@@ -1,0 +1,512 @@
+﻿SDID,Table,Site: Datatype,Expected Min,Expected Max,Cutoff Min,Cutoff Max,Rate of Change
+1721,hour,HDMLC - Lake Mead: storage,7120000,27377000,7120000,27377000,7000
+1863,hour,HDMLC - Lake Mead: power release,200,46000,0,76000,30000
+1930,hour,HDMLC - Lake Mead: res el eop,1070,1088,1045,1229,0.06
+1984,hour,AZ1: volume of flow,0,290,0,340,320
+1985,hour,AZ2: volume of flow,0,290,0,340,320
+1986,hour,AZ3: volume of flow,0,290,0,340,320
+1987,hour,AZ4: volume of flow,0,290,0,340,320
+1988,hour,AZ5: volume of flow,0,290,0,340,320
+1989,hour,AZ6: volume of flow,0,290,0,340,320
+1990,hour,AZ7: volume of flow,0,290,0,340,320
+1991,hour,AZ8: volume of flow,0,290,0,340,320
+1992,hour,NV1: volume of flow,0,290,0,340,320
+1993,hour,NV2: volume of flow,0,290,0,340,320
+1994,hour,NV3: volume of flow,0,290,0,340,320
+1995,hour,NV4: volume of flow,0,290,0,340,320
+1996,hour,NV5: volume of flow,0,290,0,340,320
+1997,hour,NV6: volume of flow,0,290,0,340,320
+1998,hour,NV7: volume of flow,0,290,0,340,320
+1999,hour,NV8: volume of flow,0,290,0,340,320
+2000,hour,LWAZ: volume of flow,0,1075,0,2250,1400
+2001,hour,LWNV: volume of flow,0,1075,0,2250,1400
+2002,hour,UPAZ: volume of flow,0,1075,0,1800,1400
+2003,hour,UPNV: volume of flow,0,1075,0,1800,1400
+2004,hour,DVS1: volume of flow,0,450,0,500,440
+2005,hour,DVS2: volume of flow,0,450,0,500,440
+2006,hour,DVS3: volume of flow,0,420,0,490,440
+2007,hour,DVS4: volume of flow,0,450,0,500,440
+2008,hour,DVS5: volume of flow,0,450,0,500,440
+2009,hour,PKR1: volume of flow,0,490,0,530,465
+2010,hour,PKR2: volume of flow,0,490,0,530,460
+2011,hour,PKR3: volume of flow,0,490,0,530,470
+2012,hour,PKR4: volume of flow,0,450,0,500,460
+2013,hour,CLC: flow,1480,19500,300,46750,6000
+2019,hour,PVLC: flow,1300,20000,400,46750,6000
+2020,hour,TFLC: flow,1000,19500,300,46750,6000
+2021,hour,WWLC: flow,1000,19500,300,46750,6000
+2036,instant,CLC: gage height inst,204.6,211.6,198,214.1,3
+2042,instant,PVLC: gage height inst,259,270,258.75,281,3
+2043,instant,TFLC: gage height inst,225,234,223,242.5,3
+2044,instant,WWLC: gage height inst,296.5,305.2,296,313,3
+2046,instant,DDMLC - Below Davis Dam: gage height inst,497,506.5,490,512,2.5
+2049,hour,CLC: gage height,204.6,211.6,198,214.1,3
+2055,hour,PGLC: gage height,339,346,338,349,3
+2056,hour,PVLC: gage height,258.380005,270,258.380005,281,3
+2057,hour,TFLC: gage height,225,234,223,242.5,3
+2058,hour,WWLC: gage height,296.5,305.2,296,313,3
+2060,hour,DDMLC - Below Davis Dam: gage height,497,506.5,490,512,2.5
+2070,day,HDMLC - Hoover Dam: energy,1500,28000,0,49800,15000
+2071,hour,DDMLC - Davis Dam: ave MW,15,260,0,260,70
+2072,hour,PDMLC - Parker Dam: ave MW,4,112,0,120,35
+2081,instant,HDMLC - Hoover Dam: inst head,432,485,387,599,20
+2082,instant,DDMLC - Davis Dam: inst head,126.8,147.2,113,156.9,5
+2083,instant,PDMLC - Parker Dam: inst head,72.8,85.65,62,90.6,3.5
+2086,hour,DDMLC - Lake Mohave: storage,1284700,1807000,1284700,1807000,5400
+2087,hour,PDMLC - Lake Havasu: storage,489600,632000,489600,632000,3200
+2089,instant,DDMLC - Lake Mohave: res el inst,641.5,644,625,646.9,0.2
+2090,instant,PDMLC - Lake Havasu: res el inst,446,449.4,440,450.6,0.17
+2100,hour,DDMLC - Lake Mohave: res el eop,641.5,644,625,646.9,0.2
+2101,hour,PDMLC - Lake Havasu: res el eop,446,449.4,440,450.6,0.17
+2105,hour,DDMLC - Below Davis Dam: gage height eop,497,506.5,490,512,2.5
+2106,hour,PDMLC - Below Parker Dam: tbay elev eop,363.75,373,360,378,3
+2109,instant,PDMLC - Below Parker Dam: inst tbay elev,363.75,373,360,378,3
+2118,instant,PGLC: gage height inst,339,346,338,349,3
+2119,hour,PGLC: flow,1000,20000,20,26990,6000
+2144,hour,PDMLC - Parker Dam: ave head,72.8,85.65,62,90.6,3.5
+2146,hour,PDMLC - Lake Havasu: power release,1450,19900,0,23000,6000
+2149,hour,PDMLC - Below Parker Dam: ave tbay elev,363.75,373,360,378,3
+2158,hour,HDMLC - Lake Mead: ave tbay elev,636,656,630,658,20
+2164,hour,DDMLC - Davis Dam: ave head,126.8,147.2,113,156.9,5
+2166,hour,DDMLC - Lake Mohave: power release,1450,25000,0,30000,5500
+2195,day,Imperial Reservoir - IID: flow above,1500,16200,0,18000,6000
+2201,day,Imperial Reservoir - IID: res el eop,179,181,178.5,182,1.5
+2204,day,PVID- (PVID): diversion,200,2530,200,2600,700
+2205,day,Senator Wash - (IID): pumps,0,1300,0,1500,1300
+2206,day,Senator Wash - (IID): storage,1852,9144,1447,14311,2200
+2207,day,Senator Wash - (IID): res el eop,212,240,209,252,8
+2208,day,Senator Wash - (IID): release,0,1000,0,1300,1200
+2211,day,Imperial Reservoir - IID: routed flow,1200,16000,500,45000,6000
+2220,day,PVID- above TF (PVID): return flow,0,170,0,200,110
+2221,day,PVID- below TF (PVID): return flow,0,1000,0,1150,600
+2282,hour,HDMLC - Hoover Dam: net energy ,10,20000,0,45000,22000
+2335,hour,HDMLC - below Hoover Dam: ave ec,865,1010,840,1100,15
+2336,hour,BBBLC: flow,1450,26500,500,30000,12000
+2337,hour,RS41LC: flow,3500,25800,1000,45000,6000
+2340,hour,HDMLC - below Hoover Dam: wtrtemp tbay,53,63,48,67,4
+2343,hour,HDMLC - below Hoover Dam: ave TDS,550,650,515,725,15
+2358,instant,BBBLC: gage height inst,475,490,473,493,3
+2359,hour,BBBLC: gage height,475,490,473,493,3
+2360,instant,RS41LC: gage height inst,448,455,445,460,3
+2361,hour,RS41LC: lvl,448,455,445,460,3
+2481,hour,DVS1: power,-5,52.7,-5,55,60
+2482,hour,DVS2: power,-3,52.7,-5,55,60
+2483,hour,DVS3: power,-3,52.7,-5,55,60
+2484,hour,DVS4: power,-3,52.7,-5,55,60
+2485,hour,DVS5: power,-3,52.7,-5,55,60
+2760,hour,CRIR - Gardner WW (USGS): return flow,0,17,0,100,30
+3361,day,CRIR - Palo Verde Drain (USGS): return flow,0,60,0,100,0.2
+3362,hour,CRIR - Poston (USGS): return flow,0,550,0,650,300
+3410,hour,CAP: diversion,-2.9000001,3660,-3.20000005,3700,3400
+3411,hour,MWD: diversion,0,2500,0,2800,2300
+3417,hour,PVOF: return flow,225,825,175,3100,2000
+4178,hour,PKR1: power,-3,30,-5,33,28
+4179,hour,PKR2: power,-3,30,-5,33,28
+4180,hour,PKR3: power,-3,30,-5,33,28
+4181,hour,PKR4: power,-3,30,-5,33,28
+4262,hour,PVOF: wtrtemp canal,50,86,32,90,20
+4263,hour,PVOF: lvl,213,217.5,211,222,5
+4264,hour,PVOF: v1,1,2.5,0.5,5,5
+4265,hour,PVOF: v2,0.05,0.22,0,0.65,1
+4266,hour,PVOF: v3,1,2.5,0.5,5,5
+4267,hour,PVOF: ce,26,27,6,28,33
+4268,hour,PVOF: ms,35,175,15,225,255
+4274,hour,PVC: diversion,200,2530,-1200,2600,2200
+4275,instant,PVC: gage height inst,280.5,282.28,269,283,5
+4276,hour,PVC: wtrtemp canal,40,87,32,93,20
+4277,hour,PVC: lvl,280.5,282.28,0,283,5
+4278,hour,PVC: ce,49.2,49.2,3.3,51,60
+4279,hour,PVC: ms,15,50,0,60,255
+4280,hour,PVC: v1,0.4,4,-5,4,8
+4281,hour,PVC: v2,-0.05,0.05,-0.1,0.1,2
+4282,hour,PVC: v3,0,4,-0.8,4,8
+4628,hour,PVC: mp,1.9,2.9,0.1,3.1,3.5
+4629,hour,PVOF: mp,0.6,2.5,0.3,3.5,3.5
+4633,hour,FWSIC: diversion,-20,164,-60,175,295
+4634,hour,FWSIC: v1,-0.3,1.8,-0.6,2,10
+4635,hour,FWSIC: v2,-0.2,0.2,-0.3,0.3,2
+4636,hour,FWSIC: v3,-0.3,1.8,-0.5,2,10
+4637,hour,FWSIC: wtrtemp canal,34,93,32,95,20
+4638,hour,FWSIC: lvl,452.9,458.6,0,459.6,5
+4639,hour,FWSIC: ce,0.7,5.3,0.5,5.5,10
+4640,hour,FWSIC: ms,24,68,23,70,47
+4781,hour,FWSFD: wtrtemp canal,34,85,32,90,20
+4782,hour,FWSFD: lvl,2.5,2.99,0,3.1,4
+4783,hour,FWSFD: ce,-2.3,0,-2.31,0.01,4
+4784,hour,FWSFD: v1,-0.8,4.7,-1.4,6.5,10.5
+4785,hour,FWSFD: v2,-0.7,0.4,-1,1,2
+4786,hour,FWSFD: v3,-0.8,4.7,-1.4,6.3,10.5
+4787,hour,FWSFD: ms,0,75,0,80,255
+4788,hour,FWSFD: diversion,-3,32,-10,50,150
+4829,hour,PDMLC - Below Parker Dam: wtrtemp tbay,46,84,42,86,10
+4830,hour,PDMLC - Below Parker Dam: ave ec,905,1045,0,1120,10
+4831,hour,PDMLC - Below Parker Dam: ave tds,560,700,550,750,10
+4839,hour,FWSSD: return flow,0,27,-100,90,1000
+4840,hour,FWSSD: gate ,456,457.6,449,460,14
+4841,hour,FWSSD: res el ave,453,457,452,459,5
+4842,hour,FWSSD: ave tbay elev,451,457.3,449,458,6
+4843,hour,FMTNV: diversion,-2,16,-2,18,25
+4844,hour,FMTC1: diversion,-2,66,-8,90,70
+4916,hour,RS41LC: wtrtemp river,45,80,35,86,20
+5012,hour,FMTC2 - West: diversion,0,18,-0.01,22,25
+5013,hour,FMTC2 - North: diversion,0,17,0,26,20
+5014,hour,FMTC2 - South: diversion,0,10,-0.01,14,20
+5015,hour,FMTC2 - North: over flume,0,1,-0.01,1.2,3.3
+5016,hour,FMTC2 - South: over flume,0,0.9,-0.01,1.1,3.1
+5023,hour,FMTC2 - West: flow probe prim,0,18.5,-0.01,22.5,25
+5024,hour,FMTC1: v1,0,4,-0.300000012,6,4
+5025,hour,FMTC1: v2,-1,1,-2,2,5
+5026,hour,FMTC1: v3,0,4,-0.300000012,5,4
+5027,hour,FMTC1: ce,0,4,0,5,5
+5028,hour,FMTC1: ms,0,85,0,130,100
+5030,hour,FMTC1: wtrtemp canal,40,90,32,95,63
+5032,hour,FMTC1: lvl,0,4.5,0,4.7,4
+5074,hour,FMTNV: flow probe prim,0,18,0,22,25
+5075,hour,FMTNV: flow probe sec,0,19,0,22,25
+7775,instant,BNBLC: gage height inst,447,463.5,445,475,3
+7776,hour,BNBLC: gage height,447,463.5,445,475,3
+7777,hour,BNBLC: flow,1500,25000,500,30000,12000
+7778,hour,FMTRS - Ft Mojave: diversion,0,23,0,35,30
+7779,hour,FMTRS - Vanderslice: diversion,0,17,0,22,25
+7780,hour,Published BBBLC: flow,0,30000,,,100
+7780,day,Published BBBLC: flow,0,30000,,,100
+7781,hour,Published CLC: flow,300,47000,,,100
+7781,day,Published CLC: flow,300,47000,,,100
+7782,hour,Published PGLC: flow,20,27000,,,100
+7782,day,Published PGLC: flow,20,27000,,,100
+7783,hour,Published TFLC: flow,300,47000,,,100
+7783,day,Published TFLC: flow,300,47000,,,100
+7784,hour,Published WWLC: flow,300,47000,,,100
+7784,day,Published WWLC: flow,300,47000,,,100
+7785,hour,Published PVLC: flow,500,47000,,,100
+7785,day,Published PVLC: flow,500,47000,,,100
+7940,hour,Published BBBLC: gage height,0,500,,,0.2
+7940,day,Published BBBLC: gage height,0,500,,,0.2
+7941,hour,Published PGLC: gage height,0,500,,,0.2
+7941,day,Published PGLC: gage height,0,500,,,0.2
+7942,hour,Published WWLC: gage height,0,500,,,0.2
+7942,day,Published WWLC: gage height,0,500,,,0.2
+7943,hour,Published PVLC: gage height,0,500,,,0.2
+7943,day,Published PVLC: gage height,0,500,,,0.2
+7944,hour,Published TFLC: gage height,0,500,,,0.2
+7944,day,Published TFLC: gage height,0,500,,,0.2
+7945,hour,Published CLC: gage height,0,500,,,0.2
+7945,day,Published CLC: gage height,0,500,,,0.2
+7946,hour,Published FWSSD: return flow,-30,50,,,100
+7946,day,Published FWSSD: return flow,-30,50,,,100
+7947,hour,Published FWSSD: tailrace,0,500,,,
+7947,day,Published FWSSD: tailrace,0,500,,,100
+7948,hour,Published FWSSD: res el ave,0,500,,,
+7948,day,Published FWSSD: res el ave,0,500,,,
+7949,hour,Published FMTBS: diversion,0,50,,,100
+7949,day,Published FMTBS: diversion,0,50,,,100
+7950,hour,Published FMTBS: gage height,0,500,,,0.2
+7950,day,Published FMTBS: gage height,0,500,,,0.2
+7951,hour,Published FMTWS: diversion,0,120,,,100
+7951,day,Published FMTWS: diversion,0,120,,,100
+7952,hour,Published FMTWS: gage height,0,500,,,0.2
+7952,day,Published FMTWS: gage height,0,500,,,0.2
+7953,hour,Published FMTCS: diversion,0,50,,,100
+7953,day,Published FMTCS: diversion,0,50,,,100
+7954,hour,Published FMTCS: gage height,0,500,,,0.2
+7954,day,Published FMTCS: gage height,0,500,,,0.2
+7955,hour,Published FMTSC: diversion,0,40,,,100
+7955,day,Published FMTSC: diversion,0,40,,,100
+7956,hour,Published FMTSC: gage height,0,500,,,0.2
+7956,day,Published FMTSC: gage height,0,500,,,0.2
+7957,hour,Published FMTNC: diversion,0,50,,,100
+7957,day,Published FMTNC: diversion,0,50,,,100
+7958,hour,Published FMTNC: gage height,0,500,,,0.2
+7958,day,Published FMTNC: gage height,0,500,,,0.2
+7959,hour,Published FMTC1: diversion,-8,90,,,100
+7959,day,Published FMTC1: diversion,-8,90,,,100
+7960,hour,Published FMTC1: gage height,0,500,,,0.2
+7960,day,Published FMTC1: gage height,0,500,,,0.2
+7961,hour,Published FMTC2 North: gage height,0,500,,,0.2
+7961,day,Published FMTC2 North: gage height,0,500,,,0.2
+7962,hour,Published FMTC2 North: diversion,0,26,,,100
+7962,day,Published FMTC2 North: diversion,0,26,,,100
+7963,hour,Published FMTC2 South: diversion,-0.01,14,,,100
+7963,day,Published FMTC2 South: diversion,-0.01,14,,,100
+7964,hour,Published FMTC2 South: gage height,0,500,,,0.2
+7964,day,Published FMTC2 South: gage height,0,500,,,0.2
+7965,hour,Published BNBLC: flow,500,30000,,,100
+7965,day,Published BNBLC: flow,500,30000,,,100
+7966,hour,Published BNBLC: gage height,0,500,,,0.2
+7966,day,Published BNBLC: gage height,0,500,,,0.2
+7967,hour,Published FWSIC: diversion,-41,175,,,100
+7967,day,Published FWSIC: diversion,-41,175,,,100
+7968,hour,Published FWSIC: gage height,0,500,,,0.2
+7968,day,Published FWSIC: gage height,0,500,,,0.2
+7969,hour,Published RS41LC: flow,1000,45000,,,100
+7969,day,Published RS41LC: flow,1000,45000,,,100
+7970,hour,Published RS41LC: gage height,0,500,,,0.2
+7970,day,Published RS41LC: gage height,0,500,,,0.2
+7971,hour,Published PVC: diversion,-260,2600,,,100
+7971,day,Published PVC: diversion,-260,2600,,,100
+7972,hour,Published PVC: gage height,0,500,,,0.2
+7972,day,Published PVC: gage height,0,500,,,0.2
+7973,hour,Published PVOF: return flow,175,3100,,,100
+7973,day,Published PVOF: return flow,175,3100,,,100
+7974,hour,Published PVOF: gage height,0,500,,,0.2
+7974,day,Published PVOF: gage height,0,500,,,0.2
+7975,hour,Published MLLC: flow,300,45000,,,100
+7975,day,Published MLLC: flow,300,47000,,,100
+7976,hour,Published MLLC: gage height,0,500,,,0.2
+7976,day,Published MLLC: gage height,0,500,,,0.2
+7977,hour,Published FWSFD: diversion,-8,45,,,100
+7977,day,Published FWSFD: diversion,-8,45,,,100
+7978,hour,Published FMTNV: diversion,0,22,,,100
+7978,day,Published FMTNV: diversion,0,22,,,100
+7979,hour,Published FMTC2 West: diversion,-0.01,23,,,100
+7979,day,Published FMTC2 West: diversion,-0.01,23,,,100
+7980,hour,Published FMTRS Vanderslice : diversion,0,22,,,100
+7980,day,Published FMTRS Vanderslice : diversion,0,22,,,100
+7981,hour,Published FMTRS Mohave : diversion,0,35,,,100
+7981,day,Published FMTRS Mohave : diversion,0,35,,,100
+7982,hour,Published CAP: diversion,0,3700,,,100
+7982,day,Published CAP: diversion,0,3700,,,100
+7983,hour,Published MWD: diversion,0,2300,,,100
+7983,day,Published MWD: diversion,0,2300,,,100
+7987,hour,FMTCS: diversion sec,0,50,0,52,50
+7988,hour,FMTCS: over flume,0.3,3.5,0,4,1
+7989,hour,FMTSC: diversion,-2,35,-2,40,35
+7990,hour,FMTSC: over flume,0,2.6,0,4,1
+7991,hour,FMTNC: diversion,-2,52,-2,53,52
+7992,hour,FMTNC: ce,0.27,3.3,0,3.5,5
+7993,hour,FMTNC: ms,0,79,0,86,80
+7994,hour,FMTNC: v1,0,3.2,0,3.5,5
+7995,hour,FMTNC: v2,-0.5,0.8,-1,1.2,2
+7996,hour,FMTNC: v3,0,3.2,0,3.5,5
+7997,hour,FMTNC: lvl,0,3.8,0,4,4.25
+7998,hour,FMTNC: wtrtemp canal,34,83,32,90,63
+8000,hour,RS41LC: v1,1,4,0,8,20
+8001,hour,RS41LC: v2,-0.600000024,0.17,-0.699999988,0.2,4
+8002,hour,RS41LC: v3,1,4,0,5,20
+8003,hour,RS41LC: ms,8,55,2,152,255
+8004,hour,RS41LC: ce,61,63,30,66,33
+8005,hour,FMTBS: diversion,0,43,0,50,50
+8006,hour,FMTBS: over flume,0,1,0,1.3,1
+8007,hour,FMTWS: diversion,-2,115,-2,120,300
+8008,hour,FMTWS: wtrtemp canal,34,83,32,90,300
+8009,hour,FMTWS: lvl,0,4.1,0,4.5,300
+8010,hour,FMTWS: v1,-2,3,-2,3.5,300
+8011,hour,FMTWS: v2,-0.1,0.2,-0.1,0.21,300
+8012,hour,FMTWS: v3,0,3,0,3.5,300
+8013,hour,FMTWS: ms,0,81,0,85,300
+8014,hour,FMTWS: ce,0,3.9,0,4.2,300
+8016,hour,FWSSD: ave head,-2,3.7,-3,5,4
+8017,hour,BBBLC: gage height sec,475,490,473,493,3
+8018,hour,BNBLC: gage height sec,447,463.5,445,475,3
+8019,hour,PGLC: gage height sec,339,346,338,349,3
+8020,hour,WWLC: gage height sec,296.5,305.2,296,313,3
+8021,hour,TFLC: gage height sec,225,234,223,242.5,3
+8022,hour,CLC: gage height sec,204.6,211.6,198,214.1,3
+8024,hour,RS41LC: gage height sec,448,455,445,460,3
+8065,hour,FWSSD: wtrtemp fbay,42,90,32,94,63
+8066,hour,FWSSD: wtrtemp tbay,40,88,32,92,63
+8067,hour,FWSSD: res el ave sec,453,457,452,459,5
+8068,hour,FWSSD: ave tbay elev sec,451,457.3,449,458,6
+8097,hour,FMTC2 - North: flow probe prim,0,16.5,-10,25.5,20
+8098,hour,FMTRS - Vanderslice: flow probe prim,0,17,0,22,25
+8099,hour,FMTRS - Ft Mojave: flow probe prim,0,25,0,35,30
+8100,hour,FMTC2 - North: diversion sec,0,17,-0.01,26,20
+8869,hour,PDMLC - Lake Havasu: wtrtemp fbay,45,85,40,90,4
+8870,hour,BBBLC: wtrtemp river,40,85,39,86,
+8871,hour,TFLC: wtrtemp river,44,84,32,90,63
+8872,hour,CLC: wtrtemp river,44,84,32,90,63
+8873,hour,WWLC: wtrtemp river,44,85,43,87,63
+8874,hour,BNBLC: wtrtemp river,40,85,32,87,63
+8875,hour,PDMLC - Below Parker Dam: ave tbay elev sec,363.75,373,360,378,3
+8876,instant,PDMLC - Lake Havasu: res el inst sec,446,449.4,440,450.6,0.17
+8896,hour,PDMLC - Lake Havasu: res el ave,446,449.4,440,450.6,0.17
+8897,hour,PDMLC - Lake Havasu: res el ave sec,446,449.4,440,450.6,0.17
+8898,instant,PDMLC - Below Parker Dam: inst tbay elev sec,363.75,373,360,378,3
+8899,hour,PDMLC - Below Parker Dam: wtrtemp tbay sec,45,84,44,86,10
+8900,hour,PKR1: flow,0,5930,0,6415,5626
+8901,hour,PKR2: flow,0,5930,0,6415,5566
+8902,hour,PKR3: flow,0,5930,0,6415,5687
+8903,hour,PKR4: flow,0,5550,0,6050,5566
+8906,hour,HDMLC - Hoover Dam: head eop,432,480,387,599,20
+8907,hour,DDMLC - Davis Dam: head eop,126.8,147.2,113,156.9,5
+8908,hour,PDMLC - Parker Dam: head eop,72.8,85.65,62,90.6,3.5
+10081,hour,FMTCS: wtrtemp canal,34,83,32,90,63
+10082,hour,FMTCS: lvl,0,4,0,4.88,4.5
+10083,hour,FMTCS: v1,0,1.6,0,2,3
+10084,hour,FMTCS: v2,-0.1,0.2,-0.6,0.5,1
+10085,hour,FMTCS: v3,0,1.6,0,2,3
+10086,hour,FMTCS: ce,0.27,2.6,0,3.5,15
+10087,hour,FMTCS: ms,2,76,0,82,255
+10090,hour,FMTCS: diversion,0,35,0,50,45
+13966,hour,DVS1: flow,0,5450,0,6050,5300
+13967,hour,DVS2: flow,0,5450,0,6050,5300
+13968,hour,DVS3: flow,0,5080,0,5930,5300
+13969,hour,DVS4: flow,0,5450,0,6050,5300
+13970,hour,DVS5: flow,0,5450,0,6050,5300
+13971,hour,DDMLC - Lake Mohave: wtrtemp fbay,40,82,35,85,4
+13972,hour,DDMLC - Below Davis Dam: wtrtemp river,46,75,45,80,8
+13973,instant,DDMLC - Lake Mohave: res el inst sec,641.5,644,625,646.9,0.2
+13974,hour,DDMLC - Lake Mohave: res el ave,641.5,644,625,646.9,0.2
+13975,hour,DDMLC - Lake Mohave: res el ave sec,641.5,644,625,646.9,0.2
+14079,day,Senator Wash - (IID): freewheel release,0,1000,0,1300,1200
+14163,hour,DVS1: energy,-2,52.5,-5,55,60
+14164,hour,DVS2: energy,-2,52.5,-5,55,60
+14165,hour,DVS3: energy,-2,52.5,-5,55,60
+14166,hour,DVS4: energy,-2,52.5,-5,55,60
+14167,hour,DVS5: energy,-2,52.5,-5,55,60
+14168,hour,PKR1: energy,-2,30,-5,32,60
+14169,hour,PKR2: energy,-2,30,-5,32,60
+14170,hour,PKR3: energy,-2,30,-5,32,60
+14171,hour,PKR4: energy,-2,30,-5,32,60
+14172,instant,DVS1: accum energy inst,-10,9000000,-10,9000000,9000000
+14173,instant,DVS2: accum energy inst,-10,9000000,-10,9000000,9000000
+14174,instant,DVS3: accum energy inst,-10,9000000,-10,9000000,9000000
+14175,instant,DVS4: accum energy inst,-10,9000000,-10,9000000,9000000
+14176,instant,DVS5: accum energy inst,-10,9000000,-10,9000000,9000000
+14177,instant,PKR1: accum energy inst,-10,9000000,-10,9000000,9000000
+14178,instant,PKR2: accum energy inst,-10,9000000,-10,9000000,9000000
+14179,instant,PKR3: accum energy inst,-10,9000000,-10,9000000,9000000
+14180,instant,PKR4: accum energy inst,-10,9000000,-10,9000000,9000000
+14181,hour,DDMLC - Below Davis Dam: gage height sec,497,506.5,497,507,2.5
+14182,instant,DVS1: accum energy csmd inst,-10,9000000,-10,9000000,9000000
+14183,instant,DVS2: accum energy csmd inst,-10,9000000,-10,9000000,9000000
+14184,instant,DVS3: accum energy csmd inst,-10,9000000,-10,9000000,9000000
+14185,instant,DVS4: accum energy csmd inst,-10,9000000,-10,9000000,9000000
+14186,instant,DVS5: accum energy csmd inst,-10,9000000,-10,9000000,9000000
+14187,instant,PKR1: accum energy csmd inst,-10,9000000,-10,9000000,9000000
+14188,instant,PKR2: accum energy csmd inst,-10,9000000,-10,9000000,9000000
+14189,instant,PKR3: accum energy csmd inst,-10,9000000,-10,9000000,9000000
+14190,instant,PKR4: accum energy csmd inst,-10,9000000,-10,9000000,9000000
+14207,hour,DVS1: jem cond,0,4.5,0,6,6
+14208,hour,DVS2: jem cond,0,4.5,0,6,6
+14209,hour,DVS3: jem cond,0,4.5,0,6,6
+14210,hour,DVS4: jem cond,0,4.5,0,6,6
+14211,hour,DVS5: jem cond,0,4.5,0,6,6
+14212,hour,PKR1: jem cond,0,3,0,5,60
+14213,hour,PKR2: jem cond,0,3,0,5,60
+14214,hour,PKR3: jem cond,0,3,0,5,60
+14215,hour,PKR4: jem cond,0,1.8,0,5,60
+14216,hour,DDMLC - Davis Dam: energy,17,263,0,275,60
+14217,hour,PDMLC - Parker Dam: energy,5,112,0,120,60
+14218,hour,DDMLC - Davis Dam: jem cond,0,18,0,24,24
+14219,hour,PDMLC - Parker Dam: jem cond,0,10.8,0,12,60
+14239,hour,Lake Mohave - (USGS): res el eop,641,640,625,646.9,0.2
+14241,hour,Lake Havasu - (USGS): res el eop,445.8,449.4,440,450.6,0.17
+14444,instant,Lake Mead - (USGS): gage height inst,636,655.5,630,658,25
+14639,hour,CRIR - LMD below Tyson (USGS): return flow,40,300,0,500,432
+19120,hour,PVOF: gage height sec,213,217.5,212,218,5
+19194,instant,PVOF: gage height inst sec,213,217.5,213,217.5,5
+19277,hour,Lake Mead - (USGS): ws evap,-1000,100000,-1000,100000,
+19278,hour,Lake Mead - (USGS): wtrtemp,-1000,1000,-1000,1000,
+19279,hour,Lake Mead - (USGS): air temp,-1000,1000,-1000,1000,
+19280,hour,Lake Mead - (USGS): humidity,-1000,1000,-1000,1000,
+19319,hour,Lake Mead - (USGS): volume of evap,-1000,100000,-1000,100000,
+19339,hour,Published HDMLC: ave ec,865,1010,840,1100,
+19340,hour,Published HDMLC: wtrtemp tbay,53,63,49,67,
+19341,hour,Published HDMLC: ave tds,550,630,515,725,
+20179,hour,BIBLC: flow,700,18000,400,19000,1200
+20180,instant,BIBLC: gage height inst,244.8,253.73,243.8,254.73,63
+20181,hour,BIBLC: gage height,244.5,252.5,243.8,254,63
+20182,hour,BIBLC: wtrtemp river,45,88,43,90,63
+20183,hour,BIBLC: gage height sec,244.8,253.73,243.8,254.73,63
+20184,hour,BOBLC: flow,1100,17000,900,18000,1200
+20185,instant,BOBLC: gage height inst,215.71,251.83,214.71,252.83,63
+20186,hour,BOBLC: gage height,215.71,251.83,214.71,252.83,63
+20187,hour,BOBLC: wtrtemp river,45,88,43,90,63
+20188,hour,BOBLC: gage height sec,215.71,251.83,214.71,252.83,63
+20189,hour,BMPLC: flow,1800,17000,1000,18000,1200
+20190,instant,BMPLC: gage height inst,234,244,234,245,63
+20191,hour,BMPLC: gage height,234,244,234,245,63
+20192,hour,BMPLC: wtrtemp river,45,88,43,90,63
+20193,hour,BMPLC: gage height sec,234,244,234,245,63
+20242,hour,MSCPBL: res el eop,450,456.64,450,457.64,63
+20243,hour,MSCPBL: res el eop sec,450,456.64,450,457.64,1
+20244,hour,MSCPBL: ave tbay elev,450,456.64,450,457.64,63
+20245,hour,MSCPBL: ave tbay elev sec,450,456.64,450,457.64,1
+20246,hour,MSCPBL: wtrtemp tbay,50,88,40,99,63
+20247,hour,MSCPBL: wtrtemp tbay sec,50,88,40,99,1
+20248,hour,MSCPBL: wtrtemp fbay,50,88,40,99,63
+20249,hour,MSCPBL: wtrtemp fbay sec,50,88,40,99,1
+20250,hour,MSCPBL: ave head,-0.3,10,-1,10,1
+20633,hour,FMTNC - NEC Pipe: ave velocity,-11.1,12.75,-12,14,15
+20635,hour,FMTNC - NEC Pipe: flow probe prim,-9,10.5,-10,10,15
+20638,hour,FMTNC - NEC Pipe: ave signal,0,455,-0.1,460,15
+20799,hour,Published BIBLC: flow,0,30000,,,
+20799,day,Published BIBLC: flow,0,30000,,,
+20801,hour,Published BIBLC: gage height,0,500,,,
+20801,day,Published BIBLC: gage height,0,500,,,
+20803,hour,Published BMPLC: flow,0,30000,,,
+20803,day,Published BMPLC: flow,0,30000,,,
+20805,hour,Published BMPLC: gage height,0,500,,,
+20805,day,Published BMPLC: gage height,0,500,,,
+20807,hour,Published BOBLC: flow,0,30000,,,
+20807,day,Published BOBLC: flow,0,30000,,,
+20809,hour,Published BOBLC: gage height,0,500,,,
+20809,day,Published BOBLC: gage height,0,500,,,
+20893,hour,Published FMTNC - NEC Pipe: diversion,-0.100000001,50,,,10
+20893,day,Published FMTNC - NEC Pipe: diversion,0,50,,,10
+20898,hour,Published Lake Mohave: res el ave,600,700,,,
+20898,day,Published Lake Mohave: res el ave,600,700,,,
+20899,hour,Published Lake Havasu: res el ave,400,500,,,
+20899,day,Published Lake Havasu: res el ave,400,500,,,
+20917,hour,FMTNC - NEC Pipe: diversion,-2,,-2,,10
+21072,hour,MSCPBLW: stage,450,460,450,460,0.2
+21074,hour,MSCPBLW: wtrtemp,30,90,30,99,2
+21075,hour,MSCPBLW: stage sec,450,460,450,460,0.2
+21187,hour,PGLC: wtrtemp river,55,75,50,84,1
+21212,instant,PGLC: battery voltage,12,13.8,11.75,14.25,1
+21217,instant,FMTSC: battery voltage,12,13.8,11.75,14.25,1
+21218,hour,FMTSC: gage height,0,3,0,4,3.7
+21219,instant,FMTBS: battery voltage,12,13.8,11.75,14.25,1
+21220,hour,FMTBS: gage height,1.5,3.7,1,4,3.9
+21223,instant,BBBLC: battery voltage,12,13.8,11.75,14.25,1
+21225,instant,BIBLC: battery voltage,12,13.8,11.75,14.25,1
+21226,instant,MSCPBLW: battery voltage,12,13.8,11.75,14.6999998,1
+21227,instant,BMPLC: battery voltage,12,13.8,11.75,14.25,1
+21228,instant,FMTC1: battery voltage,12,13.8,11.75,14.25,1
+21229,instant,BOBLC: battery voltage,12,13.8,11.75,14.25,1
+21230,instant,CAP: battery voltage,12,13.8,11.75,14.25,1
+21231,instant,CLC: battery voltage,12,13.8,11.75,14.25,1
+21232,instant,FMTC2 - North: battery voltage,12,13.8,11.75,14.25,1
+21235,instant,FMTCS: battery voltage,12,13.8,11.75,14.25,1
+21236,instant,FMTNC: battery voltage,12,13.8,11.75,14.25,1
+21237,instant,FMTNC - NEC Pipe: battery voltage,12,13.8,11.75,14.25,1
+21238,instant,FMTNV: battery voltage,12,13.8,11.75,14.25,1
+21239,instant,FMTRS - Ft Mojave: battery voltage,12,13.8,11.75,14.25,1
+21240,instant,FMTWS: battery voltage,12,13.8,11.75,14.25,1
+21241,instant,FWSFD: battery voltage,12,13.8,11.75,14.25,1
+21242,instant,FWSIC: battery voltage,12,13.8,11.75,14.25,1
+21243,instant,FWSSD: battery voltage,12,14.5,11.75,14.5,1
+21244,instant,MSCPBL: battery voltage,12,13.8,11.75,14.25,1
+21245,instant,MWD: battery voltage,12,13.8,11.75,14.25,1
+21246,instant,PVC: battery voltage,12,13.8,11.75,14.25,1
+21247,instant,PVLC: battery voltage,12,13.8,11.75,14.25,1
+21248,instant,PVOF: battery voltage,12,13.8,11.75,14.25,1
+21249,instant,RS41LC: battery voltage,11.6999998,14.6000004,11.6999998,14.6000004,1
+21250,instant,TFLC: battery voltage,12,13.8,11.75,14.25,1
+21251,instant,WWLC: battery voltage,12,13.8,11.75,14.25,1
+21252,instant,BNBLC: battery voltage,12,13.8,11.75,14.25,1
+21258,hour,Published below Parker: gage height,300,400,300,400,
+21258,day,Published below Parker: gage height,300,400,300,400,
+21259,hour,Published below Davis: gage height,475,525,475,525,
+21259,day,Published below Davis: gage height,475,525,475,525,
+21347,hour,FMTC2 - South: flow probe prim,0,,-1,,21
+21350,hour,FMTC2 - South: pump minutes,0,60,0,60,
+21351,hour,FMTC2 - North: pump minutes,0,60,0,60,
+21352,hour,FMTC2 - West: pump minutes,0,60,0,60,
+21528,hour,BNBLC: v1,0.5,4,0,8,2
+21529,hour,BNBLC: v2,-0.3,0.200000003,-0.3,0.300000012,2
+21530,hour,BNBLC: v3,0.5,4,0,8,2
+21531,hour,BNBLC: ce,61,66,30,67,2
+21532,hour,BNBLC: ms,8,55,2,152,2
+21533,hour,BNBLC: lvl,447,463.5,445,475,2
+21887,hour,LWNV: flow,,,,,
+23315,hour,PVLC: gage height sec,259,270,258.75,281,
+24797,hour,FMTRS - Ft Mojave: MACE  flow Hrly,-99999,99999,-99999,99999,
+24799,hour,FMTRS - Ft Mojave: MACE velocity Hrly,-99999,99999,-99999,99999,
+24801,hour,FMTRS - Ft Mojave: MACE  Mean signal strength Hrly,-99999,99999,-99999,99999,
+24802,hour,FMTRS - Vanderslice: Pump Run Time (Last Hour),-99999,99999,-99999,99999,
+24803,hour,FMTRS - Ft Mojave: Pump Run Time (Last Hour),-99999,99999,-99999,99999,
+25399,instant,HDMLC - Lake Mead: res el inst sec,1070,1088,1045,1229,0.059999999
+25400,instant,HDMLC - Lake Mead: res el inst ter,1070,1088,1045,1229,0.059999999
+25401,instant,HDMLC - Lake Mead: res el inst qua,1070,1088,1045,1229,0.059999999
