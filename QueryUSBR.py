@@ -44,8 +44,13 @@ def API(database, dataID, startTime, endTime, dataInterval):
     output = []
     buildHeader = []
     
-    for s in range(0, len(readfile)):            
-            siteInfo = readfile[s]       
+    for s in range(0, len(readfile)):  
+            # API query isn't bringing data back in the order of the SDID sent
+            # Loop through and find the SDID in order of query
+            for c in range(0, len(dataID.split(','))):
+                siteInfo = readfile[c]            
+                if float(siteInfo['SDI']) == float(dataID.split(',')[s]): break 
+                 
             buildHeader.append(siteInfo['SDI'])  
             siteInfo = siteInfo['Data']       
 

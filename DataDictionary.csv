@@ -1,4 +1,4 @@
-﻿SDID,Table,Site: Datatype,Expected Min,Expected Max,Cutoff Min,Cutoff Max,Rate of Change
+﻿dataID,Interval,Site: Datatype,Expected Min,Expected Max,Cutoff Min,Cutoff Max,Rate of Change
 1721,hour,HDMLC - Lake Mead: storage,7120000,27377000,7120000,27377000,7000
 1863,hour,HDMLC - Lake Mead: power release,200,46000,0,76000,30000
 1930,hour,HDMLC - Lake Mead: res el eop,1070,1088,1045,1229,0.06
@@ -329,7 +329,6 @@
 8903,hour,PKR4: flow,0,5550,0,6050,5566
 8906,hour,HDMLC - Hoover Dam: head eop,432,480,387,599,20
 8907,hour,DDMLC - Davis Dam: head eop,126.8,147.2,113,156.9,5
-8908,hour,PDMLC - Parker Dam: head eop,72.8,85.65,62,90.6,3.5
 10081,hour,FMTCS: wtrtemp canal,34,83,32,90,63
 10082,hour,FMTCS: lvl,0,4,0,4.88,4.5
 10083,hour,FMTCS: v1,0,1.6,0,2,3
@@ -463,7 +462,6 @@
 21225,instant,BIBLC: battery voltage,12,13.8,11.75,14.25,1
 21226,instant,MSCPBLW: battery voltage,12,13.8,11.75,14.6999998,1
 21227,instant,BMPLC: battery voltage,12,13.8,11.75,14.25,1
-21228,instant,FMTC1: battery voltage,12,13.8,11.75,14.25,1
 21229,instant,BOBLC: battery voltage,12,13.8,11.75,14.25,1
 21230,instant,CAP: battery voltage,12,13.8,11.75,14.25,1
 21231,instant,CLC: battery voltage,12,13.8,11.75,14.25,1
@@ -502,11 +500,10 @@
 21533,hour,BNBLC: lvl,447,463.5,445,475,2
 21887,hour,LWNV: flow,,,,,
 23315,hour,PVLC: gage height sec,259,270,258.75,281,
-24797,hour,FMTRS - Ft Mojave: MACE  flow Hrly,-99999,99999,-99999,99999,
+24273,hour,FMTC1: SonTek IQ Stage,0,4,-0.01,4.5,4
+24283,hour,FMTC1: SonTek IQ Water Temp,50,87,32,90,20
 24799,hour,FMTRS - Ft Mojave: MACE velocity Hrly,-99999,99999,-99999,99999,
 24801,hour,FMTRS - Ft Mojave: MACE  Mean signal strength Hrly,-99999,99999,-99999,99999,
 24802,hour,FMTRS - Vanderslice: Pump Run Time (Last Hour),-99999,99999,-99999,99999,
 24803,hour,FMTRS - Ft Mojave: Pump Run Time (Last Hour),-99999,99999,-99999,99999,
 25399,instant,HDMLC - Lake Mead: res el inst sec,1070,1088,1045,1229,0.059999999
-25400,instant,HDMLC - Lake Mead: res el inst ter,1070,1088,1045,1229,0.059999999
-25401,instant,HDMLC - Lake Mead: res el inst qua,1070,1088,1045,1229,0.059999999

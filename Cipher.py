@@ -21,11 +21,13 @@ class uiMain(QtWidgets.QMainWindow):
         self.table = self.findChild(QtWidgets.QTableWidget, 'mainTable')  
         self.menuDataDictionary = self.findChild(QtWidgets.QAction,'actionDataDictionary')  
         self.menuDarkMode = self.findChild(QtWidgets.QAction,'actionDarkMode')
+        self.menuExit = self.findChild(QtWidgets.QAction,'actionExit')  
         
         # Create events
         self.btnQuery.clicked.connect(self.btnQueryPressed)  
         self.menuDataDictionary.triggered.connect(self.showDataDictionary)     
-        self.menuDarkMode.triggered.connect(self.toggleDarkMode)   
+        self.menuDarkMode.triggered.connect(self.toggleDarkMode)  
+        self.menuExit.triggered.connect(self.exitPressed) 
         
         # Show the GUI on application start
         self.show()   
@@ -35,7 +37,7 @@ class uiMain(QtWidgets.QMainWindow):
 
     def toggleDarkMode(self):   
         # Open config and get color mode  
-        f = open(f'./config.ini', 'r') 
+        f = open(f'./config.ini', 'r', encoding='utf-8-sig') 
         data = f.readlines()
         colorMode = str(data[0])  
 
@@ -50,12 +52,15 @@ class uiMain(QtWidgets.QMainWindow):
         app.setStyleSheet(stream.readAll())   
 
         # Save color mode to config
-        f = open(f'./config.ini', 'w')  
+        f = open(f'./config.ini', 'w', encoding='utf-8-sig')  
         data[0] = colorMode
         f.writelines(data)     
 
     def showDataDictionary(self):         
-        winDataDictionary.show()           
+        winDataDictionary.show()     
+
+    def exitPressed(self):
+        app.exit()    
 
 class uiQuery(QtWidgets.QMainWindow):
     def __init__(self):
@@ -155,7 +160,27 @@ class uiDataDictionary(QtWidgets.QMainWindow):
         self.btnAddRow.clicked.connect(self.btnAddRowPressed) 
 
     def btnSavePressed(self):
-        print('i dun did it!')
+        data = []    
+
+        # Open the data dictionary file
+        f = open(f'./DataDictionary.csv', 'r', encoding='utf-8-sig') 
+        data.append(f.readlines()[0]) 
+    
+        # Close the file
+        f.close()
+
+        # Check each column and each row in the table. Place data into array
+        for r in range(0, self.table.rowCount()):            
+            for c in range(0, self.table.columnCount()):            
+                if c == 0: data.append(self.table.item(r, c).text())
+                else: data[r + 1] = f'{data[r + 1]},{self.table.item(r, c).text()}'
+
+        # Write the data to the file
+        f = open(f'./DataDictionary.csv', 'w', encoding='utf-8-sig')  
+        f.writelines(data)  
+
+        # Close the file
+        f.close()
 
     def btnAddRowPressed(self):
         self.table.setRowCount(self.table.rowCount() + 1)   

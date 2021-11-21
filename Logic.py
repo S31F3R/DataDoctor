@@ -47,7 +47,7 @@ def buildDataDictionary(table):
     data = []      
 
     # Open the file     
-    f = open('./DataDictionary.csv', 'r')  
+    f = open('./DataDictionary.csv', 'r', encoding='utf-8-sig')  
 
     # Read all lines in the file         
     readfile = f.readlines()
@@ -108,22 +108,24 @@ def QAQC(mainTable, dataDictionaryTable, dataID):
                 # Check to see if data is missing           
                 if mainTable.item(d, c).text() == '': item.setBackground(QtGui.QColor(100, 195, 247))
                 else:              
-                    # Check for over cutoff max                   
-                    if float(mainTable.item(d, c).text()) > float(dataDictionaryTable.item(dataDictionaryItem, 6).text()): item.setBackground(QtGui.QColor(192, 28, 40))   
+                    try:
+                        # Check for over cutoff max                   
+                        if float(mainTable.item(d, c).text()) > float(dataDictionaryTable.item(dataDictionaryItem, 6).text()): item.setBackground(QtGui.QColor(192, 28, 40))   
 
-                    # Check for under cutoff min
-                    if float(mainTable.item(d, c).text()) < float(dataDictionaryTable.item(dataDictionaryItem, 5).text()): item.setBackground(QtGui.QColor(255, 163, 72))   
+                        # Check for under cutoff min
+                        if float(mainTable.item(d, c).text()) < float(dataDictionaryTable.item(dataDictionaryItem, 5).text()): item.setBackground(QtGui.QColor(255, 163, 72))   
 
-                    # Check for over expected max                   
-                    if float(mainTable.item(d, c).text()) > float(dataDictionaryTable.item(dataDictionaryItem, 4).text()): item.setBackground(QtGui.QColor(245, 194, 17))   
+                        # Check for over expected max                   
+                        if float(mainTable.item(d, c).text()) > float(dataDictionaryTable.item(dataDictionaryItem, 4).text()): item.setBackground(QtGui.QColor(245, 194, 17))   
 
-                    # Check for under expected min
-                    if float(mainTable.item(d, c).text()) < float(dataDictionaryTable.item(dataDictionaryItem, 3).text()): item.setBackground(QtGui.QColor(249, 240, 107))  
+                        # Check for under expected min
+                        if float(mainTable.item(d, c).text()) < float(dataDictionaryTable.item(dataDictionaryItem, 3).text()): item.setBackground(QtGui.QColor(249, 240, 107))  
 
-                    # Check for rate of change
-                    if d > 0:
-                        if mainTable.item(d - 1, c).text() != '':
-                            if (float(mainTable.item(d, c).text()) - float(mainTable.item(d - 1, c).text())) > float(dataDictionaryTable.item(dataDictionaryItem, 7).text()): item.setBackground(QtGui.QColor(246, 97, 81)) 
+                        # Check for rate of change
+                        if d > 0:
+                            if mainTable.item(d - 1, c).text() != '':
+                                if (float(mainTable.item(d, c).text()) - float(mainTable.item(d - 1, c).text())) > float(dataDictionaryTable.item(dataDictionaryItem, 7).text()): item.setBackground(QtGui.QColor(246, 97, 81)) 
+                    except: None
 
                     # Check for repeating values
                     if d > 0:
@@ -143,7 +145,7 @@ def loadAllQuickLooks(cbQuickLook):
     # Open the file  
     for file in os.listdir('./QuickLook'):
         # Open the file
-        f = open(f'./QuickLook/{file}', 'r')  
+        f = open(f'./QuickLook/{file}', 'r', encoding='utf-8-sig')  
 
         # Read all lines in the file         
         readfile = f.readlines()  
@@ -155,7 +157,7 @@ def loadAllQuickLooks(cbQuickLook):
                   
 def saveQuickLook(textQuickLookName, listQueryList):
     # Create a file or open if it deson't exist
-    f = open(f'./QuickLook/{textQuickLookName.toPlainText()}.txt', 'w')    
+    f = open(f'./QuickLook/{textQuickLookName.toPlainText()}.txt', 'w', encoding='utf-8-sig')    
     
     for x in range(listQueryList.count()):
         if x == 0: data = (listQueryList.item(x).text())
@@ -172,7 +174,7 @@ def loadQuickLook(cbQuickLook, listQueryList):
     listQueryList.clear()
 
     # Open the file  
-    f = open(f'./QuickLook/{cbQuickLook.currentText()}.txt', 'r')           
+    f = open(f'./QuickLook/{cbQuickLook.currentText()}.txt', 'r', encoding='utf-8-sig')           
     readfile = f.readlines()  
 
     # Close the file
@@ -192,11 +194,11 @@ def loadConfig():
 
     try: 
         # Try to open the file
-        f = open(f'./config.ini', 'r') 
+        f = open(f'./config.ini', 'r', encoding='utf-8-sig') 
         config = f.readlines()     
     except:   
         # If no file found, create one and set light as first item in config  
-        f = open(f'./config.ini', 'w')    
+        f = open(f'./config.ini', 'w', encoding='utf-8-sig')    
         config.append('light') 
         f.writelines(config)   
     finally:

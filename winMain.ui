@@ -93,14 +93,7 @@
     <addaction name="actionDarkMode"/>
     <addaction name="actionExit"/>
    </widget>
-   <widget class="QMenu" name="menuHelp">
-    <property name="title">
-     <string>Help</string>
-    </property>
-    <addaction name="actionAboutCipher"/>
-   </widget>
    <addaction name="menuFile"/>
-   <addaction name="menuHelp"/>
   </widget>
   <action name="actionExit">
    <property name="text">
