@@ -90,6 +90,7 @@ class uiQuery(QtWidgets.QMainWindow):
         self.btnSaveQuickLook = self.findChild(QtWidgets.QPushButton,'btnSaveQuickLook')
         self.cbQuickLook = self.findChild(QtWidgets.QComboBox,'cbQuickLook')
         self.btnLoadQuickLook = self.findChild(QtWidgets.QPushButton, 'btnLoadQuickLook') 
+        self.btnClearQuery = self.findChild(QtWidgets.QPushButton, 'btnClearQuery')
 
         # Create events        
         self.btnQuery.clicked.connect(self.btnQueryPressed)  
@@ -97,6 +98,7 @@ class uiQuery(QtWidgets.QMainWindow):
         self.btnRemoveQuery.clicked.connect(self.btnRemoveQueryPressed) 
         self.btnSaveQuickLook.clicked.connect(self.btnSaveQuickLookPressed)   
         self.btnLoadQuickLook.clicked.connect(self.btnLoadQuickLookPressed)     
+        self.btnClearQuery.clicked.connect(self.btnClearQueryPressed)
 
         # Populate database combobox        
         self.cbDatabase.addItem('USBR-LCHDB')   
@@ -160,6 +162,9 @@ class uiQuery(QtWidgets.QMainWindow):
     
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
+
+    def btnClearQueryPressed(self):
+        self.listQueryList.clear()
 
 class uiDataDictionary(QtWidgets.QMainWindow):
     def __init__(self):
