@@ -19,15 +19,21 @@ class uiMain(QtWidgets.QMainWindow):
         # Attach controls
         self.btnQuery = self.findChild(QtWidgets.QPushButton, 'btnQuery')
         self.table = self.findChild(QtWidgets.QTableWidget, 'mainTable')  
-        self.menuDataDictionary = self.findChild(QtWidgets.QAction,'actionDataDictionary')  
-        self.menuDarkMode = self.findChild(QtWidgets.QAction,'actionDarkMode')
-        self.menuExit = self.findChild(QtWidgets.QAction,'actionExit')  
+        self.btnDataDictionary = self.findChild(QtWidgets.QPushButton,'btnDataDictionary')  
+        self.btnDarkMode = self.findChild(QtWidgets.QPushButton,'btnDarkMode')  
+        self.btnExportCSV = self.findChild(QtWidgets.QPushButton, 'btnExportCSV')
         
         # Create events
         self.btnQuery.clicked.connect(self.btnQueryPressed)  
-        self.menuDataDictionary.triggered.connect(self.showDataDictionary)     
-        self.menuDarkMode.triggered.connect(self.toggleDarkMode)  
-        self.menuExit.triggered.connect(self.exitPressed) 
+        self.btnDataDictionary.clicked.connect(self.showDataDictionary)  
+        self.btnDarkMode.clicked.connect(self.toggleDarkMode)    
+        self.btnExportCSV.clicked.connect(self.btnExportCSVPressed) 
+
+        # Center window when opened
+        qtRectangle = self.frameGeometry()
+        centerPoint = QDesktopWidget().availableGeometry().center()
+        qtRectangle.moveCenter(centerPoint)
+        self.move(qtRectangle.topLeft())
         
         # Show the GUI on application start
         self.show()   
@@ -57,7 +63,11 @@ class uiMain(QtWidgets.QMainWindow):
         f.writelines(data)     
 
     def showDataDictionary(self):         
-        winDataDictionary.show()     
+        winDataDictionary.show()    
+
+    def btnExportCSVPressed(self):
+        #print(self.table.horizontalHeaderItem(1).text())
+        Logic.exportTableToCSV(self.table, './', 'TestExport')
 
     def exitPressed(self):
         app.exit()    
@@ -101,7 +111,13 @@ class uiQuery(QtWidgets.QMainWindow):
 
         # Set default query times on DateTimeEdit controls        
         self.dteStartDate.setDateTime(datetime.now() - timedelta(hours = 72) )        
-        self.dteEndDate.setDateTime(datetime.now())        
+        self.dteEndDate.setDateTime(datetime.now())      
+
+        # Center window when opened
+        qtRectangle = self.frameGeometry()
+        centerPoint = QDesktopWidget().availableGeometry().center()
+        qtRectangle.moveCenter(centerPoint)
+        self.move(qtRectangle.topLeft())  
 
     def btnQueryPressed(self):   
         if self.listQueryList.count() == 0: dataID = self.textSDID.toPlainText()
@@ -158,6 +174,12 @@ class uiDataDictionary(QtWidgets.QMainWindow):
         # Create events
         self.btnSave.clicked.connect(self.btnSavePressed)  
         self.btnAddRow.clicked.connect(self.btnAddRowPressed) 
+
+        # Center window when opened
+        qtRectangle = self.frameGeometry()
+        centerPoint = QDesktopWidget().availableGeometry().center()
+        qtRectangle.moveCenter(centerPoint)
+        self.move(qtRectangle.topLeft())
 
     def btnSavePressed(self):
         data = []    
@@ -233,7 +255,7 @@ winQuickLook = uiQuickLook()
 # Load in configuration files
 config = Logic.loadConfig()
 
-if config[0] == 'dark': winMain.menuDarkMode.setChecked(True)         
+if config[0] == 'dark': winMain.btnDarkMode.setChecked(True)         
   
 # Set stylesheet
 file = QFile(f":/{config[0]}/stylesheet.qss")

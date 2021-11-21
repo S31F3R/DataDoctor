@@ -207,3 +207,27 @@ def loadConfig():
         output = config
 
     return output
+
+def exportTableToCSV(table, fileLocation, fileName):
+    data = []    
+
+    # Save all header information into array before looping through the rows
+    for h in range(0, table.columnCount()):
+        if h == 0: data.append(table.horizontalHeaderItem(h).text())
+        else: 
+            header = table.horizontalHeaderItem(h).text().replace('\n', ' | ')
+            #header = table.horizontalHeaderItem(h).text()
+            data[0] = f'{data[0]},{header}'
+
+    # Check each column and each row in the table. Place data into array
+    for r in range(0, table.rowCount()):            
+        for c in range(0, table.columnCount()):            
+            if c == 0: data.append('\n' + table.item(r, c).text())
+            else: data[r + 1] = f'{data[r + 1]},{table.item(r, c).text()}'
+
+    # Write the data to the file
+    f = open(f'{fileLocation}/{fileName}.csv', 'w', encoding='utf-8-sig')     
+    f.writelines(data) 
+
+    # Close the file
+    f.close()
