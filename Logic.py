@@ -1,12 +1,13 @@
 import os
 import datetime
+import shutil
 from PyQt5 import QtWidgets, QtGui
 from PyQt5 import QtCore
 
 def buildTable(table, data, buildHeader, dataDictionaryTable):
     # Make sure the table is clear before adding items to it
     table.clear()    
-
+  
     # Create headers for table
     for h in range(0, len(buildHeader)): 
         if dataDictionaryTable != None:
@@ -142,15 +143,16 @@ def loadAllQuickLooks(cbQuickLook):
     # First item should always be a blank
     cbQuickLook.addItem(None)
 
-    # Open the file  
+    # Open the file      
     for file in os.listdir('./QuickLook'):
         # Open the file
         f = open(f'./QuickLook/{file}', 'r', encoding='utf-8-sig')  
-
+        
         # Read all lines in the file         
         readfile = f.readlines()  
 
-        # Close the file   
+        # Close the file  
+        f.close() 
 
         # Add all lines as combobox items     
         cbQuickLook.addItem(str(file).split('.txt')[0]) 
@@ -216,7 +218,6 @@ def exportTableToCSV(table, fileLocation, fileName):
         if h == 0: data.append(table.horizontalHeaderItem(h).text())
         else: 
             header = table.horizontalHeaderItem(h).text().replace('\n', ' | ')
-            #header = table.horizontalHeaderItem(h).text()
             data[0] = f'{data[0]},{header}'
 
     # Check each column and each row in the table. Place data into array

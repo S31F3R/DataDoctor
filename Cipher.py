@@ -39,7 +39,7 @@ class uiMain(QtWidgets.QMainWindow):
         self.show()   
 
     def btnQueryPressed(self): 
-        winQuery.show()  
+        winWebQuery.show()        
 
     def toggleDarkMode(self):   
         # Open config and get color mode  
@@ -66,16 +66,15 @@ class uiMain(QtWidgets.QMainWindow):
         winDataDictionary.show()    
 
     def btnExportCSVPressed(self):
-        #print(self.table.horizontalHeaderItem(1).text())
         Logic.exportTableToCSV(self.table, './', 'TestExport')
 
     def exitPressed(self):
         app.exit()    
 
-class uiQuery(QtWidgets.QMainWindow):
+class uiWebQuery(QtWidgets.QMainWindow):
     def __init__(self):
-        super(uiQuery, self).__init__() # Call the inherited classes __init__ method
-        uic.loadUi('./winQuery.ui', self) # Load the .ui file
+        super(uiWebQuery, self).__init__() # Call the inherited classes __init__ method
+        uic.loadUi('./winWebQuery.ui', self) # Load the .ui file
 
         # Define the controls
         self.btnQuery = self.findChild(QtWidgets.QPushButton, 'btnQuery')    
@@ -129,7 +128,7 @@ class uiQuery(QtWidgets.QMainWindow):
                 else: dataID = f'{dataID},{self.listQueryList.item(x).text()}' 
 
         # USBR public API query
-        if self.cbDatabase.currentText().split('-')[0] == 'USBR': data = QueryUSBR.API(self.cbDatabase, dataID, self.dteStartDate, self.dteEndDate, self.cbInterval)            
+        if self.cbDatabase.currentText().split('-')[0] == 'USBR': data = QueryUSBR.API(self.cbDatabase, dataID, self.dteStartDate, self.dteEndDate, self.cbInterval)     
 
         # USGS nwis query
         if self.cbDatabase.currentText().split('-')[0] == 'USGS': data = QueryUSGS.API(dataID, self.cbInterval, self.dteStartDate, self.dteEndDate)                                 
@@ -145,7 +144,7 @@ class uiQuery(QtWidgets.QMainWindow):
         Logic.QAQC(winMain.table, winDataDictionary.table, dataID)
 
         # Hide the window
-        winQuery.hide() 
+        winWebQuery.hide() 
 
     def btnAddQueryPressed(self):
         item = QListWidgetItem(self.textSDID.toPlainText())
@@ -228,12 +227,12 @@ class uiQuickLook(QtWidgets.QDialog):
 
     def btnSavePressed(self): 
         # Save quick look
-        Logic.saveQuickLook(self.textQuickLookName, winQuery.listQueryList)
+        Logic.saveQuickLook(self.textQuickLookName, winWebQuery.listQueryList)
 
         # Clear the controls
         self.clear()
 
-        Logic.loadAllQuickLooks(winQuery.cbQuickLook)
+        Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
 
         # Close the window
         winQuickLook.close() 
@@ -253,7 +252,7 @@ app = QtWidgets.QApplication([sys.argv])
 
 # Create an instance of our class
 winMain = uiMain() 
-winQuery = uiQuery()
+winWebQuery = uiWebQuery()
 winDataDictionary = uiDataDictionary()
 winQuickLook = uiQuickLook()
 
@@ -272,7 +271,7 @@ app.setStyleSheet(stream.readAll())
 Logic.buildDataDictionary(winDataDictionary.table) 
 
 # Load quick looks
-Logic.loadAllQuickLooks(winQuery.cbQuickLook)
+Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
 
 # Start the application
 app.exec() 

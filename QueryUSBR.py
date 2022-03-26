@@ -36,7 +36,7 @@ def API(database, dataID, startTime, endTime, dataInterval):
     
     # Query the data
     url = f'https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr={database}&sdi={dataID}&tstp={interval}&t1={startYear}-{startMonth}-{startDay}T{startHour}:{startMinute}&t2={endYear}-{endMonth}-{endDay}T{endHour}:{endMinute}&table=R&mrid=0&format=json'
-    webQuery = urllib.request.urlopen(url)
+    webQuery = urllib.request.urlopen(url)    
     readfile = webQuery.read().decode("utf-8")
     readfile = json.loads(readfile)
     readfile = readfile['Series']   
@@ -76,7 +76,7 @@ def API(database, dataID, startTime, endTime, dataInterval):
                         if int(hour) < 12: dateTime = dateTime + timedelta(hours = 12)
 
                 dateTime = '{:%m/%d/%y %H:%M:%S}'.format(dateTime)         
-
+              
                 if s == 0: 
                     output.append(f'{dateTime},{value}')  
                 else:
