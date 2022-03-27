@@ -21,7 +21,7 @@ class uiMain(QtWidgets.QMainWindow):
         self.table = self.findChild(QtWidgets.QTableWidget, 'mainTable')  
         self.btnDataDictionary = self.findChild(QtWidgets.QPushButton,'btnDataDictionary')  
         self.btnDarkMode = self.findChild(QtWidgets.QPushButton,'btnDarkMode')  
-        self.btnExportCSV = self.findChild(QtWidgets.QPushButton, 'btnExportCSV')
+        self.btnExportCSV = self.findChild(QtWidgets.QPushButton, 'btnExportCSV')        
         
         # Create events
         self.btnQuery.clicked.connect(self.btnQueryPressed)  
@@ -39,7 +39,7 @@ class uiMain(QtWidgets.QMainWindow):
         self.show()   
 
     def btnQueryPressed(self): 
-        winWebQuery.show()        
+        winWebQuery.show()  
 
     def toggleDarkMode(self):   
         # Open config and get color mode  
@@ -101,6 +101,7 @@ class uiWebQuery(QtWidgets.QMainWindow):
 
         # Populate database combobox        
         self.cbDatabase.addItem('USBR-LCHDB')   
+        self.cbDatabase.addItem('USBR-AQUARIUS') 
         self.cbDatabase.addItem('USBR-YAOHDB')  
         self.cbDatabase.addItem('USBR-UCHDB2') 
         self.cbDatabase.addItem('USGS-NWIS') 
@@ -227,12 +228,12 @@ class uiQuickLook(QtWidgets.QDialog):
 
     def btnSavePressed(self): 
         # Save quick look
-        Logic.saveQuickLook(self.textQuickLookName, winWebQuery.listQueryList)
+        Logic.saveQuickLook(self.textQuickLookName, winQuery.listQueryList)
 
         # Clear the controls
         self.clear()
 
-        Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
+        Logic.loadAllQuickLooks(winQuery.cbQuickLook)
 
         # Close the window
         winQuickLook.close() 

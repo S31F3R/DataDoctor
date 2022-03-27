@@ -1,4 +1,4 @@
-import urllib.request
+import requests
 import json
 import datetime
 import Logic
@@ -30,10 +30,8 @@ def API(dataID, dataInterval, startTime, endTime):
         period = str(period).split('.')[0]
 
         # This is executed when the button is pressed
-        url = f'https://waterservices.usgs.gov/nwis/{interval}/?format=json&sites={site}&period=PT{period}H&parameterCD=000{parameter}&sitestatus=all'
-        f = urllib.request.urlopen(url)
-        readfile = f.read().decode("utf-8")
-        readfile = json.loads(readfile)
+        url = requests.get(f'https://waterservices.usgs.gov/nwis/{interval}/?format=json&sites={site}&period=PT{period}H&parameterCD=000{parameter}&sitestatus=all')
+        readfile = json.loads(url.content)
         readfile = readfile['value']
         readfile = readfile['timeSeries']
         readfile = readfile[0]
