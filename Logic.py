@@ -1,8 +1,80 @@
 import os
 import datetime
-import shutil
+from datetime import datetime, timedelta
 from PyQt5 import QtWidgets, QtGui
-from PyQt5 import QtCore
+
+def buildTimestamps(startDate, endDate, dataInterval):
+    # Set the inverval   
+    if dataInterval.currentText() == 'HOUR': interval = timedelta(hours = 1)
+    if dataInterval.currentText() == 'INSTANT': interval = timedelta(minutes = 15)
+    if dataInterval.currentText() == 'DAY': interval = timedelta(days = 1) 
+
+    counter = 0
+    currentTimestamp = datetime.fromisoformat(startDate)
+    endDate = datetime.fromisoformat(endDate)
+
+    while currentTimestamp < endDate:
+        # Add interval to current timestamp
+        currentTimestamp = currentTimestamp + interval   
+
+        # Parse out date/time
+        month = currentTimestamp.month
+        day = currentTimestamp.day
+        hour = currentTimestamp.hour
+        minute = currentTimestamp.minute
+
+        # Zero out minutes if the interval is anything other than instant
+        if not(dataInterval.currentText() == 'INSTANT'): minute = '00'
+
+        # Create 2 digit month and day for isoformatting to work
+        if len(str(month)) == 1: month = f'0{month}'
+        if len(str(day)) == 1: day = f'0{day}'
+        if len(str(hour)) == 1: hour = f'0{hour}'
+        if len(str(minute)) == 1: minute = f'0{minute}'
+        
+        # Build the output of timestamps
+        if counter == 0: 
+            output = f'{currentTimestamp.year}-{month}-{day} {hour}:{minute}'
+        else:
+            output = f'{output},{currentTimestamp.year}-{month}-{day} {hour}:{minute}'
+
+        counter += 1
+
+    return output
+
+def gapCheck(timestamps, data):
+    parseLine = []
+    parseTimestamps = []
+    parseTimestamps = timestamps.split(',')
+
+    for t in range(0, len(parseTimestamps) - 1):
+        # Format date from ISO format to desired format
+        parseTimestamps[t] = datetime.strftime(datetime.fromisoformat(parseTimestamps[t]), '%m/%d/%y %H:%M:%S')
+
+        # If there is no data, all data for range is missing
+        if len(data) == 0:
+            data.insert(t,f'{parseTimestamps[t]},')  
+        else:
+            # If there is only data in the beginning of the list, this will stop the code from breaking
+            if len(data) - 1 < t:
+                data.insert(t,f'{parseTimestamps[t]},')  
+            else:
+                # Split the timestamp out of the data line
+                parseLine = data[t].split(',')               
+                
+                # Check to see if the timestamps match. If they don't, there is missing data
+                if datetime.strptime(parseTimestamps[t], '%m/%d/%y %H:%M:%S') != datetime.strptime(parseLine[0], '%m/%d/%y %H:%M:%S'): 
+                    # Insert created timestamp and place a blank
+                    data.insert(t,f'{parseTimestamps[t]},')  
+
+    return data
+
+def combineParameters(data, newData):
+    for d in range(0, len(newData)):
+        parseLine = newData[d].split(',')
+        data[d] = f'{data[d]},{parseLine[1]}'  
+    
+    return data
 
 def buildTable(table, data, buildHeader, dataDictionaryTable):
     # Make sure the table is clear before adding items to it
@@ -78,7 +150,7 @@ def buildDTEDateTime(dateTime):
     minute = dateTime.split(',')[4]   
     if len(minute) == 1: minute = f'0{minute}'
 
-    output = datetime.datetime(int(year), int(month), int(day), int(hour), int(minute))   
+    output = datetime(int(year), int(month), int(day), int(hour), int(minute))   
 
     return output
 
