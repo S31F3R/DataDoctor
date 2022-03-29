@@ -138,6 +138,9 @@ class uiWebQuery(QtWidgets.QMainWindow):
         dataID = data[0]     
         data.pop(0)
 
+        # USBR API queries the data 1 hour off. This was fixed in the query but it has too much data in the list. Remove last item in the list
+        if self.cbDatabase.currentText() != 'USBR-AQUARIUS' or self.cbDatabase.currentText().split('-')[0] == 'USGS': data.pop(len(data) - 1)
+
         # Build the table
         Logic.buildTable(winMain.table, data, buildHeader, winDataDictionary.table)
 

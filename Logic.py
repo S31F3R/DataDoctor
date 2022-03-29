@@ -104,11 +104,11 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
             else: header = f'{header},{buildHeader[h]}' 
 
         # Set table properties
-        table.setRowCount(len(data) - 1)                
+        table.setRowCount(len(data))                
         table.setColumnCount(len(data[0].split(',')))                       
         table.setHorizontalHeaderLabels(header.split(','))  
         
-        for d in range(0, len(data) - 1):       
+        for d in range(0, len(data)):       
             for c in range(0, len(data[d].split(','))):
                 table.setItem(d, c, QtWidgets.QTableWidgetItem(data[d].split(',')[c])) 
                 
