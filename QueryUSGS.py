@@ -2,7 +2,7 @@ import requests
 import json
 import datetime
 import Logic
-from datetime import timedelta
+from datetime import datetime
 
 def API(dataID, dataInterval, startTime, endTime):
     output = []
@@ -53,7 +53,7 @@ def API(dataID, dataInterval, startTime, endTime):
                 hour = dateTime.split(' ')[1].split(':')[0]
                 minute = dateTime.split(' ')[1].split(':')[1]
                 second = dateTime.split(' ')[1].split(':')[2]
-                dateTime = datetime.datetime(int(year), int(month), int(day), int(hour), int(minute), int(second))                   
+                dateTime = datetime(int(year), int(month), int(day), int(hour), int(minute), int(second))                   
                 dateTime = '{:%m/%d/%y %H:%M:%S}'.format(dateTime)
 
                 if i == 0: 
@@ -61,7 +61,6 @@ def API(dataID, dataInterval, startTime, endTime):
                 else:
                     output[d] = f'{output[d]},{value}'
                 
-
     # Add headers as first item in list   
     output.insert(0, buildHeader)
 
