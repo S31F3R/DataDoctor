@@ -142,7 +142,7 @@ class uiWebQuery(QtWidgets.QMainWindow):
         Logic.buildTable(winMain.table, data, buildHeader, winDataDictionary.table)
 
         # QAQC the data
-        Logic.QAQC(winMain.table, winDataDictionary.table, dataID)
+        Logic.QAQC(winMain.table, winDataDictionary.table, dataID) 
 
         # Hide the window
         winWebQuery.hide() 
@@ -228,12 +228,12 @@ class uiQuickLook(QtWidgets.QDialog):
 
     def btnSavePressed(self): 
         # Save quick look
-        Logic.saveQuickLook(self.textQuickLookName, winQuery.listQueryList)
+        Logic.saveQuickLook(self.textQuickLookName, winWebQuery.listQueryList)
 
         # Clear the controls
         self.clear()
 
-        Logic.loadAllQuickLooks(winQuery.cbQuickLook)
+        Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
 
         # Close the window
         winQuickLook.close() 
