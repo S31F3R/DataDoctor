@@ -6,9 +6,9 @@ import QueryUSGS
 import Logic
 import datetime
 import breeze_resources
-from PyQt5 import QtWidgets, uic
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import *
+from PyQt6 import QtWidgets, uic
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
 from datetime import datetime, timedelta
 
 class uiMain(QtWidgets.QMainWindow):
