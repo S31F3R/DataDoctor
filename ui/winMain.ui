@@ -15,7 +15,7 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>Icons/DataDoctor.png</normaloff>Icons/DataDoctor.png</iconset>
+    <normaloff>icons/DataDoctor.png</normaloff>icons/DataDoctor.png</iconset>
   </property>
   <property name="autoFillBackground">
    <bool>false</bool>
@@ -102,8 +102,8 @@
          </property>
          <property name="icon">
           <iconset>
-           <selectedoff>Icons/Light.png</selectedoff>
-           <selectedon>Icons/Dark.png</selectedon>
+           <selectedoff>icons/Light.png</selectedoff>
+           <selectedon>icons/Dark.png</selectedon>
           </iconset>
          </property>
          <property name="iconSize">
@@ -127,7 +127,7 @@
          </property>
          <property name="icon">
           <iconset>
-           <normalon>Icons/ExportCSV.png</normalon>
+           <normalon>icons/ExportCSV.png</normalon>
           </iconset>
          </property>
          <property name="iconSize">
@@ -148,7 +148,7 @@
          </property>
          <property name="icon">
           <iconset>
-           <normalon>Icons/Info.png</normalon>
+           <normalon>icons/Info.png</normalon>
           </iconset>
          </property>
          <property name="iconSize">
@@ -175,7 +175,7 @@
          </property>
          <property name="icon">
           <iconset>
-           <normalon>Icons/Book.png</normalon>
+           <normalon>icons/Book.png</normalon>
           </iconset>
          </property>
          <property name="iconSize">
@@ -196,7 +196,7 @@
          </property>
          <property name="icon">
           <iconset>
-           <normalon>Icons/PublicQuery.png</normalon>
+           <normalon>icons/PublicQuery.png</normalon>
           </iconset>
          </property>
          <property name="iconSize">

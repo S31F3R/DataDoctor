@@ -43,7 +43,7 @@
          </property>
          <property name="icon">
           <iconset>
-           <normalon>Icons/Save.png</normalon>
+           <normalon>icons/Save.png</normalon>
           </iconset>
          </property>
          <property name="iconSize">
@@ -64,7 +64,7 @@
          </property>
          <property name="icon">
           <iconset>
-           <normalon>Icons/Plus.png</normalon>
+           <normalon>icons/Plus.png</normalon>
           </iconset>
          </property>
          <property name="iconSize">

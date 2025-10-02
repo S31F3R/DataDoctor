@@ -16,8 +16,8 @@ class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
     def __init__(self):
         super(uiMain, self).__init__() # Call the inherited classes __init__ method
-        uic.loadUi('./winMain.ui', self) # Load the .ui file
-
+        uic.loadUi(Logic.resource_path('ui\winMain.ui'), self) # Load the .ui file
+        
         # Attach controls
         self.btnQuery = self.findChild(QPushButton, 'btnQuery')
         self.table = self.findChild(QTableWidget, 'mainTable')  
@@ -45,9 +45,9 @@ class uiMain(QMainWindow):
 
     def toggleDarkMode(self):
         try:
-            with open('./config.ini', 'r', encoding='utf-8-sig') as f:
+            with open(Logic.resource_path('config.ini'), 'r', encoding='utf-8-sig') as f:
                 data = f.readlines()
-            colorMode = data[0].strip()
+                colorMode = data[0].strip()
         except FileNotFoundError:
             colorMode = 'light'  # Default if no config
             data = [colorMode + '\n']
@@ -60,7 +60,7 @@ class uiMain(QMainWindow):
         f = QFile(stylesheet_path)
         if not f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
             # Fallback to filesystem
-            stylesheet_path = f"./{colorMode}/stylesheet.qss"
+            stylesheet_path = Logic.resource_path(f"{colorMode}/stylesheet.qss")
             f = QFile(stylesheet_path)
             if not f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
                 QMessageBox.warning(self, "Style Error", f"Could not load {colorMode} stylesheet from {stylesheet_path}.\nError: {f.errorString()}")
@@ -72,14 +72,14 @@ class uiMain(QMainWindow):
 
         # Save
         data[0] = colorMode + '\n'
-        with open('./config.ini', 'w', encoding='utf-8-sig') as f:
+        with open(Logic.resource_path('config.ini'), 'w', encoding='utf-8-sig') as f:
             f.writelines(data)
 
     def showDataDictionary(self):         
         winDataDictionary.show()    
 
     def btnExportCSVPressed(self):
-        Logic.exportTableToCSV(self.table, './', 'TestExport')
+        Logic.exportTableToCSV(self.table, Logic.resource_path(''), 'TestExport')
 
     def exitPressed(self):
         app.exit()    
@@ -88,7 +88,7 @@ class uiWebQuery(QMainWindow):
     """Query window: Builds and executes USBR/USGS API calls."""
     def __init__(self, parent=None):
         super(uiWebQuery, self).__init__(parent) # Pass parent superclass
-        uic.loadUi('./winWebQuery.ui', self) # Load the .ui file
+        uic.loadUi(Logic.resource_path('ui\winWebQuery.ui'), self) # Load the .ui file
 
         # Define the controls
         self.btnQuery = self.findChild(QPushButton, 'btnQuery')    
@@ -210,7 +210,7 @@ class uiDataDictionary(QMainWindow):
     """Data dictionary editor: Manages labels for time-series IDs."""
     def __init__(self, parent=None):
         super(uiDataDictionary, self).__init__(parent) # Pass parent superclass
-        uic.loadUi('./winDataDictionary.ui', self) # Load the .ui file
+        uic.loadUi(Logic.resource_path('ui\winDataDictionary.ui'), self) # Load the .ui file
 
         # Attach controls
         self.table = self.findChild(QTableWidget, 'dataDictionaryTable')  
@@ -234,7 +234,7 @@ class uiDataDictionary(QMainWindow):
         data = []    
 
         # Open the data dictionary file
-        f = open(f'./DataDictionary.csv', 'r', encoding='utf-8-sig') 
+        f = open(Logic.resource_path('DataDictionary.csv'), 'r', encoding='utf-8-sig') 
         data.append(f.readlines()[0]) 
     
         # Close the file
@@ -247,7 +247,7 @@ class uiDataDictionary(QMainWindow):
                 else: data[r + 1] = f'{data[r + 1]},{self.table.item(r, c).text()}'
 
         # Write the data to the file
-        f = open(f'./DataDictionary.csv', 'w', encoding='utf-8-sig')  
+        f = open(Logic.resource_path('DataDictionary.csv'), 'w', encoding='utf-8-sig')  
         f.writelines(data)  
 
         # Close the file
@@ -260,7 +260,7 @@ class uiQuickLook(QDialog):
     """Quick look save dialog: Names and stores query presets."""
     def __init__(self, parent=None):
         super(uiQuickLook, self).__init__(parent) # Pass parent superclass
-        uic.loadUi('./winQuickLook.ui', self) # Load the .ui file
+        uic.loadUi(Logic.resource_path('ui\winQuickLook.ui'), self) # Load the .ui file
 
         # Attach controls
         self.btnSave = self.findChild(QPushButton, 'btnSave')   
@@ -335,7 +335,7 @@ if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
 
 # Fallback to filesystem if resource failed
 if not stylesheet_loaded:
-    stylesheet_path = f"./{colorMode}/stylesheet.qss"
+    stylesheet_path = Logic.resource_path(f"{colorMode}/stylesheet.qss")
     f = QFile(stylesheet_path)
     if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
         stream = QTextStream(f)
