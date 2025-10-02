@@ -3,7 +3,7 @@ import json
 import Logic
 from datetime import datetime, timedelta
 
-def API(dataID, startTime, endTime, dataInterval): 
+def api(dataID, startTime, endTime, dataInterval): 
     # Get Aquarius settings
     server = ''
     user = ''

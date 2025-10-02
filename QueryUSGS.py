@@ -4,7 +4,7 @@ import datetime
 import Logic
 from datetime import datetime
 
-def API(dataID, dataInterval, startTime, endTime):
+def api(dataID, dataInterval, startTime, endTime):
     output = []
     buildHeader = []
 

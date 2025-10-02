@@ -4,7 +4,7 @@ import datetime
 import QueryAquarius
 from datetime import timedelta
 
-def API(database, dataID, startTime, endTime, dataInterval): 
+def api(database, dataID, startTime, endTime, dataInterval): 
     # Remove agency from database string, which will leave you just with database name
     database = database.currentText().lower().split('-')[1]
 

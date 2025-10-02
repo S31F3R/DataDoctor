@@ -1,7 +1,8 @@
 import os
 import datetime
 from datetime import datetime, timedelta
-from PyQt5 import QtWidgets, QtGui
+from PyQt6 import  QtGui
+from PyQt6.QtWidgets import QTableWidgetItem
 
 def buildTimestamps(startDate, endDate, dataInterval):
     # Set the inverval   
@@ -110,7 +111,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
         
         for d in range(0, len(data)):       
             for c in range(0, len(data[d].split(','))):
-                table.setItem(d, c, QtWidgets.QTableWidgetItem(data[d].split(',')[c])) 
+                table.setItem(d, c, QTableWidgetItem(data[d].split(',')[c])) 
                 
         # Resize columns to fit the data
         for s in range(0, len(data[0].split(','))): 
@@ -163,7 +164,7 @@ def getDataDictionaryItem(table, dataID):
 
     return output
 
-def QAQC(mainTable, dataDictionaryTable, dataID): 
+def qaqc(mainTable, dataDictionaryTable, dataID): 
     for c in range(1, mainTable.columnCount()):  
         # Find the data ID in the dictionary and return the row number
         parseID = str(dataID[c - 1]).split('\n')
@@ -176,7 +177,7 @@ def QAQC(mainTable, dataDictionaryTable, dataID):
         if float(dataDictionaryItem) > -9999: 
             for d in range(0, mainTable.rowCount()):   
                 # Add item to variable for formatting             
-                item = QtWidgets.QTableWidgetItem(mainTable.item(d, c).text()) 
+                item = QTableWidgetItem(mainTable.item(d, c).text()) 
 
                 # Check to see if data is missing           
                 if mainTable.item(d, c).text() == '': item.setBackground(QtGui.QColor(100, 195, 247))

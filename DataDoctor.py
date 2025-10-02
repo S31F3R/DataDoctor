@@ -1,27 +1,29 @@
-import urllib.request
-import json
 import sys
 import QueryUSBR
 import QueryUSGS
 import Logic
 import datetime
-import breeze_resources
-from PyQt6 import QtWidgets, uic
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
+import breeze_resources # Registers Qt resources for stylesheets
+from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtCore import QIODevice, QFile, QTextStream
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, 
+                             QTextEdit, QComboBox, QDateTimeEdit, QListWidget, 
+                             QListWidgetItem, QMessageBox, QDialog)
 from datetime import datetime, timedelta
+from PyQt6 import uic
 
-class uiMain(QtWidgets.QMainWindow):
+class uiMain(QMainWindow):
+    """Main window for DataDoctor: Handles core UI, queries, and exports."""
     def __init__(self):
         super(uiMain, self).__init__() # Call the inherited classes __init__ method
         uic.loadUi('./winMain.ui', self) # Load the .ui file
 
         # Attach controls
-        self.btnQuery = self.findChild(QtWidgets.QPushButton, 'btnQuery')
-        self.table = self.findChild(QtWidgets.QTableWidget, 'mainTable')  
-        self.btnDataDictionary = self.findChild(QtWidgets.QPushButton,'btnDataDictionary')  
-        self.btnDarkMode = self.findChild(QtWidgets.QPushButton,'btnDarkMode')  
-        self.btnExportCSV = self.findChild(QtWidgets.QPushButton, 'btnExportCSV')        
+        self.btnQuery = self.findChild(QPushButton, 'btnQuery')
+        self.table = self.findChild(QTableWidget, 'mainTable')  
+        self.btnDataDictionary = self.findChild(QPushButton,'btnDataDictionary')  
+        self.btnDarkMode = self.findChild(QPushButton,'btnDarkMode')  
+        self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')        
         
         # Create events
         self.btnQuery.clicked.connect(self.btnQueryPressed)  
@@ -30,10 +32,10 @@ class uiMain(QtWidgets.QMainWindow):
         self.btnExportCSV.clicked.connect(self.btnExportCSVPressed) 
 
         # Center window when opened
-        qtRectangle = self.frameGeometry()
-        centerPoint = QDesktopWidget().availableGeometry().center()
-        qtRectangle.moveCenter(centerPoint)
-        self.move(qtRectangle.topLeft())
+        rect = self.frameGeometry()
+        centerPoint = QGuiApplication.primaryScreen().availableGeometry().center()
+        rect.moveCenter(centerPoint)
+        self.move(rect.topLeft())
         
         # Show the GUI on application start
         self.show()   
@@ -41,26 +43,37 @@ class uiMain(QtWidgets.QMainWindow):
     def btnQueryPressed(self): 
         winWebQuery.show()  
 
-    def toggleDarkMode(self):   
-        # Open config and get color mode  
-        f = open(f'./config.ini', 'r', encoding='utf-8-sig') 
-        data = f.readlines()
-        colorMode = str(data[0])  
+    def toggleDarkMode(self):
+        try:
+            with open('./config.ini', 'r', encoding='utf-8-sig') as f:
+                data = f.readlines()
+            colorMode = data[0].strip()
+        except FileNotFoundError:
+            colorMode = 'light'  # Default if no config
+            data = [colorMode + '\n']
 
-        # Check to see if dark mode was turned on or off
-        if colorMode == 'light': colorMode = 'dark'  
-        else: colorMode = 'light'     
+        # Toggle
+        colorMode = 'dark' if colorMode == 'light' else 'light'
 
-        # Set stylesheet
-        file = QFile(f":/{colorMode}/stylesheet.qss")
-        file.open(QFile.ReadOnly | QFile.Text)
-        stream = QTextStream(file)
-        app.setStyleSheet(stream.readAll())   
+        # Load and apply stylesheet (resource first, then fallback to file)
+        stylesheet_path = f":/{colorMode}/stylesheet.qss"
+        f = QFile(stylesheet_path)
+        if not f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+            # Fallback to filesystem
+            stylesheet_path = f"./{colorMode}/stylesheet.qss"
+            f = QFile(stylesheet_path)
+            if not f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+                QMessageBox.warning(self, "Style Error", f"Could not load {colorMode} stylesheet from {stylesheet_path}.\nError: {f.errorString()}")
+                f.close()
+                return
+        stream = QTextStream(f)
+        app.setStyleSheet(stream.readAll())
+        f.close()
 
-        # Save color mode to config
-        f = open(f'./config.ini', 'w', encoding='utf-8-sig')  
-        data[0] = colorMode
-        f.writelines(data)     
+        # Save
+        data[0] = colorMode + '\n'
+        with open('./config.ini', 'w', encoding='utf-8-sig') as f:
+            f.writelines(data)
 
     def showDataDictionary(self):         
         winDataDictionary.show()    
@@ -71,25 +84,26 @@ class uiMain(QtWidgets.QMainWindow):
     def exitPressed(self):
         app.exit()    
 
-class uiWebQuery(QtWidgets.QMainWindow):
-    def __init__(self):
-        super(uiWebQuery, self).__init__() # Call the inherited classes __init__ method
+class uiWebQuery(QMainWindow):
+    """Query window: Builds and executes USBR/USGS API calls."""
+    def __init__(self, parent=None):
+        super(uiWebQuery, self).__init__(parent) # Pass parent superclass
         uic.loadUi('./winWebQuery.ui', self) # Load the .ui file
 
         # Define the controls
-        self.btnQuery = self.findChild(QtWidgets.QPushButton, 'btnQuery')    
-        self.textSDID = self.findChild(QtWidgets.QTextEdit,'textSDID')    
-        self.cbDatabase = self.findChild(QtWidgets.QComboBox,'cbDatabase')  
-        self.cbInterval = self.findChild(QtWidgets.QComboBox,'cbInterval')
-        self.dteStartDate = self.findChild(QtWidgets.QDateTimeEdit, 'dteStartDate')
-        self.dteEndDate = self.findChild(QtWidgets.QDateTimeEdit, 'dteEndDate')
-        self.listQueryList = self.findChild(QtWidgets.QListWidget, 'listQueryList') 
-        self.btnAddQuery = self.findChild(QtWidgets.QPushButton,'btnAddQuery')
-        self.btnRemoveQuery = self.findChild(QtWidgets.QPushButton,'btnRemoveQuery')
-        self.btnSaveQuickLook = self.findChild(QtWidgets.QPushButton,'btnSaveQuickLook')
-        self.cbQuickLook = self.findChild(QtWidgets.QComboBox,'cbQuickLook')
-        self.btnLoadQuickLook = self.findChild(QtWidgets.QPushButton, 'btnLoadQuickLook') 
-        self.btnClearQuery = self.findChild(QtWidgets.QPushButton, 'btnClearQuery')
+        self.btnQuery = self.findChild(QPushButton, 'btnQuery')    
+        self.textSDID = self.findChild(QTextEdit,'textSDID')    
+        self.cbDatabase = self.findChild(QComboBox,'cbDatabase')  
+        self.cbInterval = self.findChild(QComboBox,'cbInterval')
+        self.dteStartDate = self.findChild(QDateTimeEdit, 'dteStartDate')
+        self.dteEndDate = self.findChild(QDateTimeEdit, 'dteEndDate')
+        self.listQueryList = self.findChild(QListWidget, 'listQueryList') 
+        self.btnAddQuery = self.findChild(QPushButton,'btnAddQuery')
+        self.btnRemoveQuery = self.findChild(QPushButton,'btnRemoveQuery')
+        self.btnSaveQuickLook = self.findChild(QPushButton,'btnSaveQuickLook')
+        self.cbQuickLook = self.findChild(QComboBox,'cbQuickLook')
+        self.btnLoadQuickLook = self.findChild(QPushButton, 'btnLoadQuickLook') 
+        self.btnClearQuery = self.findChild(QPushButton, 'btnClearQuery')
 
         # Create events        
         self.btnQuery.clicked.connect(self.btnQueryPressed)  
@@ -115,31 +129,54 @@ class uiWebQuery(QtWidgets.QMainWindow):
         self.dteStartDate.setDateTime(datetime.now() - timedelta(hours = 72) )        
         self.dteEndDate.setDateTime(datetime.now())      
 
-        # Center window when opened
-        qtRectangle = self.frameGeometry()
-        centerPoint = QDesktopWidget().availableGeometry().center()
-        qtRectangle.moveCenter(centerPoint)
-        self.move(qtRectangle.topLeft())  
+        # Center window relative to parent (main window)
+        if self.parent():  # Fallback if no parent
+            parent_center = self.parent().frameGeometry().center()
+        else:
+            parent_center = QGuiApplication.primaryScreen().availableGeometry().center()
+        rect = self.frameGeometry()
+        rect.moveCenter(parent_center)
+        self.move(rect.topLeft())
 
     def btnQueryPressed(self):   
-        if self.listQueryList.count() == 0: dataID = self.textSDID.toPlainText()
+        # Build dataID: List first (comma-joined), fallback to single text if empty
+        if self.listQueryList.count() == 0:
+            dataID = self.textSDID.toPlainText().strip()  # Trim whitespace
         else:         
             for x in range(self.listQueryList.count()):
-                if x == 0: dataID = self.listQueryList.item(x).text()
-                else: dataID = f'{dataID},{self.listQueryList.item(x).text()}' 
+                if x == 0: 
+                    dataID = self.listQueryList.item(x).text()
+                else: 
+                    dataID = f'{dataID},{self.listQueryList.item(x).text()}'
 
-        # USBR public API query
-        if self.cbDatabase.currentText().split('-')[0] == 'USBR': data = QueryUSBR.API(self.cbDatabase, dataID, self.dteStartDate, self.dteEndDate, self.cbInterval)     
+        # Validate dataID before API
+        if not dataID:
+            QMessageBox.warning(self, "Empty Query", "Enter an SDID or add to list.")
+            return
 
-        # USGS nwis query
-        if self.cbDatabase.currentText().split('-')[0] == 'USGS': data = QueryUSGS.API(dataID, self.cbInterval, self.dteStartDate, self.dteEndDate)                                 
-                      
+        # USBR or USGS API query (separate ifs, as original)
+        data = None
+        try:
+            if self.cbDatabase.currentText().split('-')[0] == 'USBR': 
+                data = QueryUSBR.api(self.cbDatabase, dataID, self.dteStartDate, self.dteEndDate, self.cbInterval)
+            if self.cbDatabase.currentText().split('-')[0] == 'USGS': 
+                data = QueryUSGS.api(dataID, self.cbInterval, self.dteStartDate, self.dteEndDate)
+        except Exception as e:  # Catches API errors (e.g., invalid ID, no net)
+            QMessageBox.warning(self, "Query Error", f"API fetch failed:\n{e}\nCheck SDID, dates, or connection.")
+            return
+
+        # Check for empty results post-API
+        if not data or len(data) < 1:
+            QMessageBox.warning(self, "No Data", f"Query for '{dataID}' returned nothing.\nTry different dates/IDs.")
+            return
+                        
         buildHeader = data[0]        
-        dataID = data[0]     
+        dataID = data[0]  # Reuse as universal tag for QAQC (your intent)
         data.pop(0)
 
-        # USBR API queries the data 1 hour off. This was fixed in the query but it has too much data in the list. Remove last item in the list
-        if self.cbDatabase.currentText() != 'USBR-AQUARIUS' or self.cbDatabase.currentText().split('-')[0] == 'USGS': data.pop(len(data) - 1)
+        # USBR API fix: Pop extra item if not AQUARIUS or USGS
+        if self.cbDatabase.currentText() != 'USBR-AQUARIUS' or self.cbDatabase.currentText().split('-')[0] == 'USGS': 
+            data.pop(len(data) - 1)
 
         # Build the table
         Logic.buildTable(winMain.table, data, buildHeader, winDataDictionary.table)
@@ -161,7 +198,7 @@ class uiWebQuery(QtWidgets.QMainWindow):
         self.listQueryList.takeItem(self.listQueryList.row(item))
 
     def btnSaveQuickLookPressed(self):         
-        winQuickLook.show()  
+        winQuickLook.exec()  
     
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
@@ -169,25 +206,29 @@ class uiWebQuery(QtWidgets.QMainWindow):
     def btnClearQueryPressed(self):
         self.listQueryList.clear()
 
-class uiDataDictionary(QtWidgets.QMainWindow):
-    def __init__(self):
-        super(uiDataDictionary, self).__init__() # Call the inherited classes __init__ method
+class uiDataDictionary(QMainWindow):
+    """Data dictionary editor: Manages labels for time-series IDs."""
+    def __init__(self, parent=None):
+        super(uiDataDictionary, self).__init__(parent) # Pass parent superclass
         uic.loadUi('./winDataDictionary.ui', self) # Load the .ui file
 
         # Attach controls
-        self.table = self.findChild(QtWidgets.QTableWidget, 'dataDictionaryTable')  
-        self.btnSave = self.findChild(QtWidgets.QPushButton, 'btnSave') 
-        self.btnAddRow = self.findChild(QtWidgets.QPushButton, 'btnAddRow') 
+        self.table = self.findChild(QTableWidget, 'dataDictionaryTable')  
+        self.btnSave = self.findChild(QPushButton, 'btnSave') 
+        self.btnAddRow = self.findChild(QPushButton, 'btnAddRow') 
 
         # Create events
         self.btnSave.clicked.connect(self.btnSavePressed)  
         self.btnAddRow.clicked.connect(self.btnAddRowPressed) 
 
-        # Center window when opened
-        qtRectangle = self.frameGeometry()
-        centerPoint = QDesktopWidget().availableGeometry().center()
-        qtRectangle.moveCenter(centerPoint)
-        self.move(qtRectangle.topLeft())
+        # Center window relative to parent (main window)
+        if self.parent():  # Fallback if no parent
+            parent_center = self.parent().frameGeometry().center()
+        else:
+            parent_center = QGuiApplication.primaryScreen().availableGeometry().center()
+        rect = self.frameGeometry()
+        rect.moveCenter(parent_center)
+        self.move(rect.topLeft())
 
     def btnSavePressed(self):
         data = []    
@@ -215,19 +256,29 @@ class uiDataDictionary(QtWidgets.QMainWindow):
     def btnAddRowPressed(self):
         self.table.setRowCount(self.table.rowCount() + 1)   
         
-class uiQuickLook(QtWidgets.QDialog):
-    def __init__(self):
-        super(uiQuickLook, self).__init__() # Call the inherited classes __init__ method
+class uiQuickLook(QDialog):
+    """Quick look save dialog: Names and stores query presets."""
+    def __init__(self, parent=None):
+        super(uiQuickLook, self).__init__(parent) # Pass parent superclass
         uic.loadUi('./winQuickLook.ui', self) # Load the .ui file
 
         # Attach controls
-        self.btnSave = self.findChild(QtWidgets.QPushButton, 'btnSave')   
-        self.btnCancel = self.findChild(QtWidgets.QPushButton, 'btnCancel')  
-        self.textQuickLookName = self.findChild(QtWidgets.QTextEdit,'textQuickLookName')  
+        self.btnSave = self.findChild(QPushButton, 'btnSave')   
+        self.btnCancel = self.findChild(QPushButton, 'btnCancel')  
+        self.textQuickLookName = self.findChild(QTextEdit,'textQuickLookName')  
 
         # Create events
         self.btnSave.clicked.connect(self.btnSavePressed)  
         self.btnCancel.clicked.connect(self.btnCancelPressed)  
+
+        # Center window relative to parent (main window)
+        if self.parent():  # Fallback if no parent
+            parent_center = self.parent().frameGeometry().center()
+        else:
+            parent_center = QGuiApplication.primaryScreen().availableGeometry().center()
+        rect = self.frameGeometry()
+        rect.moveCenter(parent_center)
+        self.move(rect.topLeft())
 
     def btnSavePressed(self): 
         # Save quick look
@@ -251,25 +302,53 @@ class uiQuickLook(QtWidgets.QDialog):
         # Clear all controls
         self.textQuickLookName.clear()
 
-# Create an instance of QtWidgets.QApplication     
-app = QtWidgets.QApplication([sys.argv]) 
+# Create an instance of QApplication     
+app = QApplication(sys.argv) 
 
 # Create an instance of our class
 winMain = uiMain() 
-winWebQuery = uiWebQuery()
-winDataDictionary = uiDataDictionary()
-winQuickLook = uiQuickLook()
+winWebQuery = uiWebQuery(winMain) # Pass parent
+winDataDictionary = uiDataDictionary(winMain) # Pass parent
+winQuickLook = uiQuickLook(winMain) # Pass parent
 
 # Load in configuration files
-config = Logic.loadConfig()
+try:
+    config = Logic.loadConfig()
+except (FileNotFoundError, ValueError) as e:
+    print(f"Config load failed: {e}. Defaulting to light mode.")
+    config = ['light']  # Fallback list
 
-if config[0] == 'dark': winMain.btnDarkMode.setChecked(True)         
+if config[0].strip() == 'dark': winMain.btnDarkMode.setChecked(True)       
   
 # Set stylesheet
-file = QFile(f":/{config[0]}/stylesheet.qss")
-file.open(QFile.ReadOnly | QFile.Text)
-stream = QTextStream(file)
-app.setStyleSheet(stream.readAll())
+colorMode = config[0].strip()  # Strip any whitespace
+stylesheet_loaded = False
+
+# Try resource path first
+stylesheet_path = f":/{colorMode}/stylesheet.qss"
+f = QFile(stylesheet_path)
+if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+    stream = QTextStream(f)
+    app.setStyleSheet(stream.readAll())
+    f.close()
+    stylesheet_loaded = True
+
+# Fallback to filesystem if resource failed
+if not stylesheet_loaded:
+    stylesheet_path = f"./{colorMode}/stylesheet.qss"
+    f = QFile(stylesheet_path)
+    if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
+        stream = QTextStream(f)
+        app.setStyleSheet(stream.readAll())
+        f.close()
+        stylesheet_loaded = True
+    else:
+        print(f"Initial {colorMode} stylesheet load failed (both paths): {f.errorString()}")
+        f.close()
+        # App continues with default Qt style—no crash
+
+if not stylesheet_loaded:
+    print(f"Warning: No stylesheet applied for {colorMode}. Check file paths.")
 
 # Load in data dictionary
 Logic.buildDataDictionary(winDataDictionary.table) 

@@ -1,3 +1,3 @@
 # DataDoctor
 
-pip install pyqt6
+pip install pyqt6, requests
