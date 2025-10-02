@@ -11,7 +11,7 @@ def api(database, dataID, startTime, endTime, dataInterval):
     # Temp solution to introduce Aquarius query was to add it here
     # Need Auarius query to be seperate from web query in the future
     if database == 'aquarius':
-        output = QueryAquarius.API(dataID, startTime, endTime, dataInterval)
+        output = QueryAquarius.api(dataID, startTime, endTime, dataInterval)
     else:
         # Parse out start time   
         startTime = str(startTime.dateTime()).replace("'",'')

@@ -182,7 +182,7 @@ class uiWebQuery(QMainWindow):
         Logic.buildTable(winMain.table, data, buildHeader, winDataDictionary.table)
 
         # QAQC the data
-        Logic.QAQC(winMain.table, winDataDictionary.table, dataID) 
+        Logic.qaqc(winMain.table, winDataDictionary.table, dataID) 
 
         # Hide the window
         winWebQuery.hide() 

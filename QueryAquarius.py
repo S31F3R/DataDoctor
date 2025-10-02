@@ -77,7 +77,7 @@ def api(dataID, startTime, endTime, dataInterval):
     data = {'Username':f'{user}','EncryptedPassword':f'{password}'}
 
     # Authenticate session
-    url = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=data)
+    url = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=data, verify=False)
 
     # Create API headers
     headers = {'X-Authentication-Token':url.text}   
@@ -90,7 +90,7 @@ def api(dataID, startTime, endTime, dataInterval):
 
     for d in range(0, len(uid)):
         # Query the data    
-        url = requests.get(f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid[d]}&QueryFrom={startDate}&QueryTo={endDate}&UtcOffset={utcOffset}&GetParts=PointsOnly&format=json', headers=headers)
+        url = requests.get(f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid[d]}&QueryFrom={startDate}&QueryTo={endDate}&UtcOffset={utcOffset}&GetParts=PointsOnly&format=json', headers=headers, verify=False)
 
         # Read the json data
         readfile = json.loads(url.content)
