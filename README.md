@@ -1,3 +1,3 @@
-# Cipher
+# DataDoctor
 
-pip install pyqt5
+pip install pyqt6
