@@ -3,7 +3,9 @@ import sys
 import datetime
 from datetime import datetime, timedelta
 from PyQt6 import QtGui
-from PyQt6.QtWidgets import QTableWidgetItem
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QColor  # For QAQC cell colors
+from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QTableWidget, QLabel, QAbstractItemView
 
 def buildTimestamps(startDate, endDate, dataInterval):
     # Set the inverval   
@@ -45,244 +47,264 @@ def buildTimestamps(startDate, endDate, dataInterval):
     return output
 
 def gapCheck(timestamps, data):
-    parseLine = []
-    parseTimestamps = []
+    if not timestamps:
+        return data
     parseTimestamps = timestamps.split(',')
+    parseTimestamps = [datetime.fromisoformat(ts).strftime('%m/%d/%y %H:%M:%S') for ts in parseTimestamps]
 
-    for t in range(0, len(parseTimestamps) - 1):
-        # Format date from ISO format to desired format
-        parseTimestamps[t] = datetime.strftime(datetime.fromisoformat(parseTimestamps[t]), '%m/%d/%y %H:%M:%S')
-
-        # If there is no data, all data for range is missing
-        if len(data) == 0:
-            data.insert(t,f'{parseTimestamps[t]},')  
+    for t in range(len(parseTimestamps) - 1):
+        expected_ts = datetime.strptime(parseTimestamps[t], '%m/%d/%y %H:%M:%S')
+        if t >= len(data):
+            data.insert(t, f'{parseTimestamps[t]},')
         else:
-            # If there is only data in the beginning of the list, this will stop the code from breaking
-            if len(data) - 1 < t:
-                data.insert(t,f'{parseTimestamps[t]},')  
-            else:
-                # Split the timestamp out of the data line
-                parseLine = data[t].split(',')               
-                
-                # Check to see if the timestamps match. If they don't, there is missing data
-                if datetime.strptime(parseTimestamps[t], '%m/%d/%y %H:%M:%S') != datetime.strptime(parseLine[0], '%m/%d/%y %H:%M:%S'): 
-                    # Insert created timestamp and place a blank
-                    data.insert(t,f'{parseTimestamps[t]},')  
+            actual_line = data[t].split(',')
+            actual_ts = datetime.strptime(actual_line[0], '%m/%d/%y %H:%M:%S')
+            if expected_ts != actual_ts:
+                data.insert(t, f'{parseTimestamps[t]},')
 
     return data
 
 def combineParameters(data, newData):
-    for d in range(0, len(newData)):
+    if len(data) != len(newData):
+        return data  # Mismatch—skip
+    for d in range(len(newData)):
         parseLine = newData[d].split(',')
-        data[d] = f'{data[d]},{parseLine[1]}'  
-    
+        data[d] = f'{data[d]},{parseLine[1]}'
     return data
 
 def buildTable(table, data, buildHeader, dataDictionaryTable):
-    # Make sure the table is clear before adding items to it
-    table.clear()    
-  
-    # Create headers for table
-    for h in range(0, len(buildHeader)): 
-        if dataDictionaryTable != None:
-            # Find the data ID in the dictionary and return the row number
-            dataDictionaryItem = getDataDictionaryItem(dataDictionaryTable, buildHeader[h])
-     
-            # If data ID wasn't found in data dictionary, it will return a null. Change null to a -9999 for next logic check
-            if dataDictionaryItem == 'null': dataDictionaryItem = -9999   
-            
-            # If data ID is found, change the label to match what is in the dictionary
-            else: 
-                parseHeader = dataDictionaryTable.item(dataDictionaryItem, 2).text().split(':')
-                parseHeader[1] = parseHeader[1][1:]
-                buildHeader[h] = f'{parseHeader[0]} \n{parseHeader[1]} \n{buildHeader[h]}'
+    table.clear()
+    if not data:return
 
-        # Data dictionary doesn't need a date column so create headers normally for other tables
-        if dataDictionaryTable != None:
-            if h == 0: header = f'Date,{buildHeader[h]}' 
-            else: header = f'{header},{buildHeader[h]}' 
-        else:
-            if h == 0: header = buildHeader[h]
-            else: header = f'{header},{buildHeader[h]}' 
+    # Assume buildHeader is list; split if str
+    if isinstance(buildHeader, str):buildHeader = [h.strip() for h in buildHeader.split(',')]
 
-        # Set table properties
-        table.setRowCount(len(data))                
-        table.setColumnCount(len(data[0].split(',')))                       
-        table.setHorizontalHeaderLabels(header.split(','))  
-        
-        for d in range(0, len(data)):       
-            for c in range(0, len(data[d].split(','))):
-                table.setItem(d, c, QTableWidgetItem(data[d].split(',')[c])) 
-                
-        # Resize columns to fit the data
-        for s in range(0, len(data[0].split(','))): 
-            table.resizeColumnToContents(s)  
+    # Build processed headers with dict lookup (list for efficiency)
+    processed_headers = []
+    for h in buildHeader:
+        header_text = h.strip()  # Strip raw header
+
+        if dataDictionaryTable:
+            dict_row = getDataDictionaryItem(dataDictionaryTable, header_text)
+            if dict_row != 'null':
+                label_item = dataDictionaryTable.item(dict_row, 2)
+                if label_item:
+                    parse_label = label_item.text().split(':')
+                    if len(parse_label) > 1:
+                        parse_label[1] = parse_label[1][1:].strip()  # Strip label part
+                        header_text = f'{parse_label[0].strip()} \n{parse_label[1]} \n{header_text}'
+        processed_headers.append(header_text)
+
+    # Headers: Processed only (no Date prepend)
+    headers = processed_headers
+
+    # Conditional skip for main table (skip date col 0)
+    skip_date_col = dataDictionaryTable  # True for main, False for dict
+    num_cols = len(headers)
+    num_rows = len(data)
+    table.setRowCount(num_rows)
+    table.setColumnCount(num_cols)
+    table.setHorizontalHeaderLabels(headers)  # Full list
+
+    # Vertical: Timestamps for main table only (dict table no dates)
+    if dataDictionaryTable:
+        timestamps = [row.split(',')[0].strip() for row in data]
+        table.setVerticalHeaderLabels(timestamps)
+        table.verticalHeader().setMinimumWidth(120)
+        table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        table.verticalHeader().setVisible(True)
+    else:
+        table.verticalHeader().setVisible(False)  # Hide for dict
+
+    # Populate data (conditional skip, center all)
+    for row_idx, row_str in enumerate(data):
+        row_data = row_str.split(',')[1:] if skip_date_col else row_str.split(',')  # Skip date for main
+
+        for col_idx in range(min(num_cols, len(row_data))):
+            cell_text = row_data[col_idx].strip() if col_idx < len(row_data) else ''
+            item = QTableWidgetItem(cell_text)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            table.setItem(row_idx, col_idx, item)
+
+    # Freeze first column (values for main, ID for dict)
+    table.setColumnWidth(0, 150)
+    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+    table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+    table.setViewportMargins(150, 0, 0, 0)
+
+    # Resize other columns
+    for col in range(1, num_cols):
+        table.resizeColumnToContents(col)
 
 def buildDataDictionary(table):
-    data = []      
+    data = []
+    csv_path = resource_path('DataDictionary.csv')
+    try:
+        with open(csv_path, 'r', encoding='utf-8-sig') as f:
+            readfile = f.readlines()
+            if readfile:
+                header = readfile[0].strip().split(',')
+                data = [line.strip() for line in readfile[1:]]
+    except FileNotFoundError:
+        print("DataDictionary.csv missing—create empty.")
+        header = ['ID', 'Description', 'Label']  # Default header
 
-    # Open the file     
-    f = open(resource_path('DataDictionary.csv'), 'r', encoding='utf-8-sig')  
-
-    # Read all lines in the file         
-    readfile = f.readlines()
-
-    # Close the file
-    f.close()
-
-    # Set the headers
-    header = readfile[0].split(',')        
-
-    # Parse the data into an array
-    for d in range(1, len(readfile)):
-        data.append(readfile[d])
-
-    # Build the table
     buildTable(table, data, header, None)
 
 def buildDTEDateTime(dateTime):
     # Parse out date/time   
-    dateTime = str(dateTime.dateTime()).replace("'",'')
-    dateTime = dateTime.replace(' ','')
-    year = dateTime.split(',')[0].split('(')[1]
-    month = dateTime.split(',')[1]
-    day = dateTime.split(',')[2]
-    hour = dateTime.split(',')[3]
-    if len(hour) == 1: hour = f'0{hour}'
-    minute = dateTime.split(',')[4]   
-    if len(minute) == 1: minute = f'0{minute}'
-
-    output = datetime(int(year), int(month), int(day), int(hour), int(minute))   
-
-    return output
+    dt_str = str(dateTime.dateTime()).replace("'", '').replace(' ', '')
+    parts = dt_str.split(',')
+    year = int(parts[0].split('(')[1])
+    month = int(parts[1])
+    day = int(parts[2])
+    hour = int(parts[3])
+    minute = int(parts[4])
+    return datetime(year, month, day, hour, minute)
 
 def getDataDictionaryItem(table, dataID):
-    output = 'null'    
+    data_id_clean = dataID.strip()  # Clean input
+    # Optional: Strip common prefixes (e.g., 'SDID', 'site') if API adds them
+    for prefix in ['', 'SDID', 'site', 'uid']:  # Add more if needed
+        if data_id_clean.startswith(prefix):
+            data_id_clean = data_id_clean[len(prefix):].strip()
+            break
 
-    # Check every row in the dictionary for data ID
-    for r in range(0, table.rowCount()):
-        if table.item(r, 0).text() == dataID: output = r
+    for r in range(table.rowCount()):
+        id_item = table.item(r, 0)
+        if id_item:
+            csv_id = id_item.text().strip()
+            # Same prefix strip for CSV
+            csv_id_clean = csv_id
+            for prefix in ['', 'SDID', 'site', 'uid']:
+                if csv_id_clean.startswith(prefix):
+                    csv_id_clean = csv_id_clean[len(prefix):].strip()
+                    break
+            if csv_id_clean == data_id_clean:
+                return r
+    return 'null'
 
-    return output
+def qaqc(mainTable, dataDictionaryTable, dataID):
+    if not dataDictionaryTable:return
 
-def qaqc(mainTable, dataDictionaryTable, dataID): 
-    for c in range(1, mainTable.columnCount()):  
-        # Find the data ID in the dictionary and return the row number
-        parseID = str(dataID[c - 1]).split('\n')
-        parseID = parseID[len(parseID) - 1]
-        dataDictionaryItem = getDataDictionaryItem(dataDictionaryTable, parseID)
- 
-        # If data ID wasn't found in data dictionary, it will return a null. Change null to a -9999 for next logic check
-        if dataDictionaryItem == 'null': dataDictionaryItem = -9999       
+    # Cache dict for fast lookup (col 0=ID, 3=exp_min,4=exp_max,5=cut_min,6=cut_max,7=roc)
+    dict_cache = {}
 
-        if float(dataDictionaryItem) > -9999: 
-            for d in range(0, mainTable.rowCount()):   
-                # Add item to variable for formatting             
-                item = QTableWidgetItem(mainTable.item(d, c).text()) 
+    for r in range(dataDictionaryTable.rowCount()):
+        id_item = dataDictionaryTable.item(r, 0)  # Col 0 = dataID
+        id_key = id_item.text().strip() if id_item else ''
 
-                # Check to see if data is missing           
-                if mainTable.item(d, c).text() == '': item.setBackground(QtGui.QColor(100, 195, 247))
-                else:              
-                    try:
-                        # Check for over cutoff max                   
-                        if float(mainTable.item(d, c).text()) > float(dataDictionaryTable.item(dataDictionaryItem, 6).text()): item.setBackground(QtGui.QColor(192, 28, 40))   
+        if id_key:
+            try:
+                dict_cache[id_key] = {
+                    'exp_min': float(dataDictionaryTable.item(r, 3).text().strip() if dataDictionaryTable.item(r, 3) else '0'),
+                    'exp_max': float(dataDictionaryTable.item(r, 4).text().strip() if dataDictionaryTable.item(r, 4) else float('inf')),
+                    'cut_min': float(dataDictionaryTable.item(r, 5).text().strip() if dataDictionaryTable.item(r, 5) else float('-inf')),
+                    'cut_max': float(dataDictionaryTable.item(r, 6).text().strip() if dataDictionaryTable.item(r, 6) else float('inf')),
+                    'roc': float(dataDictionaryTable.item(r, 7).text().strip() if dataDictionaryTable.item(r, 7) else float('inf'))
+                }
+            except ValueError:pass  # Skip bad row
 
-                        # Check for under cutoff min
-                        if float(mainTable.item(d, c).text()) < float(dataDictionaryTable.item(dataDictionaryItem, 5).text()): item.setBackground(QtGui.QColor(255, 163, 72))   
+    for c in range(1, mainTable.columnCount()):
+        parse_id = str(dataID[c - 1]).split('\n')[-1].strip()  # Last line = raw ID
+        params = dict_cache.get(parse_id)
+        if not params:continue  # Skip if no dict entry
 
-                        # Check for over expected max                   
-                        if float(mainTable.item(d, c).text()) > float(dataDictionaryTable.item(dataDictionaryItem, 4).text()): item.setBackground(QtGui.QColor(245, 194, 17))   
+        prev_val = None
 
-                        # Check for under expected min
-                        if float(mainTable.item(d, c).text()) < float(dataDictionaryTable.item(dataDictionaryItem, 3).text()): item.setBackground(QtGui.QColor(249, 240, 107))  
+        for d in range(mainTable.rowCount()):
+            cell_text = mainTable.item(d, c).text() if mainTable.item(d, c) else ''
+            item = QTableWidgetItem(cell_text)
+            colored = False  # Flag for white text
 
-                        # Check for rate of change
-                        if d > 0:
-                            if mainTable.item(d - 1, c).text() != '':
-                                if (float(mainTable.item(d, c).text()) - float(mainTable.item(d - 1, c).text())) > float(dataDictionaryTable.item(dataDictionaryItem, 7).text()): item.setBackground(QtGui.QColor(246, 97, 81)) 
-                    except: None
+            if not cell_text:
+                item.setBackground(QColor(100, 195, 247))  # Missing (blue)
+                colored = True
+            else:
+                try:
+                    val = float(cell_text)
+                    # Cutoffs (red/orange)
+                    if val > params['cut_max']:
+                        item.setBackground(QColor(192, 28, 40))
+                        colored = True
+                    elif val < params['cut_min']:
+                        item.setBackground(QColor(255, 163, 72))
+                        colored = True
+                    # Expected (yellow)
+                    elif val > params['exp_max']:
+                        item.setBackground(QColor(245, 194, 17))
+                        colored = True
+                    elif val < params['exp_min']:
+                        item.setBackground(QColor(249, 240, 107))
+                        colored = True
+                    # ROC (red)
+                    if prev_val is not None and (val - prev_val) > params['roc']:
+                        item.setBackground(QColor(246, 97, 81))
+                        colored = True
+                    # Repeat (green)
+                    if prev_val is not None and val == prev_val:
+                        item.setBackground(QColor(87, 227, 137))
+                        colored = True
+                    prev_val = val
+                except ValueError:pass  # Non-numeric: no color
 
-                    # Check for repeating values
-                    if d > 0:
-                        if mainTable.item(d - 1, c).text() != '':
-                            if float(mainTable.item(d, c).text()) == float(mainTable.item(d - 1, c).text()): item.setBackground(QtGui.QColor(87, 227, 137))            
+            if colored:
+                item.setForeground(QColor("white"))  # White text for dark mode readability
 
-                # Add data to the table
-                mainTable.setItem(d, c, item)  
+            mainTable.setItem(d, c, item)
 
 def loadAllQuickLooks(cbQuickLook):     
-    # Clear the combobox first
     cbQuickLook.clear()
+    cbQuickLook.addItem(None)  # Blank first
 
-    # First item should always be a blank
-    cbQuickLook.addItem(None)
-
-    # Open the file      
-    for file in os.listdir(resource_path('quickLook')):
-        # Open the file
-        f = open(resource_path(f'quickLook/{file}'), 'r', encoding='utf-8-sig')  
-        
-        # Read all lines in the file         
-        readfile = f.readlines()  
-
-        # Close the file  
-        f.close() 
-
-        # Add all lines as combobox items     
-        cbQuickLook.addItem(str(file).split('.txt')[0]) 
+    quicklook_dir = resource_path('quickLook')
+    if os.path.exists(quicklook_dir):
+        for file in os.listdir(quicklook_dir):
+            if file.endswith('.txt'):
+                cbQuickLook.addItem(file.split('.txt')[0])
                   
 def saveQuickLook(textQuickLookName, listQueryList):
-    # Create a file or open if it deson't exist
-    f = open(resource_path(f'quickLook/{textQuickLookName.toPlainText()}.txt'), 'w', encoding='utf-8-sig')    
-    
-    for x in range(listQueryList.count()):
-        if x == 0: data = (listQueryList.item(x).text())
-        else: data = f'{data},{listQueryList.item(x).text()}'       
-    
-    # Write data to file
-    f.write(data)  
+    name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
+    if not name:
+        print("Warning: Empty quick look name—skipped.")
+        return
 
-    # Close the file
-    f.close()
+    data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
+    quicklook_path = resource_path(f'quickLook/{name}.txt')
+    os.makedirs(os.path.dirname(quicklook_path), exist_ok=True)  # Ensure dir
+    with open(quicklook_path, 'w', encoding='utf-8-sig') as f:
+        f.write(','.join(data))
 
-def loadQuickLook(cbQuickLook, listQueryList):     
-    # Clear the list first
+def loadQuickLook(cbQuickLook, listQueryList):
+    name = cbQuickLook.currentText()
+    if not name:
+        return
+
+    quicklook_path = resource_path(f'quickLook/{name}.txt')
     listQueryList.clear()
-
-    # Open the file  
-    f = open(resource_path(f'quickLook/{cbQuickLook.currentText()}.txt'), 'r', encoding='utf-8-sig')           
-    readfile = f.readlines()  
-
-    # Close the file
-    f.close()  
-    
-    # Parse the data    
-    data = str(readfile).split(',')
-    data[0] = data[0].replace("['", '')
-    data[len(data)-1] = data[len(data)-1].replace("']", '')
-    
-    for d in range(0, len(data)):
-        listQueryList.addItem(data[d])    
+    try:
+        with open(quicklook_path, 'r', encoding='utf-8-sig') as f:
+            content = f.read().strip()
+            if content:
+                data = content.split(',')
+                for item_text in data:
+                    listQueryList.addItem(item_text.strip())
+    except FileNotFoundError:
+        print(f"Quick look '{name}' not found.")  
 
 def loadConfig():
-    output = []
-    config = []
-
-    try: 
-        # Try to open the file
-        f = open(resource_path('config.ini'), 'r', encoding='utf-8-sig') 
-        config = f.readlines()     
-    except:   
-        # If no file found, create one and set light as first item in config  
-        f = open(resource_path('config.ini'), 'w', encoding='utf-8-sig')    
-        config.append('light') 
-        f.writelines(config)   
-    finally:
-        # Close the file and output config
-        f.close()
-        output = config
-
-    return output
+    config = ['light']  # Default
+    config_path = resource_path('config.ini')
+    try:
+        with open(config_path, 'r', encoding='utf-8-sig') as f:
+            config = [line.strip() for line in f.readlines()]
+            if not config:  # Empty file
+                config = ['light']
+    except FileNotFoundError:
+        # Create if missing
+        with open(config_path, 'w', encoding='utf-8-sig') as f:
+            f.write('light\n')
+    return config
 
 def exportTableToCSV(table, fileLocation, fileName):
     data = []    
@@ -309,11 +331,8 @@ def exportTableToCSV(table, fileLocation, fileName):
 
 def resource_path(relative_path):
     """Get absolute path to resource, works for dev and PyInstaller"""
-    if getattr(sys, 'frozen', False): # Bundeled mode
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
+    if getattr(sys, 'frozen', False):  # Bundled mode
         base_path = sys._MEIPASS
-    else: # Dev mode
-        base_path = os.path.dirname(os.path.abspath(__file__)) # Scripts directory  
-    full_path = os.path.join(base_path, relative_path)
-
-    return os.path.normpath(full_path) # Normalize slashes
+    else:  # Dev mode
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.normpath(os.path.join(base_path, relative_path))
