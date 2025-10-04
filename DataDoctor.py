@@ -79,7 +79,7 @@ class uiMain(QMainWindow):
         winDataDictionary.show()    
 
     def btnExportCSVPressed(self):
-        Logic.exportTableToCSV(self.table, Logic.resource_path(''), 'TestExport')
+        Logic.exportTableToCSV(self.table, '', '')  # Pass empty (uses dialog)
 
     def exitPressed(self):
         app.exit()    
@@ -156,7 +156,7 @@ class uiWebQuery(QMainWindow):
 
         # USBR or USGS API query (separate ifs, as original)
         data = None
-        
+
         try:
             if self.cbDatabase.currentText().split('-')[0] == 'USBR': 
                 data = QueryUSBR.api(self.cbDatabase, dataID, self.dteStartDate, self.dteEndDate, self.cbInterval)
