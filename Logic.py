@@ -162,4 +162,4 @@ def buildDTEDateTime(dateTime):
     month = int(parts[1])
     day = int(parts[2])
     hour = int(parts[3])
-    minute = int(parts
+    minute = int(parts[4])
