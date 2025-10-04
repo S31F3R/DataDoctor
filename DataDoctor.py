@@ -16,7 +16,7 @@ class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
     def __init__(self):
         super(uiMain, self).__init__() # Call the inherited classes __init__ method
-        uic.loadUi(Logic.resource_path('ui\winMain.ui'), self) # Load the .ui file
+        uic.loadUi(Logic.resource_path('ui/winMain.ui'), self) # Load the .ui file
         
         # Attach controls
         self.btnQuery = self.findChild(QPushButton, 'btnQuery')
@@ -88,7 +88,7 @@ class uiWebQuery(QMainWindow):
     """Query window: Builds and executes USBR/USGS API calls."""
     def __init__(self, parent=None):
         super(uiWebQuery, self).__init__(parent) # Pass parent superclass
-        uic.loadUi(Logic.resource_path('ui\winWebQuery.ui'), self) # Load the .ui file
+        uic.loadUi(Logic.resource_path('ui/winWebQuery.ui'), self) # Load the .ui file
 
         # Define the controls
         self.btnQuery = self.findChild(QPushButton, 'btnQuery')    
@@ -210,7 +210,7 @@ class uiDataDictionary(QMainWindow):
     """Data dictionary editor: Manages labels for time-series IDs."""
     def __init__(self, parent=None):
         super(uiDataDictionary, self).__init__(parent) # Pass parent superclass
-        uic.loadUi(Logic.resource_path('ui\winDataDictionary.ui'), self) # Load the .ui file
+        uic.loadUi(Logic.resource_path('ui/winDataDictionary.ui'), self) # Load the .ui file
 
         # Attach controls
         self.table = self.findChild(QTableWidget, 'dataDictionaryTable')  
@@ -260,7 +260,7 @@ class uiQuickLook(QDialog):
     """Quick look save dialog: Names and stores query presets."""
     def __init__(self, parent=None):
         super(uiQuickLook, self).__init__(parent) # Pass parent superclass
-        uic.loadUi(Logic.resource_path('ui\winQuickLook.ui'), self) # Load the .ui file
+        uic.loadUi(Logic.resource_path('ui/winQuickLook.ui'), self) # Load the .ui file
 
         # Attach controls
         self.btnSave = self.findChild(QPushButton, 'btnSave')   
