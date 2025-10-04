@@ -3,7 +3,7 @@ import sys
 import datetime
 from datetime import datetime, timedelta
 from PyQt6 import QtGui
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QThreadPool, QRunnable, pyqtSignal, QObject
 from PyQt6.QtGui import QColor  # For QAQC cell colors
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QTableWidget, QLabel, QAbstractItemView
 
@@ -126,11 +126,11 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
             table.setItem(row_idx, col_idx, item)
 
-    # Freeze first column (values for main, ID for dict)
-    table.setColumnWidth(0, 150)
-    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+    # Freeze first column (dates, manual resize allowed)
+    table.setColumnWidth(0, 150)  # Initial width
+    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)  # Auto + manual drag
     table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-    table.setViewportMargins(150, 0, 0, 0)
+    table.setViewportMargins(150, 0, 0, 0)  # Pin on scroll
 
     # Resize all columns to fit headers + data
     for col in range(num_cols):
@@ -188,15 +188,14 @@ def getDataDictionaryItem(table, dataID):
     return 'null'
 
 def qaqc(mainTable, dataDictionaryTable, dataID):
-    if not dataDictionaryTable:return
+    if not dataDictionaryTable:
+        return
 
     # Cache dict for fast lookup (col 0=ID, 3=exp_min,4=exp_max,5=cut_min,6=cut_max,7=roc)
     dict_cache = {}
-
     for r in range(dataDictionaryTable.rowCount()):
         id_item = dataDictionaryTable.item(r, 0)  # Col 0 = dataID
         id_key = id_item.text().strip() if id_item else ''
-
         if id_key:
             try:
                 dict_cache[id_key] = {
@@ -206,20 +205,20 @@ def qaqc(mainTable, dataDictionaryTable, dataID):
                     'cut_max': float(dataDictionaryTable.item(r, 6).text().strip() if dataDictionaryTable.item(r, 6) else float('inf')),
                     'roc': float(dataDictionaryTable.item(r, 7).text().strip() if dataDictionaryTable.item(r, 7) else float('inf'))
                 }
-            except ValueError:pass  # Skip bad row
+            except ValueError:
+                pass  # Skip bad row
 
     for c in range(1, mainTable.columnCount()):
         parse_id = str(dataID[c - 1]).split('\n')[-1].strip()  # Last line = raw ID
         params = dict_cache.get(parse_id)
-        if not params:continue  # Skip if no dict entry
+        if not params:
+            continue  # Skip if no dict entry
 
         prev_val = None
-
         for d in range(mainTable.rowCount()):
             cell_text = mainTable.item(d, c).text() if mainTable.item(d, c) else ''
             item = QTableWidgetItem(cell_text)
-            colored = False  # Flag for white text
-
+            colored = False  # Flag for text color
             if not cell_text:
                 item.setBackground(QColor(100, 195, 247))  # Missing (blue)
                 colored = True
@@ -249,10 +248,15 @@ def qaqc(mainTable, dataDictionaryTable, dataID):
                         item.setBackground(QColor(87, 227, 137))
                         colored = True
                     prev_val = val
-                except ValueError:pass  # Non-numeric: no color
+                except ValueError:
+                    pass  # Non-numeric: no color
 
             if colored:
-                item.setForeground(QColor("white"))  # White text for dark mode readability
+                # White for all except yellow (black for yellow readability)
+                if item.background().color() in [QColor(245, 194, 17), QColor(249, 240, 107)]:  # Yellows
+                    item.setForeground(QColor("black"))
+                else:
+                    item.setForeground(QColor("white"))
 
             mainTable.setItem(d, c, item)
 
@@ -350,7 +354,7 @@ def custom_sort_table(table, col, dataDictionaryTable):
     else:
         ascending = True  # Default asc for new col
 
-    # Extract rows: [timestamp, value_col0, value_col1, ...]
+    # Extract rows in main thread (fast, just text)
     num_rows = table.rowCount()
     rows = []
     for row_idx in range(num_rows):
@@ -358,18 +362,20 @@ def custom_sort_table(table, col, dataDictionaryTable):
         row_data = [table.item(row_idx, c).text() if table.item(row_idx, c) else '' for c in range(table.columnCount())]
         rows.append([timestamp] + row_data)  # Timestamp first
 
-    # Sort rows by col (skip timestamp index 0, uniform float key)
-    def sort_key(row):
-        try:
-            return float(row[col + 1])  # Try numeric
-        except ValueError:
-            return 0  # Fallback for str/empty (sorts to start/end)
+    # Start pooled worker (auto-managed, no destroy warning)
+    pool = QThreadPool.globalInstance()
+    worker = sortWorker(rows, col, ascending)
+    worker.signals.sort_done.connect(lambda sorted_rows, asc: update_table_after_sort(table, sorted_rows, asc, dataDictionaryTable, col))
+    pool.start(worker)
 
-    rows.sort(key=sort_key, reverse=not ascending)
+    # Set sort indicator immediately (UI feedback)
+    header.setSortIndicator(col, Qt.SortOrder.AscendingOrder if ascending else Qt.SortOrder.DescendingOrder)
 
-    # Re-populate table with sorted rows
+def update_table_after_sort(table, sorted_rows, ascending, dataDictionaryTable, col):
+    # Re-populate on main thread
     table.setSortingEnabled(False)  # Disable default sort
-    for row_idx, row in enumerate(rows):
+    num_rows = len(sorted_rows)
+    for row_idx, row in enumerate(sorted_rows):
         # Vertical: Timestamp
         table.setVerticalHeaderItem(row_idx, QTableWidgetItem(row[0]))
         # Data cols
@@ -379,15 +385,12 @@ def custom_sort_table(table, col, dataDictionaryTable):
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
             table.setItem(row_idx, c, item)
 
-    # Re-apply QAQC colors (reconstruct dataID from headers)
+    # Re-apply QAQC colors
     header_labels = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
     data_id = [label.split('\n')[-1].strip() for label in header_labels]  # Last line = raw ID
     qaqc(table, dataDictionaryTable, data_id)
 
-    # Set sort indicator
-    header.setSortIndicator(col, Qt.SortOrder.AscendingOrder if ascending else Qt.SortOrder.DescendingOrder)
-
-    # Re-freeze col 0 if needed
+    # Re-freeze col 0
     table.setColumnWidth(0, 150)
     table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
     table.setViewportMargins(150, 0, 0, 0)
@@ -395,3 +398,45 @@ def custom_sort_table(table, col, dataDictionaryTable):
     # Resize others
     for c in range(1, table.columnCount()):
         table.resizeColumnToContents(c)
+
+class sortWorkerSignals(QObject):
+    sort_done = pyqtSignal(list, bool)
+
+class sortWorker(QRunnable):
+    def __init__(self, rows, col, ascending):
+        super().__init__()
+        self.signals = sortWorkerSignals()
+        self.rows = rows
+        self.col = col
+        self.ascending = ascending
+
+    def run(self):
+        def sort_key(row):
+            try:
+                return float(row[self.col + 1])
+            except ValueError:
+                return 0
+
+        self.rows.sort(key=sort_key, reverse=not self.ascending)
+        self.signals.sort_done.emit(self.rows, self.ascending)
+
+class sortThread(QThread):
+    sort_done = pyqtSignal(list, bool, list)  # Emits sorted_rows, ascending, data_id
+
+    def __init__(self):
+        super().__init__()
+        self.rows = None
+        self.col = None
+        self.ascending = None
+
+    def run(self):
+        # Sort in background
+        def sort_key(row):
+            try:
+                return float(row[self.col + 1])  # Skip timestamp
+            except ValueError:
+                return 0  # Fallback
+
+        self.rows.sort(key=sort_key, reverse=not self.ascending)
+        self.sort_done.emit(self.rows, self.ascending, [])  # Empty data_id placeholder
+        self.quit()  # Stop event loop
