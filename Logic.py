@@ -135,6 +135,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
     # Resize all columns to fit headers + data
     for col in range(num_cols):
         table.resizeColumnToContents(col)
+    
+    # Connect custom sort (syncs timestamps)
+    table.horizontalHeader().sectionClicked.connect(lambda col: custom_sort_table(table, col, dataDictionaryTable))
 
 def buildDataDictionary(table):
     data = []
@@ -336,3 +339,59 @@ def resource_path(relative_path):
     else:  # Dev mode
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.normpath(os.path.join(base_path, relative_path))
+
+def custom_sort_table(table, col, dataDictionaryTable):
+    # Get current sort order (toggle asc/dec per col)
+    header = table.horizontalHeader()
+    sort_indicator = header.sortIndicatorSection()
+    ascending = header.sortIndicatorOrder() == Qt.SortOrder.AscendingOrder
+    if sort_indicator == col:
+        ascending = not ascending  # Toggle
+    else:
+        ascending = True  # Default asc for new col
+
+    # Extract rows: [timestamp, value_col0, value_col1, ...]
+    num_rows = table.rowCount()
+    rows = []
+    for row_idx in range(num_rows):
+        timestamp = table.verticalHeaderItem(row_idx).text() if table.verticalHeaderItem(row_idx) else ''  # From vertical
+        row_data = [table.item(row_idx, c).text() if table.item(row_idx, c) else '' for c in range(table.columnCount())]
+        rows.append([timestamp] + row_data)  # Timestamp first
+
+    # Sort rows by col (skip timestamp index 0, uniform float key)
+    def sort_key(row):
+        try:
+            return float(row[col + 1])  # Try numeric
+        except ValueError:
+            return 0  # Fallback for str/empty (sorts to start/end)
+
+    rows.sort(key=sort_key, reverse=not ascending)
+
+    # Re-populate table with sorted rows
+    table.setSortingEnabled(False)  # Disable default sort
+    for row_idx, row in enumerate(rows):
+        # Vertical: Timestamp
+        table.setVerticalHeaderItem(row_idx, QTableWidgetItem(row[0]))
+        # Data cols
+        for c in range(table.columnCount()):
+            cell_text = row[c + 1]
+            item = QTableWidgetItem(cell_text)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            table.setItem(row_idx, c, item)
+
+    # Re-apply QAQC colors (reconstruct dataID from headers)
+    header_labels = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
+    data_id = [label.split('\n')[-1].strip() for label in header_labels]  # Last line = raw ID
+    qaqc(table, dataDictionaryTable, data_id)
+
+    # Set sort indicator
+    header.setSortIndicator(col, Qt.SortOrder.AscendingOrder if ascending else Qt.SortOrder.DescendingOrder)
+
+    # Re-freeze col 0 if needed
+    table.setColumnWidth(0, 150)
+    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+    table.setViewportMargins(150, 0, 0, 0)
+
+    # Resize others
+    for c in range(1, table.columnCount()):
+        table.resizeColumnToContents(c)
