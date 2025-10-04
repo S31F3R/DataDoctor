@@ -132,8 +132,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
     table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
     table.setViewportMargins(150, 0, 0, 0)
 
-    # Resize other columns
-    for col in range(1, num_cols):
+    # Resize all columns to fit headers + data
+    for col in range(num_cols):
         table.resizeColumnToContents(col)
 
 def buildDataDictionary(table):
