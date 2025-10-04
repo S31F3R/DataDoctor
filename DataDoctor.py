@@ -156,6 +156,7 @@ class uiWebQuery(QMainWindow):
 
         # USBR or USGS API query (separate ifs, as original)
         data = None
+        
         try:
             if self.cbDatabase.currentText().split('-')[0] == 'USBR': 
                 data = QueryUSBR.api(self.cbDatabase, dataID, self.dteStartDate, self.dteEndDate, self.cbInterval)
