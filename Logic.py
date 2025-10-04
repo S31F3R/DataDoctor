@@ -7,6 +7,8 @@ from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStand
 from PyQt6.QtGui import QColor  # For QAQC cell colors
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QTableWidget, QLabel, QAbstractItemView, QFileDialog
 
+sort_state = {}  # Global dict for per-col sort state (col: ascending)
+
 def buildTimestamps(startDate, endDate, dataInterval):
     # Set the inverval   
     if dataInterval.currentText() == 'HOUR': interval = timedelta(hours = 1)
@@ -135,8 +137,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
     # Resize all columns to fit headers + data
     for col in range(num_cols):
         table.resizeColumnToContents(col)
+
     
     # Connect custom sort (syncs timestamps)
+    table.horizontalHeader().setStretchLastSection(True)  # Fill space from start (no shift)
     table.horizontalHeader().sectionClicked.connect(lambda col: custom_sort_table(table, col, dataDictionaryTable))
 
 def buildDataDictionary(table):
@@ -370,14 +374,19 @@ def resource_path(relative_path):
     return os.path.normpath(os.path.join(base_path, relative_path))
 
 def custom_sort_table(table, col, dataDictionaryTable):
-    # Get current sort order (toggle asc/dec per col)
-    header = table.horizontalHeader()
-    sort_indicator = header.sortIndicatorSection()
-    ascending = header.sortIndicatorOrder() == Qt.SortOrder.AscendingOrder
-    if sort_indicator == col:
-        ascending = not ascending  # Toggle
+    # Disable selection highlight during sort
+    table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+
+    # Pre-resize columns to prevent shift (before sort)
+    for c in range(table.columnCount()):
+        table.resizeColumnToContents(c)
+
+    # Toggle sort order (per-col state)
+    if col not in sort_state:
+        sort_state[col] = True  # Default ASC for new col
     else:
-        ascending = True  # Default asc for new col
+        sort_state[col] = not sort_state[col]  # Flip
+    ascending = sort_state[col]
 
     # Extract rows in main thread (fast, just text)
     num_rows = table.rowCount()
@@ -394,6 +403,7 @@ def custom_sort_table(table, col, dataDictionaryTable):
     pool.start(worker)
 
     # Set sort indicator immediately (UI feedback)
+    header = table.horizontalHeader()
     header.setSortIndicator(col, Qt.SortOrder.AscendingOrder if ascending else Qt.SortOrder.DescendingOrder)
 
 def update_table_after_sort(table, sorted_rows, ascending, dataDictionaryTable, col):
@@ -410,19 +420,24 @@ def update_table_after_sort(table, sorted_rows, ascending, dataDictionaryTable, 
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
             table.setItem(row_idx, c, item)
 
+    # Lock widths before QAQC (no reflow/shift)
+    for c in range(table.columnCount()):
+        table.setColumnWidth(c, table.columnWidth(c))  # Lock current
+
     # Re-apply QAQC colors
     header_labels = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
     data_id = [label.split('\n')[-1].strip() for label in header_labels]  # Last line = raw ID
     qaqc(table, dataDictionaryTable, data_id)
 
-    # Re-freeze col 0
+    # Re-freeze col 0 (locked, no resize)
     table.setColumnWidth(0, 150)
     table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
     table.setViewportMargins(150, 0, 0, 0)
 
-    # Resize others
-    for c in range(1, table.columnCount()):
-        table.resizeColumnToContents(c)
+    # Re-enable selection (after sort, for normal use)
+    table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+
+    # No resize here—locked prevents shift
 
 class sortWorkerSignals(QObject):
     sort_done = pyqtSignal(list, bool)
