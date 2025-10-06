@@ -67,8 +67,6 @@ def gapCheck(timestamps, data):
     return data
 
 def combineParameters(data, newData):
-    if len(data) != len(newData):
-        return data  # Mismatch—skip
     for d in range(len(newData)):
         parseLine = newData[d].split(',')
         data[d] = f'{data[d]},{parseLine[1]}'
@@ -475,7 +473,7 @@ class sortWorker(QRunnable):
 
         self.rows.sort(key=sort_key, reverse=not self.ascending)
         self.signals.sort_done.emit(self.rows, self.ascending)
-        
+
 def centerWindowToParent(ui):
     # Center window relative to parent (main window)
     if ui.parent():  # Fallback if no parent
