@@ -2,10 +2,9 @@ import os
 import sys
 import datetime
 from datetime import datetime, timedelta
-from PyQt6 import QtGui
-from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDateTime, QTimer
+from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer
 from PyQt6.QtGui import QColor  # For QAQC cell colors
-from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QTableWidget, QLabel, QAbstractItemView, QFileDialog
+from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog
 
 sort_state = {}  # Global dict for per-col sort state (col: ascending)
 sorting_active = False  # Global flag to prevent overlapping sorts
