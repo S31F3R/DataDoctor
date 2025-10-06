@@ -3,11 +3,12 @@ import sys
 import datetime
 from datetime import datetime, timedelta
 from PyQt6 import QtGui
-from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDateTime
+from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDateTime, QTimer
 from PyQt6.QtGui import QColor  # For QAQC cell colors
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QTableWidget, QLabel, QAbstractItemView, QFileDialog
 
 sort_state = {}  # Global dict for per-col sort state (col: ascending)
+sorting_active = False  # Global flag to prevent overlapping sorts
 
 def buildTimestamps(startDate, endDate, dataInterval):
     # Set the inverval   
@@ -76,16 +77,17 @@ def combineParameters(data, newData):
 
 def buildTable(table, data, buildHeader, dataDictionaryTable):
     table.clear()
-    if not data:return
+    if not data:
+        return
 
     # Assume buildHeader is list; split if str
-    if isinstance(buildHeader, str):buildHeader = [h.strip() for h in buildHeader.split(',')]
+    if isinstance(buildHeader, str):
+        buildHeader = [h.strip() for h in buildHeader.split(',')]
 
     # Build processed headers with dict lookup (list for efficiency)
     processed_headers = []
     for h in buildHeader:
         header_text = h.strip()  # Strip raw header
-
         if dataDictionaryTable:
             dict_row = getDataDictionaryItem(dataDictionaryTable, header_text)
             if dict_row != 'null':
@@ -138,11 +140,22 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
     for col in range(num_cols):
         table.resizeColumnToContents(col)
 
-    
+    # Warm-up dummy sort to trigger initial reflow (no shift on first real click)
+    header = table.horizontalHeader()
+    table.setSortingEnabled(False)  # Disable for dummy
+    QTimer.singleShot(0, lambda: [
+        header.setSortIndicator(0, Qt.SortOrder.AscendingOrder),  # Dummy ASC on col 0
+        table.sortItems(0, Qt.SortOrder.AscendingOrder),  # Dummy sort (no change)
+        header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder),  # Clear with ASC
+        table.setSortingEnabled(True)  # Re-enable
+    ])  # Queued for next loop cycle (settles layout)
+
     # Connect custom sort (syncs timestamps)
-    table.horizontalHeader().setStretchLastSection(True)  # Fill space from start (no shift)
     table.horizontalHeader().sectionClicked.connect(lambda col: custom_sort_table(table, col, dataDictionaryTable))
 
+    # Connect custom sort (syncs timestamps)
+    table.horizontalHeader().sectionClicked.connect(lambda col: custom_sort_table(table, col, dataDictionaryTable))
+    
 def buildDataDictionary(table):
     data = []
     csv_path = resource_path('DataDictionary.csv')
@@ -374,18 +387,23 @@ def resource_path(relative_path):
     return os.path.normpath(os.path.join(base_path, relative_path))
 
 def custom_sort_table(table, col, dataDictionaryTable):
+    # Prevent overlap (ignore if sorting already)
+    pool = QThreadPool.globalInstance()
+    if pool.activeThreadCount() > 0:
+        return  # Skip during sort
+
     # Disable selection highlight during sort
     table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
 
-    # Pre-resize columns to prevent shift (before sort)
-    for c in range(table.columnCount()):
-        table.resizeColumnToContents(c)
+    # Clear indicator to stop Qt double-trigger
+    header = table.horizontalHeader()
+    header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)  # Clear (safe enum)
 
     # Toggle sort order (per-col state)
     if col not in sort_state:
         sort_state[col] = True  # Default ASC for new col
     else:
-        sort_state[col] = not sort_state[col]  # Flip
+        sort_state[col] = not sort_state[col]  # Flip on every click
     ascending = sort_state[col]
 
     # Extract rows in main thread (fast, just text)
@@ -403,7 +421,6 @@ def custom_sort_table(table, col, dataDictionaryTable):
     pool.start(worker)
 
     # Set sort indicator immediately (UI feedback)
-    header = table.horizontalHeader()
     header.setSortIndicator(col, Qt.SortOrder.AscendingOrder if ascending else Qt.SortOrder.DescendingOrder)
 
 def update_table_after_sort(table, sorted_rows, ascending, dataDictionaryTable, col):
