@@ -129,12 +129,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
             table.setItem(row_idx, col_idx, item)
 
-    # Freeze first column (dates, manual resize allowed)
-    table.setColumnWidth(0, 150)  # Initial width
-    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)  # Auto + manual drag
-    table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-    table.setViewportMargins(150, 0, 0, 0)  # Pin on scroll
-
     # Resize all columns to fit headers + data
     for col in range(num_cols):
         table.resizeColumnToContents(col)
@@ -148,9 +142,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
         header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder),  # Clear with ASC
         table.setSortingEnabled(True)  # Re-enable
     ])  # Queued for next loop cycle (settles layout)
-
-    # Connect custom sort (syncs timestamps)
-    table.horizontalHeader().sectionClicked.connect(lambda col: custom_sort_table(table, col, dataDictionaryTable))
 
     # Connect custom sort (syncs timestamps)
     table.horizontalHeader().sectionClicked.connect(lambda col: custom_sort_table(table, col, dataDictionaryTable))
