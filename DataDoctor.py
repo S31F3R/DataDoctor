@@ -130,13 +130,7 @@ class uiWebQuery(QMainWindow):
         self.dteEndDate.setDateTime(datetime.now())      
 
         # Center window relative to parent (main window)
-        if self.parent():  # Fallback if no parent
-            parent_center = self.parent().frameGeometry().center()
-        else:
-            parent_center = QGuiApplication.primaryScreen().availableGeometry().center()
-        rect = self.frameGeometry()
-        rect.moveCenter(parent_center)
-        self.move(rect.topLeft())
+        Logic.centerWindowToParent(self)
 
     def btnQueryPressed(self):   
         # Build dataID: List first (comma-joined), fallback to single text if empty
@@ -172,7 +166,7 @@ class uiWebQuery(QMainWindow):
             return
                         
         buildHeader = data[0]        
-        dataID = data[0]  # Reuse as universal tag for QAQC (your intent)
+        dataID = data[0]  # Reuse as universal tag for QAQC
         data.pop(0)
 
         # USBR API fix: Pop extra item if not AQUARIUS or USGS
@@ -223,13 +217,7 @@ class uiDataDictionary(QMainWindow):
         self.btnAddRow.clicked.connect(self.btnAddRowPressed) 
 
         # Center window relative to parent (main window)
-        if self.parent():  # Fallback if no parent
-            parent_center = self.parent().frameGeometry().center()
-        else:
-            parent_center = QGuiApplication.primaryScreen().availableGeometry().center()
-        rect = self.frameGeometry()
-        rect.moveCenter(parent_center)
-        self.move(rect.topLeft())
+        Logic.centerWindowToParent(self)
 
     def btnSavePressed(self):
         data = []    
@@ -273,13 +261,7 @@ class uiQuickLook(QDialog):
         self.btnCancel.clicked.connect(self.btnCancelPressed)  
 
         # Center window relative to parent (main window)
-        if self.parent():  # Fallback if no parent
-            parent_center = self.parent().frameGeometry().center()
-        else:
-            parent_center = QGuiApplication.primaryScreen().availableGeometry().center()
-        rect = self.frameGeometry()
-        rect.moveCenter(parent_center)
-        self.move(rect.topLeft())
+        Logic.centerWindowToParent(self)
 
     def btnSavePressed(self): 
         # Save quick look

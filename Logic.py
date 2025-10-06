@@ -3,7 +3,7 @@ import sys
 import datetime
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer
-from PyQt6.QtGui import QColor  # For QAQC cell colors
+from PyQt6.QtGui import QGuiApplication, QColor
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog
 
 sort_state = {}  # Global dict for per-col sort state (col: ascending)
@@ -475,3 +475,13 @@ class sortWorker(QRunnable):
 
         self.rows.sort(key=sort_key, reverse=not self.ascending)
         self.signals.sort_done.emit(self.rows, self.ascending)
+        
+def centerWindowToParent(ui):
+    # Center window relative to parent (main window)
+    if ui.parent():  # Fallback if no parent
+        parent_center = ui.parent().frameGeometry().center()
+    else:
+        parent_center = QGuiApplication.primaryScreen().availableGeometry().center()
+    rect = ui.frameGeometry()
+    rect.moveCenter(parent_center)
+    ui.move(rect.topLeft())
