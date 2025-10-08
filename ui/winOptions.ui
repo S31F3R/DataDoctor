@@ -11,12 +11,12 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Dialog</string>
+   <string>Options</string>
   </property>
-  <widget class="QDialogButtonBox" name="buttonBox">
+  <widget class="QDialogButtonBox" name="btnbOptions">
    <property name="geometry">
     <rect>
-     <x>0</x>
+     <x>10</x>
      <y>260</y>
      <width>441</width>
      <height>32</height>
@@ -27,6 +27,9 @@
    </property>
    <property name="standardButtons">
     <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+   </property>
+   <property name="centerButtons">
+    <bool>true</bool>
    </property>
   </widget>
   <widget class="QTabWidget" name="tabWidget">
@@ -39,24 +42,218 @@
     </rect>
    </property>
    <property name="currentIndex">
-    <number>0</number>
+    <number>1</number>
    </property>
    <widget class="QWidget" name="tabGeneral">
     <attribute name="title">
      <string>General</string>
     </attribute>
+    <widget class="QTextEdit" name="textUTCOffset">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>20</y>
+       <width>151</width>
+       <height>31</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbUTCOffset">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>0</y>
+       <width>81</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>UTC Offset</string>
+     </property>
+    </widget>
    </widget>
-   <widget class="QWidget" name="tabDatabase">
+   <widget class="QWidget" name="tabAquarius">
     <attribute name="title">
-     <string>Database</string>
+     <string>Aquarius</string>
     </attribute>
+    <widget class="QTextEdit" name="textAQServer">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>20</y>
+       <width>451</width>
+       <height>31</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbAQServer">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>0</y>
+       <width>81</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Server Link</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbAQUserName">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>60</y>
+       <width>81</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>User Name</string>
+     </property>
+    </widget>
+    <widget class="QTextEdit" name="textAQUser">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>80</y>
+       <width>451</width>
+       <height>31</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbAQPassword">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>120</y>
+       <width>81</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Password</string>
+     </property>
+    </widget>
+    <widget class="QTextEdit" name="textAQPassword">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>140</y>
+       <width>451</width>
+       <height>31</height>
+      </rect>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QWidget" name="tabUSGS">
+    <attribute name="title">
+     <string>USGS</string>
+    </attribute>
+    <widget class="QLabel" name="lbUSGSAPIKey">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>0</y>
+       <width>451</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>API Key</string>
+     </property>
+    </widget>
+    <widget class="QTextEdit" name="textUSGSAPIKey">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>20</y>
+       <width>451</width>
+       <height>31</height>
+      </rect>
+     </property>
+    </widget>
+   </widget>
+   <widget class="QWidget" name="tabUSBR">
+    <attribute name="title">
+     <string>USBR</string>
+    </attribute>
+    <widget class="QLabel" name="lbTNSNames">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>0</y>
+       <width>451</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>TNS Names Location</string>
+     </property>
+    </widget>
+    <widget class="QTextEdit" name="textTNSNames">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>20</y>
+       <width>451</width>
+       <height>31</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbTNSNames_2">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>60</y>
+       <width>451</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>sqlnet.ora Location</string>
+     </property>
+    </widget>
+    <widget class="QTextEdit" name="textSQLNetOra">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>80</y>
+       <width>451</width>
+       <height>31</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbTNSNames_3">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>120</y>
+       <width>451</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Oracle Wallet Location</string>
+     </property>
+    </widget>
+    <widget class="QTextEdit" name="textOracleWallet">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>140</y>
+       <width>451</width>
+       <height>31</height>
+      </rect>
+     </property>
+    </widget>
    </widget>
   </widget>
  </widget>
  <resources/>
  <connections>
   <connection>
-   <sender>buttonBox</sender>
+   <sender>btnbOptions</sender>
    <signal>accepted()</signal>
    <receiver>Dialog</receiver>
    <slot>accept()</slot>
@@ -72,7 +269,7 @@
    </hints>
   </connection>
   <connection>
-   <sender>buttonBox</sender>
+   <sender>btnbOptions</sender>
    <signal>rejected()</signal>
    <receiver>Dialog</receiver>
    <slot>reject()</slot>
