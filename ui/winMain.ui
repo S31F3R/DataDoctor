@@ -222,9 +222,12 @@
     </item>
     <item row="1" column="1" rowspan="2">
      <widget class="QTabWidget" name="tabWidget">
-      <widget class="QWidget" name="tab">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+      <widget class="QWidget" name="tabMain">
        <attribute name="title">
-        <string>Tab 1</string>
+        <string>Data Query</string>
        </attribute>
        <widget class="QTableWidget" name="mainTable">
         <property name="geometry">
@@ -240,9 +243,9 @@
         </property>
        </widget>
       </widget>
-      <widget class="QWidget" name="tab_2">
+      <widget class="QWidget" name="tabSQL">
        <attribute name="title">
-        <string>Tab 2</string>
+        <string>SQL</string>
        </attribute>
       </widget>
      </widget>

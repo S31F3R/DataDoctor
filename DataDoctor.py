@@ -301,8 +301,7 @@ class uiOptions(QDialog):
         super(uiOptions, self).__init__(parent) # Pass parent superclass
         uic.loadUi(Logic.resource_path('ui/winOptions.ui'), self) # Load the .ui file
 
-        # Attach controls
-        self.btnbOptions = self.findChild(QPushButton, 'btnbOptions')      
+        # Attach controls             
         self.textUTCOffset = self.findChild(QTextEdit,'textUTCOffset')  
         self.textAQServer = self.findChild(QTextEdit,'textAQServer') 
         self.textAQUser = self.findChild(QTextEdit,'textAQUser') 
@@ -310,6 +309,10 @@ class uiOptions(QDialog):
         self.textUSGSAPIKey = self.findChild(QTextEdit,'textUSGSAPIKey') 
 
         # Create events
+
+
+        # Center window relative to parent (main window)
+        Logic.centerWindowToParent(self)
         
 # Create an instance of QApplication     
 app = QApplication(sys.argv) 
