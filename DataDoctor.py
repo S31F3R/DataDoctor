@@ -311,7 +311,6 @@ class uiOptions(QDialog):
 
         # Create events
         
-
 # Create an instance of QApplication     
 app = QApplication(sys.argv) 
 
