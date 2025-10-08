@@ -86,24 +86,17 @@
        </size>
       </property>
       <layout class="QGridLayout" name="gridLayout_2">
-       <item row="0" column="3">
-        <widget class="QPushButton" name="btnDarkMode">
-         <property name="baseSize">
-          <size>
-           <width>32</width>
-           <height>32</height>
-          </size>
-         </property>
+       <item row="0" column="5">
+        <widget class="QPushButton" name="btnInfo">
          <property name="toolTip">
-          <string>Toggle Dark Mode</string>
+          <string>Information</string>
          </property>
          <property name="text">
           <string/>
          </property>
          <property name="icon">
           <iconset>
-           <selectedoff>icons/Light.png</selectedoff>
-           <selectedon>icons/Dark.png</selectedon>
+           <normalon>icons/Info.png</normalon>
           </iconset>
          </property>
          <property name="iconSize">
@@ -111,9 +104,6 @@
            <width>36</width>
            <height>36</height>
           </size>
-         </property>
-         <property name="checkable">
-          <bool>true</bool>
          </property>
         </widget>
        </item>
@@ -138,17 +128,14 @@
          </property>
         </widget>
        </item>
-       <item row="0" column="4">
-        <widget class="QPushButton" name="btnInfo">
-         <property name="toolTip">
-          <string>Information</string>
-         </property>
+       <item row="0" column="0">
+        <widget class="QPushButton" name="btnQuery">
          <property name="text">
           <string/>
          </property>
          <property name="icon">
           <iconset>
-           <normalon>icons/Info.png</normalon>
+           <normalon>icons/PublicQuery.png</normalon>
           </iconset>
          </property>
          <property name="iconSize">
@@ -189,15 +176,45 @@
          </property>
         </widget>
        </item>
-       <item row="0" column="0">
-        <widget class="QPushButton" name="btnQuery">
+       <item row="0" column="3">
+        <widget class="QPushButton" name="btnDarkMode">
+         <property name="baseSize">
+          <size>
+           <width>32</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="toolTip">
+          <string>Toggle Dark Mode</string>
+         </property>
          <property name="text">
           <string/>
          </property>
          <property name="icon">
           <iconset>
-           <normalon>icons/PublicQuery.png</normalon>
+           <selectedoff>icons/Light.png</selectedoff>
+           <selectedon>icons/Dark.png</selectedon>
           </iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="4">
+        <widget class="QPushButton" name="btnOptions">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/Options.png</normaloff>icons/Options.png</iconset>
          </property>
          <property name="iconSize">
           <size>

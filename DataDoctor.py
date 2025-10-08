@@ -23,13 +23,17 @@ class uiMain(QMainWindow):
         self.table = self.findChild(QTableWidget, 'mainTable')  
         self.btnDataDictionary = self.findChild(QPushButton,'btnDataDictionary')  
         self.btnDarkMode = self.findChild(QPushButton,'btnDarkMode')  
-        self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')        
+        self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')       
+        self.btnOptions = self.findChild(QPushButton, 'btnOptions')   
+        self.btnInfo = self.findChild(QPushButton, 'btnInfo')    
         
         # Create events
         self.btnQuery.clicked.connect(self.btnQueryPressed)  
         self.btnDataDictionary.clicked.connect(self.showDataDictionary)  
         self.btnDarkMode.clicked.connect(self.toggleDarkMode)    
         self.btnExportCSV.clicked.connect(self.btnExportCSVPressed) 
+        self.btnOptions.clicked.connect(self.btnOptionsPressed) 
+        self.btnInfo.clicked.connect(self.btnInfoPressed) 
 
         # Center window when opened
         rect = self.frameGeometry()
@@ -42,6 +46,12 @@ class uiMain(QMainWindow):
 
     def btnQueryPressed(self): 
         winWebQuery.show()  
+
+    def btnOptionsPressed(self): 
+        winOptions.exec()  
+
+    def btnInfoPressed(self): 
+        print('Not complete yet')
 
     def toggleDarkMode(self):
         try:
