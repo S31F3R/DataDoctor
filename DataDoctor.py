@@ -285,6 +285,23 @@ class uiQuickLook(QDialog):
         # Clear all controls
         self.textQuickLookName.clear()
 
+class uiOptions(QDialog):
+    """Options editor: Stores database connection information and application settings."""
+    def __init__(self, parent=None):
+        super(uiOptions, self).__init__(parent) # Pass parent superclass
+        uic.loadUi(Logic.resource_path('ui/winOptions.ui'), self) # Load the .ui file
+
+        # Attach controls
+        self.btnbOptions = self.findChild(QPushButton, 'btnbOptions')      
+        self.textUTCOffset = self.findChild(QTextEdit,'textUTCOffset')  
+        self.textAQServer = self.findChild(QTextEdit,'textAQServer') 
+        self.textAQUser = self.findChild(QTextEdit,'textAQUser') 
+        self.textAQPassword = self.findChild(QTextEdit,'textAQPassword') 
+        self.textUSGSAPIKey = self.findChild(QTextEdit,'textUSGSAPIKey') 
+
+        # Create events
+        
+
 # Create an instance of QApplication     
 app = QApplication(sys.argv) 
 
@@ -293,6 +310,7 @@ winMain = uiMain()
 winWebQuery = uiWebQuery(winMain) # Pass parent
 winDataDictionary = uiDataDictionary(winMain) # Pass parent
 winQuickLook = uiQuickLook(winMain) # Pass parent
+winOptions = uiOptions(winMain) # Pass Parent
 
 # Load in configuration files
 try:
