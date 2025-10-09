@@ -150,6 +150,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
 def buildDataDictionary(table):
     data = []
     csv_path = resource_path('DataDictionary.csv')
+
     try:
         with open(csv_path, 'r', encoding='utf-8-sig') as f:
             readfile = f.readlines()
@@ -171,10 +172,12 @@ def buildDTEDateTime(dateTime):
     day = int(parts[2])
     hour = int(parts[3])
     minute = int(parts[4])
+
     return datetime(year, month, day, hour, minute)
 
 def getDataDictionaryItem(table, dataID):
     data_id_clean = dataID.strip()  # Clean input
+
     # Optional: Strip common prefixes (e.g., 'SDID', 'site') if API adds them
     for prefix in ['', 'SDID', 'site', 'uid']:  # Add more if needed
         if data_id_clean.startswith(prefix):
@@ -185,6 +188,7 @@ def getDataDictionaryItem(table, dataID):
         id_item = table.item(r, 0)
         if id_item:
             csv_id = id_item.text().strip()
+
             # Same prefix strip for CSV
             csv_id_clean = csv_id
             for prefix in ['', 'SDID', 'site', 'uid']:
@@ -201,6 +205,7 @@ def qaqc(mainTable, dataDictionaryTable, dataID):
 
     # Cache dict for fast lookup (col 0=ID, 3=exp_min,4=exp_max,5=cut_min,6=cut_max,7=roc)
     dict_cache = {}
+
     for r in range(dataDictionaryTable.rowCount()):
         id_item = dataDictionaryTable.item(r, 0)  # Col 0 = dataID
         id_key = id_item.text().strip() if id_item else ''
@@ -233,6 +238,7 @@ def qaqc(mainTable, dataDictionaryTable, dataID):
             else:
                 try:
                     val = float(cell_text)
+
                     # Cutoffs (red/orange)
                     if val > params['cut_max']:
                         item.setBackground(QColor(192, 28, 40))
@@ -240,6 +246,7 @@ def qaqc(mainTable, dataDictionaryTable, dataID):
                     elif val < params['cut_min']:
                         item.setBackground(QColor(255, 163, 72))
                         colored = True
+
                     # Expected (yellow)
                     elif val > params['exp_max']:
                         item.setBackground(QColor(245, 194, 17))
@@ -247,10 +254,12 @@ def qaqc(mainTable, dataDictionaryTable, dataID):
                     elif val < params['exp_min']:
                         item.setBackground(QColor(249, 240, 107))
                         colored = True
+
                     # ROC (red)
                     if prev_val is not None and (val - prev_val) > params['roc']:
                         item.setBackground(QColor(246, 97, 81))
                         colored = True
+
                     # Repeat (green)
                     if prev_val is not None and val == prev_val:
                         item.setBackground(QColor(87, 227, 137))
@@ -273,6 +282,7 @@ def loadAllQuickLooks(cbQuickLook):
     cbQuickLook.addItem(None)  # Blank first
 
     quicklook_dir = resource_path('quickLook')
+
     if os.path.exists(quicklook_dir):
         for file in os.listdir(quicklook_dir):
             if file.endswith('.txt'):
@@ -287,11 +297,13 @@ def saveQuickLook(textQuickLookName, listQueryList):
     data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
     quicklook_path = resource_path(f'quickLook/{name}.txt')
     os.makedirs(os.path.dirname(quicklook_path), exist_ok=True)  # Ensure dir
+
     with open(quicklook_path, 'w', encoding='utf-8-sig') as f:
         f.write(','.join(data))
 
 def loadQuickLook(cbQuickLook, listQueryList):
     name = cbQuickLook.currentText()
+
     if not name:
         return
 
@@ -310,6 +322,7 @@ def loadQuickLook(cbQuickLook, listQueryList):
 def loadConfig():
     config = ['light']  # Default color
     config_path = resource_path('config.ini')
+
     try:
         with open(config_path, 'r', encoding='utf-8-sig') as f:
             config = [line.strip() for line in f.readlines()]
@@ -319,6 +332,7 @@ def loadConfig():
         # Create if missing
         with open(config_path, 'w', encoding='utf-8-sig') as f:
             f.write('light\n')
+            
     # Ensure path entry (index 1)
     while len(config) < 2:
         config.append('')  # Empty path default
@@ -332,6 +346,7 @@ def exportTableToCSV(table, fileLocation, fileName):
     # Get last path from config (default to Documents)
     config = loadConfig()
     last_path = config[1] if len(config) > 1 else os.path.expanduser("~/Documents")
+
     # Force Documents if last_path empty/invalid
     if not last_path or not os.path.exists(last_path):
         last_path = os.path.expanduser("~/Documents")
@@ -418,9 +433,11 @@ def update_table_after_sort(table, sorted_rows, ascending, dataDictionaryTable, 
     # Re-populate on main thread
     table.setSortingEnabled(False)  # Disable default sort
     num_rows = len(sorted_rows)
+
     for row_idx, row in enumerate(sorted_rows):
         # Vertical: Timestamp
         table.setVerticalHeaderItem(row_idx, QTableWidgetItem(row[0]))
+
         # Data cols
         for c in range(table.columnCount()):
             cell_text = row[c + 1]
@@ -468,54 +485,10 @@ class sortWorker(QRunnable):
         self.rows.sort(key=sort_key, reverse=not self.ascending)
         self.signals.sort_done.emit(self.rows, self.ascending)
 
-def saveWindowGeometry(ui, window_name):
-    """Save a window's geometry (position/size) to geometry.ini for persistence."""
-    if not hasattr(ui, 'window_name'):
-        return
-
-    config = configparser.ConfigParser()
-    geometry_file = Logic.resource_path('geometry.ini')
-
-    if os.path.exists(geometry_file):
-        config.read(geometry_file)
-    else:
-        config['DEFAULT'] = {}  # Init if new file
-    
-    # Convert geometry to QByteArray for saving (Qt format handles multi-monitor)
-    geom_bytes = ui.saveGeometry()
-    config[window_name] = {'geometry': geom_bytes.toBase64().data().decode('ascii')}
-    
-    with open(geometry_file, 'w') as f:
-        config.write(f)
-
-def loadWindowGeometry(ui, window_name):
-    """Load and restore a window's saved geometry; fallback to parent centering."""
-    geometry_file = Logic.resource_path('geometry.ini')
-    if not os.path.exists(geometry_file):
-        return False  # No saved—fallback to center
-    
-    config = configparser.ConfigParser()
-    config.read(geometry_file)
-
-    if window_name not in config:
-        return False  # No saved for this window
-    
-    try:
-        # Decode base64 back to QByteArray
-        geom_base64 = config[window_name]['geometry']
-        geom_bytes = QByteArray.fromBase64(geom_base64.encode('ascii'))
-        restored = ui.restoreGeometry(geom_bytes)
-
-        if restored:
-            return True  # Success—geometry applied
-    except Exception:
-        pass  # Invalid data—fallback
-    
-    return False  # Fallback to center
-
 def centerWindowToParent(ui):
     """Center a window relative to its parent (main window), robust for multi-monitor."""
     parent = ui.parent()
+
     if parent:
         # Get parent's screen for centering (multi-monitor aware)
         parent_center_point = parent.geometry().center()

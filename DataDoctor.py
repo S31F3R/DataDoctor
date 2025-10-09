@@ -189,8 +189,9 @@ class uiWebQuery(QMainWindow):
         self.dteStartDate.setDateTime(datetime.now() - timedelta(hours = 72) )        
         self.dteEndDate.setDateTime(datetime.now())      
 
-        # Center window relative to parent (main window)
+    def showEvent(self, event):
         Logic.centerWindowToParent(self)
+        super().showEvent(event)
 
     def btnQueryPressed(self):
         # Build dataID: List first (comma-joined), fallback to single text if empty
@@ -288,8 +289,9 @@ class uiDataDictionary(QMainWindow):
         self.btnSave.clicked.connect(self.btnSavePressed)  
         self.btnAddRow.clicked.connect(self.btnAddRowPressed) 
 
-        # Center window relative to parent (main window)
+    def showEvent(self, event):
         Logic.centerWindowToParent(self)
+        super().showEvent(event)
 
     def btnSavePressed(self):
         data = []    
@@ -332,8 +334,9 @@ class uiQuickLook(QDialog):
         self.btnSave.clicked.connect(self.btnSavePressed)  
         self.btnCancel.clicked.connect(self.btnCancelPressed)  
 
-        # Center window relative to parent (main window)
+    def showEvent(self, event):
         Logic.centerWindowToParent(self)
+        super().showEvent(event)
 
     def btnSavePressed(self): 
         # Save quick look
@@ -373,9 +376,10 @@ class uiOptions(QDialog):
         # Create events
 
 
-        # Center window relative to parent (main window)
+    def showEvent(self, event):
         Logic.centerWindowToParent(self)
-        
+        super().showEvent(event)
+
 # Create an instance of QApplication     
 app = QApplication(sys.argv) 
 
