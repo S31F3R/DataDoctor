@@ -25,7 +25,7 @@ class uiMain(QMainWindow):
         self.btnDarkMode = self.findChild(QPushButton,'btnDarkMode')  
         self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')       
         self.btnOptions = self.findChild(QPushButton, 'btnOptions')   
-        self.btnInfo = self.findChild(QPushButton, 'btnInfo')    
+        self.btnInfo = self.findChild(QPushButton, 'btnInfo')        
         
         # Set up stretch for central grid layout (make tab row expand)
         central_layout = self.centralWidget().layout()
@@ -36,25 +36,41 @@ class uiMain(QMainWindow):
             central_layout.setColumnStretch(0, 1)  # Single column expanding
         
         # Ensure tab widget expands
-        tab_widget = self.findChild(QTabWidget, 'tabWidget')
-        if tab_widget:
-            tab_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
+        if self.tabWidget:
+            self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            # Connect close button signal
+            self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
         
-        # Set up layout for Data Query tab (tabMain QWidget)
-        tab_main = self.findChild(QWidget, 'tabMain')
-        if tab_main:
-            tab_main.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # Set up Data Query tab (tabMain QWidget)
+        self.tab_main = self.findChild(QWidget, 'tabMain')
+        if self.tab_main:
+            self.tab_main.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            
             # Add layout if none exists
-            if not tab_main.layout():
-                layout = QVBoxLayout(tab_main)
+            if not self.tab_main.layout():
+                layout = QVBoxLayout(self.tab_main)
                 layout.addWidget(self.table)
                 layout.setContentsMargins(0, 0, 0, 0)
                 layout.setSpacing(0)
+
             # Reset table geometry to let layout manage sizing
             self.table.setGeometry(0, 0, 0, 0)
         
         # Set table to expand within its layout
         self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        # Hide tabs on startup (both Data Query and SQL)
+        if self.tabWidget:
+            # Hide Data Query
+            data_query_index = self.tabWidget.indexOf(self.tab_main)
+            if data_query_index != -1:
+                self.tabWidget.removeTab(data_query_index)
+            # Hide SQL
+            sql_tab = self.findChild(QWidget, 'tabSQL')
+            sql_index = self.tabWidget.indexOf(sql_tab)
+            if sql_index != -1:
+                self.tabWidget.removeTab(sql_index)
         
         # Create events
         self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)  
@@ -72,6 +88,11 @@ class uiMain(QMainWindow):
         
         # Show the GUI on application start
         self.show()   
+
+    def onTabCloseRequested(self, index):
+        """Handle tab close button clicks by removing the tab."""
+        if self.tabWidget:
+            self.tabWidget.removeTab(index)
 
     def btnPublicQueryPressed(self): 
         winWebQuery.show()  
@@ -171,17 +192,16 @@ class uiWebQuery(QMainWindow):
         # Center window relative to parent (main window)
         Logic.centerWindowToParent(self)
 
-    def btnQueryPressed(self):   
+    def btnQueryPressed(self):
         # Build dataID: List first (comma-joined), fallback to single text if empty
         if self.listQueryList.count() == 0:
-            dataID = self.textSDID.toPlainText().strip()  # Trim whitespace
-        else:         
+            dataID = self.textSDID.toPlainText().strip() # Trim whitespace
+        else:
             for x in range(self.listQueryList.count()):
-                if x == 0: 
+                if x == 0:
                     dataID = self.listQueryList.item(x).text()
-                else: 
+                else:
                     dataID = f'{dataID},{self.listQueryList.item(x).text()}'
-
         # Validate dataID before API
         if not dataID:
             QMessageBox.warning(self, "Empty Query", "Enter an SDID or add to list.")
@@ -191,11 +211,11 @@ class uiWebQuery(QMainWindow):
         data = None
 
         try:
-            if self.cbDatabase.currentText().split('-')[0] == 'USBR': 
+            if self.cbDatabase.currentText().split('-')[0] == 'USBR':
                 data = QueryUSBR.api(self.cbDatabase, dataID, self.dteStartDate, self.dteEndDate, self.cbInterval)
-            if self.cbDatabase.currentText().split('-')[0] == 'USGS': 
+            if self.cbDatabase.currentText().split('-')[0] == 'USGS':
                 data = QueryUSGS.api(dataID, self.cbInterval, self.dteStartDate, self.dteEndDate)
-        except Exception as e:  # Catches API errors (e.g., invalid ID, no net)
+        except Exception as e: # Catches API errors (e.g., invalid ID, no net)
             QMessageBox.warning(self, "Query Error", f"API fetch failed:\n{e}\nCheck SDID, dates, or connection.")
             return
 
@@ -203,23 +223,36 @@ class uiWebQuery(QMainWindow):
         if not data or len(data) < 1:
             QMessageBox.warning(self, "No Data", f"Query for '{dataID}' returned nothing.\nTry different dates/IDs.")
             return
-                        
-        buildHeader = data[0]        
-        dataID = data[0]  # Reuse as universal tag for QAQC
+
+        buildHeader = data[0]
+        dataID = data[0] # Reuse as universal tag for QAQC
         data.pop(0)
 
         # USBR API fix: Pop extra item if not AQUARIUS or USGS
-        if self.cbDatabase.currentText() != 'USBR-AQUARIUS' or self.cbDatabase.currentText().split('-')[0] == 'USGS': 
+        if self.cbDatabase.currentText() != 'USBR-AQUARIUS' or self.cbDatabase.currentText().split('-')[0] == 'USGS':
             data.pop(len(data) - 1)
 
         # Build the table
         Logic.buildTable(winMain.table, data, buildHeader, winDataDictionary.table)
 
         # QAQC the data
-        Logic.qaqc(winMain.table, winDataDictionary.table, dataID) 
+        Logic.qaqc(winMain.table, winDataDictionary.table, dataID)
+
+        # Ensure Data Query tab is open and selected
+        parent = self.parent()  # uiMain instance
+
+        if hasattr(parent, 'tabWidget') and hasattr(parent, 'tab_main'):
+            tab_widget = parent.tabWidget
+            data_query_tab = parent.tab_main
+            data_query_index = tab_widget.indexOf(data_query_tab)
+            if data_query_index == -1:
+
+                # Re-add if closed (insert at index 0 to keep it first)
+                tab_widget.insertTab(0, data_query_tab, "Data Query")
+            tab_widget.setCurrentIndex(0)
 
         # Hide the window
-        winWebQuery.hide() 
+        winWebQuery.hide()
 
     def btnAddQueryPressed(self):
         item = QListWidgetItem(self.textSDID.toPlainText())
