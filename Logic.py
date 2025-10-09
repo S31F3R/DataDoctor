@@ -1,8 +1,9 @@
 import os
 import sys
 import datetime
+import configparser  # For geometry persistence
 from datetime import datetime, timedelta
-from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer
+from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer, QByteArray
 from PyQt6.QtGui import QGuiApplication, QColor
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog
 
@@ -466,13 +467,72 @@ class sortWorker(QRunnable):
 
         self.rows.sort(key=sort_key, reverse=not self.ascending)
         self.signals.sort_done.emit(self.rows, self.ascending)
-        
-def centerWindowToParent(ui):
-    # Center window relative to parent (main window)
-    if ui.parent():  # Fallback if no parent
-        parent_center = ui.parent().frameGeometry().center()
+
+def saveWindowGeometry(ui, window_name):
+    """Save a window's geometry (position/size) to geometry.ini for persistence."""
+    if not hasattr(ui, 'window_name'):
+        return
+
+    config = configparser.ConfigParser()
+    geometry_file = Logic.resource_path('geometry.ini')
+
+    if os.path.exists(geometry_file):
+        config.read(geometry_file)
     else:
+        config['DEFAULT'] = {}  # Init if new file
+    
+    # Convert geometry to QByteArray for saving (Qt format handles multi-monitor)
+    geom_bytes = ui.saveGeometry()
+    config[window_name] = {'geometry': geom_bytes.toBase64().data().decode('ascii')}
+    
+    with open(geometry_file, 'w') as f:
+        config.write(f)
+
+def loadWindowGeometry(ui, window_name):
+    """Load and restore a window's saved geometry; fallback to parent centering."""
+    geometry_file = Logic.resource_path('geometry.ini')
+    if not os.path.exists(geometry_file):
+        return False  # No saved—fallback to center
+    
+    config = configparser.ConfigParser()
+    config.read(geometry_file)
+
+    if window_name not in config:
+        return False  # No saved for this window
+    
+    try:
+        # Decode base64 back to QByteArray
+        geom_base64 = config[window_name]['geometry']
+        geom_bytes = QByteArray.fromBase64(geom_base64.encode('ascii'))
+        restored = ui.restoreGeometry(geom_bytes)
+
+        if restored:
+            return True  # Success—geometry applied
+    except Exception:
+        pass  # Invalid data—fallback
+    
+    return False  # Fallback to center
+
+def centerWindowToParent(ui):
+    """Center a window relative to its parent (main window), robust for multi-monitor."""
+    parent = ui.parent()
+    if parent:
+        # Get parent's screen for centering (multi-monitor aware)
+        parent_center_point = parent.geometry().center()
+        parent_screen = QGuiApplication.screenAt(parent_center_point)
+        # Use parent's frame center for precise relative positioning
+        parent_center = parent.frameGeometry().center()
+        # Fallback if null (invalid)
+        if parent_center.isNull():
+            if parent_screen:
+                parent_center = parent_screen.availableGeometry().center()
+            else:
+                parent_center = QGuiApplication.primaryScreen().availableGeometry().center()
+    else:
+        # No parent: Center on primary
         parent_center = QGuiApplication.primaryScreen().availableGeometry().center()
+    
+    # Center child's frame on parent's center
     rect = ui.frameGeometry()
     rect.moveCenter(parent_center)
     ui.move(rect.topLeft())
