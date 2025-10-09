@@ -215,7 +215,7 @@ class uiWebQuery(QMainWindow):
             QMessageBox.warning(self, "Empty Query", "Enter an SDID or add to list.")
             return
 
-        # USBR or USGS API query (separate ifs, as original)
+        # USBR or USGS API query
         data = None
 
         try:
@@ -226,41 +226,56 @@ class uiWebQuery(QMainWindow):
         except Exception as e: # Catches API errors (e.g., invalid ID, no net)
             QMessageBox.warning(self, "Query Error", f"API fetch failed:\n{e}\nCheck SDID, dates, or connection.")
             return
-
-        # Check for empty results post-API
+        
         if not data or len(data) < 1:
-            QMessageBox.warning(self, "No Data", f"Query for '{dataID}' returned nothing.\nTry different dates/IDs.")
+            QMessageBox.warning(self, "No Data", f"Query for '{dataID}' returned nothing. \nTry different dates/IDs.")
             return
+        
+        if data: 
+            # Standardize data with complete time-series
+            startTime = self.dteStartDate.dateTime().toString('yyyy-MM-ddTHH:mm:ss')
+            endTime = self.dteEndDate.dateTime().toString('yyyy-MM-ddTHH:mm:ss')       
+            timestamps = Logic.buildTimestamps(startTime, endTime, self.cbInterval) # Complete timestamps list            
+            
+            # Convert data to list o fstr if list of lists (for multi-col APIs)
+            dataStr = []
 
-        buildHeader = data[0]
-        dataID = data[0] # Reuse as universal tag for QAQC
-        data.pop(0)
+            for d in data:
+                if isinstance(d, list):
+                    dataStr.append(','.join(map(str, d)))
+                else:
+                    dataStr.append(d)
 
-        # USBR API fix: Pop extra item if not AQUARIUS or USGS
-        if self.cbDatabase.currentText() != 'USBR-AQUARIUS' or self.cbDatabase.currentText().split('-')[0] == 'USGS':
-            data.pop(len(data) - 1)
+            data = Logic.gapCheck(timestamps, dataStr)
 
-        # Build the table
-        Logic.buildTable(winMain.table, data, buildHeader, winDataDictionary.table)
+            buildHeader = data[0].split(',')[1:] # Extract headers
+            dataID = buildHeader # Reuse as universal tag for QAQC       
 
-        # QAQC the data
-        Logic.qaqc(winMain.table, winDataDictionary.table, dataID)
+            # USBR API fix: Pop extra item if not AQUARIUS or USGS
+            if self.cbDatabase.currentText() != 'USBR-AQUARIUS' or self.cbDatabase.currentText().split('-')[0] == 'USGS':
+                data.pop(len(data) - 1)
 
-        # Ensure Data Query tab is open and selected
-        parent = self.parent()  # uiMain instance
+            # Build the table
+            Logic.buildTable(winMain.table, data, buildHeader, winDataDictionary.table)
 
-        if hasattr(parent, 'tabWidget') and hasattr(parent, 'tab_main'):
-            tab_widget = parent.tabWidget
-            data_query_tab = parent.tab_main
-            data_query_index = tab_widget.indexOf(data_query_tab)
-            if data_query_index == -1:
+            # QAQC the data
+            Logic.qaqc(winMain.table, winDataDictionary.table, dataID)
 
-                # Re-add if closed (insert at index 0 to keep it first)
-                tab_widget.insertTab(0, data_query_tab, "Data Query")
-            tab_widget.setCurrentIndex(0)
+            # Ensure Data Query tab is open and selected
+            parent = self.parent()  # uiMain instance
 
-        # Hide the window
-        winWebQuery.hide()
+            if hasattr(parent, 'tabWidget') and hasattr(parent, 'tab_main'):
+                tab_widget = parent.tabWidget
+                data_query_tab = parent.tab_main
+                data_query_index = tab_widget.indexOf(data_query_tab)
+                if data_query_index == -1:
+
+                    # Re-add if closed (insert at index 0 to keep it first)
+                    tab_widget.insertTab(0, data_query_tab, "Data Query")
+                tab_widget.setCurrentIndex(0)
+
+            # Hide the window
+            winWebQuery.hide()
 
     def btnAddQueryPressed(self):
         item = QListWidgetItem(self.textSDID.toPlainText())
