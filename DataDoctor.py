@@ -6,20 +6,20 @@ import datetime
 import breeze_resources # Registers Qt resources for stylesheets
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtCore import QIODevice, QFile, QTextStream
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, 
-                             QTextEdit, QComboBox, QDateTimeEdit, QListWidget, 
-                             QListWidgetItem, QMessageBox, QDialog)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
+                             QTextEdit, QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
+                             QListWidgetItem, QMessageBox, QDialog, QSizePolicy, QTabWidget)
 from datetime import datetime, timedelta
 from PyQt6 import uic
 
 class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
     def __init__(self):
-        super(uiMain, self).__init__() # Call the inherited classes __init__ method
-        uic.loadUi(Logic.resource_path('ui/winMain.ui'), self) # Load the .ui file
+        super(uiMain, self).__init__()  # Call the inherited classes __init__ method
+        uic.loadUi(Logic.resource_path('ui/winMain.ui'), self)  # Load the .ui file
         
         # Attach controls
-        self.btnQuery = self.findChild(QPushButton, 'btnQuery')
+        self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
         self.table = self.findChild(QTableWidget, 'mainTable')  
         self.btnDataDictionary = self.findChild(QPushButton,'btnDataDictionary')  
         self.btnDarkMode = self.findChild(QPushButton,'btnDarkMode')  
@@ -27,8 +27,37 @@ class uiMain(QMainWindow):
         self.btnOptions = self.findChild(QPushButton, 'btnOptions')   
         self.btnInfo = self.findChild(QPushButton, 'btnInfo')    
         
+        # Set up stretch for central grid layout (make tab row expand)
+        central_layout = self.centralWidget().layout()
+        if isinstance(central_layout, QGridLayout):
+            central_layout.setContentsMargins(0, 0, 0, 0)
+            central_layout.setRowStretch(0, 0)  # Toolbar row fixed
+            central_layout.setRowStretch(1, 1)  # Tab row expanding
+            central_layout.setColumnStretch(0, 1)  # Single column expanding
+        
+        # Ensure tab widget expands
+        tab_widget = self.findChild(QTabWidget, 'tabWidget')
+        if tab_widget:
+            tab_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        # Set up layout for Data Query tab (tabMain QWidget)
+        tab_main = self.findChild(QWidget, 'tabMain')
+        if tab_main:
+            tab_main.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            # Add layout if none exists
+            if not tab_main.layout():
+                layout = QVBoxLayout(tab_main)
+                layout.addWidget(self.table)
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setSpacing(0)
+            # Reset table geometry to let layout manage sizing
+            self.table.setGeometry(0, 0, 0, 0)
+        
+        # Set table to expand within its layout
+        self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
         # Create events
-        self.btnQuery.clicked.connect(self.btnQueryPressed)  
+        self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)  
         self.btnDataDictionary.clicked.connect(self.showDataDictionary)  
         self.btnDarkMode.clicked.connect(self.toggleDarkMode)    
         self.btnExportCSV.clicked.connect(self.btnExportCSVPressed) 
@@ -44,7 +73,7 @@ class uiMain(QMainWindow):
         # Show the GUI on application start
         self.show()   
 
-    def btnQueryPressed(self): 
+    def btnPublicQueryPressed(self): 
         winWebQuery.show()  
 
     def btnOptionsPressed(self): 
