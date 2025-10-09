@@ -1,7 +1,6 @@
 import os
 import sys
 import datetime
-import configparser  # For geometry persistence
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer, QByteArray
 from PyQt6.QtGui import QGuiApplication, QColor
