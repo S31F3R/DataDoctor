@@ -20,15 +20,16 @@ class uiMain(QMainWindow):
         
         # Attach controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
-        self.table = self.findChild(QTableWidget, 'mainTable')  
+        self.table = self.findChild(QTableWidget, 'mainTable')          
         self.btnDataDictionary = self.findChild(QPushButton,'btnDataDictionary')  
         self.btnDarkMode = self.findChild(QPushButton,'btnDarkMode')  
         self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')       
         self.btnOptions = self.findChild(QPushButton, 'btnOptions')   
-        self.btnInfo = self.findChild(QPushButton, 'btnInfo')        
+        self.btnInfo = self.findChild(QPushButton, 'btnInfo')      
         
         # Set up stretch for central grid layout (make tab row expand)
         central_layout = self.centralWidget().layout()
+
         if isinstance(central_layout, QGridLayout):
             central_layout.setContentsMargins(0, 0, 0, 0)
             central_layout.setRowStretch(0, 0)  # Toolbar row fixed
@@ -37,13 +38,16 @@ class uiMain(QMainWindow):
         
         # Ensure tab widget expands
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
+
         if self.tabWidget:
             self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
             # Connect close button signal
             self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
         
         # Set up Data Query tab (tabMain QWidget)
         self.tab_main = self.findChild(QWidget, 'tabMain')
+
         if self.tab_main:
             self.tab_main.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             
@@ -61,14 +65,17 @@ class uiMain(QMainWindow):
         self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Hide tabs on startup (both Data Query and SQL)
-        if self.tabWidget:
+        if self.tabWidget:            
             # Hide Data Query
             data_query_index = self.tabWidget.indexOf(self.tab_main)
+
             if data_query_index != -1:
                 self.tabWidget.removeTab(data_query_index)
+
             # Hide SQL
             sql_tab = self.findChild(QWidget, 'tabSQL')
             sql_index = self.tabWidget.indexOf(sql_tab)
+
             if sql_index != -1:
                 self.tabWidget.removeTab(sql_index)
         
@@ -87,7 +94,7 @@ class uiMain(QMainWindow):
         self.move(rect.topLeft())
         
         # Show the GUI on application start
-        self.show()   
+        self.show()     
 
     def onTabCloseRequested(self, index):
         """Handle tab close button clicks by removing the tab."""

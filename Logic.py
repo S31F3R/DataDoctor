@@ -76,8 +76,32 @@ def combineParameters(data, newData):
 
 def buildTable(table, data, buildHeader, dataDictionaryTable):
     table.clear()
+
     if not data:
         return
+    
+    # Set up table structure (extra column for timestamp)
+    table.setRowCount(len(data))
+    table.setColumnCount(len(buildHeader) + 1)
+
+    # Build header with center alignment (col 0 = timestamp)
+    timestamp_header = QTableWidgetItem("Timestamp")
+    timestamp_header.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+    table.setHorizontalHeaderItem(0, timestamp_header)
+
+    for c in range(len(buildHeader)):
+        item = QTableWidgetItem(str(buildHeader[c]))
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        table.setHorizontalHeaderItem(c, item)
+
+    # Populate data rows with center alignment
+    for r in range(len(data)):
+        row_data = data[r].split(',')
+
+        for c in range(len(row_data)):
+            item = QTableWidgetItem(row_data[c])
+            item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+            table.setHorizontalHeaderItem(c + 1, item)
 
     # Assume buildHeader is list; split if str
     if isinstance(buildHeader, str):
@@ -85,14 +109,19 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
 
     # Build processed headers with dict lookup (list for efficiency)
     processed_headers = []
+
     for h in buildHeader:
         header_text = h.strip()  # Strip raw header
+
         if dataDictionaryTable:
             dict_row = getDataDictionaryItem(dataDictionaryTable, header_text)
+
             if dict_row != 'null':
                 label_item = dataDictionaryTable.item(dict_row, 2)
+
                 if label_item:
                     parse_label = label_item.text().split(':')
+
                     if len(parse_label) > 1:
                         parse_label[1] = parse_label[1][1:].strip()  # Strip label part
                         header_text = f'{parse_label[0].strip()} \n{parse_label[1]} \n{header_text}'
@@ -199,82 +228,91 @@ def getDataDictionaryItem(table, dataID):
     return 'null'
 
 def qaqc(mainTable, dataDictionaryTable, dataID):
-    if not dataDictionaryTable:
+    if not dataID:
         return
 
-    # Cache dict for fast lookup (col 0=ID, 3=exp_min,4=exp_max,5=cut_min,6=cut_max,7=roc)
-    dict_cache = {}
+    # Loop directly over dataID (list of IDs)
+    for p, id_val in enumerate(dataID):       
+        temp_index = getDataDictionaryItem(dataDictionaryTable, id_val) 
+        row_index = int(temp_index) if temp_index is not None and temp_index != 'null' else None            
 
-    for r in range(dataDictionaryTable.rowCount()):
-        id_item = dataDictionaryTable.item(r, 0)  # Col 0 = dataID
-        id_key = id_item.text().strip() if id_item else ''
-        if id_key:
-            try:
-                dict_cache[id_key] = {
-                    'exp_min': float(dataDictionaryTable.item(r, 3).text().strip() if dataDictionaryTable.item(r, 3) else '0'),
-                    'exp_max': float(dataDictionaryTable.item(r, 4).text().strip() if dataDictionaryTable.item(r, 4) else float('inf')),
-                    'cut_min': float(dataDictionaryTable.item(r, 5).text().strip() if dataDictionaryTable.item(r, 5) else float('-inf')),
-                    'cut_max': float(dataDictionaryTable.item(r, 6).text().strip() if dataDictionaryTable.item(r, 6) else float('inf')),
-                    'roc': float(dataDictionaryTable.item(r, 7).text().strip() if dataDictionaryTable.item(r, 7) else float('inf'))
-                }
-            except ValueError:
-                pass  # Skip bad row
+        if row_index is None: 
+            continue # No match, skip entire column
+        else:
+            # Extract thresholds from dictionary row
+            expected_min = float(dataDictionaryTable.item(row_index, 3).text()) if dataDictionaryTable.item(row_index, 3).text() else 0
+            expected_max = float(dataDictionaryTable.item(row_index, 4).text()) if dataDictionaryTable.item(row_index, 4).text() else float('inf')
+            cutoff_min = float(dataDictionaryTable.item(row_index, 5).text()) if dataDictionaryTable.item(row_index, 5).text() else expected_min
+            cutoff_max = float(dataDictionaryTable.item(row_index, 6).text()) if dataDictionaryTable.item(row_index, 6).text() else expected_max
+            roc = float(dataDictionaryTable.item(row_index, 7).text()) if dataDictionaryTable.item(row_index, 7).text() else 0
 
-    for c in range(1, mainTable.columnCount()):
-        parse_id = str(dataID[c - 1]).split('\n')[-1].strip()  # Last line = raw ID
-        params = dict_cache.get(parse_id)
-        if not params:
-            continue  # Skip if no dict entry
+            col_index = p + 1 # Offset by 1 for timestamp col
 
-        prev_val = None
-        for d in range(mainTable.rowCount()):
-            cell_text = mainTable.item(d, c).text() if mainTable.item(d, c) else ''
-            item = QTableWidgetItem(cell_text)
-            colored = False  # Flag for text color
-            if not cell_text:
-                item.setBackground(QColor(100, 195, 247))  # Missing (blue)
-                colored = True
-            else:
-                try:
-                    val = float(cell_text)
+            # Check each row in mainTable (skip header)
+            for row in range(1, mainTable.rowCount()):   
+                item = mainTable.item(row, col_index)
+                print(f"Processing row {row}, col {col_index}: item = {item}")
 
-                    # Cutoffs (red/orange)
-                    if val > params['cut_max']:
-                        item.setBackground(QColor(192, 28, 40))
-                        colored = True
-                    elif val < params['cut_min']:
-                        item.setBackground(QColor(255, 163, 72))
-                        colored = True
+                if not item:
+                    continue
 
-                    # Expected (yellow)
-                    elif val > params['exp_max']:
-                        item.setBackground(QColor(245, 194, 17))
-                        colored = True
-                    elif val < params['exp_min']:
-                        item.setBackground(QColor(249, 240, 107))
-                        colored = True
+                cell_text = item.text()
+                colored = False # Flag for text color
 
-                    # ROC (red)
-                    if prev_val is not None and (val - prev_val) > params['roc']:
-                        item.setBackground(QColor(246, 97, 81))
-                        colored = True
-
-                    # Repeat (green)
-                    if prev_val is not None and val == prev_val:
-                        item.setBackground(QColor(87, 227, 137))
-                        colored = True
-                    prev_val = val
-                except ValueError:
-                    pass  # Non-numeric: no color
-
-            if colored:
-                # White for all except yellow (black for yellow readability)
-                if item.background().color() in [QColor(245, 194, 17), QColor(249, 240, 107)]:  # Yellows
-                    item.setForeground(QColor("black"))
+                if not cell_text:
+                    item.setBackground(QColor(100, 195, 247)) # Missing (blue)
+                    colored = True
                 else:
-                    item.setForeground(QColor("white"))
+                    try:
+                        val = float(cell_text)
 
-            mainTable.setItem(d, c, item)
+                        # Cutoffs (red/orange)
+                        if val > cutoff_max:
+                            item.setBackground(QColor(192, 28, 40)) # Red
+                            colored = True
+                        elif val < cutoff_min:
+                            item.setBackground(QColor(255, 163, 72)) # Orange
+                            colored = True
+
+                        # Expected (yellow)
+                        elif val > expected_max:
+                            item.setBackground(QColor(245, 194, 17)) # Yellow
+                            colored = True
+                        elif val < expected_min:
+                            item.setBackground(QColor(249, 240, 107)) # Light Yellow
+                            colored = True
+
+                        # ROC (red)
+                        prev_val = None
+                        prev_item = mainTable.item(row - 1, col_index) if row > 1 else None
+
+                        if prev_item:
+                            try:
+                                prev_val = float(prev_item.text())
+
+                                if abs(val - prev_val) > roc:
+                                    item.setBackground(QColor(246, 97, 81)) # Red
+                                    colored = True
+                            except ValueError: 
+                                pass
+
+                        # Repeat (green)
+                        if prev_val is not None and val == prev_val:
+                            item.setBackground(QColor(87, 227, 137)) # Green
+                            colored = True
+                        prev_val = val
+                    except ValueError:
+                        pass  # Non-numeric: no color
+
+                if colored:
+                    # White for all except yellow (black for yellow readability)
+                    if item.background().color() in [QColor(245, 194, 17), QColor(249, 240, 107)]:  # Yellows
+                        item.setForeground(QColor("black"))
+                    else:
+                        item.setForeground(QColor("white"))
+
+            # Re-center after any mod
+            if item: item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)                          
 
 def loadAllQuickLooks(cbQuickLook):     
     cbQuickLook.clear()
@@ -352,7 +390,7 @@ def exportTableToCSV(table, fileLocation, fileName):
     default_dir = last_path
 
     # Timestamped default name (yyyy-mm-dd HH:mm:ss Export.csv)
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    timestamp = datetime.now().strftime('%Y-%m-%d %H%M%S')
     default_name = f"{timestamp} Export.csv"
     suggested_path = os.path.join(default_dir, default_name)
     file_path, _ = QFileDialog.getSaveFileName(None, "Save CSV As", suggested_path, "CSV files (*.csv)")
@@ -468,7 +506,7 @@ class sortWorkerSignals(QObject):
 
 class sortWorker(QRunnable):
     def __init__(self, rows, col, ascending):
-        super().__init__()
+        super(sortWorker, self).__init__()
         self.signals = sortWorkerSignals()
         self.rows = rows
         self.col = col
