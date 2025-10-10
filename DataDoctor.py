@@ -16,11 +16,11 @@ class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
     def __init__(self):
         super(uiMain, self).__init__()  # Call the inherited classes __init__ method
-        uic.loadUi(Logic.resource_path('ui/winMain.ui'), self)  # Load the .ui file
+        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self)  # Load the .ui file
         
         # Attach controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
-        self.table = self.findChild(QTableWidget, 'mainTable')          
+        self.mainTable = self.findChild(QTableWidget, 'mainTable')          
         self.btnDataDictionary = self.findChild(QPushButton,'btnDataDictionary')  
         self.btnDarkMode = self.findChild(QPushButton,'btnDarkMode')  
         self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')       
@@ -28,13 +28,13 @@ class uiMain(QMainWindow):
         self.btnInfo = self.findChild(QPushButton, 'btnInfo')      
         
         # Set up stretch for central grid layout (make tab row expand)
-        central_layout = self.centralWidget().layout()
+        centralLayout = self.centralWidget().layout()
 
-        if isinstance(central_layout, QGridLayout):
-            central_layout.setContentsMargins(0, 0, 0, 0)
-            central_layout.setRowStretch(0, 0)  # Toolbar row fixed
-            central_layout.setRowStretch(1, 1)  # Tab row expanding
-            central_layout.setColumnStretch(0, 1)  # Single column expanding
+        if isinstance(centralLayout, QGridLayout):
+            centralLayout.setContentsMargins(0, 0, 0, 0)
+            centralLayout.setRowStretch(0, 0)  # Toolbar row fixed
+            centralLayout.setRowStretch(1, 1)  # Tab row expanding
+            centralLayout.setColumnStretch(0, 1)  # Single column expanding
         
         # Ensure tab widget expands
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
@@ -46,38 +46,38 @@ class uiMain(QMainWindow):
             self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
         
         # Set up Data Query tab (tabMain QWidget)
-        self.tab_main = self.findChild(QWidget, 'tabMain')
+        self.tabMain = self.findChild(QWidget, 'tabMain')
 
-        if self.tab_main:
-            self.tab_main.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        if self.tabMain:
+            self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             
             # Add layout if none exists
-            if not self.tab_main.layout():
-                layout = QVBoxLayout(self.tab_main)
-                layout.addWidget(self.table)
+            if not self.tabMain.layout():
+                layout = QVBoxLayout(self.tabMain)
+                layout.addWidget(self.mainTable)
                 layout.setContentsMargins(0, 0, 0, 0)
                 layout.setSpacing(0)
 
             # Reset table geometry to let layout manage sizing
-            self.table.setGeometry(0, 0, 0, 0)
+            self.mainTable.setGeometry(0, 0, 0, 0)
         
         # Set table to expand within its layout
-        self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.mainTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Hide tabs on startup (both Data Query and SQL)
         if self.tabWidget:            
             # Hide Data Query
-            data_query_index = self.tabWidget.indexOf(self.tab_main)
+            dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
 
-            if data_query_index != -1:
-                self.tabWidget.removeTab(data_query_index)
+            if dataQueryIndex != -1:
+                self.tabWidget.removeTab(dataQueryIndex)
 
             # Hide SQL
-            sql_tab = self.findChild(QWidget, 'tabSQL')
-            sql_index = self.tabWidget.indexOf(sql_tab)
+            sqlTab = self.findChild(QWidget, 'tabSQL')
+            sqlIndex = self.tabWidget.indexOf(sqlTab)
 
-            if sql_index != -1:
-                self.tabWidget.removeTab(sql_index)
+            if sqlIndex != -1:
+                self.tabWidget.removeTab(sqlIndex)
         
         # Create events
         self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)  
@@ -112,7 +112,7 @@ class uiMain(QMainWindow):
 
     def toggleDarkMode(self):
         try:
-            with open(Logic.resource_path('config.ini'), 'r', encoding='utf-8-sig') as f:
+            with open(Logic.resourcePath('config.ini'), 'r', encoding='utf-8-sig') as f:
                 data = f.readlines()
                 colorMode = data[0].strip()
         except FileNotFoundError:
@@ -123,14 +123,16 @@ class uiMain(QMainWindow):
         colorMode = 'dark' if colorMode == 'light' else 'light'
 
         # Load and apply stylesheet (resource first, then fallback to file)
-        stylesheet_path = f":/{colorMode}/stylesheet.qss"
-        f = QFile(stylesheet_path)
+        stylesheetPath = f":/{colorMode}/stylesheet.qss"
+        f = QFile(stylesheetPath)
+
         if not f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
             # Fallback to filesystem
-            stylesheet_path = Logic.resource_path(f"{colorMode}/stylesheet.qss")
-            f = QFile(stylesheet_path)
+            stylesheetPath = Logic.resourcePath(f"{colorMode}/stylesheet.qss")
+            f = QFile(stylesheetPath)
+
             if not f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
-                QMessageBox.warning(self, "Style Error", f"Could not load {colorMode} stylesheet from {stylesheet_path}.\nError: {f.errorString()}")
+                QMessageBox.warning(self, "Style Error", f"Could not load {colorMode} stylesheet from {stylesheetPath}.\nError: {f.errorString()}")
                 f.close()
                 return
         stream = QTextStream(f)
@@ -139,14 +141,14 @@ class uiMain(QMainWindow):
 
         # Save
         data[0] = colorMode + '\n'
-        with open(Logic.resource_path('config.ini'), 'w', encoding='utf-8-sig') as f:
+        with open(Logic.resourcePath('config.ini'), 'w', encoding='utf-8-sig') as f:
             f.writelines(data)
 
     def showDataDictionary(self):         
         winDataDictionary.show()    
 
     def btnExportCSVPressed(self):
-        Logic.exportTableToCSV(self.table, '', '')  # Pass empty (uses dialog)
+        Logic.exportTableToCSV(self.mainTable, '', '')  # Pass empty (uses dialog)
 
     def exitPressed(self):
         app.exit()    
@@ -155,7 +157,7 @@ class uiWebQuery(QMainWindow):
     """Query window: Builds and executes USBR/USGS API calls."""
     def __init__(self, parent=None):
         super(uiWebQuery, self).__init__(parent) # Pass parent superclass
-        uic.loadUi(Logic.resource_path('ui/winWebQuery.ui'), self) # Load the .ui file
+        uic.loadUi(Logic.resourcePath('ui/winWebQuery.ui'), self) # Load the .ui file
 
         # Define the controls
         self.btnQuery = self.findChild(QPushButton, 'btnQuery')    
@@ -205,60 +207,65 @@ class uiWebQuery(QMainWindow):
         if self.listQueryList.count() == 0:
             dataID = self.textSDID.toPlainText().strip() # Trim whitespace
         else:
-            for x in range(self.listQueryList.count()):
-                if x == 0:
-                    dataID = self.listQueryList.item(x).text()
-                else:
-                    dataID = f'{dataID},{self.listQueryList.item(x).text()}'
+            dataID = ','.join([self.listQueryList.item(x).text() for x in range(self.listQueryList.count())])
+        
         # Validate dataID before API
         if not dataID:
             QMessageBox.warning(self, "Empty Query", "Enter an SDID or add to list.")
             return
-
-        # USBR or USGS API query (separate ifs, as original)
+        
+        # Extract str from controls 
+        databaseStr = self.cbDatabase.currentText()
+        intervalStr = self.cbInterval.currentText()
+        startDateStr = self.dteStartDate.dateTime().toString('yyyy-MM-dd HH:mm')
+        endDateStr = self.dteEndDate.dateTime().toString('yyyy-MM-dd HH:mm')
+        
+        print(f"[DEBUG] Extracted: database='{databaseStr}', interval='{intervalStr}', start='{startDateStr}', end='{endDateStr}', dataID='{dataID}'")
+        
+        # Call API based on database 
         data = None
 
         try:
-            if self.cbDatabase.currentText().split('-')[0] == 'USBR':
-                data = QueryUSBR.api(self.cbDatabase, dataID, self.dteStartDate, self.dteEndDate, self.cbInterval)
-            if self.cbDatabase.currentText().split('-')[0] == 'USGS':
-                data = QueryUSGS.api(dataID, self.cbInterval, self.dteStartDate, self.dteEndDate)
+            print(f"[DEBUG] Starting '{databaseStr}' API query")
+            if 'USBR' in databaseStr:
+                data = QueryUSBR.api(databaseStr, dataID, startDateStr, endDateStr, intervalStr)
+            elif 'USGS' in databaseStr:
+                data = QueryUSGS.api(dataID, intervalStr, startDateStr, endDateStr)
+            # Add Aquarius when ready (similar sig)
+            # elif 'AQUARIUS' in databaseStr:
+            #     data = QueryAquarius.api(dataID, startDateStr, endDateStr, intervalStr)
         except Exception as e: # Catches API errors (e.g., invalid ID, no net)
             QMessageBox.warning(self, "Query Error", f"API fetch failed:\n{e}\nCheck SDID, dates, or connection.")
             return
-
+        
         # Check for empty results post-API
         if not data or len(data) < 1:
             QMessageBox.warning(self, "No Data", f"Query for '{dataID}' returned nothing.\nTry different dates/IDs.")
             return
-
+        
         buildHeader = data[0]
-        dataID = data[0] # Reuse as universal tag for QAQC
+        dataIDList = data[0] # Reuse as list for QAQC
         data.pop(0)
-
-        # USBR API fix: Pop extra item if not AQUARIUS or USGS
-        if self.cbDatabase.currentText() != 'USBR-AQUARIUS' or self.cbDatabase.currentText().split('-')[0] == 'USGS':
-            data.pop(len(data) - 1)
-
+        
         # Build the table
-        Logic.buildTable(winMain.table, data, buildHeader, winDataDictionary.table)
+        Logic.buildTable(winMain.mainTable, data, buildHeader, winDataDictionary.mainTable)
 
         # QAQC the data
-        Logic.qaqc(winMain.table, winDataDictionary.table, dataID)
-
+        Logic.qaqc(winMain.mainTable, winDataDictionary.mainTable, dataIDList)
+        
         # Ensure Data Query tab is open and selected
-        parent = self.parent()  # uiMain instance
+        parent = self.parent() # uiMain instance
 
-        if hasattr(parent, 'tabWidget') and hasattr(parent, 'tab_main'):
-            tab_widget = parent.tabWidget
-            data_query_tab = parent.tab_main
-            data_query_index = tab_widget.indexOf(data_query_tab)
-            if data_query_index == -1:
+        if hasattr(parent, 'tabWidget') and hasattr(parent, 'tabMain'):
+            tabWidget = parent.tabWidget
+            dataQueryTab = parent.tabMain
+            dataQueryIndex = tabWidget.indexOf(dataQueryTab)
 
+            if dataQueryIndex == -1:
                 # Re-add if closed (insert at index 0 to keep it first)
-                tab_widget.insertTab(0, data_query_tab, "Data Query")
-            tab_widget.setCurrentIndex(0)
-
+                tabWidget.insertTab(0, dataQueryTab, "Data Query")
+            tabWidget.setCurrentIndex(0)
+        
         # Hide the window
         winWebQuery.hide()
 
@@ -285,10 +292,10 @@ class uiDataDictionary(QMainWindow):
     """Data dictionary editor: Manages labels for time-series IDs."""
     def __init__(self, parent=None):
         super(uiDataDictionary, self).__init__(parent) # Pass parent superclass
-        uic.loadUi(Logic.resource_path('ui/winDataDictionary.ui'), self) # Load the .ui file
+        uic.loadUi(Logic.resourcePath('ui/winDataDictionary.ui'), self) # Load the .ui file
 
         # Attach controls
-        self.table = self.findChild(QTableWidget, 'dataDictionaryTable')  
+        self.mainTable = self.findChild(QTableWidget, 'dataDictionaryTable')  
         self.btnSave = self.findChild(QPushButton, 'btnSave') 
         self.btnAddRow = self.findChild(QPushButton, 'btnAddRow') 
 
@@ -304,33 +311,33 @@ class uiDataDictionary(QMainWindow):
         data = []    
 
         # Open the data dictionary file
-        f = open(Logic.resource_path('DataDictionary.csv'), 'r', encoding='utf-8-sig') 
+        f = open(Logic.resourcePath('DataDictionary.csv'), 'r', encoding='utf-8-sig') 
         data.append(f.readlines()[0]) 
     
         # Close the file
         f.close()
 
         # Check each column and each row in the table. Place data into array
-        for r in range(0, self.table.rowCount()):            
-            for c in range(0, self.table.columnCount()):            
-                if c == 0: data.append(self.table.item(r, c).text())
-                else: data[r + 1] = f'{data[r + 1]},{self.table.item(r, c).text()}'
+        for r in range(0, self.mainTable.rowCount()):            
+            for c in range(0, self.mainTable.columnCount()):            
+                if c == 0: data.append(self.mainTable.item(r, c).text())
+                else: data[r + 1] = f'{data[r + 1]},{self.mainTable.item(r, c).text()}'
 
         # Write the data to the file
-        f = open(Logic.resource_path('DataDictionary.csv'), 'w', encoding='utf-8-sig')  
+        f = open(Logic.resourcePath('DataDictionary.csv'), 'w', encoding='utf-8-sig')  
         f.writelines(data)  
 
         # Close the file
         f.close()
 
     def btnAddRowPressed(self):
-        self.table.setRowCount(self.table.rowCount() + 1)   
+        self.mainTable.setRowCount(self.mainTable.rowCount() + 1)   
         
 class uiQuickLook(QDialog):
     """Quick look save dialog: Names and stores query presets."""
     def __init__(self, parent=None):
         super(uiQuickLook, self).__init__(parent) # Pass parent superclass
-        uic.loadUi(Logic.resource_path('ui/winQuickLook.ui'), self) # Load the .ui file
+        uic.loadUi(Logic.resourcePath('ui/winQuickLook.ui'), self) # Load the .ui file
 
         # Attach controls
         self.btnSave = self.findChild(QPushButton, 'btnSave')   
@@ -352,6 +359,7 @@ class uiQuickLook(QDialog):
         # Clear the controls
         self.clear()
 
+        # Load quick looks
         Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
 
         # Close the window
@@ -371,7 +379,7 @@ class uiOptions(QDialog):
     """Options editor: Stores database connection information and application settings."""
     def __init__(self, parent=None):
         super(uiOptions, self).__init__(parent) # Pass parent superclass
-        uic.loadUi(Logic.resource_path('ui/winOptions.ui'), self) # Load the .ui file
+        uic.loadUi(Logic.resourcePath('ui/winOptions.ui'), self) # Load the .ui file
 
         # Attach controls             
         self.textUTCOffset = self.findChild(QTextEdit,'textUTCOffset')  
@@ -408,36 +416,37 @@ if config[0].strip() == 'dark': winMain.btnDarkMode.setChecked(True)
   
 # Set stylesheet
 colorMode = config[0].strip()  # Strip any whitespace
-stylesheet_loaded = False
+stylesheetLoaded = False
 
 # Try resource path first
-stylesheet_path = f":/{colorMode}/stylesheet.qss"
-f = QFile(stylesheet_path)
+stylesheetPath = f":/{colorMode}/stylesheet.qss"
+f = QFile(stylesheetPath)
+
 if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
     stream = QTextStream(f)
     app.setStyleSheet(stream.readAll())
     f.close()
-    stylesheet_loaded = True
+    stylesheetLoaded = True
 
 # Fallback to filesystem if resource failed
-if not stylesheet_loaded:
-    stylesheet_path = Logic.resource_path(f"{colorMode}/stylesheet.qss")
-    f = QFile(stylesheet_path)
+if not stylesheetLoaded:
+    stylesheetPath = Logic.resourcePath(f"{colorMode}/stylesheet.qss")
+    f = QFile(stylesheetPath)
+
     if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
         stream = QTextStream(f)
         app.setStyleSheet(stream.readAll())
         f.close()
-        stylesheet_loaded = True
+        stylesheetLoaded = True
     else:
         print(f"Initial {colorMode} stylesheet load failed (both paths): {f.errorString()}")
-        f.close()
-        # App continues with default Qt style—no crash
+        f.close() # App continues with default Qt style—no crash        
 
-if not stylesheet_loaded:
+if not stylesheetLoaded:
     print(f"Warning: No stylesheet applied for {colorMode}. Check file paths.")
 
 # Load in data dictionary
-Logic.buildDataDictionary(winDataDictionary.table) 
+Logic.buildDataDictionary(winDataDictionary.mainTable) 
 
 # Load quick looks
 Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
