@@ -5,7 +5,7 @@ import Logic
 import datetime
 import breeze_resources # Registers Qt resources for stylesheets
 from PyQt6.QtGui import QGuiApplication
-from PyQt6.QtCore import QIODevice, QFile, QTextStream
+from PyQt6.QtCore import QIODevice, QFile, QTextStream, QEvent, QObject
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
                              QTextEdit, QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
                              QListWidgetItem, QMessageBox, QDialog, QSizePolicy, QTabWidget)
@@ -25,7 +25,17 @@ class uiMain(QMainWindow):
         self.btnDarkMode = self.findChild(QPushButton,'btnDarkMode')  
         self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')       
         self.btnOptions = self.findChild(QPushButton, 'btnOptions')   
-        self.btnInfo = self.findChild(QPushButton, 'btnInfo')      
+        self.btnInfo = self.findChild(QPushButton, 'btnInfo')    
+        self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
+
+        # Set button style
+        Logic.buttonStyle(self.btnPublicQuery)
+        Logic.buttonStyle(self.btnDataDictionary)
+        Logic.buttonStyle(self.btnDarkMode)  
+        Logic.buttonStyle(self.btnExportCSV)
+        Logic.buttonStyle(self.btnOptions)
+        Logic.buttonStyle(self.btnInfo)
+        Logic.buttonStyle(self.btnInternalQuery)
         
         # Set up stretch for central grid layout (make tab row expand)
         centralLayout = self.centralWidget().layout()
@@ -173,7 +183,13 @@ class uiWebQuery(QMainWindow):
         self.cbQuickLook = self.findChild(QComboBox,'cbQuickLook')
         self.btnLoadQuickLook = self.findChild(QPushButton, 'btnLoadQuickLook') 
         self.btnClearQuery = self.findChild(QPushButton, 'btnClearQuery')
+        self.btnDataIdInfo = self.findChild(QPushButton, 'btnDataIdInfo')
+        self.btnIntervalInfo = self.findChild(QPushButton, 'btnIntervalInfo')
 
+        # Set button style
+        Logic.buttonStyle(self.btnDataIdInfo)  
+        Logic.buttonStyle(self.btnIntervalInfo)     
+        
         # Create events        
         self.btnQuery.clicked.connect(self.btnQueryPressed)  
         self.btnAddQuery.clicked.connect(self.btnAddQueryPressed) 
@@ -181,10 +197,12 @@ class uiWebQuery(QMainWindow):
         self.btnSaveQuickLook.clicked.connect(self.btnSaveQuickLookPressed)   
         self.btnLoadQuickLook.clicked.connect(self.btnLoadQuickLookPressed)     
         self.btnClearQuery.clicked.connect(self.btnClearQueryPressed)
+        self.btnDataIdInfo.clicked.connect(self.btnDataIdInfoPressed)
+        self.btnIntervalInfo.clicked.connect(self.btnIntervalInfoPressed)
 
         # Populate database combobox        
-        self.cbDatabase.addItem('USBR-LCHDB')   
         self.cbDatabase.addItem('AQUARIUS') 
+        self.cbDatabase.addItem('USBR-LCHDB') 
         self.cbDatabase.addItem('USBR-YAOHDB')  
         self.cbDatabase.addItem('USBR-UCHDB2') 
         self.cbDatabase.addItem('USGS-NWIS') 
@@ -196,16 +214,22 @@ class uiWebQuery(QMainWindow):
 
         # Set default query times on DateTimeEdit controls        
         self.dteStartDate.setDateTime(datetime.now() - timedelta(hours = 72) )        
-        self.dteEndDate.setDateTime(datetime.now())      
+        self.dteEndDate.setDateTime(datetime.now())  
 
     def showEvent(self, event):
         Logic.centerWindowToParent(self)
         super().showEvent(event)
 
+    def btnDataIdInfoPressed(self):
+        QMessageBox.information(self, "DataID Formats", f"AQUARIUS Format: \nUID \n\nUSBR Format: \nSDID \nSDID-MRID \n\nUSGS Format: \nSite-Method-Parameter")
+
+    def btnIntervalInfoPressed(self):
+        QMessageBox.information(self, "Interval Info", f"Interval determines what timestamps are displayed and what table the data is queried from (USBR).\n\nIn a query list, timestamp interval is determined by first dataID in the list.")
+
     def btnQueryPressed(self):
         # Build dataID: List first (comma-joined), fallback to single text if empty
         if self.listQueryList.count() == 0:
-            dataID = self.textSDID.toPlainText().strip() # Trim whitespace
+            dataID = f'{self.textSDID.toPlainText().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}'
         else:
             dataID = ','.join([self.listQueryList.item(x).text() for x in range(self.listQueryList.count())])
         
@@ -268,8 +292,8 @@ class uiWebQuery(QMainWindow):
         # Hide the window
         winWebQuery.hide()
 
-    def btnAddQueryPressed(self):
-        item = QListWidgetItem(self.textSDID.toPlainText())
+    def btnAddQueryPressed(self):        
+        item = f'{self.textSDID.toPlainText().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}'
         self.listQueryList.addItem(item)
         self.textSDID.clear()
         self.textSDID.setFocus()

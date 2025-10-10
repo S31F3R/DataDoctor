@@ -581,7 +581,7 @@ def centerWindowToParent(ui):
 
         # Use parent's frame center for precise relative positioning
         parentCenter = parent.frameGeometry().center()
-        
+
         # Fallback if null (invalid)
         if parentCenter.isNull():
             if parentScreen:
@@ -596,3 +596,22 @@ def centerWindowToParent(ui):
     rect = ui.frameGeometry()
     rect.moveCenter(parentCenter)
     ui.move(rect.topLeft())
+
+def buttonStyle(button):
+    """Apply flat, borderless style to a QPushButton with no hover/press effects."""
+    button.setStyleSheet("""
+        QPushButton {
+            border: none;
+            background: transparent;
+        }
+        QPushButton:hover {
+            background: transparent;
+        }
+        QPushButton:pressed {
+            background: transparent;
+            border: none;
+        }
+        QPushButton:focus {
+            outline: none;
+        }
+    """)

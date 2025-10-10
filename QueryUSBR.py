@@ -59,7 +59,11 @@ def api(database, dataID, startDate, endDate, interval):
             print("[DEBUG] Fetching USBR URL: {}".format(urlStr))
             try:
                 response = requests.get(urlStr)
-                response.raise_for_status()
+
+                if response.status_code != 200:
+                    print("[DEBUG] Non-200 response: code={}, text={}".format(response.status_code, response.text[:200]))
+                    continue  # Skip bad batch  
+                         
                 readFile = json.loads(response.content)
                 seriesList = readFile['Series']
                 print("[DEBUG] Fetched {} series entries.".format(len(seriesList)))
@@ -91,6 +95,7 @@ def api(database, dataID, startDate, endDate, interval):
                 print("[DEBUG] Found series for '{}': {} points.".format(sdi, len(dataPoints)))
                 
                 outputData = []
+
                 for point in dataPoints:
                     value = point['v']
                     dateTime = point['t']  # MM/DD/YY HH:MM:SS AM/PM
