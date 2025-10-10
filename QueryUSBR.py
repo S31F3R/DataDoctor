@@ -15,11 +15,8 @@ def api(database, dataID, startDate, endDate, interval):
         return []
     
     # Remove agency from database string
-    database = database.lower().split('-')[1]
-    
-    # Fallback to Aquarius if 'aquarius'
-    if database == 'aquarius':
-        return QueryAquarius.api(dataID, startDate, endDate, interval)    
+    database = database.lower().split('-')[1]    
+  
     try:
         # Parse start time
         startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
