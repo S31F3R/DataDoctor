@@ -9,62 +9,123 @@ from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QF
 sort_state = {}  # Global dict for per-col sort state (col: ascending)
 sorting_active = False  # Global flag to prevent overlapping sorts
 
-def buildTimestamps(startDate, endDate, dataInterval):
-    # Set the inverval   
-    if dataInterval.currentText() == 'HOUR': interval = timedelta(hours = 1)
-    if dataInterval.currentText() == 'INSTANT': interval = timedelta(minutes = 15)
-    if dataInterval.currentText() == 'DAY': interval = timedelta(days = 1) 
+def buildTimestamps(startDateStr, endDateStr, intervalStr):
+    print("[DEBUG] buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
 
-    counter = 0
-    currentTimestamp = datetime.fromisoformat(startDate)
-    endDate = datetime.fromisoformat(endDate)
+    try:
+        start = datetime.strptime(startDateStr, '%Y-%m-%d %H:%M')
+        end = datetime.strptime(endDateStr, '%Y-%m-%d %H:%M')
+    except ValueError as e:
+        print("[ERROR] Invalid date format in buildTimestamps: {}".format(e))
+        return []
+    
+    if intervalStr == 'HOUR':
+        delta = timedelta(hours=1)
 
-    while currentTimestamp < endDate:
-        # Add interval to current timestamp
-        currentTimestamp = currentTimestamp + interval   
+        # Truncate start down to top of hour
+        start = start.replace(minute=0, second=0)
+    elif intervalStr == 'INSTANT':
+        delta = timedelta(minutes=15)
 
-        # Parse out date/time
-        month = currentTimestamp.month
-        day = currentTimestamp.day
-        hour = currentTimestamp.hour
-        minute = currentTimestamp.minute
+        # Truncate down to nearest 15min
+        minute = (start.minute // 15) * 15
+        start = start.replace(minute=minute, second=0)
+    elif intervalStr == 'DAY':
+        delta = timedelta(days=1)
 
-        # Zero out minutes if the interval is anything other than instant
-        if not(dataInterval.currentText() == 'INSTANT'): minute = '00'
+        # Truncate down to midnight
+        start = start.replace(hour=0, minute=0, second=0)
+    else:
+        print("[ERROR] Unknown intervalStr: {}".format(intervalStr))
+        return []
+    
+    timestamps = []
+    current = start
+    
+    while current < end:
+        ts_str = current.strftime('%m/%d/%y %H:%M:00')
+        timestamps.append(ts_str)
+        current += delta
+    
+    print("[DEBUG] Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
+    return timestamps
 
-        # Create 2 digit month and day for isoformatting to work
-        if len(str(month)) == 1: month = f'0{month}'
-        if len(str(day)) == 1: day = f'0{day}'
-        if len(str(hour)) == 1: hour = f'0{hour}'
-        if len(str(minute)) == 1: minute = f'0{minute}'
-        
-        # Build the output of timestamps
-        if counter == 0: 
-            output = f'{currentTimestamp.year}-{month}-{day} {hour}:{minute}'
-        else:
-            output = f'{output},{currentTimestamp.year}-{month}-{day} {hour}:{minute}'
+def gapCheck(timestamps, data, dataID=''):
+    print("[DEBUG] gapCheck for dataID '{}': timestamps len={}, data len={}".format(dataID, len(timestamps), len(data)))
 
-        counter += 1
-
-    return output
-
-def gapCheck(timestamps, data):
     if not timestamps:
         return data
-    parseTimestamps = timestamps.split(',')
-    parseTimestamps = [datetime.fromisoformat(ts).strftime('%m/%d/%y %H:%M:%S') for ts in parseTimestamps]
+    
+    # Parse expected ts
+    try:
+        expected_dts = [datetime.strptime(ts, '%m/%d/%y %H:%M:00') for ts in timestamps]
+    except ValueError as e:
+        print("[ERROR] Invalid timestamp format in timestamps: {}".format(e))
+        return data
+    
+    newData = []
+    removed = []  # Collect details for warn
+    i = 0
 
-    for t in range(len(parseTimestamps) - 1):
-        expected_ts = datetime.strptime(parseTimestamps[t], '%m/%d/%y %H:%M:%S')
-        if t >= len(data):
-            data.insert(t, f'{parseTimestamps[t]},')
-        else:
-            actual_line = data[t].split(',')
-            actual_ts = datetime.strptime(actual_line[0], '%m/%d/%y %H:%M:%S')
-            if expected_ts != actual_ts:
-                data.insert(t, f'{parseTimestamps[t]},')
+    for exp_dt in expected_dts:
+        found = False
 
-    return data
+        while i < len(data):
+            line = data[i]
+            if not line:
+                i += 1
+                continue
+            parts = line.split(',')
+            if len(parts) < 2:
+                print("[WARN] Malformed data row skipped: '{}' for '{}'".format(line, dataID))
+                i += 1
+                continue
+
+            actual_ts_str = parts[0].strip()
+            
+            try:
+                actual_dt = datetime.strptime(actual_ts_str, '%m/%d/%y %H:%M:%S')
+            except ValueError:
+                print("[WARN] Invalid ts skipped: '{}' in '{}' for '{}'".format(actual_ts_str, line, dataID))
+                i += 1
+                continue
+            
+            if actual_dt == exp_dt:
+                # Match, add (ensure :00 seconds if not)
+                if not actual_ts_str.endswith(':00'):
+                    actual_ts_str = actual_dt.strftime('%m/%d/%y %H:%M:00')
+                    line = actual_ts_str + ',' + ','.join(parts[1:])
+
+                new_data.append(line)
+                found = True
+                i += 1
+                break
+            elif actual_dt < exp_dt:
+                # Extra/early, remove
+                removed.append(actual_ts_str)
+                i += 1
+            else:
+                # Future/mismatch, insert gap and break to next exp
+                break
+        if not found:
+            # Gap, insert blank
+            ts_str = exp_dt.strftime('%m/%d/%y %H:%M:00')
+            new_data.append(ts_str + ',')
+    
+    # Any remaining data are extras
+    while i < len(data):
+        line = data[i]
+        parts = line.split(',')
+        
+        if len(parts) > 0:
+            removed.append(parts[0].strip())
+        i += 1
+    
+    if removed:
+        print("[WARN] Removed {} extra/mismatched rows from '{}': ts {}".format(len(removed), dataID, removed))
+    
+    print("[DEBUG] Post-gapCheck len={}, sample first 3: {}".format(len(new_data), new_data[:3]))
+    return new_data
 
 def combineParameters(data, newData):
     if len(data) != len(newData):
