@@ -3,31 +3,31 @@ import json
 from datetime import datetime, timedelta
 import Logic  # For buildTimestamps, gapCheck, combineParameters
 
-def api(dataID, intervalStr, startDateStr, endDateStr):
-    print("[DEBUG] QueryUSGS.api called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, intervalStr, startDateStr, endDateStr))
+def api(dataID, interval, startDate, endDate):
+    print("[DEBUG] QueryUSGS.api called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
     
     # Standardize timestamps
-    timestamps = Logic.buildTimestamps(startDateStr, endDateStr, intervalStr)
+    timestamps = Logic.buildTimestamps(startDate, endDate, interval)
 
     if not timestamps:
         print("[ERROR] No timestamps generated - invalid dates or interval.")
         return []
     
     # Set interval for USGS ('iv' for HOUR/INSTANT, 'dv' for DAY)
-    if intervalStr in ['HOUR', 'INSTANT']:
+    if interval in ['HOUR', 'INSTANT']:
         usgsInterval = 'iv'
-    elif intervalStr == 'DAY':
+    elif interval == 'DAY':
         usgsInterval = 'dv'
     else:
-        print("[ERROR] Unsupported intervalStr: {}".format(intervalStr))
+        print("[ERROR] Unsupported interval: {}".format(interval))
         return []
     
     # Compute period in hours (keep current method)
     try:
-        startDateTime = datetime.strptime(startDateStr, '%Y-%m-%d %H:%M')
-        endDateTime = datetime.strptime(endDateStr, '%Y-%m-%d %H:%M')
+        startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
+        endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
         periodDelta = endDateTime - startDateTime
-        periodHours = int(periodDelta.total_seconds() / 3600)
+        periodHours = int(periodDelta.totalSeconds() / 3600)
     except ValueError as e:
         print("[ERROR] Date parse failed: {}".format(e))
         return []
@@ -145,7 +145,7 @@ def api(dataID, intervalStr, startDateStr, endDateStr):
         # Combine group outputs
         if groupOutputData:
             combined = groupOutputData[0]
-            
+
             for nextData in groupOutputData[1:]:
                 combined = Logic.combineParameters(combined, nextData)
             if output:
