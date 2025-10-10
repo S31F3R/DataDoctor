@@ -184,7 +184,7 @@ class uiWebQuery(QMainWindow):
 
         # Populate database combobox        
         self.cbDatabase.addItem('USBR-LCHDB')   
-        self.cbDatabase.addItem('USBR-AQUARIUS') 
+        self.cbDatabase.addItem('AQUARIUS') 
         self.cbDatabase.addItem('USBR-YAOHDB')  
         self.cbDatabase.addItem('USBR-UCHDB2') 
         self.cbDatabase.addItem('USGS-NWIS') 
@@ -215,25 +215,24 @@ class uiWebQuery(QMainWindow):
             return
         
         # Extract str from controls 
-        databaseStr = self.cbDatabase.currentText()
-        intervalStr = self.cbInterval.currentText()
-        startDateStr = self.dteStartDate.dateTime().toString('yyyy-MM-dd HH:mm')
-        endDateStr = self.dteEndDate.dateTime().toString('yyyy-MM-dd HH:mm')
+        database = self.cbDatabase.currentText()
+        interval = self.cbInterval.currentText()
+        startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd HH:mm')
+        endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd HH:mm')
         
-        print(f"[DEBUG] Extracted: database='{databaseStr}', interval='{intervalStr}', start='{startDateStr}', end='{endDateStr}', dataID='{dataID}'")
+        print(f"[DEBUG] Extracted: database='{database}', interval='{interval}', start='{startDate}', end='{endDate}', dataID='{dataID}'")
         
         # Call API based on database 
         data = None
 
         try:
-            print(f"[DEBUG] Starting '{databaseStr}' API query")
-            if 'USBR' in databaseStr:
-                data = QueryUSBR.api(databaseStr, dataID, startDateStr, endDateStr, intervalStr)
-            elif 'USGS' in databaseStr:
-                data = QueryUSGS.api(dataID, intervalStr, startDateStr, endDateStr)
-            # Add Aquarius when ready (similar sig)
-            # elif 'AQUARIUS' in databaseStr:
-            #     data = QueryAquarius.api(dataID, startDateStr, endDateStr, intervalStr)
+            print(f"[DEBUG] Starting '{database}' API query")
+            if 'USBR' in database:
+                data = QueryUSBR.api(database, dataID, startDate, endDate, interval)
+            elif 'USGS' in database:
+                data = QueryUSGS.api(dataID, interval, startDate, endDate)
+            elif database == 'AQUARIUS':
+                data = QueryAquarius.api(dataID, startDate, endDate, interval)
         except Exception as e: # Catches API errors (e.g., invalid ID, no net)
             QMessageBox.warning(self, "Query Error", f"API fetch failed:\n{e}\nCheck SDID, dates, or connection.")
             return
