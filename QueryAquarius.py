@@ -1,136 +1,130 @@
 import requests
 import json
-import Logic
 from datetime import datetime, timedelta
+import Logic  # For buildTimestamps, gapCheck, combineParameters
 
-def api(dataID, startTime, endTime, dataInterval): 
+def api(dataID, startDate, endDate, interval):
+    print("[DEBUG] QueryAquarius.api called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
+    
     # Get Aquarius settings
     server = ''
     user = ''
     password = ''
     utcOffset = -7
-
-    # Parse out start time   
-    startTime = str(startTime.dateTime()).replace("'",'')
-    startTime = startTime.replace(' ','')
-    startYear = startTime.split(',')[0].split('(')[1]
-    startMonth = startTime.split(',')[1]
-    startDay = startTime.split(',')[2]
-    startHour = startTime.split(',')[3]
-    if len(startHour) == 1: startHour = f'0{startHour}'
-    startMinute = startTime.split(',')[4]   
-    if len(startMinute) == 1: startMinute = f'0{startMinute}'
-
-    # Parse out end time   
-    endTime = str(endTime.dateTime()).replace("'",'')
-    endTime = endTime.replace(' ','')
-    endYear = endTime.split(',')[0].split('(')[1]
-    endMonth = endTime.split(',')[1]
-    endDay = endTime.split(',')[2]
-    endHour = endTime.split(',')[3]
-    if len(endHour) == 1: endHour = f'0{endHour}'
-    endMinute = endTime.split(',')[4]   
-    if len(endMinute) == 1: endMinute = f'0{endMinute}'
-
-    # Create 2 digit month and day for isoformatting to work
-    if len(startMonth) == 1: startMonth = f'0{startMonth}'
-    if len(startDay) == 1: startDay = f'0{startDay}'
-    if len(endMonth) == 1: endMonth = f'0{endMonth}'
-    if len(endDay) == 1: endDay = f'0{endDay}'
-
-    # Build start and end date is ISO format
+    
+    # Parse start
+    startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
+    startYear = startDateTime.year
+    startMonth = f'{startDateTime.month:02d}'
+    startDay = f'{startDateTime.day:02d}'
+    startHour = f'{startDateTime.hour:02d}'
+    startMinute = f'{startDateTime.minute:02d}'
+    
+    # Parse end
+    endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
+    endYear = endDateTime.year
+    endMonth = f'{endDateTime.month:02d}'
+    endDay = f'{endDateTime.day:02d}'
+    endHour = f'{endDateTime.hour:02d}'
+    endMinute = f'{endDateTime.minute:02d}'
+    
+    # Build start and end date in ISO format (keep exact)
     startDate = f'{startYear}-{startMonth}-{startDay} {startHour}:{startMinute}'
     endDate = f'{endYear}-{endMonth}-{endDay} {endHour}:{endMinute}'
-
+    
     # Build timestamps
-    timestamps = Logic.buildTimestamps(startDate, endDate, dataInterval)
-
-    # Apply utc offset for Aquarius query    
-    startDate = datetime.fromisoformat(startDate) - timedelta(0, 0, 0, 0, 0, utcOffset)
-    endDate = datetime.fromisoformat(endDate) - timedelta(0, 0, 0, 0, 0, utcOffset)
-
-    # Create 2 digit month and day for isoformatting to work
-    startMonth = startDate.month
-    if len(str(startDate.month)) == 1: startMonth = f'0{startDate.month}'   
-    startDay = startDate.day
-    if len(str(startDate.day)) == 1: startDay = f'0{startDate.day}'
-    startHour = startDate.hour
-    if len(str(startDate.hour)) == 1: startHour = f'0{startDate.hour}'
-    startMinute = startDate.minute
-    if len(str(startDate.minute)) == 1: startMinute = f'0{startDate.minute}'
-    endMonth = endDate.month
-    if len(str(endDate.month)) == 1: endMonth = f'0{endDate.month}'
-    endDay = endDate.day
-    if len(str(endDate.day)) == 1: endDay = f'0{endDate.day}'
-    endHour = endDate.hour
-    if len(str(endDate.hour)) == 1: endHour = f'0{endDate.hour}'
-    endMinute = endDate.minute
-    if len(str(endDate.minute)) == 1: endMinute = f'0{endDate.minute}'
-
-    # Build start and end date is ISO format
-    startDate = f'{startDate.year}-{startMonth}-{startDay} {startHour}:{startMinute}' 
-    endDate = f'{endDate.year}-{endMonth}-{endDay} {endHour}:{endMinute}'
-
-    output = []
-
-    # Create json string
-    data = {'Username':f'{user}','EncryptedPassword':f'{password}'}
-
+    timestamps = Logic.buildTimestamps(startDate, endDate, interval)
+    if not timestamps:
+        print("[ERROR] No timestamps generated - invalid dates or interval.")
+        return []
+    
+    # Apply utc offset for Aquarius query
+    startDateTime = startDateTime - timedelta(hours=utcOffset)
+    endDateTime = endDateTime - timedelta(hours=utcOffset)
+    
+    # Re-pad after offset
+    startMonth = f'{startDateTime.month:02d}'
+    startDay = f'{startDateTime.day:02d}'
+    startHour = f'{startDateTime.hour:02d}'
+    startMinute = f'{startDateTime.minute:02d}'
+    endMonth = f'{endDateTime.month:02d}'
+    endDay = f'{endDateTime.day:02d}'
+    endHour = f'{endDateTime.hour:02d}'
+    endMinute = f'{endDateTime.minute:02d}'
+    
+    # Build offset ISO
+    startDate = f'{startDateTime.year}-{startMonth}-{startDay} {startHour}:{startMinute}'
+    endDate = f'{endDateTime.year}-{endMonth}-{endDay} {endHour}:{endMinute}'
+    
     # Authenticate session
+    data = {'Username':f'{user}','EncryptedPassword':f'{password}'}
     url = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=data, verify=False)
-
-    # Create API headers
-    headers = {'X-Authentication-Token':url.text}   
-
-    # Create table header array
+    headers = {'X-Authentication-Token':url.text}
+    
+    uids = dataID.split(',')
+    queryLimit = 50
+    output = []
     buildHeader = []
+    
+    # Batch uids into groups of queryLimit (serial fetch per uid in group)
+    for groupStart in range(0, len(uids), queryLimit):
+        groupUids = uids[groupStart:groupStart + queryLimit]
+        print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))        
+        groupOutputData = []  # List of outputData lists, one per uid
 
-    # Parse dataID
-    uid = dataID.split(',')    
-
-    for d in range(0, len(uid)):
-        # Query the data    
-        url = requests.get(f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid[d]}&QueryFrom={startDate}&QueryTo={endDate}&UtcOffset={utcOffset}&GetParts=PointsOnly&format=json', headers=headers, verify=False)
-
-        # Read the json data
-        readfile = json.loads(url.content)
-
-        # Create arrays
-        outputData = []
-        header = []        
-
-        # Add label to header
-        header.append(readfile['LocationIdentifier'])
-        header.append(readfile['Label'])
-        buildHeader.append(f'{header[0]} \n{header[1]}')
-
-        for r in range(0, len(readfile['Points'])):
-            # Pull date timestamp out of json string
-            date = readfile['Points'][r]['Timestamp']
+        for uid in groupUids:
+            # Query the data
+            url = requests.get(f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={startDate}&QueryTo={endDate}&UtcOffset={utcOffset}&GetParts=PointsOnly&format=json', headers=headers, verify=False)
             
-            # Parse date
-            parseDate = date.split('T')
-            parseDate[1] = parseDate[1].split('.')[0]
+            try:
+                readFile = json.loads(url.content)
+            except Exception as e:
+                print("[WARN] Aquarius fetch failed for uid '{}': {}".format(uid, e))
+                groupOutputData.append([])  # Pad blanks
+                continue
+            
+            # Create arrays
+            outputData = []
+            header = []
 
-            # Format date from ISO format to desired format
-            date = datetime.strftime(datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}'), '%m/%d/%y %H:%M:%S')
+            # Add label to header
+            header.append(readFile['LocationIdentifier'])
+            header.append(readFile['Label'])
+            buildHeader.append(f'{header[0]} \n{header[1]}')            
+            points = readFile['Points']
+            print("[DEBUG] Fetched {} points for uid '{}'.".format(len(points), uid))
 
-            # Pull queried paramater data out of json string
-            value = readfile['Points'][r]['Value']['Numeric']
-
-            #print(f'Date: {date} Value: {value}')
-            outputData.append(f'{date},{value}')      
-
-        # Check for gaps
-        outputData = Logic.gapCheck(timestamps, outputData)   
-
-        # Combine parameters
-        if d != 0: output = Logic.combineParameters(output, outputData)  
-
-        # If this is the first parameter, add it to output
-        else: output = outputData  
-
-    # Add headers as first item in list
+            for point in points:
+                # Pull date timestamp
+                date = point['Timestamp']
+                parseDate = date.split('T')
+                parseDate[1] = parseDate[1].split('.')[0]
+                
+                # Format to standard
+                dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}')
+                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+                value = point['Value']['Numeric']
+                outputData.append(f'{formattedTs},{value}')
+            
+            # Check for gaps
+            outputData = Logic.gapCheck(timestamps, outputData, uid)
+            groupOutputData.append(outputData)
+        
+        # Combine group outputs
+        if groupOutputData:
+            combined = groupOutputData[0]
+            for nextData in groupOutputData[1:]:
+                combined = Logic.combineParameters(combined, nextData)
+            if output:
+                output = Logic.combineParameters(output, combined)
+            else:
+                output = combined
+    
+    if not output:
+        print("[WARN] No data after processing all batches.")
+        return []
+    
+    # Prepend header
     output.insert(0, buildHeader)
-
+    print("[DEBUG] Final output len={} (incl header), sample row: {}".format(len(output), output[1] if len(output) > 1 else 'empty'))
     return output

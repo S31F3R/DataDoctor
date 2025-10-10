@@ -1,67 +1,164 @@
 import requests
 import json
-import datetime
-import Logic
-from datetime import datetime
+from datetime import datetime, timedelta
+import Logic  # For buildTimestamps, gapCheck, combineParameters
 
-def api(dataID, dataInterval, startTime, endTime):
+def api(dataID, intervalStr, startDateStr, endDateStr):
+    print("[DEBUG] QueryUSGS.api called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, intervalStr, startDateStr, endDateStr))
+    
+    # Standardize timestamps
+    timestamps = Logic.buildTimestamps(startDateStr, endDateStr, intervalStr)
+
+    if not timestamps:
+        print("[ERROR] No timestamps generated - invalid dates or interval.")
+        return []
+    
+    # Set interval for USGS ('iv' for HOUR/INSTANT, 'dv' for DAY)
+    if intervalStr in ['HOUR', 'INSTANT']:
+        usgsInterval = 'iv'
+    elif intervalStr == 'DAY':
+        usgsInterval = 'dv'
+    else:
+        print("[ERROR] Unsupported intervalStr: {}".format(intervalStr))
+        return []
+    
+    # Compute period in hours (keep current method)
+    try:
+        startDateTime = datetime.strptime(startDateStr, '%Y-%m-%d %H:%M')
+        endDateTime = datetime.strptime(endDateStr, '%Y-%m-%d %H:%M')
+        periodDelta = endDateTime - startDateTime
+        periodHours = int(periodDelta.total_seconds() / 3600)
+    except ValueError as e:
+        print("[ERROR] Date parse failed: {}".format(e))
+        return []
+    
+    uids = dataID.split(',')
+    queryLimit = 50
     output = []
     buildHeader = []
-
-    # Split dataID to handle multiple queries
-    parseID = dataID.split(',')
-
-    for i in range(0, len(parseID)):
-        buildHeader.append(parseID[i])
-
-        # Parse out site, parameter, and method
-        site = parseID[i].split('-')[0]
-        method = parseID[i].split('-')[1]
-        parameter = parseID[i].split('-')[2]
-
-        # Set the inverval   
-        if dataInterval.currentText() == 'HOUR': interval = 'iv'
-        if dataInterval.currentText() == 'INSTANT': interval = 'iv'
-        if dataInterval.currentText() == 'DAY': interval = 'dv'
-
-        # Set period based on time range
-        period = Logic.buildDTEDateTime(endTime) - Logic.buildDTEDateTime(startTime)
-        period = period.total_seconds() / 3600
-        period = str(period).split('.')[0]
-
-        # This is executed when the button is pressed
-        url = requests.get(f'https://waterservices.usgs.gov/nwis/{interval}/?format=json&sites={site}&period=PT{period}H&parameterCD=000{parameter}&sitestatus=all')
-        readfile = json.loads(url.content)
-        readfile = readfile['value']
-        readfile = readfile['timeSeries']
-        readfile = readfile[0]
-        siteName = readfile['sourceInfo']['siteName']
-        readfile = readfile['values']        
+    
+    # Batch uids into groups of queryLimit
+    for groupStart in range(0, len(uids), queryLimit):
+        groupUids = uids[groupStart:groupStart + queryLimit]
+        print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))
         
-        data = readfile[0]            
-                        
-        if int(method) == int(data['method'][0]['methodID']):  
-            data = data['value']    
+        # Parse group: collect unique sites, params (methods filter post-fetch)
+        sites = []
+        params = []
+        methods = []  # For post-filter
+        uidMap = {}  # uid -> (site, method, param)
 
-            for d in range(0, len(data)):  
-                value = data[d]['value']  
-                dateTime = data[d]['dateTime']             
-                dateTime = dateTime.replace('T', ' ').split('.')[0]
-                year = dateTime.split('-')[0]
-                month = dateTime.split('-')[1]
-                day = dateTime.split('-')[2].split(' ')[0]
-                hour = dateTime.split(' ')[1].split(':')[0]
-                minute = dateTime.split(' ')[1].split(':')[1]
-                second = dateTime.split(' ')[1].split(':')[2]
-                dateTime = datetime(int(year), int(month), int(day), int(hour), int(minute), int(second))                   
-                dateTime = '{:%m/%d/%y %H:%M:%S}'.format(dateTime)
+        for uid in groupUids:
+            parts = uid.split('-')
 
-                if i == 0: 
-                    output.append(f'{dateTime},{value}')  
-                else:
-                    output[d] = f'{output[d]},{value}'
-                
-    # Add headers as first item in list   
+            if len(parts) != 3:
+                print("[WARN] Invalid uid format skipped: {}".format(uid))
+                continue
+
+            site, method, param = parts
+            sites.append(site)
+            params.append('000' + param)  # Pad
+            methods.append(method)
+            uidMap[uid] = (site, method, param)
+        
+        if not sites:
+            continue
+        
+        # Unique for efficiency, but API handles dups
+        sitesStr = ','.join(set(sites))
+        paramsStr = ','.join(set(params))
+        
+        # Fetch batched
+        url = "https://waterservices.usgs.gov/nwis/{}/?format=json&sites={}&period=PT{}H&parameterCd={}&siteStatus=all".format(
+            usgsInterval, sitesStr, periodHours, paramsStr
+        )
+        print("[DEBUG] Fetching USGS URL: {}".format(url))
+
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            readFile = json.loads(response.content)
+            timeSeriesList = readFile['value']['timeSeries']
+            print("[DEBUG] Fetched {} timeSeries entries.".format(len(timeSeriesList)))
+        except Exception as e:
+            print("[ERROR] USGS fetch failed: {}".format(e))
+            continue
+        
+        # Process per input uid in order (reorder/validate)
+        groupOutputData = []  # List of outputData lists, one per uid
+
+        for idx, uid in enumerate(groupUids):
+            site, method, param = uidMap.get(uid, (None, None, None))
+
+            if not site:
+                groupOutputData.append([])  # Empty for invalid
+                continue
+            
+            # Find matching timeSeries
+            matchingSeries = None
+
+            for series in timeSeriesList:
+                seriesSite = series['sourceInfo']['siteCode'][0]['value'] if 'sourceInfo' in series and 'siteCode' in series['sourceInfo'] else None
+                seriesParam = series['variable']['variableCode'][0]['value'] if 'variable' in series and 'variableCode' in series['variable'] else None
+
+                if seriesSite == site and seriesParam == '000' + param:
+                    # Check method
+                    seriesValues = series['values']
+
+                    if seriesValues and 'method' in seriesValues[0] and seriesValues[0]['method']:
+                        seriesMethodId = seriesValues[0]['method'][0]['methodID']
+
+                        if str(seriesMethodId) == method:
+                            matchingSeries = series
+                            break
+            
+            if not matchingSeries:
+                print("[WARN] No matching series for uid '{}': site={}, param={}, method={}. Skipping.".format(uid, site, param, method))
+                groupOutputData.append([])  # Will pad to blanks in gapCheck
+                continue
+            
+            # Extract points
+            dataPoints = matchingSeries['values'][0]['value']
+            siteName = matchingSeries['sourceInfo']['siteName']  # Unused, but log
+            print("[DEBUG] Found series for '{}': {} points, siteName={}".format(uid, len(dataPoints), siteName))
+            
+            outputData = []
+
+            for point in dataPoints:
+                value = point['value']
+                dateTimeStr = point['dateTime'].replace('T', ' ').split('.')[0]  # YYYY-MM-DD HH:MM:SS
+
+                try:
+                    dateTime = datetime.strptime(dateTimeStr, '%Y-%m-%d %H:%M:%S')
+                    formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')  # Standard, zero sec
+                    outputData.append(f"{formattedTs},{value}")
+                except ValueError as e:
+                    print("[WARN] Invalid point ts skipped for '{}': {} - {}".format(uid, dateTimeStr, e))
+            
+            # Gap check
+            outputData = Logic.gapCheck(timestamps, outputData, uid)
+            groupOutputData.append(outputData)
+            
+            # Header: raw uid
+            buildHeader.append(uid)
+        
+        # Combine group outputs
+        if groupOutputData:
+            combined = groupOutputData[0]
+            
+            for nextData in groupOutputData[1:]:
+                combined = Logic.combineParameters(combined, nextData)
+            if output:
+                output = Logic.combineParameters(output, combined)
+            else:
+                output = combined
+    
+    if not output:
+        print("[WARN] No data after processing all batches.")
+        return []
+    
+    # Prepend header
     output.insert(0, buildHeader)
+    print("[DEBUG] Final output len={} (incl header), sample row: {}".format(len(output), output[1] if len(output) > 1 else 'empty'))
 
-    return output 
+    return output
