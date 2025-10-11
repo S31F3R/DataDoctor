@@ -3,10 +3,10 @@ import sys
 import datetime
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer, QByteArray
-from PyQt6.QtGui import QGuiApplication, QColor
+from PyQt6.QtGui import QGuiApplication, QColor, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog
 
-sortState = {}  # Global dict for per-col sort state (col: ascending)
+sortState = {} # Global dict for per-col sort state (col: ascending)
 
 def buildTimestamps(startDateStr, endDateStr, intervalStr):
     print("[DEBUG] buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
@@ -42,8 +42,8 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
     current = start
     
     while current < end:
-        ts_str = current.strftime('%m/%d/%y %H:%M:00')
-        timestamps.append(ts_str)
+        ts = current.strftime('%m/%d/%y %H:%M:00')
+        timestamps.append(ts)
         current += delta
     
     print("[DEBUG] Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
@@ -63,7 +63,7 @@ def gapCheck(timestamps, data, dataID=''):
         return data
 
     newData = []
-    removed = []  # Collect details for warn
+    removed = [] # Collect details for warn
     i = 0
 
     for expectedDateTime in expectedDateTimes:
@@ -90,12 +90,14 @@ def gapCheck(timestamps, data, dataID=''):
             except ValueError:
                 print("[WARN] Invalid ts skipped: '{}' in '{}' for '{}'".format(actualTimestampStr, line, dataID))
                 i += 1
+
                 continue
             if actualDateTime == expectedDateTime:
                 # Match, add (ensure :00 seconds if not)
                 if not actualTimestampStr.endswith(':00'):
                     actualTimestampStr = actualDateTime.strftime('%m/%d/%y %H:%M:00')
                     line = actualTimestampStr + ',' + ','.join(parts[1:])
+
                 newData.append(line)
                 found = True
                 i += 1
@@ -112,10 +114,12 @@ def gapCheck(timestamps, data, dataID=''):
             # Gap, insert blank
             tsStr = expectedDateTime.strftime('%m/%d/%y %H:%M:00')
             newData.append(tsStr + ',')
+
     # Any remaining data are extras
     while i < len(data):
         line = data[i]
         parts = line.split(',')
+
         if len(parts) > 0:
             removed.append(parts[0].strip())
         i += 1
@@ -127,76 +131,59 @@ def gapCheck(timestamps, data, dataID=''):
 
 def combineParameters(data, newData):
     if len(data) != len(newData):
-        return data  # Mismatch—skip
+        return data # Mismatch—skip
+
     for d in range(len(newData)):
         parseLine = newData[d].split(',')
         data[d] = f'{data[d]},{parseLine[1]}'
+
     return data
 
-def buildTable(table, data, buildHeader, dataDictionaryTable):
+def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None):
     table.clear()
-
-    if not data:
-        return
     
-    # Set up table structure (extra column for timestamp)
-    table.setRowCount(len(data))
-    table.setColumnCount(len(buildHeader) + 1)
-
-    # Build header with center alignment (col 0 = timestamp)
-    timestampHeader = QTableWidgetItem("Timestamp")
-    timestampHeader.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-    table.setHorizontalHeaderItem(0, timestampHeader)
-
-    for c in range(len(buildHeader)):
-        item = QTableWidgetItem(str(buildHeader[c]))
-        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-        table.setHorizontalHeaderItem(c, item)
-
-    # Populate data rows with center alignment
-    for r in range(len(data)):
-        rowData = data[r].split(',')
-
-        for c in range(len(rowData)):
-            item = QTableWidgetItem(rowData[c])
-            item.setTextAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
-            table.setHorizontalHeaderItem(c + 1, item)
-
+    if not data:
+        return  
+  
     # Assume buildHeader is list; split if str
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
+    
+    # Build prateOfChangeessed headers with dict lookup and \nINTERVAL
+    prateOfChangeessedHeaders = []
 
-    # Build processed headers with dict lookup (list for efficiency)
-    processedHeaders = []
+    for i, h in enumerate(buildHeader):
+        headerText = h.strip() # Strip raw header
+        intervalStr = intervals[i].upper()
+        
+        dictRow = getDataDictionaryItem(dataDictionaryTable, headerText)
 
-    for h in buildHeader:
-        headerText = h.strip()  # Strip raw header
+        if dictRow != -1:
+            siteItem = dataDictionaryTable.item(dictRow, 1) # Site col1
+            datatypeItem = dataDictionaryTable.item(dictRow, 2) # Datatype col2
+            baseLabel = (siteItem.text().strip() + ' ' + datatypeItem.text().strip()) if siteItem and datatypeItem else headerText
+        else:
+            baseLabel = headerText
+        
+        fullLabel = baseLabel + ' \n' + intervalStr
 
-        if dataDictionaryTable:
-            dictRow = getDataDictionaryItem(dataDictionaryTable, headerText)
+        if dictRow != -1:
+            fullLabel += ' \n' + h
 
-            if dictRow != 'null':
-                labelItem = dataDictionaryTable.item(dictRow, 2)
-
-                if labelItem:
-                    parseLabel = labelItem.text().split(':')
-
-                    if len(parseLabel) > 1:
-                        parseLabel[1] = parseLabel[1][1:].strip()  # Strip label part
-                        headerText = f'{parseLabel[0].strip()} \n{parseLabel[1]} \n{headerText}'
-        processedHeaders.append(headerText)
-
-    # Headers: Processed only (no Date prepend)
-    headers = processedHeaders
-
+        prateOfChangeessedHeaders.append(fullLabel)
+    
+    # Headers: PrateOfChangeessed only (no Date prepend)
+    headers = prateOfChangeessedHeaders
+    
     # Conditional skip for main table (skip date col 0)
-    skipDateCol = dataDictionaryTable  # True for main, False for dict
+    skipDateCol = dataDictionaryTable is not None  # True for main (has dict), False for dict itself? Wait, adjust if needed - assuming dataDictionaryTable is passed for main, None or False for others
+    
     numCols = len(headers)
     numRows = len(data)
     table.setRowCount(numRows)
     table.setColumnCount(numCols)
-    table.setHorizontalHeaderLabels(headers)  # Full list
-
+    table.setHorizontalHeaderLabels(headers) # Full list
+    
     # Vertical: Timestamps for main table only (dict table no dates)
     if dataDictionaryTable:
         timestamps = [row.split(',')[0].strip() for row in data]
@@ -205,164 +192,158 @@ def buildTable(table, data, buildHeader, dataDictionaryTable):
         table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         table.verticalHeader().setVisible(True)
     else:
-        table.verticalHeader().setVisible(False)  # Hide for dict
-
+        table.verticalHeader().setVisible(False) # Hide for dict
+    
     # Populate data (conditional skip, center all)
     for rowIDx, row_str in enumerate(data):
-        rowData = row_str.split(',')[1:] if skipDateCol else row_str.split(',')  # Skip date for main
-
+        rowData = row_str.split(',')[1:] if skipDateCol else row_str.split(',') # Skip date for main
+        
         for colIDx in range(min(numCols, len(rowData))):
             cellText = rowData[colIDx].strip() if colIDx < len(rowData) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
             table.setItem(rowIDx, colIDx, item)
-
+    
     # Resize all columns to fit headers + data
     for col in range(numCols):
         table.resizeColumnToContents(col)
-
+    
+    # dataIds for QAQC: raw buildHeader
+    dataIds = buildHeader
+    
+    # QAQC colors
+    qaqc(table, dataDictionaryTable, dataIds)
+    
     # Warm-up dummy sort to trigger initial reflow (no shift on first real click)
     header = table.horizontalHeader()
-    table.setSortingEnabled(False)  # Disable for dummy
+    table.setSortingEnabled(False) # Disable for dummy
     QTimer.singleShot(0, lambda: [
-        header.setSortIndicator(0, Qt.SortOrder.AscendingOrder),  # Dummy ASC on col 0
-        table.sortItems(0, Qt.SortOrder.AscendingOrder),  # Dummy sort (no change)
-        header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder),  # Clear with ASC
-        table.setSortingEnabled(True)  # Re-enable
-    ])  # Queued for next loop cycle (settles layout)
-
+        header.setSortIndicator(0, Qt.SortOrder.AscendingOrder), # Dummy ASC on col 0
+        table.sortItems(0, Qt.SortOrder.AscendingOrder), # Dummy sort (no change)
+        header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder), # Clear with ASC
+        table.setSortingEnabled(True) # Re-enable
+    ])  
+    
     # Connect custom sort (syncs timestamps)
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
     
 def buildDataDictionary(table):
-    data = []
-    csv_path = resourcePath('DataDictionary.csv')
+    table.clear()
 
-    try:
-        with open(csv_path, 'r', encoding='utf-8-sig') as f:
-            readfile = f.readlines()
-            if readfile:
-                header = readfile[0].strip().split(',')
-                data = [line.strip() for line in readfile[1:]]
-    except FileNotFoundError:
-        print("DataDictionary.csv missing—create empty.")
-        header = ['ID', 'Description', 'Label']  # Default header
-
-    buildTable(table, data, header, None)
-
-def getDataDictionaryItem(table, dataID):
-    data_id_clean = dataID.strip()  # Clean input
-
-    # Optional: Strip common prefixes (e.g., 'SDID', 'site') if API adds them
-    for prefix in ['', 'SDID', 'site', 'uid']:  # Add more if needed
-        if data_id_clean.startswith(prefix):
-            data_id_clean = data_id_clean[len(prefix):].strip()
-            break
-
-    for r in range(table.rowCount()):
-        id_item = table.item(r, 0)
-        if id_item:
-            csv_id = id_item.text().strip()
-
-            # Same prefix strip for CSV
-            csv_id_clean = csv_id
-            for prefix in ['', 'SDID', 'site', 'uid']:
-                if csv_id_clean.startswith(prefix):
-                    csv_id_clean = csv_id_clean[len(prefix):].strip()
-                    break
-            if csv_id_clean == data_id_clean:
-                return r
-    return 'null'
-
-def qaqc(mainTable, dataDictionaryTable, dataID):
-    if not dataID:
+    with open(resourcePath('DataDictionary.csv'), 'r', encoding='utf-8-sig') as f:
+        data = [line.strip().split(',') for line in f.readlines()]
+    
+    if not data:
         return
+    
+    table.setRowCount(len(data) - 1) # Skip header
+    table.setColumnCount(len(data[0]))
+    
+    # Set headers
+    for c, header in enumerate(data[0]):
+        item = QTableWidgetItem(header.strip())
+        table.setHorizontalHeaderItem(c, item)
+    
+    # Populate, trim spaces
+    for r in range(1, len(data)):
+        for c in range(len(data[r])):
+            value = data[r][c].strip()
+            item = QTableWidgetItem(value)
+            table.setItem(r-1, c, item)
 
-    # Loop directly over dataID (list of IDs)
-    for p, idVal in enumerate(dataID):       
-        tempIndex = getDataDictionaryItem(dataDictionaryTable, idVal) 
-        rowIndex = int(tempIndex) if tempIndex is not None and tempIndex != 'null' else None            
+def getDataDictionaryItem(table, dataId):
+    for r in range(table.rowCount()):
+        item = table.item(r, 0)
 
-        if rowIndex is None: 
-            continue # No match, skip entire column
-        else:
-            # Extract thresholds from dictionary row
-            expectedMin = float(dataDictionaryTable.item(rowIndex, 3).text()) if dataDictionaryTable.item(rowIndex, 3).text() else 0
-            expectedMax = float(dataDictionaryTable.item(rowIndex, 4).text()) if dataDictionaryTable.item(rowIndex, 4).text() else float('inf')
-            cutoffMin = float(dataDictionaryTable.item(rowIndex, 5).text()) if dataDictionaryTable.item(rowIndex, 5).text() else expectedMin
-            cutoffMax = float(dataDictionaryTable.item(rowIndex, 6).text()) if dataDictionaryTable.item(rowIndex, 6).text() else expectedMax
-            roc = float(dataDictionaryTable.item(rowIndex, 7).text()) if dataDictionaryTable.item(rowIndex, 7).text() else 0
+        if item and item.text().strip() == dataId.strip():
+            return r
+            
+    return -1 # Not found
 
-            colIndex = p + 1 # Offset by 1 for timestamp col
+def qaqc(table, dataDictionaryTable, lookupIds):
+    if not dataDictionaryTable:
+        return
+    
+    for col, lookupId in enumerate(lookupIds):
+        rowIndex = getDataDictionaryItem(dataDictionaryTable, lookupId)
 
-            # Check each row in mainTable (skip header)
-            for row in range(1, mainTable.rowCount()):   
-                item = mainTable.item(row, colIndex)                
+        if rowIndex == -1:
+            continue # Skip QAQC for non-dict
+        
+        # Expected min/max etc. (with strip)
+        expectedMin = None
+        expectedMinItem = dataDictionaryTable.item(rowIndex, 3)
+        
+        if expectedMinItem and expectedMinItem.text().strip():
+            expectedMin = float(expectedMinItem.text().strip())
+        
+        expectedMax = None
+        expectedMaxItem = dataDictionaryTable.item(rowIndex, 4)
 
-                if not item:
-                    continue
+        if expectedMaxItem and expectedMaxItem.text().strip():
+            expectedMax = float(expectedMaxItem.text().strip())
+        
+        cutoffMin = None
+        cutoffMinItem = dataDictionaryTable.item(rowIndex, 5)
 
-                cellText = item.text()
-                colored = False # Flag for text color
+        if cutoffMinItem and cutoffMinItem.text().strip():
+            cutoffMin = float(cutoffMinItem.text().strip())
+        
+        cutoffMax = None
+        cutoffMaxItem = dataDictionaryTable.item(rowIndex, 6)
 
-                if not cellText:
-                    item.setBackground(QColor(100, 195, 247)) # Missing (blue)
-                    colored = True
-                else:
-                    try:
-                        val = float(cellText)
+        if cutoffMaxItem and cutoffMaxItem.text().strip():
+            cutoffMax = float(cutoffMaxItem.text().strip())
+        
+        rateOfChange = None
+        rateOfChangeItem = dataDictionaryTable.item(rowIndex, 7)
 
-                        # Cutoffs (red/orange)
-                        if val > cutoffMax:
-                            item.setBackground(QColor(192, 28, 40)) # Red
-                            colored = True
-                        elif val < cutoffMin:
-                            item.setBackground(QColor(255, 163, 72)) # Orange
-                            colored = True
+        if rateOfChangeItem and rateOfChangeItem.text().strip():
+            rateOfChange = float(rateOfChangeItem.text().strip())
+        
+        # Iterate over rows for colors
+        prevVal = None
 
-                        # Expected (yellow)
-                        elif val > expectedMax:
-                            item.setBackground(QColor(245, 194, 17)) # Yellow
-                            colored = True
-                        elif val < expectedMin:
-                            item.setBackground(QColor(249, 240, 107)) # Light Yellow
-                            colored = True
+        for r in range(table.rowCount()):
+            item = table.item(r, col)
+            if not item:
+                continue
+            
+            cellText = item.text().strip()
 
-                        # ROC (red)
-                        prevVal = None
-                        prevItem = mainTable.item(row - 1, colIndex) if row > 1 else None
+            if cellText == '': # Missing data blue (only if in dict)
+                item.setBackground(QColor(100, 195, 247)) # Light blue
+                continue
+            
+            try:
+                val = float(cellText)
+            except ValueError:
+                continue # Skip non-numeric
+            
+            # Min/Max colors
+            if expectedMin is not None and val < expectedMin:
+                item.setBackground(QColor(249, 240, 107)) # Light Yellow                              
+            elif expectedMax is not None and val > expectedMax:
+                item.setBackground(QColor(249, 194, 17)) # Yellow
+            elif cutoffMin is not None and val < cutoffMin:
+                item.setBackground(QColor(255, 163, 72)) # Orange
+            elif cutoffMax is not None and val > cutoffMax:
+                item.setBackground(QColor(192, 28, 40)) # Red
+            
+            # Rate of change
+            if rateOfChange is not None and prevVal is not None:
+                if abs(val - prevVal) > rateOfChange:
+                    item.setBackground(QColor(246, 97, 81)) # Red
 
-                        if prevItem:
-                            try:
-                                prevVal = float(prevItem.text())
+            # Repeat (green)
+            if prevVal is not None and val == prevVal:
+                item.setBackground(QColor(87, 227, 137)) # Green                
 
-                                if abs(val - prevVal) > roc:
-                                    item.setBackground(QColor(246, 97, 81)) # Red
-                                    colored = True
-                            except ValueError: 
-                                pass
-
-                        # Repeat (green)
-                        if prevVal is not None and val == prevVal:
-                            item.setBackground(QColor(87, 227, 137)) # Green
-                            colored = True
-                        prevVal = val
-                    except ValueError:
-                        pass  # Non-numeric: no color
-
-                if colored:
-                    # White for all except yellow (black for yellow readability)
-                    if item.background().color() in [QColor(245, 194, 17), QColor(249, 240, 107)]:  # Yellows
-                        item.setForeground(QColor("black"))
-                    else:
-                        item.setForeground(QColor("white"))
-
-            # Re-center after any mod
-            if item: item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)                          
-
+            prevVal = val         
+           
 def loadAllQuickLooks(cbQuickLook):     
     cbQuickLook.clear()
-    cbQuickLook.addItem(None)  # Blank first
+    cbQuickLook.addItem(None) # Blank first
 
     quicklook_dir = resourcePath('quickLook')
 
@@ -373,13 +354,14 @@ def loadAllQuickLooks(cbQuickLook):
                   
 def saveQuickLook(textQuickLookName, listQueryList):
     name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
+
     if not name:
         print("Warning: Empty quick look name—skipped.")
         return
 
     data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
     quicklook_path = resourcePath(f'quickLook/{name}.txt')
-    os.makedirs(os.path.dirname(quicklook_path), exist_ok=True)  # Ensure dir
+    os.makedirs(os.path.dirname(quicklook_path), exist_ok=True) # Ensure dir
 
     with open(quicklook_path, 'w', encoding='utf-8-sig') as f:
         f.write(','.join(data))
@@ -392,33 +374,39 @@ def loadQuickLook(cbQuickLook, listQueryList):
 
     quicklook_path = resourcePath(f'quickLook/{name}.txt')
     listQueryList.clear()
+
     try:
         with open(quicklook_path, 'r', encoding='utf-8-sig') as f:
             content = f.read().strip()
+
             if content:
                 data = content.split(',')
                 for item_text in data:
                     listQueryList.addItem(item_text.strip())
+
     except FileNotFoundError:
         print(f"Quick look '{name}' not found.")  
 
 def loadConfig():
-    config = ['light']  # Default color
-    config_path = resourcePath('config.ini')
+    config = ['light'] # Default color
+    configPath = resourcePath('config.ini')
 
     try:
-        with open(config_path, 'r', encoding='utf-8-sig') as f:
+        with open(configPath, 'r', encoding='utf-8-sig') as f:
             config = [line.strip() for line in f.readlines()]
-            if not config:  # Empty file
+
+            if not config: # Empty file
                 config = ['light']
+
     except FileNotFoundError:
         # Create if missing
-        with open(config_path, 'w', encoding='utf-8-sig') as f:
+        with open(configPath, 'w', encoding='utf-8-sig') as f:
             f.write('light\n')
             
     # Ensure path entry (index 1)
     while len(config) < 2:
-        config.append('')  # Empty path default
+        config.append('') # Empty path default
+
     return config
 
 def exportTableToCSV(table, fileLocation, fileName):
@@ -433,16 +421,17 @@ def exportTableToCSV(table, fileLocation, fileName):
     # Force Documents if lastPath empty/invalid
     if not lastPath or not os.path.exists(lastPath):
         lastPath = os.path.expanduser("~/Documents")
+
     defaultDir = lastPath
 
     # Timestamped default name (yyyy-mm-dd HH:mm:ss Export.csv)
     timestamp = datetime.now().strftime('%Y-%m-%d %H%M%S')
-    default_name = f"{timestamp} Export.csv"
-    suggested_path = os.path.join(defaultDir, default_name)
-    filePath, _ = QFileDialog.getSaveFileName(None, "Save CSV As", suggested_path, "CSV files (*.csv)")
+    defaultName = f"{timestamp} Export.csv"
+    suggestedPath = os.path.join(defaultDir, defaultName)
+    filePath, _ = QFileDialog.getSaveFileName(None, "Save CSV As", suggestedPath, "CSV files (*.csv)")
 
     if not filePath:
-        return  # User canceled
+        return # User canceled
 
     # Build CSV (your original logic)
     headers = [table.horizontalHeaderItem(h).text().replace('\n', ' | ') for h in range(table.columnCount())]
@@ -457,21 +446,22 @@ def exportTableToCSV(table, fileLocation, fileName):
         f.write('\n'.join(csvLines))
 
     # Save last path to config (dir only)
-    export_dir = os.path.dirname(filePath)
+    exportDir = os.path.dirname(filePath)
+
     if len(config) < 2:
-        config.append(export_dir)  # Extend if short
+        config.append(exportDir) # Extend if short
     else:
-        config[1] = export_dir  # Assign
+        config[1] = exportDir # Assign
     with open(resourcePath('config.ini'), 'w', encoding='utf-8-sig') as f:
-        f.write(f"{config[0]}\n{export_dir}\n")  # color\npath
+        f.write(f"{config[0]}\n{exportDir}\n") # color\npath
 
     print(f"Exported to {filePath}")
 
 def resourcePath(relativePath):
     """Get absolute path to resource, works for dev and PyInstaller"""
-    if getattr(sys, 'frozen', False):  # Bundled mode
+    if getattr(sys, 'frozen', False): # Bundled mode
         basePath = sys._MEIPASS
-    else:  # Dev mode
+    else: # Dev mode
         basePath = os.path.dirname(os.path.abspath(__file__))
     return os.path.normpath(os.path.join(basePath, relativePath))
 
@@ -480,20 +470,20 @@ def customSortTable(table, col, dataDictionaryTable):
     pool = QThreadPool.globalInstance()
 
     if pool.activeThreadCount() > 0:
-        return  # Skip during sort
+        return # Skip during sort
 
     # Disable selection highlight during sort
     table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
 
     # Clear indicator to stop Qt double-trigger
     header = table.horizontalHeader()
-    header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)  # Clear (safe enum)
+    header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder) # Clear (safe enum)
 
     # Toggle sort order (per-col state)
     if col not in sortState:
-        sortState[col] = True  # Default ASC for new col
+        sortState[col] = True # Default ASC for new col
     else:
-        sortState[col] = not sortState[col]  # Flip on every click
+        sortState[col] = not sortState[col] # Flip on every click
     ascending = sortState[col]
 
     # Extract rows in main thread (fast, just text)
@@ -501,9 +491,9 @@ def customSortTable(table, col, dataDictionaryTable):
     rows = []
 
     for rowIDx in range(numRows):
-        timestamp = table.verticalHeaderItem(rowIDx).text() if table.verticalHeaderItem(rowIDx) else ''  # From vertical
+        timestamp = table.verticalHeaderItem(rowIDx).text() if table.verticalHeaderItem(rowIDx) else '' # From vertical
         rowData = [table.item(rowIDx, c).text() if table.item(rowIDx, c) else '' for c in range(table.columnCount())]
-        rows.append([timestamp] + rowData)  # Timestamp first
+        rows.append([timestamp] + rowData) # Timestamp first
 
     # Start pooled worker (auto-managed, no destroy warning)
     pool = QThreadPool.globalInstance()
@@ -516,7 +506,7 @@ def customSortTable(table, col, dataDictionaryTable):
 
 def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col):
     # Re-populate on main thread
-    table.setSortingEnabled(False)  # Disable default sort
+    table.setSortingEnabled(False) # Disable default sort
     numRows = len(sortedRows)
 
     for rowIDx, row in enumerate(sortedRows):
@@ -532,12 +522,12 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
 
     # Lock widths before QAQC (no reflow/shift)
     for c in range(table.columnCount()):
-        table.setColumnWidth(c, table.columnWidth(c))  # Lock current
+        table.setColumnWidth(c, table.columnWidth(c)) # Lock current
 
     # Re-apply QAQC colors
     headerLabels = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
-    data_id = [label.split('\n')[-1].strip() for label in headerLabels]  # Last line = raw ID
-    qaqc(table, dataDictionaryTable, data_id)
+    dataID = [label.split('\n')[-1].strip() for label in headerLabels] # Last line = raw ID
+    qaqc(table, dataDictionaryTable, dataID)
 
     # Re-freeze col 0 (locked, no resize)
     table.setColumnWidth(0, 150)
@@ -546,8 +536,6 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
 
     # Re-enable selection (after sort, for normal use)
     table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-
-    # No resize here—locked prevents shift
 
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)

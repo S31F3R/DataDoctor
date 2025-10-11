@@ -1,7 +1,7 @@
 import requests
 import json
 from datetime import datetime, timedelta
-import Logic  # For buildTimestamps, gapCheck, combineParameters
+import Logic # For buildTimestamps, gapCheck, combineParameters
 
 def api(dataID, interval, startDate, endDate):
     print("[DEBUG] QueryUSGS.api called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
@@ -45,8 +45,8 @@ def api(dataID, interval, startDate, endDate):
         # Parse group: collect unique sites, params (methods filter post-fetch)
         sites = []
         params = []
-        methods = []  # For post-filter
-        uidMap = {}  # uid -> (site, method, param)
+        methods = [] # For post-filter
+        uidMap = {} # uid -> (site, method, param)
 
         for uid in groupUids:
             parts = uid.split('-')
@@ -57,7 +57,7 @@ def api(dataID, interval, startDate, endDate):
 
             site, method, param = parts
             sites.append(site)
-            params.append('000' + param)  # Pad
+            params.append('000' + param) # Pad
             methods.append(method)
             uidMap[uid] = (site, method, param)
         
@@ -85,13 +85,13 @@ def api(dataID, interval, startDate, endDate):
             continue
         
         # Process per input uid in order (reorder/validate)
-        groupOutputData = []  # List of outputData lists, one per uid
+        groupOutputData = [] # List of outputData lists, one per uid
 
         for idx, uid in enumerate(groupUids):
             site, method, param = uidMap.get(uid, (None, None, None))
 
             if not site:
-                groupOutputData.append([])  # Empty for invalid
+                groupOutputData.append([]) # Empty for invalid
                 continue
             
             # Find matching timeSeries
@@ -114,23 +114,23 @@ def api(dataID, interval, startDate, endDate):
             
             if not matchingSeries:
                 print("[WARN] No matching series for uid '{}': site={}, param={}, method={}. Skipping.".format(uid, site, param, method))
-                groupOutputData.append([])  # Will pad to blanks in gapCheck
+                groupOutputData.append([]) # Will pad to blanks in gapCheck
                 continue
             
             # Extract points
             dataPoints = matchingSeries['values'][0]['value']
-            siteName = matchingSeries['sourceInfo']['siteName']  # Unused, but log
+            siteName = matchingSeries['sourceInfo']['siteName'] # Unused, but log
             print("[DEBUG] Found series for '{}': {} points, siteName={}".format(uid, len(dataPoints), siteName))
             
             outputData = []
 
             for point in dataPoints:
                 value = point['value']
-                dateTimeStr = point['dateTime'].replace('T', ' ').split('.')[0]  # YYYY-MM-DD HH:MM:SS
+                dateTimeStr = point['dateTime'].replace('T', ' ').split('.')[0] # YYYY-MM-DD HH:MM:SS
 
                 try:
                     dateTime = datetime.strptime(dateTimeStr, '%Y-%m-%d %H:%M:%S')
-                    formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')  # Standard, zero sec
+                    formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00') # Standard, zero sec
                     outputData.append(f"{formattedTs},{value}")
                 except ValueError as e:
                     print("[WARN] Invalid point ts skipped for '{}': {} - {}".format(uid, dateTimeStr, e))
