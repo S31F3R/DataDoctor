@@ -245,16 +245,28 @@ class uiWebQuery(QMainWindow):
             if len(parts) != 3:
                 print(f"[WARN] Invalid item skipped: {itemText}")
                 continue
-            dataId, interval, database = parts
-            mrid = '0'  # Default
-            sdi = dataId
+
+            dataID, interval, database = parts
+            mrid = '0' # Default
+            SDID = dataID
 
             if database.startswith('USBR-'):
-                if '-' in dataId:
-                    sdi, mrid = dataId.rsplit('-', 1)  # Last - as mrid
-            queryItems.append((dataId, interval, database, mrid, i))  # Include orig index
+                if '-' in dataID:
+                    SDID, mrid = dataID.rsplit('-', 1) # Last - as mrid
+            queryItems.append((dataID, interval, database, mrid, i)) # Include orig index
         
-        if not queryItems:
+        # Add single query from textSDID if not empty and list blank
+        if not queryItems and self.textSDID.toPlainText().strip():
+            dataID = self.textSDID.toPlainText().strip()
+            interval = self.cbInterval.currentText()
+            database = self.cbDatabase.currentText()
+            mrid = '0' # Default
+            sdi = dataID
+
+            if database.startswith('USBR-') and '-' in dataID:
+                sdi, mrid = dataID.rsplit('-', 1)
+            queryItems.append((dataID, interval, database, mrid, 0)) # origIndex=0
+        else:
             print("[WARN] No valid query items.")
             return
         
@@ -263,10 +275,10 @@ class uiWebQuery(QMainWindow):
         
         # First interval for timestamps
         firstInterval = queryItems[0][1]
-        firstDb = queryItems[0][2]  # db of first
+        firstDb = queryItems[0][2] # db of first
 
         if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
-            firstInterval = 'HOUR'  # Use hourly ts for USBR INSTANT quirk
+            firstInterval = 'HOUR' # Use hourly ts for USBR INSTANT quirk
 
         timestamps = Logic.buildTimestamps(startDate, endDate, firstInterval)
 
@@ -277,38 +289,40 @@ class uiWebQuery(QMainWindow):
         # Default blanks for missing
         defaultBlanks = [''] * len(timestamps)
         
-        # Group: dict of (db, mrid or None, interval) -> list of (origIndex, dataId)
+        # Group: dict of (db, mrid or None, interval) -> list of (origIndex, dataID)
         groups = defaultdict(list)
 
-        for dataId, interval, db, mrid, origIndex in queryItems:
+        for dataID, interval, db, mrid, origIndex in queryItems:
             groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
-            groups[groupKey].append((origIndex, dataId))  # Append dataId, recalc sdi later
+            groups[groupKey].append((origIndex, dataID)) # Append dataID, recalc SDID later
         
         print(f"[DEBUG] Formed {len(groups)} groups.")
         
-        # Collect values: dict {dataId: list of values len(timestamps)}
-        valuesDict = {}
+        # Collect values: dict {dataID: list of values len(timestamps)}
+        valueSDIDct = {}
         
         for (db, mrid, interval), groupItems in groups.items():
             print(f"[DEBUG] Processing group: db={db}, mrid={mrid}, interval={interval}, items={len(groupItems)}")
             
-            # Recalc sdis per item
-            sdis = []
+            # Recalc SDIDs per item
+            SDIDs = []
 
-            for origIndex, dataId in groupItems:
-                sdi = dataId
+            for origIndex, dataID in groupItems:
+                SDID = dataID
+
                 if db.startswith('USBR-'):
-                    if '-' in dataId:
-                        sdi, _ = dataId.rsplit('-', 1)  # Recalc sdi
-                sdis.append(sdi)            
+                    if '-' in dataID:
+                        SDID, _ = dataID.rsplit('-', 1) # Recalc SDID
+
+                SDIDs.append(SDID)            
             try:
                 if db.startswith('USBR-'):
                     svr = db.split('-')[1].lower()
-                    result = QueryUSBR.api(svr, sdis, startDate, endDate, interval, mrid)
+                    result = QueryUSBR.api(svr, SDIDs, startDate, endDate, interval, mrid)
                 elif db == 'USGS-NWIS':
-                    result = QueryUSGS.api(sdis, interval, startDate, endDate)
+                    result = QueryUSGS.api(SDIDs, interval, startDate, endDate)
                 elif db == 'Aquarius':
-                    result = QueryAquarius.api(sdis, startDate, endDate, interval)
+                    result = QueryAquarius.api(SDIDs, startDate, endDate, interval)
                 else:
                     print(f"[WARN] Unknown db skipped: {db}")
                     continue
@@ -316,39 +330,39 @@ class uiWebQuery(QMainWindow):
                 QMessageBox.warning(self, "Query Error", f"Query failed for group {db}: {e}")
                 continue
             
-            # Map to dataId
-            for idx, (origIndex, dataId) in enumerate(groupItems):
-                sdi = sdis[idx]
-                if sdi in result:
-                    outputData = result[sdi]
-                    alignedData = Logic.gapCheck(timestamps, outputData, dataId)
+            # Map to dataID
+            for idx, (origIndex, dataID) in enumerate(groupItems):
+                SDID = SDIDs[idx]
+                if SDID in result:
+                    outputData = result[SDID]
+                    alignedData = Logic.gapCheck(timestamps, outputData, dataID)
                     values = [line.split(',')[1] if line else '' for line in alignedData]
-                    valuesDict[dataId] = values
+                    valueSDIDct[dataID] = values
                 else:
-                    valuesDict[dataId] = defaultBlanks  # Full blanks
+                    valueSDIDct[dataID] = defaultBlanks # Full blanks
         
         # Recombine in original order
-        originalDataIds = [item[0] for item in queryItems]  # dataId
-        originalIntervals = [item[1] for item in queryItems]  # For labels
+        originalDataIds = [item[0] for item in queryItems] # dataID
+        originalIntervals = [item[1] for item in queryItems] # For labels
 
         # Build lookupIds for dict/QAQC (strip MRID for USBR)
         lookupIds = []
 
         for item in queryItems:
-            dataId, interval, db, mrid, origIndex = item
-            lookupId = dataId
-            if db.startswith('USBR-') and '-' in dataId:
-                lookupId = dataId.split('-')[0]  # Base SDID
+            dataID, interval, db, mrid, origIndex = item
+            lookupId = dataID
+            if db.startswith('USBR-') and '-' in dataID:
+                lookupId = dataID.split('-')[0]  # Base SDID
             lookupIds.append(lookupId)
         
         # Build data: list of 'ts,value1,value2,...' strings
         data = []
 
         for r in range(len(timestamps)):
-            rowValues = [valuesDict.get(dataId, defaultBlanks)[r] for dataId in originalDataIds]  # val at r (str)
+            rowValues = [valueSDIDct.get(dataID, defaultBlanks)[r] for dataID in originalDataIds] # val at r (str)
             data.append(f"{timestamps[r]},{','.join(rowValues)}")
         
-        # Build headers: raw dataIds for now, processed later
+        # Build headers: raw dataID for now, processed later
         buildHeader = originalDataIds
         
         # Intervals for labels
