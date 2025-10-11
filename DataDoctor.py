@@ -1,6 +1,7 @@
 import sys
 import QueryUSBR
 import QueryUSGS
+import QueryAquarius
 import Logic
 import datetime
 import breeze_resources # Registers Qt resources for stylesheets
@@ -11,12 +12,13 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
                              QListWidgetItem, QMessageBox, QDialog, QSizePolicy, QTabWidget)
 from datetime import datetime, timedelta
 from PyQt6 import uic
+from collections import defaultdict
 
 class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
     def __init__(self):
-        super(uiMain, self).__init__()  # Call the inherited classes __init__ method
-        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self)  # Load the .ui file
+        super(uiMain, self).__init__() # Call the inherited classes __init__ method
+        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self) # Load the .ui file
         
         # Attach controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
@@ -42,9 +44,9 @@ class uiMain(QMainWindow):
 
         if isinstance(centralLayout, QGridLayout):
             centralLayout.setContentsMargins(0, 0, 0, 0)
-            centralLayout.setRowStretch(0, 0)  # Toolbar row fixed
-            centralLayout.setRowStretch(1, 1)  # Tab row expanding
-            centralLayout.setColumnStretch(0, 1)  # Single column expanding
+            centralLayout.setRowStretch(0, 0) # Toolbar row fixed
+            centralLayout.setRowStretch(1, 1) # Tab row expanding
+            centralLayout.setColumnStretch(0, 1) # Single column expanding
         
         # Ensure tab widget expands
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
@@ -126,7 +128,7 @@ class uiMain(QMainWindow):
                 data = f.readlines()
                 colorMode = data[0].strip()
         except FileNotFoundError:
-            colorMode = 'light'  # Default if no config
+            colorMode = 'light' # Default if no config
             data = [colorMode + '\n']
 
         # Toggle
@@ -158,7 +160,7 @@ class uiMain(QMainWindow):
         winDataDictionary.show()    
 
     def btnExportCSVPressed(self):
-        Logic.exportTableToCSV(self.mainTable, '', '')  # Pass empty (uses dialog)
+        Logic.exportTableToCSV(self.mainTable, '', '') # Pass empty (uses dialog)
 
     def exitPressed(self):
         app.exit()    
@@ -227,70 +229,141 @@ class uiWebQuery(QMainWindow):
         QMessageBox.information(self, "Interval Info", f"Interval determines what timestamps are displayed and what table the data is queried from (USBR).\n\nIn a query list, timestamp interval is determined by first dataID in the list.")
 
     def btnQueryPressed(self):
-        # Build dataID: List first (comma-joined), fallback to single text if empty
-        if self.listQueryList.count() == 0:
-            dataID = f'{self.textSDID.toPlainText().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}'
-        else:
-            dataID = ','.join([self.listQueryList.item(x).text() for x in range(self.listQueryList.count())])
+        print("[DEBUG] btnQueryPressed: Starting query process.")
         
-        # Validate dataID before API
-        if not dataID:
-            QMessageBox.warning(self, "Empty Query", "Enter an SDID or add to list.")
+        # Get start/end dates
+        startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
+        endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
+        
+        # Collect and parse query items
+        queryItems = []
+
+        for i in range(self.listQueryList.count()):
+            itemText = self.listQueryList.item(i).text().strip()
+            parts = itemText.split('|')
+
+            if len(parts) != 3:
+                print(f"[WARN] Invalid item skipped: {itemText}")
+                continue
+            dataId, interval, database = parts
+            mrid = '0'  # Default
+            sdi = dataId
+
+            if database.startswith('USBR-'):
+                if '-' in dataId:
+                    sdi, mrid = dataId.rsplit('-', 1)  # Last - as mrid
+            queryItems.append((dataId, interval, database, mrid, i))  # Include orig index
+        
+        if not queryItems:
+            print("[WARN] No valid query items.")
             return
         
-        # Extract str from controls 
-        database = self.cbDatabase.currentText()
-        interval = self.cbInterval.currentText()
-        startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd HH:mm')
-        endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd HH:mm')
+        # Sort by orig index (though already in order)
+        queryItems.sort(key=lambda x: x[4])
         
-        print(f"[DEBUG] Extracted: database='{database}', interval='{interval}', start='{startDate}', end='{endDate}', dataID='{dataID}'")
-        
-        # Call API based on database 
-        data = None
+        # First interval for timestamps
+        firstInterval = queryItems[0][1]
+        firstDb = queryItems[0][2]  # db of first
 
-        try:
-            print(f"[DEBUG] Starting '{database}' API query")
-            if 'USBR' in database:
-                data = QueryUSBR.api(database, dataID, startDate, endDate, interval)
-            elif 'USGS' in database:
-                data = QueryUSGS.api(dataID, interval, startDate, endDate)
-            elif database == 'AQUARIUS':
-                data = QueryAquarius.api(dataID, startDate, endDate, interval)
-        except Exception as e: # Catches API errors (e.g., invalid ID, no net)
-            QMessageBox.warning(self, "Query Error", f"API fetch failed:\n{e}\nCheck SDID, dates, or connection.")
+        if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
+            firstInterval = 'HOUR'  # Use hourly ts for USBR INSTANT quirk
+
+        timestamps = Logic.buildTimestamps(startDate, endDate, firstInterval)
+
+        if not timestamps:
+            QMessageBox.warning(self, "Date Error", "Invalid dates or interval.")
             return
         
-        # Check for empty results post-API
-        if not data or len(data) < 1:
-            QMessageBox.warning(self, "No Data", f"Query for '{dataID}' returned nothing.\nTry different dates/IDs.")
-            return
+        # Default blanks for missing
+        defaultBlanks = [''] * len(timestamps)
         
-        buildHeader = data[0]
-        dataIDList = data[0] # Reuse as list for QAQC
-        data.pop(0)
-        
-        # Build the table
-        Logic.buildTable(winMain.mainTable, data, buildHeader, winDataDictionary.mainTable)
+        # Group: dict of (db, mrid or None, interval) -> list of (origIndex, dataId)
+        groups = defaultdict(list)
 
-        # QAQC the data
-        Logic.qaqc(winMain.mainTable, winDataDictionary.mainTable, dataIDList)
+        for dataId, interval, db, mrid, origIndex in queryItems:
+            groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
+            groups[groupKey].append((origIndex, dataId))  # Append dataId, recalc sdi later
         
-        # Ensure Data Query tab is open and selected
-        parent = self.parent() # uiMain instance
-
-        if hasattr(parent, 'tabWidget') and hasattr(parent, 'tabMain'):
-            tabWidget = parent.tabWidget
-            dataQueryTab = parent.tabMain
-            dataQueryIndex = tabWidget.indexOf(dataQueryTab)
-
-            if dataQueryIndex == -1:
-                # Re-add if closed (insert at index 0 to keep it first)
-                tabWidget.insertTab(0, dataQueryTab, "Data Query")
-            tabWidget.setCurrentIndex(0)
+        print(f"[DEBUG] Formed {len(groups)} groups.")
         
-        # Hide the window
-        winWebQuery.hide()
+        # Collect values: dict {dataId: list of values len(timestamps)}
+        valuesDict = {}
+        
+        for (db, mrid, interval), groupItems in groups.items():
+            print(f"[DEBUG] Processing group: db={db}, mrid={mrid}, interval={interval}, items={len(groupItems)}")
+            
+            # Recalc sdis per item
+            sdis = []
+
+            for origIndex, dataId in groupItems:
+                sdi = dataId
+                if db.startswith('USBR-'):
+                    if '-' in dataId:
+                        sdi, _ = dataId.rsplit('-', 1)  # Recalc sdi
+                sdis.append(sdi)            
+            try:
+                if db.startswith('USBR-'):
+                    svr = db.split('-')[1].lower()
+                    result = QueryUSBR.api(svr, sdis, startDate, endDate, interval, mrid)
+                elif db == 'USGS-NWIS':
+                    result = QueryUSGS.api(sdis, interval, startDate, endDate)
+                elif db == 'Aquarius':
+                    result = QueryAquarius.api(sdis, startDate, endDate, interval)
+                else:
+                    print(f"[WARN] Unknown db skipped: {db}")
+                    continue
+            except Exception as e:
+                QMessageBox.warning(self, "Query Error", f"Query failed for group {db}: {e}")
+                continue
+            
+            # Map to dataId
+            for idx, (origIndex, dataId) in enumerate(groupItems):
+                sdi = sdis[idx]
+                if sdi in result:
+                    outputData = result[sdi]
+                    alignedData = Logic.gapCheck(timestamps, outputData, dataId)
+                    values = [line.split(',')[1] if line else '' for line in alignedData]
+                    valuesDict[dataId] = values
+                else:
+                    valuesDict[dataId] = defaultBlanks  # Full blanks
+        
+        # Recombine in original order
+        originalDataIds = [item[0] for item in queryItems]  # dataId
+        originalIntervals = [item[1] for item in queryItems]  # For labels
+
+        # Build lookupIds for dict/QAQC (strip MRID for USBR)
+        lookupIds = []
+
+        for item in queryItems:
+            dataId, interval, db, mrid, origIndex = item
+            lookupId = dataId
+            if db.startswith('USBR-') and '-' in dataId:
+                lookupId = dataId.split('-')[0]  # Base SDID
+            lookupIds.append(lookupId)
+        
+        # Build data: list of 'ts,value1,value2,...' strings
+        data = []
+
+        for r in range(len(timestamps)):
+            rowValues = [valuesDict.get(dataId, defaultBlanks)[r] for dataId in originalDataIds]  # val at r (str)
+            data.append(f"{timestamps[r]},{','.join(rowValues)}")
+        
+        # Build headers: raw dataIds for now, processed later
+        buildHeader = originalDataIds
+        
+        # Intervals for labels
+        intervalsForHeaders = originalIntervals
+        
+        # Build table
+        winMain.mainTable.clear()
+        Logic.buildTable(winMain.mainTable, data, buildHeader, winDataDictionary.mainTable, intervalsForHeaders, lookupIds)
+        
+        # Show tab if hidden
+        if winMain.tabWidget.indexOf(winMain.tabMain) == -1:
+            winMain.tabWidget.addTab(winMain.tabMain, 'Data Query')
+        
+        # Close query window
+        winWebQuery.close()
 
     def btnAddQueryPressed(self):        
         item = f'{self.textSDID.toPlainText().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}'
@@ -433,12 +506,12 @@ try:
     config = Logic.loadConfig()
 except (FileNotFoundError, ValueError) as e:
     print(f"Config load failed: {e}. Defaulting to light mode.")
-    config = ['light']  # Fallback list
+    config = ['light'] # Fallback list
 
 if config[0].strip() == 'dark': winMain.btnDarkMode.setChecked(True)       
   
 # Set stylesheet
-colorMode = config[0].strip()  # Strip any whitespace
+colorMode = config[0].strip() # Strip any whitespace
 stylesheetLoaded = False
 
 # Try resource path first
