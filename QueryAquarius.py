@@ -68,8 +68,9 @@ def api(dataID, startDate, endDate, interval):
     # Batch uids into groups of queryLimit (serial fetch per uid in group)
     for groupStart in range(0, len(uids), queryLimit):
         groupUids = uids[groupStart:groupStart + queryLimit]
+
         if Logic.debug == True: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))        
-        groupOutputData = []  # List of outputData lists, one per uid
+        groupOutputData = [] # List of outputData lists, one per uid
 
         for uid in groupUids:
             # Query the data
@@ -79,7 +80,7 @@ def api(dataID, startDate, endDate, interval):
                 readFile = json.loads(url.content)
             except Exception as e:
                 print("[WARN] Aquarius fetch failed for uid '{}': {}".format(uid, e))
-                groupOutputData.append([])  # Pad blanks
+                groupOutputData.append([]) # Pad blanks
                 continue
             
             # Create arrays
@@ -91,6 +92,7 @@ def api(dataID, startDate, endDate, interval):
             header.append(readFile['Label'])
             buildHeader.append(f'{header[0]} \n{header[1]}')            
             points = readFile['Points']
+
             if Logic.debug == True: print("[DEBUG] Fetched {} points for uid '{}'.".format(len(points), uid))
 
             for point in points:
@@ -112,6 +114,7 @@ def api(dataID, startDate, endDate, interval):
         # Combine group outputs
         if groupOutputData:
             combined = groupOutputData[0]
+
             for nextData in groupOutputData[1:]:
                 combined = Logic.combineParameters(combined, nextData)
             if output:
