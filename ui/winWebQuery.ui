@@ -6,13 +6,19 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>600</width>
+    <width>660</width>
     <height>511</height>
    </rect>
   </property>
+  <property name="sizePolicy">
+   <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+    <horstretch>0</horstretch>
+    <verstretch>0</verstretch>
+   </sizepolicy>
+  </property>
   <property name="maximumSize">
    <size>
-    <width>600</width>
+    <width>660</width>
     <height>511</height>
    </size>
   </property>
@@ -78,7 +84,7 @@
    <widget class="QPushButton" name="btnQuery">
     <property name="geometry">
      <rect>
-      <x>174</x>
+      <x>204</x>
       <y>450</y>
       <width>251</width>
       <height>30</height>
@@ -167,8 +173,8 @@
      <rect>
       <x>310</x>
       <y>30</y>
-      <width>258</width>
-      <height>281</height>
+      <width>318</width>
+      <height>271</height>
      </rect>
     </property>
    </widget>
@@ -214,7 +220,7 @@
    <widget class="QPushButton" name="btnRemoveQuery">
     <property name="geometry">
      <rect>
-      <x>310</x>
+      <x>340</x>
       <y>340</y>
       <width>258</width>
       <height>31</height>
@@ -227,7 +233,7 @@
    <widget class="QPushButton" name="btnSaveQuickLook">
     <property name="geometry">
      <rect>
-      <x>310</x>
+      <x>340</x>
       <y>310</y>
       <width>258</width>
       <height>31</height>
@@ -269,7 +275,7 @@
    <widget class="QPushButton" name="btnLoadQuickLook">
     <property name="geometry">
      <rect>
-      <x>310</x>
+      <x>340</x>
       <y>410</y>
       <width>258</width>
       <height>30</height>
@@ -285,7 +291,7 @@
    <widget class="QPushButton" name="btnClearQuery">
     <property name="geometry">
      <rect>
-      <x>310</x>
+      <x>340</x>
       <y>370</y>
       <width>258</width>
       <height>31</height>
@@ -369,16 +375,6 @@
    <zorder>btnIntervalInfo</zorder>
    <zorder>cbInterval</zorder>
    <zorder>cbDatabase</zorder>
-  </widget>
-  <widget class="QMenuBar" name="menubar">
-   <property name="geometry">
-    <rect>
-     <x>0</x>
-     <y>0</y>
-     <width>600</width>
-     <height>34</height>
-    </rect>
-   </property>
   </widget>
  </widget>
  <resources/>
