@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import Logic  # For buildTimestamps, gapCheck, combineParameters
 
 def api(dataID, startDate, endDate, interval):
-    print("[DEBUG] QueryAquarius.api called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
+    if Logic.debug == True: print("[DEBUG] QueryAquarius.api called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
     
     # Get Aquarius settings
     server = ''
@@ -68,7 +68,7 @@ def api(dataID, startDate, endDate, interval):
     # Batch uids into groups of queryLimit (serial fetch per uid in group)
     for groupStart in range(0, len(uids), queryLimit):
         groupUids = uids[groupStart:groupStart + queryLimit]
-        print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))        
+        if Logic.debug == True: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))        
         groupOutputData = []  # List of outputData lists, one per uid
 
         for uid in groupUids:
@@ -91,7 +91,7 @@ def api(dataID, startDate, endDate, interval):
             header.append(readFile['Label'])
             buildHeader.append(f'{header[0]} \n{header[1]}')            
             points = readFile['Points']
-            print("[DEBUG] Fetched {} points for uid '{}'.".format(len(points), uid))
+            if Logic.debug == True: print("[DEBUG] Fetched {} points for uid '{}'.".format(len(points), uid))
 
             for point in points:
                 # Pull date timestamp
@@ -125,5 +125,5 @@ def api(dataID, startDate, endDate, interval):
     
     # Prepend header
     output.insert(0, buildHeader)
-    print("[DEBUG] Final output len={} (incl header), sample row: {}".format(len(output), output[1] if len(output) > 1 else 'empty'))
+    if Logic.debug == True: print("[DEBUG] Final output len={} (incl header), sample row: {}".format(len(output), output[1] if len(output) > 1 else 'empty'))
     return output

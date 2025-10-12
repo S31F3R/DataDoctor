@@ -8,7 +8,7 @@ import Logic # For buildTimestamps, gapCheck, combineParameters
 periodOffset = True # Global for end of period shift/pad (USBR HOUR only; toggle via config later)
 
 def api(svr, SDIDs, startDate, endDate, interval, mrid='0'):
-    print(f"[DEBUG] QueryUSBR.api called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}")
+    if Logic.debug == True: print(f"[DEBUG] QueryUSBR.api called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}")
     
     # Map for URL only
     if interval == 'HOUR':
@@ -53,15 +53,15 @@ def api(svr, SDIDs, startDate, endDate, interval, mrid='0'):
     for groupStart in range(0, len(SDIDs), queryLimit):
         groupSDIDs = SDIDs[groupStart:groupStart + queryLimit]
         groupSDIDStr = ','.join(groupSDIDs)
-        urlStr = f'https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr={svr}&SDI={groupSDIDStr}&tstp={tstp}&t1={startYear}-{startMonth}-{startDay}T{startHour}:{startMinute}&t2={endYear}-{endMonth}-{endDay}T{endHour}:{endMinute}&table=R&mrid={mrid}&format=json'
-        print("[DEBUG] Fetching USBR URL: {}".format(urlStr))
+        url = f'https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr={svr}&SDI={groupSDIDStr}&tstp={tstp}&t1={startYear}-{startMonth}-{startDay}T{startHour}:{startMinute}&t2={endYear}-{endMonth}-{endDay}T{endHour}:{endMinute}&table=R&mrid={mrid}&format=json'
+        if Logic.debug == True: print("[DEBUG] Fetching USBR URL: {}".format(url))
         
         try:
-            response = requests.get(urlStr)
+            response = requests.get(url)
             response.raise_for_status()
             readFile = json.loads(response.content)
             seriesList = readFile['Series']
-            print("[DEBUG] Fetched {} series entries.".format(len(seriesList)))
+            if Logic.debug == True: print("[DEBUG] Fetched {} series entries.".format(len(seriesList)))
         except Exception as e:
             print("[ERROR] USBR fetch failed: {}".format(e))
             continue
@@ -70,11 +70,11 @@ def api(svr, SDIDs, startDate, endDate, interval, mrid='0'):
             matchingSeries = None
             
             for series in seriesList:
-                SDID_val = series['SDI']
+                jsonSDID = series['SDI']
 
-                if isinstance(SDID_val, list):
-                    SDID_val = SDID_val[0] if SDID_val else '' # Handle list
-                if str(SDID_val) == SDID: # Str comparison
+                if isinstance(jsonSDID, list):
+                    jsonSDID = jsonSDID[0] if jsonSDID else '' # Handle list
+                if str(jsonSDID) == SDID: # Str comparison
                     matchingSeries = series
                     break
             
@@ -84,11 +84,11 @@ def api(svr, SDIDs, startDate, endDate, interval, mrid='0'):
                 continue
             
             dataPoints = matchingSeries['Data']
-            print(f"[DEBUG] Found series for '{SDID}': {len(dataPoints)} points.")
+            if Logic.debug == True: print(f"[DEBUG] Found series for '{SDID}': {len(dataPoints)} points.")
             
             outputData = []
 
-            for point in dataPoints:
+            for point in dataPoints:  
                 value = point['v']
                 dateTime = point['t'] # MM/DD/YY HH:MM:SS AM/PM
                 dateTimeParts = dateTime.split(' ')
@@ -112,9 +112,9 @@ def api(svr, SDIDs, startDate, endDate, interval, mrid='0'):
                 elif amPm == 'PM' and hour < 12:
                     dateTime = dateTime + timedelta(hours=12)
                 
-                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00') # Standard, zero sec
+                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00') # Standard, zero sec  
                 outputData.append(f'{formattedTs},{value}')
-            
+                
             resultDict[SDID] = outputData
     
     if not resultDict:

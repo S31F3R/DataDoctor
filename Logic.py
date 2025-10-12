@@ -7,9 +7,11 @@ from PyQt6.QtGui import QGuiApplication, QColor, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog
 
 sortState = {} # Global dict for per-col sort state (col: ascending)
+utcOffset = -7  # Global for timezone offset; configurable later via options UI
+debug = True
 
 def buildTimestamps(startDateStr, endDateStr, intervalStr):
-    print("[DEBUG] buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
+    if debug == True: print("[DEBUG] buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
 
     try:
         start = datetime.strptime(startDateStr, '%Y-%m-%d %H:%M')
@@ -46,11 +48,11 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
         timestamps.append(ts)
         current += delta
     
-    print("[DEBUG] Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
+    if debug == True: print("[DEBUG] Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
     return timestamps
 
 def gapCheck(timestamps, data, dataID=''):
-    print("[DEBUG] gapCheck for dataID '{}': timestamps len={}, data len={}".format(dataID, len(timestamps), len(data)))
+    if debug == True: print("[DEBUG] gapCheck for dataID '{}': timestamps len={}, data len={}".format(dataID, len(timestamps), len(data)))
 
     if not timestamps:
         return data
@@ -125,8 +127,7 @@ def gapCheck(timestamps, data, dataID=''):
         i += 1
     if removed:
         print("[WARN] Removed {} extra/mismatched rows from '{}': ts {}".format(len(removed), dataID, removed))
-    print("[DEBUG] Post-gapCheck len={}, sample first 3: {}".format(len(newData), newData[:3]))
-
+    if debug == True: print("[DEBUG] Post-gapCheck len={}, sample first 3: {}".format(len(newData), newData[:3]))
     return newData
 
 def combineParameters(data, newData):
@@ -212,18 +213,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     dataIds = buildHeader
     
     # QAQC colors
-    qaqc(table, dataDictionaryTable, dataIds)
-    
-    # Warm-up dummy sort to trigger initial reflow (no shift on first real click)
-    header = table.horizontalHeader()
-    table.setSortingEnabled(False) # Disable for dummy
-    QTimer.singleShot(0, lambda: [
-        header.setSortIndicator(0, Qt.SortOrder.AscendingOrder), # Dummy ASC on col 0
-        table.sortItems(0, Qt.SortOrder.AscendingOrder), # Dummy sort (no change)
-        header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder), # Clear with ASC
-        table.setSortingEnabled(True) # Re-enable
-    ])  
-    
+    qaqc(table, dataDictionaryTable, dataIds)  
+
     # Connect custom sort (syncs timestamps)
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
     
@@ -263,6 +254,8 @@ def getDataDictionaryItem(table, dataId):
 def qaqc(table, dataDictionaryTable, lookupIds):
     if not dataDictionaryTable:
         return
+    
+    now = datetime.now() # Current time for future check
     
     for col, lookupId in enumerate(lookupIds):
         rowIndex = getDataDictionaryItem(dataDictionaryTable, lookupId)
@@ -306,40 +299,54 @@ def qaqc(table, dataDictionaryTable, lookupIds):
 
         for r in range(table.rowCount()):
             item = table.item(r, col)
+
             if not item:
                 continue
             
             cellText = item.text().strip()
 
-            if cellText == '': # Missing data blue (only if in dict)
-                item.setBackground(QColor(100, 195, 247)) # Light blue
+            if cellText == '': # Missing data blue (only if in dict and ts <= now)
+                tsItem = table.verticalHeaderItem(r)
+
+                if tsItem:
+                    tsStr = tsItem.text()
+
+                    try:
+                        tsDt = datetime.strptime(tsStr, '%m/%d/%y %H:%M:00')
+
+                        if tsDt <= now:
+                            item.setBackground(QColor(100, 195, 247)) # Light blue for past/present missing
+                    except ValueError:
+                        pass  # Skip invalid ts
                 continue
             
             try:
                 val = float(cellText)
             except ValueError:
-                continue # Skip non-numeric
+                continue  # Skip non-numeric
             
-            # Min/Max colors
+            # Min/Max colors (apply regardless of ts, for model future data)
             if expectedMin is not None and val < expectedMin:
-                item.setBackground(QColor(249, 240, 107)) # Light Yellow                              
+                item.setBackground(QColor(249, 240, 107)) # Light Yellow  
+                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))                            
             elif expectedMax is not None and val > expectedMax:
                 item.setBackground(QColor(249, 194, 17)) # Yellow
+                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))  
             elif cutoffMin is not None and val < cutoffMin:
                 item.setBackground(QColor(255, 163, 72)) # Orange
             elif cutoffMax is not None and val > cutoffMax:
                 item.setBackground(QColor(192, 28, 40)) # Red
             
-            # Rate of change
+            # Rate of change (apply regardless)
             if rateOfChange is not None and prevVal is not None:
                 if abs(val - prevVal) > rateOfChange:
                     item.setBackground(QColor(246, 97, 81)) # Red
 
-            # Repeat (green)
+            # Repeat (green, apply regardless)
             if prevVal is not None and val == prevVal:
                 item.setBackground(QColor(87, 227, 137)) # Green                
 
-            prevVal = val         
+            prevVal = val          
            
 def loadAllQuickLooks(cbQuickLook):     
     cbQuickLook.clear()

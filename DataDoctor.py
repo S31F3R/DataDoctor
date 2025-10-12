@@ -229,7 +229,7 @@ class uiWebQuery(QMainWindow):
         QMessageBox.information(self, "Interval Info", f"Interval determines what timestamps are displayed and what table the data is queried from (USBR).\n\nIn a query list, timestamp interval is determined by first dataID in the list.")
 
     def btnQueryPressed(self):
-        print("[DEBUG] btnQueryPressed: Starting query process.")
+        if Logic.debug == True: print("[DEBUG] btnQueryPressed: Starting query process.")
         
         # Get start/end dates
         startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
@@ -241,6 +241,7 @@ class uiWebQuery(QMainWindow):
         for i in range(self.listQueryList.count()):
             itemText = self.listQueryList.item(i).text().strip()
             parts = itemText.split('|')
+            if Logic.debug == True: print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
 
             if len(parts) != 3:
                 print(f"[WARN] Invalid item skipped: {itemText}")
@@ -253,20 +254,24 @@ class uiWebQuery(QMainWindow):
             if database.startswith('USBR-'):
                 if '-' in dataID:
                     SDID, mrid = dataID.rsplit('-', 1) # Last - as mrid
+
             queryItems.append((dataID, interval, database, mrid, i)) # Include orig index
+            if Logic.debug == True: print(f"[DEBUG] Added queryItem: {(dataID, interval, database, mrid, i)}")
         
         # Add single query from textSDID if not empty and list blank
         if not queryItems and self.textSDID.toPlainText().strip():
             dataID = self.textSDID.toPlainText().strip()
             interval = self.cbInterval.currentText()
             database = self.cbDatabase.currentText()
-            mrid = '0' # Default
+            mrid = '0'  # Default
             sdi = dataID
 
             if database.startswith('USBR-') and '-' in dataID:
                 sdi, mrid = dataID.rsplit('-', 1)
+
             queryItems.append((dataID, interval, database, mrid, 0)) # origIndex=0
-        else:
+
+        elif not queryItems:
             print("[WARN] No valid query items.")
             return
         
@@ -296,13 +301,13 @@ class uiWebQuery(QMainWindow):
             groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
             groups[groupKey].append((origIndex, dataID)) # Append dataID, recalc SDID later
         
-        print(f"[DEBUG] Formed {len(groups)} groups.")
+        if Logic.debug == True: print(f"[DEBUG] Formed {len(groups)} groups.")
         
         # Collect values: dict {dataID: list of values len(timestamps)}
         valueSDIDct = {}
         
-        for (db, mrid, interval), groupItems in groups.items():
-            print(f"[DEBUG] Processing group: db={db}, mrid={mrid}, interval={interval}, items={len(groupItems)}")
+        for (db, mrid, interval), groupItems in groups.items():            
+            if Logic.debug == True: print(f"[DEBUG] Processing group: db={db}, mrid={mrid}, interval={interval}, items={len(groupItems)}")
             
             # Recalc SDIDs per item
             SDIDs = []
@@ -314,7 +319,7 @@ class uiWebQuery(QMainWindow):
                     if '-' in dataID:
                         SDID, _ = dataID.rsplit('-', 1) # Recalc SDID
 
-                SDIDs.append(SDID)            
+                SDIDs.append(SDID)                  
             try:
                 if db.startswith('USBR-'):
                     svr = db.split('-')[1].lower()
@@ -333,6 +338,7 @@ class uiWebQuery(QMainWindow):
             # Map to dataID
             for idx, (origIndex, dataID) in enumerate(groupItems):
                 SDID = SDIDs[idx]
+
                 if SDID in result:
                     outputData = result[SDID]
                     alignedData = Logic.gapCheck(timestamps, outputData, dataID)
