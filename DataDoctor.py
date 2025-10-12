@@ -9,7 +9,8 @@ from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtCore import QIODevice, QFile, QTextStream, QEvent, QObject
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
                              QTextEdit, QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
-                             QListWidgetItem, QMessageBox, QDialog, QSizePolicy, QTabWidget)
+                             QListWidgetItem, QMessageBox, QDialog, QSizePolicy, QTabWidget, QRadioButton,
+                             QDialogButtonBox)
 from datetime import datetime, timedelta
 from PyQt6 import uic
 from collections import defaultdict
@@ -20,7 +21,7 @@ class uiMain(QMainWindow):
         super(uiMain, self).__init__() # Call the inherited classes __init__ method
         uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self) # Load the .ui file
         
-        # Attach controls
+        # Define the controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
         self.mainTable = self.findChild(QTableWidget, 'mainTable')          
         self.btnDataDictionary = self.findChild(QPushButton,'btnDataDictionary')  
@@ -410,7 +411,7 @@ class uiDataDictionary(QMainWindow):
         super(uiDataDictionary, self).__init__(parent) # Pass parent superclass
         uic.loadUi(Logic.resourcePath('ui/winDataDictionary.ui'), self) # Load the .ui file
 
-        # Attach controls
+        # Define the controls
         self.mainTable = self.findChild(QTableWidget, 'dataDictionaryTable')  
         self.btnSave = self.findChild(QPushButton, 'btnSave') 
         self.btnAddRow = self.findChild(QPushButton, 'btnAddRow') 
@@ -455,7 +456,7 @@ class uiQuickLook(QDialog):
         super(uiQuickLook, self).__init__(parent) # Pass parent superclass
         uic.loadUi(Logic.resourcePath('ui/winQuickLook.ui'), self) # Load the .ui file
 
-        # Attach controls
+        # Define the controls
         self.btnSave = self.findChild(QPushButton, 'btnSave')   
         self.btnCancel = self.findChild(QPushButton, 'btnCancel')  
         self.textQuickLookName = self.findChild(QTextEdit,'textQuickLookName')  
@@ -503,13 +504,25 @@ class uiOptions(QDialog):
         self.textAQUser = self.findChild(QTextEdit,'textAQUser') 
         self.textAQPassword = self.findChild(QTextEdit,'textAQPassword') 
         self.textUSGSAPIKey = self.findChild(QTextEdit,'textUSGSAPIKey') 
+        self.textTNSNames = self.findChild(QTextEdit, 'textTNSNames')
+        self.textSQLNetOra = self.findChild(QTextEdit, 'textSQLNetOra')
+        self.textOracleWallet = self.findChild(QTextEdit, 'textSQLNetora')
+        self.rbBOP = self.findChild(QRadioButton, 'rbBOP')
+        self.rbEOP = self.findChild(QRadioButton, 'rbEOP')
+        self.qbtnbOptions = self.findChild(QDialogButtonBox, 'qbtnbOptions') 
+        self.rbTRUE = self.findChild(QRadioButton, 'rbTRUE')
+        self.rbFALSE = self.findChild(QRadioButton, 'rbFALSE')       
 
         # Create events
-
+        self.qbtnbOptions.accepted.connect(self.onSavePressed)
 
     def showEvent(self, event):
         Logic.centerWindowToParent(self)
         super().showEvent(event)
+
+    def onSavePressed(self):
+        # Placeholder for save logic (e.g., store text fields to config)
+        pass  # We'll expand this later
 
 # Create an instance of QApplication     
 app = QApplication(sys.argv) 

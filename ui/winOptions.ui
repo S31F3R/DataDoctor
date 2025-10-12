@@ -30,7 +30,7 @@
     <enum>Qt::Orientation::Horizontal</enum>
    </property>
    <property name="standardButtons">
-    <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Ok</set>
+    <set>QDialogButtonBox::StandardButton::Cancel|QDialogButtonBox::StandardButton::Save</set>
    </property>
    <property name="centerButtons">
     <bool>true</bool>
@@ -251,30 +251,43 @@
       </rect>
      </property>
     </widget>
-    <widget class="QRadioButton" name="radioButton">
-     <property name="geometry">
-      <rect>
-       <x>40</x>
-       <y>180</y>
-       <width>101</width>
-       <height>22</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>RadioButton</string>
-     </property>
-    </widget>
-    <widget class="QRadioButton" name="radioButton_2">
+    <widget class="QRadioButton" name="rbBOP">
      <property name="geometry">
       <rect>
        <x>190</x>
        <y>180</y>
-       <width>101</width>
+       <width>141</width>
        <height>22</height>
       </rect>
      </property>
      <property name="text">
-      <string>RadioButton</string>
+      <string>Beginnig Period</string>
+     </property>
+    </widget>
+    <widget class="QRadioButton" name="rbEOP">
+     <property name="geometry">
+      <rect>
+       <x>320</x>
+       <y>180</y>
+       <width>131</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>End of Period</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbTNSNames_4">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>180</y>
+       <width>191</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>HOUR Timestamp Method:</string>
      </property>
     </widget>
    </widget>
