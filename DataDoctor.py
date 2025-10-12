@@ -498,8 +498,8 @@ class uiOptions(QDialog):
         super(uiOptions, self).__init__(parent) # Pass parent superclass
         uic.loadUi(Logic.resourcePath('ui/winOptions.ui'), self) # Load the .ui file
 
-        # Attach controls             
-        self.textUTCOffset = self.findChild(QTextEdit,'textUTCOffset')  
+        # Define the controls            
+        self.cbUTCOffset = self.findChild(QComboBox,'cbUTCOffset')  
         self.textAQServer = self.findChild(QTextEdit,'textAQServer') 
         self.textAQUser = self.findChild(QTextEdit,'textAQUser') 
         self.textAQPassword = self.findChild(QTextEdit,'textAQPassword') 
@@ -509,12 +509,55 @@ class uiOptions(QDialog):
         self.textOracleWallet = self.findChild(QTextEdit, 'textSQLNetora')
         self.rbBOP = self.findChild(QRadioButton, 'rbBOP')
         self.rbEOP = self.findChild(QRadioButton, 'rbEOP')
-        self.qbtnbOptions = self.findChild(QDialogButtonBox, 'qbtnbOptions') 
+        self.btnbOptions = self.findChild(QDialogButtonBox, 'btnbOptions') 
         self.rbTRUE = self.findChild(QRadioButton, 'rbTRUE')
         self.rbFALSE = self.findChild(QRadioButton, 'rbFALSE')       
 
         # Create events
-        self.qbtnbOptions.accepted.connect(self.onSavePressed)
+        self.btnbOptions.accepted.connect(self.onSavePressed)
+
+        # Populate UTC offset combobox
+        self.cbUTCOffset.addItem("UTC-12:00 | Baker Island")
+        self.cbUTCOffset.addItem("UTC-11:00 | American Samoa")
+        self.cbUTCOffset.addItem("UTC-10:00 | Hawaii")
+        self.cbUTCOffset.addItem("UTC-09:30 | Marquesas Islands")
+        self.cbUTCOffset.addItem("UTC-09:00 | Alaska")
+        self.cbUTCOffset.addItem("UTC-08:00 | Pacific Time (US & Canada)")
+        self.cbUTCOffset.addItem("UTC-07:00 | Mountain Time (US & Canada)/Arizona")
+        self.cbUTCOffset.addItem("UTC-06:00 | Central Time (US & Canada)")
+        self.cbUTCOffset.addItem("UTC-05:00 | Eastern Time (US & Canada)")
+        self.cbUTCOffset.addItem("UTC-04:00 | Atlantic Time (Canada)")
+        self.cbUTCOffset.addItem("UTC-03:30 | Newfoundland")
+        self.cbUTCOffset.addItem("UTC-03:00 | Brasilia")
+        self.cbUTCOffset.addItem("UTC-02:00 | Mid-Atlantic")
+        self.cbUTCOffset.addItem("UTC-01:00 | Cape Verde Is.")
+        self.cbUTCOffset.addItem("UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, \nLondon")
+        self.cbUTCOffset.addItem("UTC+01:00 | Central European Time : Amsterdam, Berlin, Bern, \nRome, Stockholm, Vienna")
+        self.cbUTCOffset.addItem("UTC+02:00 | Eastern European Time : Athens, Bucharest, \nIstanbul")
+        self.cbUTCOffset.addItem("UTC+03:00 | Moscow, St. Petersburg, Volgograd")
+        self.cbUTCOffset.addItem("UTC+03:30 | Tehran")
+        self.cbUTCOffset.addItem("UTC+04:00 | Abu Dhabi, Muscat")
+        self.cbUTCOffset.addItem("UTC+04:30 | Kabul")
+        self.cbUTCOffset.addItem("UTC+05:00 | Islamabad, Karachi, Tashkent")
+        self.cbUTCOffset.addItem("UTC+05:30 | Chennai, Kolkata, Mumbai, New Delhi")
+        self.cbUTCOffset.addItem("UTC+05:45 | Kathmandu")
+        self.cbUTCOffset.addItem("UTC+06:00 | Astana, Dhaka")
+        self.cbUTCOffset.addItem("UTC+06:30 | Yangon (Rangoon)")
+        self.cbUTCOffset.addItem("UTC+07:00 | Bangkok, Hanoi, Jakarta")
+        self.cbUTCOffset.addItem("UTC+08:00 | Beijing, Chongqing, Hong Kong, Urumqi")
+        self.cbUTCOffset.addItem("UTC+08:45 | Eucla")
+        self.cbUTCOffset.addItem("UTC+09:00 | Osaka, Sapporo, Tokyo")
+        self.cbUTCOffset.addItem("UTC+09:30 | Adelaide, Darwin")
+        self.cbUTCOffset.addItem("UTC+10:00 | Brisbane, Canberra, Melbourne, Sydney")
+        self.cbUTCOffset.addItem("UTC+10:30 | Lord Howe Island")
+        self.cbUTCOffset.addItem("UTC+11:00 | Solomon Is., New Caledonia")
+        self.cbUTCOffset.addItem("UTC+12:00 | Auckland, Wellington")
+        self.cbUTCOffset.addItem("UTC+12:45 | Chatham Islands")
+        self.cbUTCOffset.addItem("UTC+13:00 | Samoa")
+        self.cbUTCOffset.addItem("UTC+14:00 | Kiritimati")
+
+        # Set default for first-time usage (UTC+00:00 in the "middle")
+        self.cbUTCOffset.setCurrentIndex(14)
 
     def showEvent(self, event):
         Logic.centerWindowToParent(self)
