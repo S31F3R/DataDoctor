@@ -2,3 +2,4 @@
 requests>=2.31.0
 PyQt6>=6.5.0
 keyring>=24.3.0
+pygame>=2.6.1
