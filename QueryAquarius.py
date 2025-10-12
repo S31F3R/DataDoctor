@@ -9,8 +9,7 @@ def api(dataID, startDate, endDate, interval):
     # Get Aquarius settings
     server = ''
     user = ''
-    password = ''
-    utcOffset = -7
+    password = ''  
     
     # Parse start
     startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
@@ -39,8 +38,8 @@ def api(dataID, startDate, endDate, interval):
         return []
     
     # Apply utc offset for Aquarius query
-    startDateTime = startDateTime - timedelta(hours=utcOffset)
-    endDateTime = endDateTime - timedelta(hours=utcOffset)
+    startDateTime = startDateTime - timedelta(hours=Logic.utcOffset)
+    endDateTime = endDateTime - timedelta(hours=Logic.utcOffset)
     
     # Re-pad after offset
     startMonth = f'{startDateTime.month:02d}'
@@ -74,7 +73,7 @@ def api(dataID, startDate, endDate, interval):
 
         for uid in groupUids:
             # Query the data
-            url = requests.get(f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={startDate}&QueryTo={endDate}&UtcOffset={utcOffset}&GetParts=PointsOnly&format=json', headers=headers, verify=False)
+            url = requests.get(f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={startDate}&QueryTo={endDate}&Logic.utcOffset={Logic.utcOffset}&GetParts=PointsOnly&format=json', headers=headers, verify=False)
             
             try:
                 readFile = json.loads(url.content)
