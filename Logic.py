@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QF
 
 sortState = {} # Global dict for per-col sort state (col: ascending)
 utcOffset = -7  # Global for timezone offset; configurable later via options UI
-debug = True
+debug = False
 
 def buildTimestamps(startDateStr, endDateStr, intervalStr):
     if debug == True: print("[DEBUG] buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
