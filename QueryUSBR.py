@@ -7,7 +7,7 @@ import Logic # For buildTimestamps, gapCheck, combineParameters
 
 periodOffset = True # Global for end of period shift/pad (USBR HOUR only; toggle via config later)
 
-def api(svr, SDIDs, startDate, endDate, interval, mrid='0'):
+def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0'):
     if Logic.debug == True: print(f"[DEBUG] QueryUSBR.api called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}")
     
     # Map for URL only
@@ -121,3 +121,8 @@ def api(svr, SDIDs, startDate, endDate, interval, mrid='0'):
         print("[WARN] No data after processing all batches.")
     
     return resultDict
+
+# QueryUSBR.py - Updated (add new def sqlRead at bottom)
+def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0'):
+    # TODO: Implement SQL read over internal network using same inputs
+    return {}  # Placeholder empty dict
