@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>660</width>
+    <width>690</width>
     <height>511</height>
    </rect>
   </property>
@@ -18,7 +18,7 @@
   </property>
   <property name="maximumSize">
    <size>
-    <width>660</width>
+    <width>690</width>
     <height>511</height>
    </size>
   </property>
@@ -84,7 +84,7 @@
    <widget class="QPushButton" name="btnQuery">
     <property name="geometry">
      <rect>
-      <x>204</x>
+      <x>219</x>
       <y>450</y>
       <width>251</width>
       <height>30</height>
@@ -173,7 +173,7 @@
      <rect>
       <x>310</x>
       <y>30</y>
-      <width>318</width>
+      <width>348</width>
       <height>271</height>
      </rect>
     </property>
@@ -220,7 +220,7 @@
    <widget class="QPushButton" name="btnRemoveQuery">
     <property name="geometry">
      <rect>
-      <x>340</x>
+      <x>355</x>
       <y>340</y>
       <width>258</width>
       <height>31</height>
@@ -233,7 +233,7 @@
    <widget class="QPushButton" name="btnSaveQuickLook">
     <property name="geometry">
      <rect>
-      <x>340</x>
+      <x>355</x>
       <y>310</y>
       <width>258</width>
       <height>31</height>
@@ -275,7 +275,7 @@
    <widget class="QPushButton" name="btnLoadQuickLook">
     <property name="geometry">
      <rect>
-      <x>340</x>
+      <x>355</x>
       <y>410</y>
       <width>258</width>
       <height>30</height>
@@ -291,7 +291,7 @@
    <widget class="QPushButton" name="btnClearQuery">
     <property name="geometry">
      <rect>
-      <x>340</x>
+      <x>355</x>
       <y>370</y>
       <width>258</width>
       <height>31</height>
