@@ -3,8 +3,8 @@ import json
 from datetime import datetime, timedelta
 import Logic  # For buildTimestamps, gapCheck, combineParameters
 
-def api(dataID, startDate, endDate, interval):
-    if Logic.debug == True: print("[DEBUG] QueryAquarius.api called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
+def apiRead(dataID, startDate, endDate, interval):
+    if Logic.debug == True: print("[DEBUG] QueryAquarius.apiRead called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
         
     # Parse start
     startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
