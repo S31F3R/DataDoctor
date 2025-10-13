@@ -7,7 +7,6 @@ import datetime
 import configparser
 import keyring
 import os
-import breeze_resources # Registers Qt resources for stylesheets
 from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QColor, QPixmap
 from PyQt6.QtCore import (Qt, QIODevice, QFile, QTextStream, QEvent, QObject, QStandardPaths, QTimer,
                           QUrl)
@@ -146,24 +145,6 @@ class uiMain(QMainWindow):
 
         # Toggle
         colorMode = 'dark' if colorMode == 'light' else 'light'
-
-        # Load and apply stylesheet (resource first, then fallback to file)
-        stylesheetPath = f":/{colorMode}/stylesheet.qss"
-        f = QFile(stylesheetPath)
-
-        if not f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
-            # Fallback to filesystem
-            stylesheetPath = Logic.resourcePath(f"{colorMode}/stylesheet.qss")
-            f = QFile(stylesheetPath)
-
-            if not f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
-                QMessageBox.warning(self, "Style Error", f"Could not load {colorMode} stylesheet from {stylesheetPath}.\nError: {f.errorString()}")
-                f.close()
-                return
-
-        stream = QTextStream(f)
-        app.setStyleSheet(stream.readAll())
-        f.close()
 
         # Save only colorMode back (preserve others)
         if 'Settings' not in config:
@@ -854,36 +835,6 @@ Logic.debug = config['debugMode']
 Logic.utcOffset = config['utcOffset']
 periodOffset = config['periodOffset'] # Global or pass to USBR as needed
 colorMode = config.get('colorMode', 'light')
-
-# Set stylesheet
-stylesheetLoaded = False
-
-# Try resource path first
-stylesheetPath = f":/{colorMode}/stylesheet.qss"
-f = QFile(stylesheetPath)
-
-if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
-    stream = QTextStream(f)
-    #app.setStyleSheet(stream.readAll())
-    f.close()
-    stylesheetLoaded = True
-
-# Fallback to filesystem if resource failed
-if not stylesheetLoaded:
-    stylesheetPath = Logic.resourcePath(f"{colorMode}/stylesheet.qss")
-    f = QFile(stylesheetPath)
-
-    if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
-        stream = QTextStream(f)
-        #app.setStyleSheet(stream.readAll())
-        f.close()
-        stylesheetLoaded = True
-    else:
-        print(f"Initial {colorMode} stylesheet load failed (both paths): {f.errorString()}")
-        f.close() # App continues with default Qt style—no crash        
-
-if not stylesheetLoaded:
-    print(f"Warning: No stylesheet applied for {colorMode}. Check file paths.")
 
 if colorMode == 'dark':
     winMain.btnDarkMode.setChecked(True)
