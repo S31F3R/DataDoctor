@@ -106,83 +106,6 @@
        </size>
       </property>
       <layout class="QGridLayout" name="gridLayout_2">
-       <item row="0" column="5">
-        <widget class="QPushButton" name="btnOptions">
-         <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset>
-           <normaloff>icons/Options.png</normaloff>icons/Options.png</iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>36</width>
-           <height>36</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="6">
-        <widget class="QPushButton" name="btnInfo">
-         <property name="toolTip">
-          <string>Information</string>
-         </property>
-         <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset>
-           <normalon>icons/Info.png</normalon>
-          </iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>36</width>
-           <height>36</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="3">
-        <widget class="QPushButton" name="btnExportCSV">
-         <property name="toolTip">
-          <string>Export to CSV</string>
-         </property>
-         <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset>
-           <normalon>icons/ExportCSV.png</normalon>
-          </iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>36</width>
-           <height>36</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="0">
-        <widget class="QPushButton" name="btnPublicQuery">
-         <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset>
-           <normalon>icons/PublicQuery.png</normalon>
-          </iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>36</width>
-           <height>36</height>
-          </size>
-         </property>
-        </widget>
-       </item>
        <item row="0" column="2">
         <widget class="QPushButton" name="btnDataDictionary">
          <property name="baseSize">
@@ -213,24 +136,14 @@
          </property>
         </widget>
        </item>
-       <item row="0" column="4">
-        <widget class="QPushButton" name="btnDarkMode">
-         <property name="baseSize">
-          <size>
-           <width>32</width>
-           <height>32</height>
-          </size>
-         </property>
-         <property name="toolTip">
-          <string>Toggle Dark Mode</string>
-         </property>
+       <item row="0" column="0">
+        <widget class="QPushButton" name="btnPublicQuery">
          <property name="text">
           <string/>
          </property>
          <property name="icon">
           <iconset>
-           <selectedoff>icons/Light.png</selectedoff>
-           <selectedon>icons/Dark.png</selectedon>
+           <normalon>icons/PublicQuery.png</normalon>
           </iconset>
          </property>
          <property name="iconSize">
@@ -238,9 +151,6 @@
            <width>36</width>
            <height>36</height>
           </size>
-         </property>
-         <property name="checkable">
-          <bool>true</bool>
          </property>
         </widget>
        </item>
@@ -252,6 +162,65 @@
          <property name="icon">
           <iconset>
            <normaloff>icons/InternalQuery.png</normaloff>icons/InternalQuery.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="3">
+        <widget class="QPushButton" name="btnExportCSV">
+         <property name="toolTip">
+          <string>Export to CSV</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normalon>icons/ExportCSV.png</normalon>
+          </iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="4">
+        <widget class="QPushButton" name="btnOptions">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/Options.png</normaloff>icons/Options.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="5">
+        <widget class="QPushButton" name="btnInfo">
+         <property name="toolTip">
+          <string>Information</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normalon>icons/Info.png</normalon>
+          </iconset>
          </property>
          <property name="iconSize">
           <size>
@@ -297,7 +266,6 @@
   <tabstop>btnPublicQuery</tabstop>
   <tabstop>btnDataDictionary</tabstop>
   <tabstop>btnExportCSV</tabstop>
-  <tabstop>btnDarkMode</tabstop>
   <tabstop>btnInfo</tabstop>
  </tabstops>
  <resources/>

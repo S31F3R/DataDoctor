@@ -38,8 +38,7 @@ class uiMain(QMainWindow):
         # Define the controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
         self.mainTable = self.findChild(QTableWidget, 'mainTable')          
-        self.btnDataDictionary = self.findChild(QPushButton,'btnDataDictionary')  
-        self.btnDarkMode = self.findChild(QPushButton,'btnDarkMode')  
+        self.btnDataDictionary = self.findChild(QPushButton,'btnDataDictionary')           
         self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')       
         self.btnOptions = self.findChild(QPushButton, 'btnOptions')   
         self.btnInfo = self.findChild(QPushButton, 'btnInfo')    
@@ -47,8 +46,7 @@ class uiMain(QMainWindow):
 
         # Set button style
         Logic.buttonStyle(self.btnPublicQuery)
-        Logic.buttonStyle(self.btnDataDictionary)
-        Logic.buttonStyle(self.btnDarkMode)  
+        Logic.buttonStyle(self.btnDataDictionary)        
         Logic.buttonStyle(self.btnExportCSV)
         Logic.buttonStyle(self.btnOptions)
         Logic.buttonStyle(self.btnInfo)
@@ -108,8 +106,7 @@ class uiMain(QMainWindow):
         
         # Create events
         self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)  
-        self.btnDataDictionary.clicked.connect(self.showDataDictionary)  
-        self.btnDarkMode.clicked.connect(self.toggleDarkMode)    
+        self.btnDataDictionary.clicked.connect(self.showDataDictionary)         
         self.btnExportCSV.clicked.connect(self.btnExportCSVPressed) 
         self.btnOptions.clicked.connect(self.btnOptionsPressed) 
         self.btnInfo.clicked.connect(self.btnInfoPressed) 
@@ -136,24 +133,6 @@ class uiMain(QMainWindow):
 
     def btnInfoPressed(self): 
         winAbout.exec()
-
-    def toggleDarkMode(self):
-        # Get current mode from config (default 'light')
-        config = configparser.ConfigParser()
-        config.read(Logic.getConfigPath())
-        colorMode = config['Settings'].get('colorMode', 'light') if 'Settings' in config else 'light'
-
-        # Toggle
-        colorMode = 'dark' if colorMode == 'light' else 'light'
-
-        # Save only colorMode back (preserve others)
-        if 'Settings' not in config:
-            config['Settings'] = {}
-
-        config['Settings']['colorMode'] = colorMode
-
-        with open(Logic.getConfigPath(), 'w') as configFile:
-            config.write(configFile)
 
     def showDataDictionary(self):         
         winDataDictionary.show()    
@@ -834,10 +813,6 @@ config = Logic.loadConfig()
 Logic.debug = config['debugMode']
 Logic.utcOffset = config['utcOffset']
 periodOffset = config['periodOffset'] # Global or pass to USBR as needed
-colorMode = config.get('colorMode', 'light')
-
-if colorMode == 'dark':
-    winMain.btnDarkMode.setChecked(True)
 
 # Load retro font if enabled (after stylesheet to override)
 retroFont = config.get('retroFont', True)

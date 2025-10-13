@@ -23,7 +23,7 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>Query</string>
+   <string>Internal Query</string>
   </property>
   <property name="autoFillBackground">
    <bool>false</bool>
