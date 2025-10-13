@@ -7,7 +7,7 @@ import datetime
 import configparser
 import keyring
 import os
-from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QColor, QPixmap
+from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QColor, QPixmap, QStyleHints
 from PyQt6.QtCore import (Qt, QIODevice, QFile, QTextStream, QEvent, QObject, QStandardPaths, QTimer,
                           QUrl)
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
@@ -25,7 +25,6 @@ from keyring.backends.SecretService import Keyring as SecretServiceKeyring
 try:
     keyring.set_keyring(SecretServiceKeyring())
 except keyring.errors.KeyringError as e:
-    print(f"SecretService failed: {e} - Using null (insecure) for now.")
     from keyring.backends.null import Keyring as NullKeyring
     keyring.set_keyring(NullKeyring())
 
@@ -33,7 +32,7 @@ class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
     def __init__(self):
         super(uiMain, self).__init__() # Call the inherited classes __init__ method
-        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self) # Load the .ui file
+        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self) # Load the .ui file   
         
         # Define the controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
@@ -118,7 +117,7 @@ class uiMain(QMainWindow):
         self.move(rect.topLeft())
         
         # Show the GUI on application start
-        self.show()     
+        self.show()      
 
     def onTabCloseRequested(self, index):
         """Handle tab close button clicks by removing the tab."""
@@ -127,6 +126,21 @@ class uiMain(QMainWindow):
 
     def btnPublicQueryPressed(self): 
         winWebQuery.show()  
+
+    def btnOptionsPressed(self): 
+        winOptions.exec()  
+
+    def btnInfoPressed(self): 
+        winAbout.exec()
+
+    def showDataDictionary(self):         
+        winDataDictionary.show()    
+
+    def btnExportCSVPressed(self):
+        Logic.exportTableToCSV(self.mainTable, '', '') # Pass empty (uses dialog)
+
+    def exitPressed(self):
+        app.exit()
 
     def btnOptionsPressed(self): 
         winOptions.exec()  
@@ -207,10 +221,11 @@ class uiWebQuery(QMainWindow):
             if index != -1:
                 self.cbQuickLook.setCurrentIndex(index)
         else:
-            self.cbQuickLook.setCurrentIndex(-1) # Blank default
+            self.cbQuickLook.setCurrentIndex(-1) # Blank default        
 
     def showEvent(self, event):
-        Logic.centerWindowToParent(self)
+        Logic.centerWindowToParent(self)    
+        self.cbQuickLook.setCurrentIndex(-1) # Remove this when lastQuickLook starts working
         super().showEvent(event)
 
     def btnDataIdInfoPressed(self):
@@ -501,7 +516,7 @@ class uiQuickLook(QDialog):
 class uiOptions(QDialog):
     """Options editor: Stores database connection information and application settings."""
     def __init__(self, parent=None):
-        super(uiOptions, self).__init__(parent) # Pass parent superclass
+        super(uiOptions, self).__init__(parent) # Call the inherited classes __init__ method
         uic.loadUi(Logic.resourcePath('ui/winOptions.ui'), self) # Load the .ui file
 
         # Define the controls            
@@ -523,8 +538,15 @@ class uiOptions(QDialog):
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget') 
         self.btnShowPassword = self.findChild(QPushButton, 'btnShowPassword')   
 
+        # Add to general tab
+        generalTab = self.tabWidget.widget(0)     
+
         # Set button style
         Logic.buttonStyle(self.btnShowPassword)       
+
+        # Timer for password show (restored to fix error)
+        self.lastCharTimer = QTimer(self) # Timer for masking after show
+        self.lastCharTimer.timeout.connect(self.maskLastChar)
 
         # Create events
         self.btnbOptions.accepted.connect(self.onSavePressed)
@@ -594,7 +616,7 @@ class uiOptions(QDialog):
 
     def loadSettings(self):
         config = configparser.ConfigParser()
-        config.read(Logic.getConfigPath())  # Use helper
+        config.read(Logic.getConfigPath()) # Use helper
 
         # Non-sensitive from config.ini (with defaults if new)
         if 'Settings' in config:
@@ -659,6 +681,9 @@ class uiOptions(QDialog):
         config = configparser.ConfigParser()
         config.read(Logic.getConfigPath()) # Read existing to preserve keys
 
+        # Read previous retro before update
+        previousRetro = config['Settings'].getboolean('retroFont', True) if 'Settings' in config else True
+
         tnsPath = self.textTNSNames.toPlainText()
         sqlNetPath = self.textSQLNetOra.toPlainText()
         walletPath = self.textOracleWallet.toPlainText()
@@ -671,7 +696,7 @@ class uiOptions(QDialog):
         if '%AppRoot%' in walletPath:
             walletPath = walletPath.replace('%AppRoot%', Logic.appRoot)
 
-        # Update only options keys (preserve e.g. colorMode)
+        # Update only options keys (preserve others)
         if 'Settings' not in config:
             config['Settings'] = {}
 
@@ -688,6 +713,9 @@ class uiOptions(QDialog):
         with open(Logic.getConfigPath(), 'w') as configFile:
             config.write(configFile)
 
+        # Reload and set globals after save
+        Logic.reloadGlobals()
+
         # Apply retro font if checked
         if self.cbRetroFont.isChecked():
             fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
@@ -695,18 +723,42 @@ class uiOptions(QDialog):
 
             if fontId != -1:
                 fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-                app.setFont(QFont(fontFamily, 12)) # Tweak 12pt
+                retroFontObj = QFont(fontFamily, 10)  # Fixed size
+                retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing
+                app.setFont(retroFontObj)
+                
+                # Re-apply to all open windows
+                for window in [winMain, winWebQuery, winDataDictionary, winQuickLook, winOptions, winAbout]:
+                    Logic.applyRetroFont(window)
         else:
             app.setFont(QFont()) # System default
+
+        # Show restart message if retro font changed (in either direction)
+        newRetro = self.cbRetroFont.isChecked()
+        if newRetro != previousRetro:
+            reply = QMessageBox.question(self, "Font Change", "Restart DataDoctor for the font change to take effect?\nOK to restart now, Cancel to revert to previous setting.", QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+            if reply == QMessageBox.StandardButton.Ok:
+                # Auto-restart app (cross-platform)
+                python = sys.executable
+                os.execl(python, python, *sys.argv) # Relaunch with same args
+            else:
+                # Revert checkbox and config
+                self.cbRetroFont.setChecked(previousRetro)
+                config = configparser.ConfigParser()
+                config.read(Logic.getConfigPath())
+                config['Settings']['retroFont'] = 'True' if previousRetro else 'False'
+
+                with open(Logic.getConfigPath(), 'w') as configFile:
+                    config.write(configFile)
+
+                # Re-apply previous font setting
+                Logic.reloadGlobals() # Reload to apply revert immediately
 
         # Sensitive to keyring
         keyring.set_password("DataDoctor", "aqServer", self.textAQServer.toPlainText())
         keyring.set_password("DataDoctor", "aqUser", self.textAQUser.toPlainText())
         keyring.set_password("DataDoctor", "aqPassword", self.qleAQPassword.text())
         keyring.set_password("DataDoctor", "usgsApiKey", self.textUSGSAPIKey.toPlainText())
-
-        # Reload and set globals after save
-        Logic.reloadGlobals()
 
     def togglePasswordVisibility(self):
         if self.qleAQPassword.echoMode() == QLineEdit.EchoMode.Password:
@@ -730,7 +782,7 @@ class uiAbout(QDialog):
         self.setFixedSize(900, 479)
 
         # Set window title
-        self.setWindowTitle('About DataDoctor')
+        self.setWindowTitle('About Data Doctor')
 
         # Load PNG bg (scale to window)
         pngPath = Logic.resourcePath('ui/DataDoctor.png')
@@ -743,6 +795,9 @@ class uiAbout(QDialog):
         fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
         fontId = QFontDatabase.addApplicationFont(fontPath)
         fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0] if fontId != -1 else "Courier" # Fallback monospace
+        retroFontObj = QFont(fontFamily, 10) # Fixed size
+        retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing for crisp retro
+        self.textInfo.setFont(retroFontObj) # Explicit for bypass
 
         # Info list: easy-edit tuples (label, content)
         infoList = [
@@ -789,16 +844,18 @@ class uiAbout(QDialog):
 
         if self.soundEffect:
             self.soundEffect.play() # Start infinite loop
+
         super().showEvent(event)
 
     def closeEvent(self, event):
         if self.soundEffect:
             self.soundEffect.stop() # Stop loop
+
         super().closeEvent(event)
 
 # Create an instance of QApplication     
 app = QApplication(sys.argv) 
-app.setApplicationName("DataDoctor")
+app.setApplicationName("Data Doctor")
 
 # Create an instance of our class
 winMain = uiMain() 
@@ -808,22 +865,30 @@ winQuickLook = uiQuickLook(winMain) # Pass parent
 winOptions = uiOptions(winMain) # Pass Parent
 winAbout = uiAbout(winMain) # Pass Parent
 
-# Load in configuration
+# Load config
 config = Logic.loadConfig()
 Logic.debug = config['debugMode']
 Logic.utcOffset = config['utcOffset']
-periodOffset = config['periodOffset'] # Global or pass to USBR as needed
+Logic.periodOffset = config['periodOffset'] # True for EOP
+Logic.retroFont = config.get('retroFont', True) # Set global
 
-# Load retro font if enabled (after stylesheet to override)
-retroFont = config.get('retroFont', True)
-
-if retroFont:
+# Apply retro font if enabled
+if Logic.retroFont:
     fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
     fontId = QFontDatabase.addApplicationFont(fontPath)
 
     if fontId != -1:
         fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-        app.setFont(QFont(fontFamily, 10)) 
+        retroFontObj = QFont(fontFamily, 10) # Fixed size
+        retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing for crisp retro
+        app.setFont(retroFontObj)
+
+# Load minimal qss if system dark
+if QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark:
+    qssPath = Logic.resourcePath('ui/stylesheet.qss')
+    
+    with open(qssPath, 'r') as f:
+        app.setStyleSheet(f.read())
 
 # Load in data dictionary
 Logic.buildDataDictionary(winDataDictionary.mainTable) 
@@ -832,4 +897,4 @@ Logic.buildDataDictionary(winDataDictionary.mainTable)
 Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
 
 # Start the application
-app.exec() 
+app.exec()

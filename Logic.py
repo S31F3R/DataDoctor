@@ -4,8 +4,8 @@ import datetime
 import configparser
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer, QByteArray, QStandardPaths
-from PyQt6.QtGui import QGuiApplication, QColor, QBrush
-from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog
+from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QStyleHints, QFontDatabase, QFont
+from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget, QTreeView, QSplitter
 
 def resourcePath(relativePath):
     """Get absolute path to resource, works for dev and PyInstaller"""
@@ -22,6 +22,7 @@ debug = False
 retroFont = False
 qaqcEnabled = True
 rawData = False
+fontSize = 10 # Default app-wide retro font size
 
 def buildTimestamps(startDateStr, endDateStr, intervalStr):
     if debug == True: print("[DEBUG] buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
@@ -339,6 +340,9 @@ def qaqc(table, dataDictionaryTable, lookupIds):
             if not item:
                 continue
             
+            # Reset foreground to system default first
+            item.setData(Qt.ItemDataRole.ForegroundRole, None)
+            
             cellText = item.text().strip()
 
             if cellText == '': # Missing data blue (only if in dict and ts <= now)
@@ -353,21 +357,21 @@ def qaqc(table, dataDictionaryTable, lookupIds):
                         if tsDt <= now:
                             item.setBackground(QColor(100, 195, 247)) # Light blue for past/present missing
                     except ValueError:
-                        pass  # Skip invalid ts
+                        pass # Skip invalid ts
                 continue
             
             try:
                 val = float(cellText)
             except ValueError:
-                continue  # Skip non-numeric
+                continue # Skip non-numeric
             
             # Min/Max colors (apply regardless of ts, for model future data)
             if expectedMin is not None and val < expectedMin:
                 item.setBackground(QColor(249, 240, 107)) # Light Yellow  
-                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))                            
+                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0))) # Black text                            
             elif expectedMax is not None and val > expectedMax:
                 item.setBackground(QColor(249, 194, 17)) # Yellow
-                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))  
+                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0))) # Black text  
             elif cutoffMin is not None and val < cutoffMin:
                 item.setBackground(QColor(255, 163, 72)) # Orange
             elif cutoffMax is not None and val > cutoffMax:
@@ -378,11 +382,12 @@ def qaqc(table, dataDictionaryTable, lookupIds):
                 if abs(val - prevVal) > rateOfChange:
                     item.setBackground(QColor(246, 97, 81)) # Red
 
-            # Repeat (green, apply regardless)
+            # Repeat (apply regardless)
             if prevVal is not None and val == prevVal:
-                item.setBackground(QColor(87, 227, 137)) # Green                
+                item.setBackground(QColor(87, 227, 137)) # Green 
+                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0))) # Black text                
 
-            prevVal = val          
+            prevVal = val                 
            
 def loadAllQuickLooks(cbQuickLook):     
     cbQuickLook.clear()
@@ -456,7 +461,11 @@ def loadConfig():
         'lastExportPath': '',
         'debugMode': False,
         'utcOffset': -7, # Default int
-        'periodOffset': True # True for EOP/end
+        'periodOffset': True, # True for EOP/end
+        'retroFont': True,
+        'qaqc': True,
+        'rawData': False,
+        'lastQuickLook': ''
     }
 
     if 'Settings' in config:
@@ -516,10 +525,41 @@ def exportTableToCSV(table, fileLocation, fileName):
     timestamp = datetime.now().strftime('%Y-%m-%d %H%M%S')
     defaultName = f"{timestamp} Export.csv"
     suggestedPath = os.path.join(defaultDir, defaultName)
-    filePath, _ = QFileDialog.getSaveFileName(None, "Save CSV As", suggestedPath, "CSV files (*.csv)")
 
-    if not filePath:
-        return  # User canceled
+    # Instantiate dialog for control (non-static)
+    dlg = QFileDialog(None)
+    dlg.setWindowTitle("Save CSV As")
+    dlg.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+    dlg.setNameFilter("CSV files (*.csv)")
+    dlg.selectFile(defaultName)
+    dlg.setDirectory(defaultDir)
+    dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True) # Force Qt-based for font control (cross-platform)
+
+    if retroFont:
+        applyRetroFont(dlg, 9) # Apply smaller retro font recursively
+        dlg.resize(800, 600) # Set custom size only for retro
+        dlg.setViewMode(QFileDialog.ViewMode.Detail) # Ensure details view for columns
+        
+        # Force sidebar width via splitter (adjust 150 as needed for your font/setup)
+        splitter = dlg.findChild(QSplitter)
+        if splitter:
+            splitter.setSizes([150, dlg.width() - 150]) # Sidebar 150px, main the rest
+        
+        # Optional: Auto-resize main view columns (sidebar fixed, so skipped for it)
+        mainView = dlg.findChild(QTreeView, "fileview") # Main view (may vary; fallback to first)
+
+        if not mainView:
+            mainView = dlg.findChild(QTreeView) # Fallback if named differently
+        if mainView:
+            header = mainView.header()
+
+            for i in range(header.count()):
+                mainView.resizeColumnToContents(i) # Auto-size main columns
+
+    if dlg.exec():
+        filePath = dlg.selectedFiles()[0]
+    else:
+        return # User canceled
 
     # Build CSV
     headers = [table.horizontalHeaderItem(h).text().replace('\n', ' | ') for h in range(table.columnCount())]
@@ -544,9 +584,7 @@ def exportTableToCSV(table, fileLocation, fileName):
     config['Settings']['lastExportPath'] = exportDir
 
     with open(getConfigPath(), 'w') as configFile:
-        config.write(configFile)
-
-    print(f"Exported to {filePath}")
+        config.write(configFile) 
 
 def customSortTable(table, col, dataDictionaryTable):
     # Prevent overlap (ignore if sorting already)
@@ -711,7 +749,7 @@ def getQuickLookDir():
 
 def reloadGlobals():
     settings = loadConfig()
-    global debug, utcOffset, periodOffset, retroFont, qaqcEnabled, rawData # Globals
+    global debug, utcOffset, periodOffset, retroFont, qaqcEnabled, rawData  # Globals
     debug = settings['debugMode']
     utcOffset = settings['utcOffset']
     periodOffset = settings['periodOffset'] # Use in USBR as needed (e.g., if periodOffset: end else begin)
@@ -719,11 +757,23 @@ def reloadGlobals():
     qaqcEnabled = settings['qaqc']
     rawData = settings['rawData']
 
+def applyRetroFont(widget, pointSize=10):
+    fontPath = resourcePath('ui/fonts/PressStart2P-Regular.ttf') # Load from path
+    fontId = QFontDatabase.addApplicationFont(fontPath)
+
+    if fontId != -1:
+        fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
+        retroFontObj = QFont(fontFamily, pointSize)
+        retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing for crisp retro
+        widget.setFont(retroFontObj)
+        for child in widget.findChildren(QWidget): # Recursive to all children
+            child.setFont(retroFontObj)
+
 def valuePrecision(value):
     """Format value to 2 decimals if <10, 1 if 10-99, 0 if >=100."""
     try:
         v = float(value)
-        
+
         if v < 10:
             return '%.2f' % v
         elif 10 <= v < 100:
