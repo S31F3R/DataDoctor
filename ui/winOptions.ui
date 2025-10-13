@@ -65,45 +65,6 @@
       <string>UTC Offset</string>
      </property>
     </widget>
-    <widget class="QLabel" name="lbTNSNames_5">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>60</y>
-       <width>101</width>
-       <height>21</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>Debug Mode:</string>
-     </property>
-    </widget>
-    <widget class="QRadioButton" name="rbTRUE">
-     <property name="geometry">
-      <rect>
-       <x>110</x>
-       <y>60</y>
-       <width>61</width>
-       <height>22</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>True</string>
-     </property>
-    </widget>
-    <widget class="QRadioButton" name="rbFALSE">
-     <property name="geometry">
-      <rect>
-       <x>180</x>
-       <y>60</y>
-       <width>71</width>
-       <height>22</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>False</string>
-     </property>
-    </widget>
     <widget class="QComboBox" name="cbUTCOffset">
      <property name="geometry">
       <rect>
@@ -114,11 +75,120 @@
       </rect>
      </property>
     </widget>
-    <zorder>lbTNSNames_5</zorder>
-    <zorder>rbTRUE</zorder>
-    <zorder>rbFALSE</zorder>
+    <widget class="QLabel" name="lbRawData">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>60</y>
+       <width>101</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Raw Data:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbQc">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>90</y>
+       <width>161</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Quality Control Checks:</string>
+     </property>
+    </widget>
+    <widget class="QCheckBox" name="cbRawData">
+     <property name="geometry">
+      <rect>
+       <x>84</x>
+       <y>62</y>
+       <width>21</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbDebug">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>150</y>
+       <width>101</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Debug Mode:</string>
+     </property>
+    </widget>
+    <widget class="QCheckBox" name="cbQAQC">
+     <property name="geometry">
+      <rect>
+       <x>178</x>
+       <y>92</y>
+       <width>21</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+    <widget class="QCheckBox" name="cbDebug">
+     <property name="geometry">
+      <rect>
+       <x>110</x>
+       <y>152</y>
+       <width>21</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+    <widget class="QCheckBox" name="cbRetroFont">
+     <property name="geometry">
+      <rect>
+       <x>90</x>
+       <y>122</y>
+       <width>21</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbRetroFont">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>120</y>
+       <width>91</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Retro Font:</string>
+     </property>
+    </widget>
     <zorder>lbUTCOffset</zorder>
     <zorder>cbUTCOffset</zorder>
+    <zorder>lbRawData</zorder>
+    <zorder>lbQc</zorder>
+    <zorder>cbRawData</zorder>
+    <zorder>lbDebug</zorder>
+    <zorder>cbQAQC</zorder>
+    <zorder>cbDebug</zorder>
+    <zorder>lbRetroFont</zorder>
+    <zorder>cbRetroFont</zorder>
    </widget>
    <widget class="QWidget" name="tabAquarius">
     <attribute name="title">
@@ -183,22 +253,49 @@
       <string>Password</string>
      </property>
     </widget>
-    <widget class="QTextEdit" name="textAQPassword">
+    <widget class="QLineEdit" name="qleAQPassword">
      <property name="geometry">
       <rect>
        <x>10</x>
        <y>140</y>
        <width>451</width>
+       <height>32</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btnShowPassword">
+     <property name="geometry">
+      <rect>
+       <x>456</x>
+       <y>140</y>
+       <width>41</width>
        <height>31</height>
       </rect>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/Visible.png</normaloff>icons/Visible.png</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="flat">
+      <bool>true</bool>
      </property>
     </widget>
     <zorder>lbAQServer</zorder>
     <zorder>lbAQUserName</zorder>
-    <zorder>textAQUser</zorder>
     <zorder>lbAQPassword</zorder>
-    <zorder>textAQPassword</zorder>
+    <zorder>qleAQPassword</zorder>
+    <zorder>textAQUser</zorder>
     <zorder>textAQServer</zorder>
+    <zorder>btnShowPassword</zorder>
    </widget>
    <widget class="QWidget" name="tabUSGS">
     <attribute name="title">
