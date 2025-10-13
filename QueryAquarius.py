@@ -5,12 +5,7 @@ import Logic  # For buildTimestamps, gapCheck, combineParameters
 
 def api(dataID, startDate, endDate, interval):
     if Logic.debug == True: print("[DEBUG] QueryAquarius.api called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
-    
-    # Get Aquarius settings
-    server = ''
-    user = ''
-    password = ''  
-    
+        
     # Parse start
     startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
     startYear = startDateTime.year
@@ -54,11 +49,20 @@ def api(dataID, startDate, endDate, interval):
     # Build offset ISO
     startDate = f'{startDateTime.year}-{startMonth}-{startDay} {startHour}:{startMinute}'
     endDate = f'{endDateTime.year}-{endMonth}-{endDay} {endHour}:{endMinute}'
+
+    # Fetch creds right before auth, use, then clear
+    server = keyring.get_password("DataDoctor", "aqServer") or ''
+    user = keyring.get_password("DataDoctor", "aqUser") or ''
+    password = keyring.get_password("DataDoctor", "aqPassword") or ''
     
     # Authenticate session
     data = {'Username':f'{user}','EncryptedPassword':f'{password}'}
     url = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=data, verify=False)
     headers = {'X-Authentication-Token':url.text}
+
+    # Clear creds immediately after use   
+    user = None
+    password = None
     
     uids = dataID.split(',')
     queryLimit = 50
@@ -121,7 +125,10 @@ def api(dataID, startDate, endDate, interval):
                 output = Logic.combineParameters(output, combined)
             else:
                 output = combined
-    
+                
+    # Clear server variable
+    server = None
+
     if not output:
         print("[WARN] No data after processing all batches.")
         return []

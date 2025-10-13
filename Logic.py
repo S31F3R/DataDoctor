@@ -1,14 +1,27 @@
 import os
 import sys
 import datetime
+import configparser
 from datetime import datetime, timedelta
-from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer, QByteArray
+from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer, QByteArray, QStandardPaths
 from PyQt6.QtGui import QGuiApplication, QColor, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog
 
-sortState = {} # Global dict for per-col sort state (col: ascending)
-utcOffset = -7  # Global for timezone offset; configurable later via options UI
+def resourcePath(relativePath):
+    """Get absolute path to resource, works for dev and PyInstaller"""
+    if getattr(sys, 'frozen', False): # Bundled mode
+        basePath = sys._MEIPASS
+    else: # Dev mode
+        basePath = os.path.dirname(os.path.abspath(__file__))
+    return os.path.normpath(os.path.join(basePath, relativePath))
+
+appRoot = resourcePath('') 
+sortState = {} 
+utcOffset = "" 
 debug = False
+retroFont = False
+qaqcEnabled = True
+rawData = False
 
 def buildTimestamps(startDateStr, endDateStr, intervalStr):
     if debug == True: print("[DEBUG] buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
@@ -49,6 +62,7 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
         current += delta
     
     if debug == True: print("[DEBUG] Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
+
     return timestamps
 
 def gapCheck(timestamps, data, dataID=''):
@@ -125,9 +139,12 @@ def gapCheck(timestamps, data, dataID=''):
         if len(parts) > 0:
             removed.append(parts[0].strip())
         i += 1
+
     if removed:
-        print("[WARN] Removed {} extra/mismatched rows from '{}': ts {}".format(len(removed), dataID, removed))
+        if debug == True: print("[DEBUG] Removed {} extra/mismatched rows from '{}': ts {}".format(len(removed), dataID, removed))
+
     if debug == True: print("[DEBUG] Post-gapCheck len={}, sample first 3: {}".format(len(newData), newData[:3]))
+
     return newData
 
 def combineParameters(data, newData):
@@ -150,8 +167,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
     
-    # Build prateOfChangeessed headers with dict lookup and \nINTERVAL
-    prateOfChangeessedHeaders = []
+    # Build processed headers
+    processedHeaders = []
 
     for i, h in enumerate(buildHeader):
         headerText = h.strip() # Strip raw header
@@ -160,8 +177,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         dictRow = getDataDictionaryItem(dataDictionaryTable, headerText)
 
         if dictRow != -1:
-            siteItem = dataDictionaryTable.item(dictRow, 1) # Site col1
-            datatypeItem = dataDictionaryTable.item(dictRow, 2) # Datatype col2
+            siteItem = dataDictionaryTable.item(dictRow, 1) 
+            datatypeItem = dataDictionaryTable.item(dictRow, 2) 
             baseLabel = (siteItem.text().strip() + ' ' + datatypeItem.text().strip()) if siteItem and datatypeItem else headerText
         else:
             baseLabel = headerText
@@ -171,19 +188,19 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if dictRow != -1:
             fullLabel += ' \n' + h
 
-        prateOfChangeessedHeaders.append(fullLabel)
+        processedHeaders.append(fullLabel)
     
-    # Headers: PrateOfChangeessed only (no Date prepend)
-    headers = prateOfChangeessedHeaders
+    # Headers: Processed only (no Date prepend)
+    headers = processedHeaders
     
     # Conditional skip for main table (skip date col 0)
-    skipDateCol = dataDictionaryTable is not None  # True for main (has dict), False for dict itself? Wait, adjust if needed - assuming dataDictionaryTable is passed for main, None or False for others
+    skipDateCol = dataDictionaryTable is not None  # True for main (has dict), False for dict itself
     
     numCols = len(headers)
     numRows = len(data)
     table.setRowCount(numRows)
     table.setColumnCount(numCols)
-    table.setHorizontalHeaderLabels(headers) # Full list
+    table.setHorizontalHeaderLabels(headers)
     
     # Vertical: Timestamps for main table only (dict table no dates)
     if dataDictionaryTable:
@@ -195,6 +212,12 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     else:
         table.verticalHeader().setVisible(False) # Hide for dict
     
+    # Load config once outside loop
+    config = configparser.ConfigParser()
+    config.read(getConfigPath())
+    rawData = config['Settings'].getboolean('rawData', False) if 'Settings' in config else False
+    qaqcToggle = config['Settings'].getboolean('qaqc', True) if 'Settings' in config else True
+    
     # Populate data (conditional skip, center all)
     for rowIDx, row_str in enumerate(data):
         rowData = row_str.split(',')[1:] if skipDateCol else row_str.split(',') # Skip date for main
@@ -203,6 +226,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             cellText = rowData[colIDx].strip() if colIDx < len(rowData) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+
+            if not rawData and cellText.strip(): # Apply formatting if not raw
+                item.setText(valuePrecision(cellText))
+
             table.setItem(rowIDx, colIDx, item)
     
     # Resize all columns to fit headers + data
@@ -212,8 +239,17 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     # dataIds for QAQC: raw buildHeader
     dataIds = buildHeader
     
-    # QAQC colors
-    qaqc(table, dataDictionaryTable, dataIds)  
+    # Apply QAQC if toggled
+    if qaqcToggle:
+        qaqc(table, dataDictionaryTable, dataIds)
+    else:
+        # Clear colors if off (transparent for stylesheet)
+        for r in range(table.rowCount()):
+            for c in range(table.columnCount()):
+                item = table.item(r, c)
+
+                if item:
+                    item.setBackground(QColor(0, 0, 0, 0)) # Transparent
 
     # Connect custom sort (syncs timestamps)
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
@@ -350,14 +386,29 @@ def qaqc(table, dataDictionaryTable, lookupIds):
            
 def loadAllQuickLooks(cbQuickLook):     
     cbQuickLook.clear()
-    cbQuickLook.addItem(None) # Blank first
+    quickLookPaths = []
 
-    quicklook_dir = resourcePath('quickLook')
+    # User-specific first
+    userDir = getQuickLookDir()
 
-    if os.path.exists(quicklook_dir):
-        for file in os.listdir(quicklook_dir):
-            if file.endswith('.txt'):
-                cbQuickLook.addItem(file.split('.txt')[0])
+    for file in os.listdir(userDir):
+        if file.endswith(".txt"):
+            quickLookPaths.append(os.path.join(userDir, file))
+
+    # Then append examples (no duplicates – check names)
+    exampleDir = getExampleQuickLookDir()
+
+    for file in os.listdir(exampleDir):
+        if file.endswith(".txt"):
+            examplePath = os.path.join(exampleDir, file)
+
+            if not os.path.exists(os.path.join(userDir, file)): # Avoid dupes
+                quickLookPaths.append(examplePath)
+    
+    # Add to combo (use basename without .txt)
+    for path in quickLookPaths:
+        name = os.path.basename(path).replace('.txt', '')
+        cbQuickLook.addItem(name)
                   
 def saveQuickLook(textQuickLookName, listQueryList):
     name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
@@ -367,10 +418,10 @@ def saveQuickLook(textQuickLookName, listQueryList):
         return
 
     data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
-    quicklook_path = resourcePath(f'quickLook/{name}.txt')
-    os.makedirs(os.path.dirname(quicklook_path), exist_ok=True) # Ensure dir
+    quicklookPath = os.path.join(getQuickLookDir(), f'{name}.txt')
+    os.makedirs(os.path.dirname(quicklookPath), exist_ok=True) # Ensure dir
 
-    with open(quicklook_path, 'w', encoding='utf-8-sig') as f:
+    with open(quicklookPath, 'w', encoding='utf-8-sig') as f:
         f.write(','.join(data))
 
 def loadQuickLook(cbQuickLook, listQueryList):
@@ -379,11 +430,11 @@ def loadQuickLook(cbQuickLook, listQueryList):
     if not name:
         return
 
-    quicklook_path = resourcePath(f'quickLook/{name}.txt')
+    quicklookPath = resourcePath(f'quickLook/{name}.txt')
     listQueryList.clear()
 
     try:
-        with open(quicklook_path, 'r', encoding='utf-8-sig') as f:
+        with open(quicklookPath, 'r', encoding='utf-8-sig') as f:
             content = f.read().strip()
 
             if content:
@@ -395,26 +446,55 @@ def loadQuickLook(cbQuickLook, listQueryList):
         print(f"Quick look '{name}' not found.")  
 
 def loadConfig():
-    config = ['light'] # Default color
-    configPath = resourcePath('config.ini')
+    configPath = getConfigPath()
+    config = configparser.ConfigParser()
+    config.read(configPath)
 
-    try:
-        with open(configPath, 'r', encoding='utf-8-sig') as f:
-            config = [line.strip() for line in f.readlines()]
+    # Defaults
+    settings = {
+        'colorMode': 'light',
+        'lastExportPath': '',
+        'debugMode': False,
+        'utcOffset': -7, # Default int
+        'periodOffset': True # True for EOP/end
+    }
 
-            if not config: # Empty file
-                config = ['light']
+    if 'Settings' in config:
+        settings['colorMode'] = config['Settings'].get('colorMode', 'light')
+        settings['lastExportPath'] = config['Settings'].get('lastExportPath', '')
+        settings['debugMode'] = config['Settings'].getboolean('debugMode', False)
+        utcStr = config['Settings'].get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London")
 
-    except FileNotFoundError:
-        # Create if missing
-        with open(configPath, 'w', encoding='utf-8-sig') as f:
-            f.write('light\n')
-            
-    # Ensure path entry (index 1)
-    while len(config) < 2:
-        config.append('') # Empty path default
+        # Parse utcOffset to int (e.g., -7 from "UTC-07:00 | ...")
+        try:
+            offsetPart = utcStr.split(' | ')[0].replace('UTC', '').split(':')[0] # " -07" or "+00"
+            settings['utcOffset'] = int(offsetPart)
+        except ValueError:
+            settings['utcOffset'] = -7 # Fallback
+        hourMethod = config['Settings'].get('hourTimestampMethod', 'EOP')
+        settings['periodOffset'] = (hourMethod == 'EOP') # True for end
+        settings['retroFont'] = config['Settings'].getboolean('retroFont', True)
+        settings['qaqc'] = config['Settings'].getboolean('qaqc', True)
+        settings['rawData'] = config['Settings'].getboolean('rawData', False)
+        settings['lastQuickLook'] = config['Settings'].get('lastQuickLook', '')
 
-    return config
+    # Create if missing/empty
+    if not os.path.exists(configPath) or not config.sections():
+        config['Settings'] = {
+            'colorMode': settings['colorMode'],
+            'lastExportPath': settings['lastExportPath'],
+            'debugMode': str(settings['debugMode']),
+            'utcOffset': "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London",
+            'hourTimestampMethod': 'EOP' if settings['periodOffset'] else 'BOP',
+            'retroFont': str(settings['retroFont']),
+            'qaqc': str(settings['qaqc']),
+            'rawData': str(settings['rawData']),
+            'lastQuickLook': settings['lastQuickLook']
+        }
+        with open(configPath, 'w') as configFile:
+            config.write(configFile)
+
+    return settings
 
 def exportTableToCSV(table, fileLocation, fileName):
     if table.rowCount() == 0:
@@ -422,8 +502,9 @@ def exportTableToCSV(table, fileLocation, fileName):
         return
 
     # Get last path from config (default to Documents)
-    config = loadConfig()
-    lastPath = config[1] if len(config) > 1 else os.path.expanduser("~/Documents")
+    config = configparser.ConfigParser()
+    config.read(getConfigPath())
+    lastPath = config['Settings'].get('lastExportPath', os.path.expanduser("~/Documents")) if 'Settings' in config else os.path.expanduser("~/Documents")
 
     # Force Documents if lastPath empty/invalid
     if not lastPath or not os.path.exists(lastPath):
@@ -438,39 +519,34 @@ def exportTableToCSV(table, fileLocation, fileName):
     filePath, _ = QFileDialog.getSaveFileName(None, "Save CSV As", suggestedPath, "CSV files (*.csv)")
 
     if not filePath:
-        return # User canceled
+        return  # User canceled
 
-    # Build CSV (your original logic)
+    # Build CSV
     headers = [table.horizontalHeaderItem(h).text().replace('\n', ' | ') for h in range(table.columnCount())]
-    csvLines = [','.join(headers)]
+    csvLines = [',Timestamp,' + ','.join(headers)] # Header with Timestamp
 
+    # Add timestamps as first column
+    timestamps = [table.verticalHeaderItem(r).text() if table.verticalHeaderItem(r) else '' for r in range(table.rowCount())]
+    
     for r in range(table.rowCount()):
         rowData = [table.item(r, c).text() if table.item(r, c) else '' for c in range(table.columnCount())]
-        csvLines.append(','.join(rowData))
+        csvLines.append(timestamps[r] + ',' + ','.join(rowData))
 
     # Write
     with open(filePath, 'w', encoding='utf-8-sig', newline='') as f:
         f.write('\n'.join(csvLines))
 
-    # Save last path to config (dir only)
+    # Save last path to config (dir only, preserve others)
     exportDir = os.path.dirname(filePath)
+    if 'Settings' not in config:
+        config['Settings'] = {}
 
-    if len(config) < 2:
-        config.append(exportDir) # Extend if short
-    else:
-        config[1] = exportDir # Assign
-    with open(resourcePath('config.ini'), 'w', encoding='utf-8-sig') as f:
-        f.write(f"{config[0]}\n{exportDir}\n") # color\npath
+    config['Settings']['lastExportPath'] = exportDir
+
+    with open(getConfigPath(), 'w') as configFile:
+        config.write(configFile)
 
     print(f"Exported to {filePath}")
-
-def resourcePath(relativePath):
-    """Get absolute path to resource, works for dev and PyInstaller"""
-    if getattr(sys, 'frozen', False): # Bundled mode
-        basePath = sys._MEIPASS
-    else: # Dev mode
-        basePath = os.path.dirname(os.path.abspath(__file__))
-    return os.path.normpath(os.path.join(basePath, relativePath))
 
 def customSortTable(table, col, dataDictionaryTable):
     # Prevent overlap (ignore if sorting already)
@@ -610,3 +686,49 @@ def buttonStyle(button):
             outline: none;
         }
     """)
+
+def getExampleQuickLookDir():
+    return resourcePath("quickLook") 
+
+def getConfigDir():
+    configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
+
+    if not os.path.exists(configDir):
+        os.makedirs(configDir)
+
+    return configDir
+
+def getConfigPath():
+    return os.path.join(getConfigDir(), "config.ini")
+
+def getQuickLookDir():
+    quickLookDir = os.path.join(getConfigDir(), "quickLook")
+
+    if not os.path.exists(quickLookDir):
+        os.makedirs(quickLookDir)
+
+    return quickLookDir
+
+def reloadGlobals():
+    settings = loadConfig()
+    global debug, utcOffset, periodOffset, retroFont, qaqcEnabled, rawData # Globals
+    debug = settings['debugMode']
+    utcOffset = settings['utcOffset']
+    periodOffset = settings['periodOffset'] # Use in USBR as needed (e.g., if periodOffset: end else begin)
+    retroFont = settings['retroFont']
+    qaqcEnabled = settings['qaqc']
+    rawData = settings['rawData']
+
+def valuePrecision(value):
+    """Format value to 2 decimals if <10, 1 if 10-99, 0 if >=100."""
+    try:
+        v = float(value)
+        
+        if v < 10:
+            return '%.2f' % v
+        elif 10 <= v < 100:
+            return '%.1f' % v
+        else:
+            return '%.0f' % v
+    except ValueError:
+        return value # Non-numeric as-is
