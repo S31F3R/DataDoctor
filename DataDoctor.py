@@ -4,16 +4,31 @@ import QueryUSGS
 import QueryAquarius
 import Logic
 import datetime
+import configparser
+import keyring
+import os
 import breeze_resources # Registers Qt resources for stylesheets
-from PyQt6.QtGui import QGuiApplication
-from PyQt6.QtCore import QIODevice, QFile, QTextStream, QEvent, QObject
+from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QColor, QPixmap
+from PyQt6.QtCore import (Qt, QIODevice, QFile, QTextStream, QEvent, QObject, QStandardPaths, QTimer,
+                          QUrl)
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
                              QTextEdit, QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
                              QListWidgetItem, QMessageBox, QDialog, QSizePolicy, QTabWidget, QRadioButton,
-                             QDialogButtonBox)
+                             QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox)
 from datetime import datetime, timedelta
 from PyQt6 import uic
+from PyQt6.QtMultimedia import QSoundEffect
 from collections import defaultdict
+import keyring
+from keyring.backends.SecretService import Keyring as SecretServiceKeyring
+
+# Force SecretService backend (avoids kwallet, uses dbus secrets)
+try:
+    keyring.set_keyring(SecretServiceKeyring())
+except keyring.errors.KeyringError as e:
+    print(f"SecretService failed: {e} - Using null (insecure) for now.")
+    from keyring.backends.null import Keyring as NullKeyring
+    keyring.set_keyring(NullKeyring())
 
 class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
@@ -121,16 +136,13 @@ class uiMain(QMainWindow):
         winOptions.exec()  
 
     def btnInfoPressed(self): 
-        print('Not complete yet')
+        winAbout.exec()
 
     def toggleDarkMode(self):
-        try:
-            with open(Logic.resourcePath('config.ini'), 'r', encoding='utf-8-sig') as f:
-                data = f.readlines()
-                colorMode = data[0].strip()
-        except FileNotFoundError:
-            colorMode = 'light' # Default if no config
-            data = [colorMode + '\n']
+        # Get current mode from config (default 'light')
+        config = configparser.ConfigParser()
+        config.read(Logic.getConfigPath())
+        colorMode = config['Settings'].get('colorMode', 'light') if 'Settings' in config else 'light'
 
         # Toggle
         colorMode = 'dark' if colorMode == 'light' else 'light'
@@ -148,14 +160,19 @@ class uiMain(QMainWindow):
                 QMessageBox.warning(self, "Style Error", f"Could not load {colorMode} stylesheet from {stylesheetPath}.\nError: {f.errorString()}")
                 f.close()
                 return
+
         stream = QTextStream(f)
         app.setStyleSheet(stream.readAll())
         f.close()
 
-        # Save
-        data[0] = colorMode + '\n'
-        with open(Logic.resourcePath('config.ini'), 'w', encoding='utf-8-sig') as f:
-            f.writelines(data)
+        # Save only colorMode back (preserve others)
+        if 'Settings' not in config:
+            config['Settings'] = {}
+
+        config['Settings']['colorMode'] = colorMode
+
+        with open(Logic.getConfigPath(), 'w') as configFile:
+            config.write(configFile)
 
     def showDataDictionary(self):         
         winDataDictionary.show()    
@@ -219,6 +236,19 @@ class uiWebQuery(QMainWindow):
         self.dteStartDate.setDateTime(datetime.now() - timedelta(hours = 72) )        
         self.dteEndDate.setDateTime(datetime.now())  
 
+        # Load last quickLook from config
+        config = configparser.ConfigParser()
+        config.read(Logic.getConfigPath())
+
+        if 'Settings' in config and 'lastQuickLook' in config['Settings']:
+            lastQuickLook = config['Settings']['lastQuickLook']
+            index = self.cbQuickLook.findText(lastQuickLook)
+            print(f"Setting index for {lastQuickLook}: {index}") # Debug index
+            if index != -1:
+                self.cbQuickLook.setCurrentIndex(index)
+        else:
+            self.cbQuickLook.setCurrentIndex(-1) # Blank default
+
     def showEvent(self, event):
         Logic.centerWindowToParent(self)
         super().showEvent(event)
@@ -242,6 +272,7 @@ class uiWebQuery(QMainWindow):
         for i in range(self.listQueryList.count()):
             itemText = self.listQueryList.item(i).text().strip()
             parts = itemText.split('|')
+
             if Logic.debug == True: print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
 
             if len(parts) != 3:
@@ -358,6 +389,7 @@ class uiWebQuery(QMainWindow):
         for item in queryItems:
             dataID, interval, db, mrid, origIndex = item
             lookupId = dataID
+
             if db.startswith('USBR-') and '-' in dataID:
                 lookupId = dataID.split('-')[0]  # Base SDID
             lookupIds.append(lookupId)
@@ -401,6 +433,18 @@ class uiWebQuery(QMainWindow):
     
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
+
+        # Save last selected quickLook to config
+        config = configparser.ConfigParser()
+        config.read(Logic.getConfigPath())
+
+        if 'Settings' not in config:
+            config['Settings'] = {}
+
+        config['Settings']['lastQuickLook'] = self.cbQuickLook.currentText()
+
+        with open(Logic.getConfigPath(), 'w') as configFile:
+            config.write(configFile)
 
     def btnClearQueryPressed(self):
         self.listQueryList.clear()
@@ -478,9 +522,11 @@ class uiQuickLook(QDialog):
 
         # Load quick looks
         Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
+        print(f"cbQuickLook items: {self.cbQuickLook.count()}")
 
         # Close the window
         winQuickLook.close() 
+
     def btnCancelPressed(self): 
         # Clear the controls
         self.clear()
@@ -502,19 +548,30 @@ class uiOptions(QDialog):
         self.cbUTCOffset = self.findChild(QComboBox,'cbUTCOffset')  
         self.textAQServer = self.findChild(QTextEdit,'textAQServer') 
         self.textAQUser = self.findChild(QTextEdit,'textAQUser') 
-        self.textAQPassword = self.findChild(QTextEdit,'textAQPassword') 
+        self.qleAQPassword = self.findChild(QLineEdit,'qleAQPassword') 
         self.textUSGSAPIKey = self.findChild(QTextEdit,'textUSGSAPIKey') 
         self.textTNSNames = self.findChild(QTextEdit, 'textTNSNames')
         self.textSQLNetOra = self.findChild(QTextEdit, 'textSQLNetOra')
-        self.textOracleWallet = self.findChild(QTextEdit, 'textSQLNetora')
+        self.textOracleWallet = self.findChild(QTextEdit, 'textOracleWallet')
         self.rbBOP = self.findChild(QRadioButton, 'rbBOP')
         self.rbEOP = self.findChild(QRadioButton, 'rbEOP')
         self.btnbOptions = self.findChild(QDialogButtonBox, 'btnbOptions') 
-        self.rbTRUE = self.findChild(QRadioButton, 'rbTRUE')
-        self.rbFALSE = self.findChild(QRadioButton, 'rbFALSE')       
+        self.cbRetroFont = self.findChild(QCheckBox, 'cbRetroFont')
+        self.cbQAQC = self.findChild(QCheckBox, 'cbQAQC')
+        self.cbRawData = self.findChild(QCheckBox, 'cbRawData')
+        self.cbDebug = self.findChild(QCheckBox, 'cbDebug')
+        self.tabWidget = self.findChild(QTabWidget, 'tabWidget') 
+        self.btnShowPassword = self.findChild(QPushButton, 'btnShowPassword')   
+
+        # Set button style
+        Logic.buttonStyle(self.btnShowPassword)       
 
         # Create events
         self.btnbOptions.accepted.connect(self.onSavePressed)
+        self.btnShowPassword.clicked.connect(self.togglePasswordVisibility)
+
+        # Mask password by default
+        self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)  
 
         # Populate UTC offset combobox
         self.cbUTCOffset.addItem("UTC-12:00 | Baker Island")
@@ -531,7 +588,7 @@ class uiOptions(QDialog):
         self.cbUTCOffset.addItem("UTC-03:00 | Brasilia")
         self.cbUTCOffset.addItem("UTC-02:00 | Mid-Atlantic")
         self.cbUTCOffset.addItem("UTC-01:00 | Cape Verde Is.")
-        self.cbUTCOffset.addItem("UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, \nLondon")
+        self.cbUTCOffset.addItem("UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London")
         self.cbUTCOffset.addItem("UTC+01:00 | Central European Time : Amsterdam, Berlin, Bern, \nRome, Stockholm, Vienna")
         self.cbUTCOffset.addItem("UTC+02:00 | Eastern European Time : Athens, Bucharest, \nIstanbul")
         self.cbUTCOffset.addItem("UTC+03:00 | Moscow, St. Petersburg, Volgograd")
@@ -562,13 +619,226 @@ class uiOptions(QDialog):
     def showEvent(self, event):
         Logic.centerWindowToParent(self)
         super().showEvent(event)
+        self.loadSettings()
+        self.tabWidget.setCurrentIndex(0) # Default to tabGeneral (index 0)
+
+    def eventFilter(self, obj, event):
+        if obj == self.qleAQPassword and event.type() == QEvent.Type.KeyPress:
+            # Show last char on key press
+            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.lastCharTimer.start(500) # 500ms delay then mask
+        return super().eventFilter(obj, event)
+
+    def maskLastChar(self):
+        self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)
+
+    def loadSettings(self):
+        config = configparser.ConfigParser()
+        config.read(Logic.getConfigPath())  # Use helper
+
+        # Non-sensitive from config.ini (with defaults if new)
+        if 'Settings' in config:
+            self.cbUTCOffset.setCurrentText(config['Settings'].get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London"))
+            retroFont = config['Settings'].getboolean('retroFont', True) # Default checked
+            self.cbRetroFont.setChecked(retroFont)
+            qaqc = config['Settings'].getboolean('qaqc', True) # Default checked
+            self.cbQAQC.setChecked(qaqc)
+            rawData = config['Settings'].getboolean('rawData', False) # Default unchecked
+            self.cbRawData.setChecked(rawData)
+            debugMode = config['Settings'].getboolean('debugMode', False)
+            self.cbDebug.setChecked(debugMode)
+            tnsPath = config['Settings'].get('tnsNamesLocation', '')
+            sqlNetPath = config['Settings'].get('sqlNetOraLocation', '')
+            walletPath = config['Settings'].get('oracleWalletLocation', '')
+
+            # Shorten if starts with appRoot
+            if tnsPath.startswith(Logic.appRoot):
+                tnsPath = tnsPath.replace(Logic.appRoot, '%AppRoot%')
+            if sqlNetPath.startswith(Logic.appRoot):
+                sqlNetPath = sqlNetPath.replace(Logic.appRoot, '%AppRoot%')
+            if walletPath.startswith(Logic.appRoot):
+                walletPath = walletPath.replace(Logic.appRoot, '%AppRoot%')
+
+            self.textTNSNames.setPlainText(tnsPath)
+            self.textSQLNetOra.setPlainText(sqlNetPath)
+            self.textOracleWallet.setPlainText(walletPath)
+            hourMethod = config['Settings'].get('hourTimestampMethod', 'EOP')
+
+            if hourMethod == 'EOP':
+                self.rbEOP.setChecked(True)
+            else:
+                self.rbBOP.setChecked(True)  
+
+        # Auto-populate Oracle from env if blank
+        if not self.textTNSNames.toPlainText():
+            envTns = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin'))
+
+            if envTns.startswith(Logic.appRoot):
+                envTns = envTns.replace(Logic.appRoot, '%AppRoot%')
+            self.textTNSNames.setPlainText(envTns)
+        if not self.textSQLNetOra.toPlainText():
+            envSql = os.environ.get('SQLNET_ORA', Logic.resourcePath('oracle/network/admin'))
+
+            if envSql.startswith(Logic.appRoot):
+                envSql = envSql.replace(Logic.appRoot, '%AppRoot%')
+            self.textSQLNetOra.setPlainText(envSql)
+        if not self.textOracleWallet.toPlainText():
+            envWallet = os.environ.get('ORACLE_WALLET', Logic.resourcePath('oracle/network/admin/wallet'))
+
+            if envWallet.startswith(Logic.appRoot):
+                envWallet = envWallet.replace(Logic.appRoot, '%AppRoot%')
+            self.textOracleWallet.setPlainText(envWallet)
+
+        # Sensitive from keyring (defaults to empty)
+        self.textAQServer.setPlainText(keyring.get_password("DataDoctor", "aqServer") or "")
+        self.textAQUser.setPlainText(keyring.get_password("DataDoctor", "aqUser") or "")
+        self.qleAQPassword.setText(keyring.get_password("DataDoctor", "aqPassword") or "") 
+        self.textUSGSAPIKey.setPlainText(keyring.get_password("DataDoctor", "usgsApiKey") or "")
 
     def onSavePressed(self):
-        # Placeholder for save logic (e.g., store text fields to config)
-        pass  # We'll expand this later
+        config = configparser.ConfigParser()
+        config.read(Logic.getConfigPath()) # Read existing to preserve keys
+
+        tnsPath = self.textTNSNames.toPlainText()
+        sqlNetPath = self.textSQLNetOra.toPlainText()
+        walletPath = self.textOracleWallet.toPlainText()
+
+        # Expand %AppRoot% to full if present
+        if '%AppRoot%' in tnsPath:
+            tnsPath = tnsPath.replace('%AppRoot%', Logic.appRoot)
+        if '%AppRoot%' in sqlNetPath:
+            sqlNetPath = sqlNetPath.replace('%AppRoot%', Logic.appRoot)
+        if '%AppRoot%' in walletPath:
+            walletPath = walletPath.replace('%AppRoot%', Logic.appRoot)
+
+        # Update only options keys (preserve e.g. colorMode)
+        if 'Settings' not in config:
+            config['Settings'] = {}
+
+        config['Settings']['utcOffset'] = self.cbUTCOffset.currentText()
+        config['Settings']['retroFont'] = 'True' if self.cbRetroFont.isChecked() else 'False'
+        config['Settings']['qaqc'] = 'True' if self.cbQAQC.isChecked() else 'False'
+        config['Settings']['rawData'] = 'True' if self.cbRawData.isChecked() else 'False'
+        config['Settings']['debugMode'] = 'True' if self.cbDebug.isChecked() else 'False'
+        config['Settings']['tnsNamesLocation'] = tnsPath
+        config['Settings']['sqlNetOraLocation'] = sqlNetPath
+        config['Settings']['oracleWalletLocation'] = walletPath
+        config['Settings']['hourTimestampMethod'] = 'EOP' if self.rbEOP.isChecked() else 'BOP'
+
+        with open(Logic.getConfigPath(), 'w') as configFile:
+            config.write(configFile)
+
+        # Apply retro font if checked
+        if self.cbRetroFont.isChecked():
+            fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
+            fontId = QFontDatabase.addApplicationFont(fontPath)
+
+            if fontId != -1:
+                fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
+                app.setFont(QFont(fontFamily, 12)) # Tweak 12pt
+        else:
+            app.setFont(QFont()) # System default
+
+        # Sensitive to keyring
+        keyring.set_password("DataDoctor", "aqServer", self.textAQServer.toPlainText())
+        keyring.set_password("DataDoctor", "aqUser", self.textAQUser.toPlainText())
+        keyring.set_password("DataDoctor", "aqPassword", self.qleAQPassword.text())
+        keyring.set_password("DataDoctor", "usgsApiKey", self.textUSGSAPIKey.toPlainText())
+
+        # Reload and set globals after save
+        Logic.reloadGlobals()
+
+    def togglePasswordVisibility(self):
+        if self.qleAQPassword.echoMode() == QLineEdit.EchoMode.Password:
+            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal)         
+            self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png'))) 
+        else:
+            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)         
+            self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
+
+class uiAbout(QDialog):
+    """About dialog: Retro PNG bg with transparent info overlay and looping sound."""
+    def __init__(self, parent=None):
+        super(uiAbout, self).__init__(parent) # Pass parent superclass
+        uic.loadUi(Logic.resourcePath('ui/winAbout.ui'), self) # Load the .ui file
+
+        # Define controls
+        self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
+        self.textInfo = self.findChild(QTextBrowser, 'textInfo') # For overlay
+
+        # Set window size
+        self.setFixedSize(900, 479)
+
+        # Set window title
+        self.setWindowTitle('About DataDoctor')
+
+        # Load PNG bg (scale to window)
+        pngPath = Logic.resourcePath('ui/DataDoctor.png')
+        pixmap = QPixmap(pngPath)
+        scaledPixmap = pixmap.scaled(900, 479, Qt.AspectRatioMode.KeepAspectRatio) # Preserve aspect
+        self.backgroundLabel.setPixmap(scaledPixmap)
+        self.backgroundLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Load pixel font
+        fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
+        fontId = QFontDatabase.addApplicationFont(fontPath)
+        fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0] if fontId != -1 else "Courier" # Fallback monospace
+
+        # Info list: easy-edit tuples (label, content)
+        infoList = [
+            ('Version', '3.0.0'),
+            ('GitHub', 'https://github.com/S31F3R/DataDoctor'),
+            ('Author', 'S31F3R'),
+            ('License', 'GPL-3.0'),
+            ('Music', 'By Eric Matyas at www.soundimage.org')
+        ]
+
+        # Build HTML for textInfo: small white, clickable GitHub, left-padded, no wrap, spaced lines
+        htmlContent = '<html><body style="color: white; font-family: \'' + fontFamily + '\'; font-size: 10pt; padding-left: 50px; white-space: nowrap; line-height: 2.0;">' # No wrap, tweak 10pt/50px/line 2.0
+
+        for label, content in infoList:
+            if 'GitHub' in label: # Clickable link
+                htmlContent += f'{label}: <a href="{content}" style="color: white;">{content}</a><br>'
+            else:
+                htmlContent += f'{label}: {content}<br>'
+
+        htmlContent += '</body></html>'
+        self.textInfo.setHtml(htmlContent)
+        self.textInfo.setOpenExternalLinks(True) # Opens GitHub in browser
+
+        # Transparent bg for textInfo overlay
+        self.textInfo.setStyleSheet("background-color: transparent; border: none;") # No bg/border
+
+        # Position textInfo overlay
+        self.textInfo.setGeometry(70, 140, 800, 200)
+
+        # Audio setup (QSoundEffect infinite loop at 80% vol)
+        self.soundEffect = None
+        
+        try:
+            wavPath = Logic.resourcePath('ui/sounds/8-Bit-Perplexion.wav')
+            self.soundEffect = QSoundEffect(self)
+            self.soundEffect.setSource(QUrl.fromLocalFile(wavPath))
+            self.soundEffect.setLoopCount(QSoundEffect.Infinite) # Infinite loop
+            self.soundEffect.setVolume(0.8) # 80% (tweak 0.0-1.0)           
+        except Exception as e: # Silent fail if missing/error
+            return
+
+    def showEvent(self, event):
+        Logic.centerWindowToParent(self) # Center on parent
+
+        if self.soundEffect:
+            self.soundEffect.play() # Start infinite loop
+        super().showEvent(event)
+
+    def closeEvent(self, event):
+        if self.soundEffect:
+            self.soundEffect.stop() # Stop loop
+        super().closeEvent(event)
 
 # Create an instance of QApplication     
 app = QApplication(sys.argv) 
+app.setApplicationName("DataDoctor")
 
 # Create an instance of our class
 winMain = uiMain() 
@@ -576,18 +846,16 @@ winWebQuery = uiWebQuery(winMain) # Pass parent
 winDataDictionary = uiDataDictionary(winMain) # Pass parent
 winQuickLook = uiQuickLook(winMain) # Pass parent
 winOptions = uiOptions(winMain) # Pass Parent
+winAbout = uiAbout(winMain) # Pass Parent
 
-# Load in configuration files
-try:
-    config = Logic.loadConfig()
-except (FileNotFoundError, ValueError) as e:
-    print(f"Config load failed: {e}. Defaulting to light mode.")
-    config = ['light'] # Fallback list
+# Load in configuration
+config = Logic.loadConfig()
+Logic.debug = config['debugMode']
+Logic.utcOffset = config['utcOffset']
+periodOffset = config['periodOffset'] # Global or pass to USBR as needed
+colorMode = config.get('colorMode', 'light')
 
-if config[0].strip() == 'dark': winMain.btnDarkMode.setChecked(True)       
-  
 # Set stylesheet
-colorMode = config[0].strip() # Strip any whitespace
 stylesheetLoaded = False
 
 # Try resource path first
@@ -596,7 +864,7 @@ f = QFile(stylesheetPath)
 
 if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
     stream = QTextStream(f)
-    app.setStyleSheet(stream.readAll())
+    #app.setStyleSheet(stream.readAll())
     f.close()
     stylesheetLoaded = True
 
@@ -607,7 +875,7 @@ if not stylesheetLoaded:
 
     if f.open(QIODevice.OpenModeFlag.ReadOnly | QIODevice.OpenModeFlag.Text):
         stream = QTextStream(f)
-        app.setStyleSheet(stream.readAll())
+        #app.setStyleSheet(stream.readAll())
         f.close()
         stylesheetLoaded = True
     else:
@@ -616,6 +884,20 @@ if not stylesheetLoaded:
 
 if not stylesheetLoaded:
     print(f"Warning: No stylesheet applied for {colorMode}. Check file paths.")
+
+if colorMode == 'dark':
+    winMain.btnDarkMode.setChecked(True)
+
+# Load retro font if enabled (after stylesheet to override)
+retroFont = config.get('retroFont', True)
+
+if retroFont:
+    fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
+    fontId = QFontDatabase.addApplicationFont(fontPath)
+
+    if fontId != -1:
+        fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
+        app.setFont(QFont(fontFamily, 10)) 
 
 # Load in data dictionary
 Logic.buildDataDictionary(winDataDictionary.mainTable) 
