@@ -353,13 +353,11 @@
      <bool>true</bool>
     </property>
    </widget>
-   <zorder>dteStartDate</zorder>
    <zorder>btnQuery</zorder>
    <zorder>label</zorder>
    <zorder>label_2</zorder>
    <zorder>label_3</zorder>
    <zorder>label_4</zorder>
-   <zorder>listQueryList</zorder>
    <zorder>btnAddQuery</zorder>
    <zorder>label_5</zorder>
    <zorder>label_6</zorder>
@@ -371,10 +369,12 @@
    <zorder>btnClearQuery</zorder>
    <zorder>btnDataIdInfo</zorder>
    <zorder>textSDID</zorder>
-   <zorder>dteEndDate</zorder>
    <zorder>btnIntervalInfo</zorder>
    <zorder>cbInterval</zorder>
    <zorder>cbDatabase</zorder>
+   <zorder>dteStartDate</zorder>
+   <zorder>dteEndDate</zorder>
+   <zorder>listQueryList</zorder>
   </widget>
  </widget>
  <resources/>
