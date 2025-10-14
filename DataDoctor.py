@@ -19,14 +19,11 @@ from PyQt6 import uic
 from PyQt6.QtMultimedia import QSoundEffect
 from collections import defaultdict
 import keyring
-from keyring.backends.SecretService import Keyring as SecretServiceKeyring
+from keyring.backends.null import Keyring as NullKeyring  # Safe fallback if needed
 
-# Force SecretService backend (avoids kwallet, uses dbus secrets)
-try:
-    keyring.set_keyring(SecretServiceKeyring())
-except keyring.errors.KeyringError as e:
-    from keyring.backends.null import Keyring as NullKeyring
-    keyring.set_keyring(NullKeyring())
+# No backend forcing: Rely on keyring defaults (KWallet on KDE/Linux, Credential Manager on Windows, Keychain on macOS)
+# For one-time test: Print detected backend (remove after confirming)
+print(f"Detected keyring backend: {keyring.get_keyring().__class__.__name__}")
 
 class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
