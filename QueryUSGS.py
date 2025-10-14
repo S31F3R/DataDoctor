@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta
 import Logic # For buildTimestamps, gapCheck, combineParameters
 
-def api(dataID, interval, startDate, endDate):
+def apiRead(dataID, interval, startDate, endDate):
     if Logic.debug == True: print("[DEBUG] QueryUSGS.api called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
     
     # Standardize timestamps
