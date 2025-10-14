@@ -5,6 +5,7 @@ To Do List
     -
 -Fix last quick look not working
 -Logging and debugging, best practices
+-Query list has a typo in query
 
 
 
