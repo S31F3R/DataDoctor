@@ -214,7 +214,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>Querry List</string>
+     <string>Query List</string>
     </property>
    </widget>
    <widget class="QPushButton" name="btnRemoveQuery">
