@@ -1,0 +1,9 @@
+##################################################################################################
+# Python needs a virtual environoment to install packages to. This is done per project/program
+# The steps below show how to create. Once created, used source to activate each time a package
+# is needed bo be installed. Use deactivate to close
+##################################################################################################
+python -m venv env # Creates a folder called 'env' with isolated python
+source env/bin/activate # On Linux/Mac; use env\Scripts\activate on Windows
+pip install # Package here
+deactivate
