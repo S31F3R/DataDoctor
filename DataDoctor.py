@@ -7,12 +7,11 @@ import datetime
 import configparser
 import keyring
 import os
-from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QColor, QPixmap, QStyleHints
-from PyQt6.QtCore import (Qt, QIODevice, QFile, QTextStream, QEvent, QObject, QStandardPaths, QTimer,
-                          QUrl)
+from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap 
+from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
                              QTextEdit, QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
-                             QListWidgetItem, QMessageBox, QDialog, QSizePolicy, QTabWidget, QRadioButton,
+                             QMessageBox, QDialog, QSizePolicy, QTabWidget, QRadioButton,
                              QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox)
 from datetime import datetime, timedelta
 from PyQt6 import uic
@@ -256,10 +255,10 @@ class uiWebQuery(QMainWindow):
             interval = self.cbInterval.currentText()
             database = self.cbDatabase.currentText()
             mrid = '0'  # Default
-            sdi = dataID
+            SDID = dataID
 
             if database.startswith('USBR-') and '-' in dataID:
-                sdi, mrid = dataID.rsplit('-', 1)
+                SDID, mrid = dataID.rsplit('-', 1)
 
             queryItems.append((dataID, interval, database, mrid, 0)) # origIndex=0
 
@@ -315,7 +314,8 @@ class uiWebQuery(QMainWindow):
             try:
                 if db.startswith('USBR-'):
                     svr = db.split('-')[1].lower()
-                    result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, interval, mrid)
+                    table = 'M' if mrid != '0' else 'R'
+                    result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, interval, mrid, table)
                 elif db == 'USGS-NWIS':
                     result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
                 else:
@@ -522,10 +522,10 @@ class uiInternalQuery(QMainWindow):
             interval = self.cbInterval.currentText()
             database = self.cbDatabase.currentText()
             mrid = '0'  # Default
-            sdi = dataID
+            SDID = dataID
 
             if database.startswith('USBR-') and '-' in dataID:
-                sdi, mrid = dataID.rsplit('-', 1)
+                SDID, mrid = dataID.rsplit('-', 1)
 
             queryItems.append((dataID, interval, database, mrid, 0)) # origIndex=0
 
@@ -588,7 +588,8 @@ class uiInternalQuery(QMainWindow):
             try:
                 if db.startswith('USBR-'):
                     svr = db.split('-')[1].lower()
-                    result = QueryUSBR.sqlRead(svr, SDIDs, startDate, endDate, interval, mrid)
+                    table = 'M' if mrid != '0' else 'R'
+                    result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, interval, mrid, table)
                 elif db == 'AQUARIUS':
                     result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
                 else:
