@@ -774,9 +774,9 @@ def valuePrecision(value):
     try:
         v = float(value)
 
-        if v < 10:
+        if v < 1000:
             return '%.2f' % v
-        elif 10 <= v < 100:
+        elif 1000 <= v < 10000:
             return '%.1f' % v
         else:
             return '%.0f' % v
