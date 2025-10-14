@@ -782,3 +782,7 @@ def valuePrecision(value):
             return '%.0f' % v
     except ValueError:
         return value # Non-numeric as-is
+
+def cleanShutdown():
+    pool = QThreadPool.globalInstance()
+    pool.waitForDone(5000) # Wait up to 5s for threads to finish (adjust if needed)
