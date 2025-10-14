@@ -18,7 +18,7 @@ from PyQt6 import uic
 from PyQt6.QtMultimedia import QSoundEffect
 from collections import defaultdict
 import keyring
-from keyring.backends.null import Keyring as NullKeyring  # Safe fallback if needed
+from keyring.backends.null import Keyring as NullKeyring # Safe fallback if needed
 
 # No backend forcing: Rely on keyring defaults (KWallet on KDE/Linux, Credential Manager on Windows, Keychain on macOS)
 
