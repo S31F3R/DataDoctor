@@ -7,8 +7,8 @@ import Logic # For buildTimestamps, gapCheck, combineParameters
 
 periodOffset = True # Global for end of period shift/pad (USBR HOUR only; toggle via config later)
 
-def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0'):
-    if Logic.debug == True: print(f"[DEBUG] QueryUSBR.api called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}")
+def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
+    if Logic.debug == True: print(f"[DEBUG] QueryUSBR.api called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table='R'")
     
     # Map for URL only
     if interval == 'HOUR':
@@ -53,7 +53,7 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0'):
     for groupStart in range(0, len(SDIDs), queryLimit):
         groupSDIDs = SDIDs[groupStart:groupStart + queryLimit]
         groupSDIDStr = ','.join(groupSDIDs)
-        url = f'https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr={svr}&SDI={groupSDIDStr}&tstp={tstp}&t1={startYear}-{startMonth}-{startDay}T{startHour}:{startMinute}&t2={endYear}-{endMonth}-{endDay}T{endHour}:{endMinute}&table=R&mrid={mrid}&format=json'
+        url = f'https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr={svr}&SDI={groupSDIDStr}&tstp={tstp}&t1={startYear}-{startMonth}-{startDay}T{startHour}:{startMinute}&t2={endYear}-{endMonth}-{endDay}T{endHour}:{endMinute}&table={table}&mrid={mrid}&format=json'
         if Logic.debug == True: print("[DEBUG] Fetching USBR URL: {}".format(url))
         
         try:
@@ -123,6 +123,6 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0'):
     return resultDict
 
 # QueryUSBR.py - Updated (add new def sqlRead at bottom)
-def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0'):
+def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     # TODO: Implement SQL read over internal network using same inputs
     return {}  # Placeholder empty dict
