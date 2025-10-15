@@ -4,6 +4,8 @@ To Do List
     -Set to 2 decimals for now
     -Look into Aquarius query to pull value percision each query to get fresh rules
         -/AQUARIUS/Publish/v2/GetParameterList?format=json
+-Aquarius query seems to take longer than it should. Look at possible threading solutions
+-Have USBR, USGS, Aquarius queries all run at the same time and collect at the end
 
 -Logging and debugging, best practices
 -Info buttons on query windows is too high on Windows systems
