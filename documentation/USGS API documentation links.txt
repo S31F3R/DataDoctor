@@ -1,0 +1,4 @@
+https://api.waterdata.usgs.gov/docs/ogcapi/keys/
+https://doi-usgs.github.io/dataRetrieval/
+https://waterdata.usgs.gov/blog/intro-data-collection-categories/
+https://api.waterdata.usgs.gov/ogcapi/v0/openapi?f=html#/daily/describeDailyCollection
