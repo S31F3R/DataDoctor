@@ -387,9 +387,15 @@ class uiWebQuery(QMainWindow):
         item = self.listQueryList.currentItem()       
         self.listQueryList.takeItem(self.listQueryList.row(item))
 
-    def btnSaveQuickLookPressed(self):         
-        winQuickLook.exec()  
-        if Logic.debug == True: print("[DEBUG] Web save clicked, window exists:", self.isVisible())
+    def btnSaveQuickLookPressed(self):    
+        # Set dynamic attrs for save/load
+        winQuickLook.currentListQueryList = self.listQueryList 
+        winQuickLook.CurrentCbQuickLook = self.cbQuickLook    
+        winQuickLook.exec()
+
+        # Re-raise/activate post-model to conuter Plasma focus loss
+        self.raise_()
+        self.activateWindow    
     
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
@@ -669,9 +675,15 @@ class uiInternalQuery(QMainWindow):
         item = self.listQueryList.currentItem()       
         self.listQueryList.takeItem(self.listQueryList.row(item))
 
-    def btnSaveQuickLookPressed(self):         
-        winQuickLook.exec()  
-        if Logic.debug == True: print("[DEBUG] Web save clicked, window exists:", self.isVisible())
+    def btnSaveQuickLookPressed(self):    
+        # Set dynamic attrs for save/load
+        winQuickLook.currentListQueryList = self.listQueryList 
+        winQuickLook.CurrentCbQuickLook = self.cbQuickLook    
+        winQuickLook.exec()
+
+        # Re-raise/activate post-model to conuter Plasma focus loss
+        self.raise_()
+        self.activateWindow    
     
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
@@ -747,6 +759,10 @@ class uiQuickLook(QDialog):
         self.btnCancel = self.findChild(QPushButton, 'btnCancel')  
         self.textQuickLookName = self.findChild(QTextEdit,'textQuickLookName')  
 
+        # Temp attrs for dynamic query widgets
+        self.currentListQueryList = None
+        self.CurrentCbQuickLook = None
+
         # Create events
         self.btnSave.clicked.connect(self.btnSavePressed)  
         self.btnCancel.clicked.connect(self.btnCancelPressed)  
@@ -755,15 +771,16 @@ class uiQuickLook(QDialog):
         Logic.centerWindowToParent(self)
         super().showEvent(event)
 
-    def btnSavePressed(self): 
+    def btnSavePressed(self):       
         # Save quick look
-        Logic.saveQuickLook(self.textQuickLookName, winWebQuery.listQueryList)
+        if self.currentListQueryList and self.CurrentCbQuickLook:
+            Logic.saveQuickLook(self.textQuickLookName, winWebQuery.listQueryList)
+
+            # Load quick looks
+            Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
 
         # Clear the controls
         self.clear()
-
-        # Load quick looks
-        Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)    
 
         # Close the window
         winQuickLook.close() 
