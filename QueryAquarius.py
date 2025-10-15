@@ -30,6 +30,9 @@ def apiRead(dataIDs, startDate, endDate, interval):
     # Apply utc offset for Aquarius query
     startDateTime = startDateTime - timedelta(hours=Logic.utcOffset)
     endDateTime = endDateTime - timedelta(hours=Logic.utcOffset)
+
+    startDateTime = startDateTime - timedelta(hours=1)
+    endDateTime = endDateTime + timedelta(minutes=1)
     
     # Re-pad after offset
     startMonth = f'{startDateTime.month:02d}'
