@@ -2,7 +2,7 @@ import requests
 import json
 import keyring
 from datetime import datetime, timedelta
-import Logic  # For globals like debug and utcOffset
+import Logic # For globals like debug and utcOffset
 
 def apiRead(dataIDs, startDate, endDate, interval):
     if Logic.debug == True: print("[DEBUG] QueryAquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}, type: {}".format(dataIDs, interval, startDate, endDate, type(dataIDs)))
@@ -71,7 +71,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
     
     result = {}
     uids = dataIDs
-    queryLimit = 50
+    queryLimit = 100
     
     # Batch uids into groups of queryLimit (serial fetch per uid in group)
     for groupStart in range(0, len(uids), queryLimit):
