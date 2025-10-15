@@ -304,8 +304,8 @@
    <widget class="QPushButton" name="btnDataIdInfo">
     <property name="geometry">
      <rect>
-      <x>78</x>
-      <y>279</y>
+      <x>76</x>
+      <y>285</y>
       <width>31</width>
       <height>20</height>
      </rect>
@@ -331,7 +331,7 @@
     <property name="geometry">
      <rect>
       <x>110</x>
-      <y>69</y>
+      <y>76</y>
       <width>31</width>
       <height>20</height>
      </rect>

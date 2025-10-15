@@ -26,7 +26,7 @@ To Do List
 
 ####### QUERY INTERFACE MODIFICATIONS #######
 -Fix last quick look not working
--Quick looks errong after save, but will eventually show up in the combobox, but you can't load them. I think both of these are tied to loading
+-Quick looks error on after save, but will eventually show up in the combobox, but you can't load them. I think both of these are tied to loading
 -Internal query list box needs to be wider
 
 

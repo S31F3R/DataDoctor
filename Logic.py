@@ -430,25 +430,27 @@ def saveQuickLook(textQuickLookName, listQueryList):
         f.write(','.join(data))
 
 def loadQuickLook(cbQuickLook, listQueryList):
-    name = cbQuickLook.currentText()
+    quickLookName = cbQuickLook.currentText()
 
-    if not name:
+    if not quickLookName:
         return
 
-    quicklookPath = resourcePath(f'quickLook/{name}.txt')
     listQueryList.clear()
+    userQuickLookPath = os.path.join(getQuickLookDir(), f'{quickLookName}.txt')
+    exampleQuickLookPath = resourcePath(f'quickLook/{quickLookName}.txt')
+    quickLookPath = userQuickLookPath if os.path.exists(userQuickLookPath) else exampleQuickLookPath
 
     try:
-        with open(quicklookPath, 'r', encoding='utf-8-sig') as f:
+        with open(quickLookPath, 'r', encoding='utf-8-sig') as f:
             content = f.read().strip()
 
             if content:
                 data = content.split(',')
-                for item_text in data:
-                    listQueryList.addItem(item_text.strip())
+                for itemText in data:
+                    listQueryList.addItem(itemText.strip())
 
     except FileNotFoundError:
-        print(f"Quick look '{name}' not found.")  
+        print(f"Quick look '{quickLookName}' not found.")
 
 def loadConfig():
     configPath = getConfigPath()

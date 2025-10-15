@@ -208,6 +208,7 @@ class uiWebQuery(QMainWindow):
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowMaximizeButtonHint)
 
     def showEvent(self, event):
+        if Logic.debug == True: print("[DEBUG] Query window showEvent, window:", self)
         Logic.centerWindowToParent(self)    
         self.cbQuickLook.setCurrentIndex(-1) # Remove this when lastQuickLook starts working
         super().showEvent(event)
@@ -388,6 +389,7 @@ class uiWebQuery(QMainWindow):
 
     def btnSaveQuickLookPressed(self):         
         winQuickLook.exec()  
+        if Logic.debug == True: print("[DEBUG] Web save clicked, window exists:", self.isVisible())
     
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
@@ -475,6 +477,7 @@ class uiInternalQuery(QMainWindow):
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowMaximizeButtonHint)
 
     def showEvent(self, event):
+        if Logic.debug == True: print("[DEBUG] Query window showEvent, window:", self)
         Logic.centerWindowToParent(self)    
         self.cbQuickLook.setCurrentIndex(-1) # Remove this when lastQuickLook starts working
         super().showEvent(event)
@@ -668,6 +671,7 @@ class uiInternalQuery(QMainWindow):
 
     def btnSaveQuickLookPressed(self):         
         winQuickLook.exec()  
+        if Logic.debug == True: print("[DEBUG] Web save clicked, window exists:", self.isVisible())
     
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
@@ -759,8 +763,7 @@ class uiQuickLook(QDialog):
         self.clear()
 
         # Load quick looks
-        Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
-        print(f"cbQuickLook items: {self.cbQuickLook.count()}")
+        Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)    
 
         # Close the window
         winQuickLook.close() 
