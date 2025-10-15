@@ -559,6 +559,8 @@ class uiInternalQuery(QMainWindow):
         # Default blanks for missing
         defaultBlanks = [''] * len(timestamps)
         
+        labelsDict = {} # For Aquarius API label fallback
+        
         # Group: dict of (db, mrid or None, interval) -> list of (origIndex, dataID)
         groups = defaultdict(list)
 
@@ -597,14 +599,18 @@ class uiInternalQuery(QMainWindow):
                     continue
             except Exception as e:
                 QMessageBox.warning(self, "Query Error", f"Query failed for group {db}: {e}")
-                continue
-            
+                continue            
+
             # Map to dataID
             for idx, (origIndex, dataID) in enumerate(groupItems):
                 SDID = SDIDs[idx]
 
                 if SDID in result:
-                    outputData = result[SDID]
+                    if db == 'AQUARIUS':
+                        outputData = result[SDID]['data']
+                        labelsDict[dataID] = result[SDID].get('label', dataID)
+                    else:
+                        outputData = result[SDID]
                     alignedData = Logic.gapCheck(timestamps, outputData, dataID)
                     values = [line.split(',')[1] if line else '' for line in alignedData]
                     valueSDIDct[dataID] = values
@@ -641,7 +647,7 @@ class uiInternalQuery(QMainWindow):
         
         # Build table
         winMain.mainTable.clear()
-        Logic.buildTable(winMain.mainTable, data, buildHeader, winDataDictionary.mainTable, intervalsForHeaders, lookupIds)
+        Logic.buildTable(winMain.mainTable, data, buildHeader, winDataDictionary.mainTable, intervalsForHeaders, lookupIds, labelsDict)
         
         # Show tab if hidden
         if winMain.tabWidget.indexOf(winMain.tabMain) == -1:

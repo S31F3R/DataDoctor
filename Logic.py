@@ -158,7 +158,7 @@ def combineParameters(data, newData):
 
     return data
 
-def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None):
+def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None):
     table.clear()
     
     if not data:
@@ -174,7 +174,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     for i, h in enumerate(buildHeader):
         headerText = h.strip() # Strip raw header
         intervalStr = intervals[i].upper()
-        
+
         dictRow = getDataDictionaryItem(dataDictionaryTable, headerText)
 
         if dictRow != -1:
@@ -182,8 +182,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             datatypeItem = dataDictionaryTable.item(dictRow, 2) 
             baseLabel = (siteItem.text().strip() + ' ' + datatypeItem.text().strip()) if siteItem and datatypeItem else headerText
         else:
-            baseLabel = headerText
-        
+            baseLabel = labelsDict.get(headerText, headerText) if labelsDict else headerText
+
         fullLabel = baseLabel + ' \n' + intervalStr
 
         if dictRow != -1:

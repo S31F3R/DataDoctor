@@ -1,11 +1,5 @@
-import requests
-import json
-import keyring
-from datetime import datetime, timedelta
-import Logic  # For buildTimestamps, gapCheck, combineParameters
-
-def apiRead(dataID, startDate, endDate, interval):
-    if Logic.debug == True: print("[DEBUG] QueryAquarius.apiRead called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
+def apiRead(dataIDs, startDate, endDate, interval):
+    if Logic.debug == True: print("[DEBUG] QueryAquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}, type: {}".format(dataIDs, interval, startDate, endDate, type(dataIDs)))
         
     # Parse start
     startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
@@ -26,13 +20,7 @@ def apiRead(dataID, startDate, endDate, interval):
     # Build start and end date in ISO format (keep exact)
     startDate = f'{startYear}-{startMonth}-{startDay} {startHour}:{startMinute}'
     endDate = f'{endYear}-{endMonth}-{endDay} {endHour}:{endMinute}'
-    
-    # Build timestamps
-    timestamps = Logic.buildTimestamps(startDate, endDate, interval)
-    if not timestamps:
-        print("[ERROR] No timestamps generated - invalid dates or interval.")
-        return []
-    
+
     # Apply utc offset for Aquarius query
     startDateTime = startDateTime - timedelta(hours=Logic.utcOffset)
     endDateTime = endDateTime - timedelta(hours=Logic.utcOffset)
@@ -56,49 +44,56 @@ def apiRead(dataID, startDate, endDate, interval):
     user = keyring.get_password("DataDoctor", "aqUser") or ''
     password = keyring.get_password("DataDoctor", "aqPassword") or ''
     
+    if not server or not user or not password:
+        print("[ERROR] Missing Aquarius credentials.")
+        return {uid: {'data': [], 'label': uid} for uid in dataIDs}
+
     # Authenticate session
-    data = {'Username':f'{user}','EncryptedPassword':f'{password}'}
-    url = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=data, verify=False)
-    headers = {'X-Authentication-Token':url.text}
+    authData = {'Username': user, 'EncryptedPassword': password}
+    authResponse = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=authData, verify=False)
+
+    if authResponse.status_code != 200:
+        print("[ERROR] Aquarius authentication failed.")
+        return {uid: {'data': [], 'label': uid} for uid in dataIDs}
+
+    token = authResponse.text.strip('"') # Strip quotes if present
+    headers = {'X-Authentication-Token': token}
 
     # Clear creds immediately after use   
     user = None
     password = None
     
-    uids = dataID.split(',')
+    result = {}
+    uids = dataIDs
     queryLimit = 50
-    output = []
-    buildHeader = []
     
     # Batch uids into groups of queryLimit (serial fetch per uid in group)
     for groupStart in range(0, len(uids), queryLimit):
         groupUids = uids[groupStart:groupStart + queryLimit]
 
-        if Logic.debug == True: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))        
-        groupOutputData = [] # List of outputData lists, one per uid
+        if Logic.debug == True: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))
 
         for uid in groupUids:
             # Query the data
-            url = requests.get(f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={startDate}&QueryTo={endDate}&Logic.utcOffset={Logic.utcOffset}&GetParts=PointsOnly&format=json', headers=headers, verify=False)
+            response = requests.get(f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={startDate}&QueryTo={endDate}&utcOffset={Logic.utcOffset}&GetParts=PointsOnly&format=json', headers=headers, verify=False)
             
             try:
-                readFile = json.loads(url.content)
+                readFile = json.loads(response.content)
             except Exception as e:
                 print("[WARN] Aquarius fetch failed for uid '{}': {}".format(uid, e))
-                groupOutputData.append([]) # Pad blanks
+                result[uid] = {'data': [], 'label': uid} # Fallback label
                 continue
             
-            # Create arrays
-            outputData = []
-            header = []
+            # Build label from response
+            location = readFile.get('LocationIdentifier', uid)
+            label = readFile.get('Label', '')
+            fullLabel = f'{location} \n{label}'
 
-            # Add label to header
-            header.append(readFile['LocationIdentifier'])
-            header.append(readFile['Label'])
-            buildHeader.append(f'{header[0]} \n{header[1]}')            
             points = readFile['Points']
 
             if Logic.debug == True: print("[DEBUG] Fetched {} points for uid '{}'.".format(len(points), uid))
+
+            outputData = []
 
             for point in points:
                 # Pull date timestamp
@@ -109,32 +104,16 @@ def apiRead(dataID, startDate, endDate, interval):
                 # Format to standard
                 dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}')
                 formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
-                value = point['Value']['Numeric']
-                outputData.append(f'{formattedTs},{value}')
-            
-            # Check for gaps
-            outputData = Logic.gapCheck(timestamps, outputData, uid)
-            groupOutputData.append(outputData)
-        
-        # Combine group outputs
-        if groupOutputData:
-            combined = groupOutputData[0]
+                value = point['Value'].get('Numeric', None)
 
-            for nextData in groupOutputData[1:]:
-                combined = Logic.combineParameters(combined, nextData)
-            if output:
-                output = Logic.combineParameters(output, combined)
-            else:
-                output = combined
-                
+                if value is not None:
+                    outputData.append(f'{formattedTs},{value}')
+            
+            result[uid] = {'data': outputData, 'label': fullLabel}
+
     # Clear server variable
     server = None
 
-    if not output:
-        print("[WARN] No data after processing all batches.")
-        return []
-    
-    # Prepend header
-    output.insert(0, buildHeader)
-    if Logic.debug == True: print("[DEBUG] Final output len={} (incl header), sample row: {}".format(len(output), output[1] if len(output) > 1 else 'empty'))
-    return output
+    if Logic.debug == True: print("[DEBUG] Returning result dict with {} UIDs.".format(len(result)))
+
+    return result
