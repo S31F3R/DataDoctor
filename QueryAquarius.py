@@ -1,3 +1,9 @@
+import requests
+import json
+import keyring
+from datetime import datetime, timedelta
+import Logic  # For globals like debug and utcOffset
+
 def apiRead(dataIDs, startDate, endDate, interval):
     if Logic.debug == True: print("[DEBUG] QueryAquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}, type: {}".format(dataIDs, interval, startDate, endDate, type(dataIDs)))
         
