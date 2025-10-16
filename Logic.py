@@ -215,8 +215,16 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         table.verticalHeader().setVisible(False) # Hide for dict
     
     # Load config once outside loop
-    config = configparser.ConfigParser()
-    config.read(getConfigPath())
+    configPath = getConfigPath() # Get JSON path
+    config = {}
+
+    if os.path.exists(configPath):
+        try:
+            with open(configPath, 'r', encoding='utf-8') as configFile:
+                config = json.load(configFile) # Read JSON
+        except Exception as e:
+            if debug: print(f"[ERROR] Failed to load user.config: {e}")
+
     rawData = config['Settings'].getboolean('rawData', False) if 'Settings' in config else False
     qaqcToggle = config['Settings'].getboolean('qaqc', True) if 'Settings' in config else True
     
@@ -879,15 +887,24 @@ def initializeQueryWindow(window, rbCustomDateTime, dteStartDate, dteEndDate):
     dteEndDate.setDateTime(datetime.now())
 
 def loadLastQuickLook(cbQuickLook): 
-    config = configparser.ConfigParser()
-    config.read(getConfigPath())
+    configPath = getConfigPath() # Get JSON path
+    config = {} 
 
-    if 'Settings' in config and 'lastQuickLook' in config['Settings']: # Check saved quick look
-        lastQuickLook = config['Settings']['lastQuickLook']
+    if os.path.exists(configPath):
+        try:
+            with open(configPath, 'r', encoding='utf-8') as configFile:
+                config = json.load(configFile) # Read JSON
+            if debug: print(f"[DEBUG] Loaded config for quick look: {config.get('lastQuickLook', 'none')}")
+        except Exception as e:
+            if debug: print(f"[DEBUG] Failed to load user.config for quick look: {e}")
+
+    if 'lastQuickLook' in config: # Check saved quick look
+        lastQuickLook = config['lastQuickLook']
         index = cbQuickLook.findText(lastQuickLook)
         
         if index != -1: # Set if found
             cbQuickLook.setCurrentIndex(index)
+            if debug: print(f"[DEBUG] Set cbQuickLook to index {index}: {lastQuickLook}")
         else:
             if debug: print(f"[DEBUG] Last quick look '{lastQuickLook}' not found, setting to -1")
             cbQuickLook.setCurrentIndex(-1) # Fallback
