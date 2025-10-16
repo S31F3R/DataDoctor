@@ -4,6 +4,3 @@ PyQt6>=6.5.0
 keyring>=24.3.0
 pygame>=2.6.1
 secretstorage>=3.3.3
-requests-ntlm>=1.1.0
-selenium
-webdriver-manager
