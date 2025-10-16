@@ -393,7 +393,7 @@
      <string>Date/Time Query Types</string>
     </property>
    </widget>
-   <widget class="QLineEdit" name="leDataID">
+   <widget class="QLineEdit" name="qleDataID">
     <property name="geometry">
      <rect>
       <x>310</x>
@@ -403,7 +403,7 @@
      </rect>
     </property>
    </widget>
-   <zorder>leDataID</zorder>
+   <zorder>qleDataID</zorder>
    <zorder>btnQuery</zorder>
    <zorder>label</zorder>
    <zorder>label_2</zorder>

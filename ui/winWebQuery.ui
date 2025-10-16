@@ -393,7 +393,7 @@
      <string>Date/Time Query Types</string>
     </property>
    </widget>
-   <widget class="QLineEdit" name="leDataID">
+   <widget class="QLineEdit" name="qleDataID">
     <property name="geometry">
      <rect>
       <x>310</x>
@@ -428,7 +428,7 @@
    <zorder>rbPrevDayToCurrent</zorder>
    <zorder>rbPrevWeekToCurrent</zorder>
    <zorder>label_8</zorder>
-   <zorder>leDataID</zorder>
+   <zorder>qleDataID</zorder>
   </widget>
  </widget>
  <resources/>
