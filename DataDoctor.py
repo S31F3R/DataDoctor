@@ -829,10 +829,13 @@ class uiQuickLook(QDialog):
     def btnSavePressed(self):       
         # Save quick look
         if self.currentListQueryList and self.CurrentCbQuickLook:
-            Logic.saveQuickLook(self.textQuickLookName, winWebQuery.listQueryList)
+            if Logic.debug: print("[DEBUG] Saving quick look using currentListQueryList with count:", self.currentListQueryList.count())
+            Logic.saveQuickLook(self.textQuickLookName, self.currentListQueryList)
 
-            # Load quick looks
+            # Reload quick looks on both windows
+            if Logic.debug: print("[DEBUG] Reloading quick looks on web and internal windows")
             Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
+            Logic.loadAllQuickLooks(winInternalQuery.cbQuickLook)
 
         # Clear the controls
         self.clear()

@@ -4,7 +4,8 @@
 -Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
     -Search will need a combobox to allow the user to search by dataID, label, or database
 -Change quick look save text box into a q line edit
--Aquairus headers need to be location /n label /n uid
+-Aquairus headers need to be laevl /n location /n uid
+-When the user hits add query and the query list gets too long and requires a scroll bar, make the list scroll to the bottom so user can see new entry
 
 ####### MAIN INTERFACE MODIFICATIONS #######
 -Stress relief button that makes screaming goat sounds
