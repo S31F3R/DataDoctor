@@ -17,7 +17,6 @@
 
 ####### OPTIONS INTERFACE MODIFICATIONS #######
 -USG API key needs masking button
--Add USBR/USGS/AQUARIUS query limiter as an option in respective sections
 
 ####### DATA TABLE MODIFICATIONS #######
 -Table first column doesn't adjust size to fit data AND header after clicking header to sort. Header is truncated on SDID 1721. Also can't resize header after sorting like that
