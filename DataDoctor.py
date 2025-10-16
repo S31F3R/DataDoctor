@@ -3,18 +3,15 @@ import QueryUSBR
 import QueryUSGS
 import QueryAquarius
 import Logic
-#import datetime
-#import configparser
 import keyring
 import os
 import json
 from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap 
-from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl 
+from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
                              QTextEdit, QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
                              QMessageBox, QDialog, QSizePolicy, QTabWidget, QRadioButton, QButtonGroup,
                              QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox)
-#from datetime import datetime, timedelta
 from PyQt6 import uic
 from PyQt6.QtMultimedia import QSoundEffect
 from collections import defaultdict
