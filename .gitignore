@@ -29,8 +29,9 @@ dist/
 # Virtual environments
 venv/
 env/
-myenv/  # Or whatever you named it
+myenv/ 
 ENV/
+.venv/
 
 # IDEs
 .vscode/
