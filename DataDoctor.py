@@ -148,7 +148,7 @@ class uiWebQuery(QMainWindow):
 
         # Define controls
         self.btnQuery = self.findChild(QPushButton, 'btnQuery') # Query Data button
-        self.leDataID = self.findChild(QLineEdit, 'leDataID') # Data ID input (QLineEdit)
+        self.qleDataID = self.findChild(QLineEdit, 'qleDataID') # Data ID input (QLineEdit)
         self.cbDatabase = self.findChild(QComboBox, 'cbDatabase') # Database selector
         self.cbInterval = self.findChild(QComboBox, 'cbInterval') # Interval selector
         self.dteStartDate = self.findChild(QDateTimeEdit, 'dteStartDate') # Start date/time
@@ -188,7 +188,7 @@ class uiWebQuery(QMainWindow):
         self.radioGroup.buttonClicked.connect(lambda btn: Logic.setQueryDateRange(self, btn, self.dteStartDate, self.dteEndDate)) # Radio button date range
 
         # Install event filters for focus and keypress handling
-        self.leDataID.installEventFilter(self) # Handle leDataID focus
+        self.qleDataID.installEventFilter(self) # Handle qleDataID focus
         self.installEventFilter(self) # Handle window-level keypress
 
         # Populate database combobox (public-specific)
@@ -222,16 +222,16 @@ class uiWebQuery(QMainWindow):
         super().showEvent(event)
 
     def eventFilter(self, obj, event):
-        if obj == self.leDataID and event.type() == QEvent.Type.FocusIn:
-            if Logic.debug: print("[DEBUG] leDataID focus in, setting Add Query default")
-            Logic.setDefaultButton(self, self.leDataID, self.btnAddQuery, self.btnQuery) # Add Query default
-        elif obj == self.leDataID and event.type() == QEvent.Type.FocusOut:
-            if Logic.debug: print("[DEBUG] leDataID focus out, setting Query Data default")
+        if obj == self.qleDataID and event.type() == QEvent.Type.FocusIn:
+            if Logic.debug: print("[DEBUG] qleDataID focus in, setting Add Query default")
+            Logic.setDefaultButton(self, self.qleDataID, self.btnAddQuery, self.btnQuery) # Add Query default
+        elif obj == self.qleDataID and event.type() == QEvent.Type.FocusOut:
+            if Logic.debug: print("[DEBUG] qleDataID focus out, setting Query Data default")
             Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery) # Query default
         elif event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if Logic.debug: print("[DEBUG] Enter key pressed")
-            if self.leDataID.hasFocus():
-                if Logic.debug: print("[DEBUG] leDataID focused, triggering btnAddQueryPressed")
+            if self.qleDataID.hasFocus():
+                if Logic.debug: print("[DEBUG] qleDataID focused, triggering btnAddQueryPressed")
                 self.btnAddQueryPressed() # Trigger Add Query
             elif self.btnQuery.isDefault():
                 if Logic.debug: print("[DEBUG] btnQuery is default, triggering btnQueryPressed")
@@ -263,9 +263,9 @@ class uiWebQuery(QMainWindow):
             queryItems.append((dataID, interval, database, mrid, i)) # Include orig index
             if Logic.debug: print(f"[DEBUG] Added queryItem: {(dataID, interval, database, mrid, i)}")
         
-        # Add single query from leDataID if list empty
-        if not queryItems and self.leDataID.text().strip():
-            dataID = self.leDataID.text().strip()
+        # Add single query from qleDataID if list empty
+        if not queryItems and self.qleDataID.text().strip():
+            dataID = self.qleDataID.text().strip()
             interval = self.cbInterval.currentText()
             database = self.cbDatabase.currentText()
             mrid = '0' # Default
@@ -370,10 +370,10 @@ class uiWebQuery(QMainWindow):
         if Logic.debug: print("[DEBUG] Web query window closed after query")
 
     def btnAddQueryPressed(self):
-        item = f'{self.leDataID.text().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}' # Build query item
+        item = f'{self.qleDataID.text().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}' # Build query item
         self.listQueryList.addItem(item) # Add to list
-        self.leDataID.clear() # Clear input
-        self.leDataID.setFocus() # Refocus
+        self.qleDataID.clear() # Clear input
+        self.qleDataID.setFocus() # Refocus
         if Logic.debug: print(f"[DEBUG] Added query item: {item}")
 
     def btnRemoveQueryPressed(self):
@@ -423,7 +423,7 @@ class uiInternalQuery(QMainWindow):
 
         # Define controls
         self.btnQuery = self.findChild(QPushButton, 'btnQuery') # Query Data button
-        self.leDataID = self.findChild(QLineEdit, 'leDataID') # Data ID input (QLineEdit)
+        self.qleDataID = self.findChild(QLineEdit, 'qleDataID') # Data ID input (QLineEdit)
         self.cbDatabase = self.findChild(QComboBox, 'cbDatabase') # Database selector
         self.cbInterval = self.findChild(QComboBox, 'cbInterval') # Interval selector
         self.dteStartDate = self.findChild(QDateTimeEdit, 'dteStartDate') # Start date/time
@@ -463,7 +463,7 @@ class uiInternalQuery(QMainWindow):
         self.radioGroup.buttonClicked.connect(lambda btn: Logic.setQueryDateRange(self, btn, self.dteStartDate, self.dteEndDate)) # Radio button date range
 
         # Install event filters for focus and keypress handling
-        self.leDataID.installEventFilter(self) # Handle leDataID focus
+        self.qleDataID.installEventFilter(self) # Handle qleDataID focus
         self.installEventFilter(self) # Handle window-level keypress
 
         # Populate database combobox (internal-specific)
@@ -497,16 +497,16 @@ class uiInternalQuery(QMainWindow):
         super().showEvent(event)
 
     def eventFilter(self, obj, event):
-        if obj == self.leDataID and event.type() == QEvent.Type.FocusIn:
-            if Logic.debug: print("[DEBUG] leDataID focus in, setting Add Query default")
-            Logic.setDefaultButton(self, self.leDataID, self.btnAddQuery, self.btnQuery) # Add Query default
-        elif obj == self.leDataID and event.type() == QEvent.Type.FocusOut:
-            if Logic.debug: print("[DEBUG] leDataID focus out, setting Query Data default")
+        if obj == self.qleDataID and event.type() == QEvent.Type.FocusIn:
+            if Logic.debug: print("[DEBUG] qleDataID focus in, setting Add Query default")
+            Logic.setDefaultButton(self, self.qleDataID, self.btnAddQuery, self.btnQuery) # Add Query default
+        elif obj == self.qleDataID and event.type() == QEvent.Type.FocusOut:
+            if Logic.debug: print("[DEBUG] qleDataID focus out, setting Query Data default")
             Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery) # Query default
         elif event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if Logic.debug: print("[DEBUG] Enter key pressed")
-            if self.leDataID.hasFocus():
-                if Logic.debug: print("[DEBUG] leDataID focused, triggering btnAddQueryPressed")
+            if self.qleDataID.hasFocus():
+                if Logic.debug: print("[DEBUG] qleDataID focused, triggering btnAddQueryPressed")
                 self.btnAddQueryPressed() # Trigger Add Query
             elif self.btnQuery.isDefault():
                 if Logic.debug: print("[DEBUG] btnQuery is default, triggering btnQueryPressed")
@@ -538,9 +538,9 @@ class uiInternalQuery(QMainWindow):
             queryItems.append((dataID, interval, database, mrid, i)) # Include orig index
             if Logic.debug: print(f"[DEBUG] Added queryItem: {(dataID, interval, database, mrid, i)}")
         
-        # Add single query from leDataID if list empty
-        if not queryItems and self.leDataID.text().strip():
-            dataID = self.leDataID.text().strip()
+        # Add single query from qleDataID if list empty
+        if not queryItems and self.qleDataID.text().strip():
+            dataID = self.qleDataID.text().strip()
             interval = self.cbInterval.currentText()
             database = self.cbDatabase.currentText()
             mrid = '0' # Default
@@ -656,10 +656,10 @@ class uiInternalQuery(QMainWindow):
         if Logic.debug: print("[DEBUG] Internal query window closed after query")
 
     def btnAddQueryPressed(self):
-        item = f'{self.leDataID.text().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}' # Build query item
+        item = f'{self.qleDataID.text().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}' # Build query item
         self.listQueryList.addItem(item) # Add to list
-        self.leDataID.clear() # Clear input
-        self.leDataID.setFocus() # Refocus
+        self.qleDataID.clear() # Clear input
+        self.qleDataID.setFocus() # Refocus
         if Logic.debug: print(f"[DEBUG] Added query item: {item}")
 
     def btnRemoveQueryPressed(self):

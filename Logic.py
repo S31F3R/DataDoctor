@@ -814,7 +814,7 @@ def setQueryDateRange(window, radioButton, dteStartDate, dteEndDate):
         if debug: print("[DEBUG] Unknown radio button in setQueryDateRange")
 
 def setDefaultButton(window, widget, btnAddQuery, btnQuery): 
-    if widget == window.leDataID: # leDataID focused: Add Query default
+    if widget == window.qleDataID: # qleDataID focused: Add Query default
         btnAddQuery.setDefault(True)
         btnQuery.setDefault(False)
     else: # Otherwise: Query Data default
