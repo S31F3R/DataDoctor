@@ -25,6 +25,10 @@
   <property name="windowTitle">
    <string>Save Quick Look</string>
   </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>icons/StarPlus.png</normaloff>icons/StarPlus.png</iconset>
+  </property>
   <property name="styleSheet">
    <string notr="true">font: 57 12pt &quot;TerminessTTF Nerd Font&quot;;</string>
   </property>

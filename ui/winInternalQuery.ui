@@ -25,6 +25,10 @@
   <property name="windowTitle">
    <string>Internal Query</string>
   </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>icons/InternalQuery.png</normaloff>icons/InternalQuery.png</iconset>
+  </property>
   <property name="autoFillBackground">
    <bool>false</bool>
   </property>

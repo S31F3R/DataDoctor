@@ -25,6 +25,10 @@
   <property name="windowTitle">
    <string>Web Query</string>
   </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>icons/PublicQuery.png</normaloff>icons/PublicQuery.png</iconset>
+  </property>
   <property name="autoFillBackground">
    <bool>false</bool>
   </property>
