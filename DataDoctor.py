@@ -716,6 +716,10 @@ class uiDataDictionary(QMainWindow):
         self.btnSave.clicked.connect(self.btnSavePressed)  
         self.btnAddRow.clicked.connect(self.btnAddRowPressed) 
 
+        # Set button style
+        Logic.buttonStyle(self.btnSave)
+        Logic.buttonStyle(self.btnAddRow)
+
     def showEvent(self, event):
         Logic.centerWindowToParent(self)
         super().showEvent(event)
