@@ -13,6 +13,7 @@
     -Look into Aquarius query to pull value percision each query to get fresh rules
         -/AQUARIUS/Publish/v2/GetParameterList?format=json
 -non data dictionary dataID should still run through missing and repeating
+-modify and test for day, month, year, and water year queries
 
 ####### OPTIONS INTERFACE MODIFICATIONS #######
 -USG API key needs masking button
