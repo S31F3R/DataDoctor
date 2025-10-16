@@ -1,12 +1,18 @@
 -Add to current button style, hover and press effects
+-Clean up user.config and remove unused options, like color mode
 -Logging and debugging, best practices
 -Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
     -Search will need a combobox to allow the user to search by dataID, label, or database
+-Change quick look save text box into a q line edit
+-Aquairus headers need to be location /n label /n uid
 
 ####### MAIN INTERFACE MODIFICATIONS #######
 -Stress relief button that makes screaming goat sounds
 
 ####### QUERY ENHANCMENTS MODIFICATIONS #######
+-Update INSTANT interval to include 1, 15, or 60 minute instant intervals
+    -Pass the different intervals as INSTANT-15, INSTANT-60 etc
+    -Can remove USBR quirk of INSTANT always being HOUR interval whent his is implemented
 -Aquarius query seems to take longer than it should. Look at possible threading solutions
     -If increasing Aquarius threads, make it an option to set how many threads can be used
 -Have USBR, USGS, Aquarius queries all run at the same time and collect at the end    
@@ -16,9 +22,23 @@
         -/AQUARIUS/Publish/v2/GetParameterList?format=json
 -non data dictionary dataID should still run through missing and repeating
 -modify and test for day, month, year, and water year queries
+-See if there is a better way to get around unverified cert when using HTTPS on Aquarius query
 
 ####### DATA TABLE MODIFICATIONS #######
 -Table first column doesn't adjust size to fit data AND header after clicking header to sort. Header is truncated on SDID 1721. Also can't resize header after sorting like that
 -Add refresh button to reset table sort
 -Export to CSV is seperating timestamps, it's using date,time. Need to export them in a single column, seperated by a space
 -SDID with MRID in them are not running through data dictionary properly, which means they are not getting proper headers
+
+####### GIT MODIFICATIONS #######
+-Figure out why __pycache__ is not being ignored
+-Create a system that allows for test branches, staging, etc. This will make it easier when codeing team gets bigger
+-Update readme
+-Need documentation on different installers and pre req, maybe add in wiki or readme
+-Provide links to stuff like requesting USGS API key, Reclamation website, USGS data browser, and documention on how to find USGS information to create dataID
+
+####### USGS API REVAMP #######
+-Rename current apiRead to apiReadOldMethod
+-New apiRead needs to use USGS new method of API key authenticaiton method
+-Need to setup logic to allow a query without the API key if none are in the system
+-Need a fallback for new method not working, due to different stages in their development, to run apiReadOldMethod instead
