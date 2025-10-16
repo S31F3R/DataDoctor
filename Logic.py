@@ -256,28 +256,31 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
     
 def buildDataDictionary(table):
-    table.clear()
+    table.clear() # Clear table
 
     with open(resourcePath('DataDictionary.csv'), 'r', encoding='utf-8-sig') as f:
-        data = [line.strip().split(',') for line in f.readlines()]
-    
+        data = [line.strip().split(',') for line in f.readlines()] # Read CSV
     if not data:
+        if Logic.debug: print("[DEBUG] DataDictionary.csv empty")
         return
-    
+
     table.setRowCount(len(data) - 1) # Skip header
-    table.setColumnCount(len(data[0]))
-    
-    # Set headers
+    table.setColumnCount(len(data[0])) # Set columns
+
     for c, header in enumerate(data[0]):
-        item = QTableWidgetItem(header.strip())
+        item = QTableWidgetItem(header.strip()) # Set header
         table.setHorizontalHeaderItem(c, item)
-    
-    # Populate, trim spaces
+
     for r in range(1, len(data)):
         for c in range(len(data[r])):
             value = data[r][c].strip()
-            item = QTableWidgetItem(value)
+            item = QTableWidgetItem(value) # Set cell
             table.setItem(r-1, c, item)
+
+    for c in range(table.columnCount()):
+        table.resizeColumnToContents(c) # Auto-size to header
+        
+    if Logic.debug: print(f"[DEBUG] Built DataDictionary with {table.rowCount()} rows, {table.columnCount()} columns")
 
 def getDataDictionaryItem(table, dataId):
     for r in range(table.rowCount()):
@@ -453,58 +456,47 @@ def loadQuickLook(cbQuickLook, listQueryList):
         print(f"Quick look '{quickLookName}' not found.")
 
 def loadConfig():
-    configPath = getConfigPath()
-    config = configparser.ConfigParser()
-    config.read(configPath)
-
-    # Defaults
+    convertConfigToJson() # Convert if needed
+    configPath = getConfigPath() # Get JSON path
     settings = {
         'colorMode': 'light',
         'lastExportPath': '',
         'debugMode': False,
-        'utcOffset': -7, # Default int
-        'periodOffset': True, # True for EOP/end
+        'utcOffset': -7,
+        'periodOffset': True,
         'retroFont': True,
         'qaqc': True,
         'rawData': False,
         'lastQuickLook': ''
     }
-
-    if 'Settings' in config:
-        settings['colorMode'] = config['Settings'].get('colorMode', 'light')
-        settings['lastExportPath'] = config['Settings'].get('lastExportPath', '')
-        settings['debugMode'] = config['Settings'].getboolean('debugMode', False)
-        utcStr = config['Settings'].get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London")
-
-        # Parse utcOffset to int (e.g., -7 from "UTC-07:00 | ...")
+    if os.path.exists(configPath):
         try:
-            offsetPart = utcStr.split(' | ')[0].replace('UTC', '').split(':')[0] # " -07" or "+00"
-            settings['utcOffset'] = int(offsetPart)
-        except ValueError:
-            settings['utcOffset'] = -7 # Fallback
-        hourMethod = config['Settings'].get('hourTimestampMethod', 'EOP')
-        settings['periodOffset'] = (hourMethod == 'EOP') # True for end
-        settings['retroFont'] = config['Settings'].getboolean('retroFont', True)
-        settings['qaqc'] = config['Settings'].getboolean('qaqc', True)
-        settings['rawData'] = config['Settings'].getboolean('rawData', False)
-        settings['lastQuickLook'] = config['Settings'].get('lastQuickLook', '')
+            with open(configPath, 'r', encoding='utf-8') as configFile:
+                config = json.load(configFile) # Read JSON
+            settings['colorMode'] = config.get('colorMode', settings['colorMode']) # Load color
+            settings['lastExportPath'] = config.get('lastExportPath', settings['lastExportPath']) # Load export path
+            settings['debugMode'] = config.get('debugMode', settings['debugMode']) # Load debug
+            settings['utcOffset'] = config.get('utcOffset', settings['utcOffset']) # Load UTC
 
-    # Create if missing/empty
-    if not os.path.exists(configPath) or not config.sections():
-        config['Settings'] = {
-            'colorMode': settings['colorMode'],
-            'lastExportPath': settings['lastExportPath'],
-            'debugMode': str(settings['debugMode']),
-            'utcOffset': "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London",
-            'hourTimestampMethod': 'EOP' if settings['periodOffset'] else 'BOP',
-            'retroFont': str(settings['retroFont']),
-            'qaqc': str(settings['qaqc']),
-            'rawData': str(settings['rawData']),
-            'lastQuickLook': settings['lastQuickLook']
-        }
-        with open(configPath, 'w') as configFile:
-            config.write(configFile)
+            if isinstance(settings['utcOffset'], str):
+                try:
+                    offsetPart = settings['utcOffset'].split(' | ')[0].replace('UTC', '').split(':')[0] # Parse UTC
+                    settings['utcOffset'] = int(offsetPart)
+                except ValueError:
+                    settings['utcOffset'] = -7 # Fallback
 
+            settings['periodOffset'] = config.get('hourTimestampMethod', 'EOP') == 'EOP' # Load period
+            settings['retroFont'] = config.get('retroFont', settings['retroFont']) # Load retro
+            settings['qaqc'] = config.get('qaqc', settings['qaqc']) # Load QAQC
+            settings['rawData'] = config.get('rawData', settings['rawData']) # Load raw
+            settings['lastQuickLook'] = config.get('lastQuickLook', settings['lastQuickLook']) # Load quick look
+            if Logic.debug: print("[DEBUG] Loaded settings from user.config")
+        except Exception as e:
+            if Logic.debug: print(f"[ERROR] Failed to load user.config: {e}")
+    else:
+        with open(configPath, 'w', encoding='utf-8') as configFile:
+            json.dump(settings, configFile, indent=2) # Write default JSON
+        if Logic.debug: print("[DEBUG] Created default user.config")
     return settings
 
 def exportTableToCSV(table, fileLocation, fileName):
@@ -739,7 +731,11 @@ def getConfigDir():
     return configDir
 
 def getConfigPath():
-    return os.path.join(getConfigDir(), "config.ini")
+    configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation) # Get config dir
+
+    if not os.path.exists(configDir):
+        os.makedirs(configDir) # Create if missing
+    return os.path.join(configDir, "user.config") # Return JSON config path
 
 def getQuickLookDir():
     quickLookDir = os.path.join(getConfigDir(), "quickLook")
@@ -750,14 +746,16 @@ def getQuickLookDir():
     return quickLookDir
 
 def reloadGlobals():
-    settings = loadConfig()
-    global debug, utcOffset, periodOffset, retroFont, qaqcEnabled, rawData  # Globals
-    debug = settings['debugMode']
-    utcOffset = settings['utcOffset']
-    periodOffset = settings['periodOffset'] # Use in USBR as needed (e.g., if periodOffset: end else begin)
-    retroFont = settings['retroFont']
-    qaqcEnabled = settings['qaqc']
-    rawData = settings['rawData']
+    settings = loadConfig() # Load JSON settings
+    global debug, utcOffset, periodOffset, retroFont, qaqcEnabled, rawData # Update globals
+    debug = settings['debugMode'] # Set debug
+    utcOffset = settings['utcOffset'] # Set UTC
+    periodOffset = settings['periodOffset'] # Set period
+    retroFont = settings['retroFont'] # Set retro
+    qaqcEnabled = settings['qaqc'] # Set QAQC
+    rawData = settings['rawData'] # Set raw
+
+    if Logic.debug: print("[DEBUG] Globals reloaded from user.config")
 
 def applyRetroFont(widget, pointSize=10):
     fontPath = resourcePath('ui/fonts/PressStart2P-Regular.ttf') # Load from path
@@ -820,6 +818,44 @@ def setDefaultButton(window, widget, btnAddQuery, btnQuery):
     else: # Otherwise: Query Data default
         btnAddQuery.setDefault(False)
         btnQuery.setDefault(True)
+
+def convertConfigToJson():
+    oldConfigPath = os.path.join(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation), "config.ini") # Old ini path
+    newConfigPath = getConfigPath() # New JSON path
+
+    if os.path.exists(oldConfigPath) and not os.path.exists(newConfigPath):
+        config = configparser.ConfigParser()
+        config.read(oldConfigPath) # Read old ini
+
+        if Logic.debug: print("[DEBUG] Found config.ini, converting to user.config")
+        settings = {
+            'utcOffset': "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
+            'retroFont': True,
+            'qaqc': True,
+            'rawData': False,
+            'debugMode': False,
+            'tnsNamesLocation': '',
+            'hourTimestampMethod': 'EOP',
+            'lastQuickLook': '',
+            'colorMode': 'light',
+            'lastExportPath': ''
+        }
+        if 'Settings' in config:
+            settings['utcOffset'] = config['Settings'].get('utcOffset', settings['utcOffset']) # Preserve UTC
+            settings['retroFont'] = config['Settings'].getboolean('retroFont', settings['retroFont']) # Preserve retro
+            settings['qaqc'] = config['Settings'].getboolean('qaqc', settings['qaqc']) # Preserve QAQC
+            settings['rawData'] = config['Settings'].getboolean('rawData', settings['rawData']) # Preserve raw
+            settings['debugMode'] = config['Settings'].getboolean('debugMode', settings['debugMode']) # Preserve debug
+            settings['tnsNamesLocation'] = config['Settings'].get('tnsNamesLocation', settings['tnsNamesLocation']) # Preserve TNS
+            settings['hourTimestampMethod'] = config['Settings'].get('hourTimestampMethod', settings['hourTimestampMethod']) # Preserve period
+            settings['lastQuickLook'] = config['Settings'].get('lastQuickLook', settings['lastQuickLook']) # Preserve quick look
+            settings['colorMode'] = config['Settings'].get('colorMode', settings['colorMode']) # Preserve color
+            settings['lastExportPath'] = config['Settings'].get('lastExportPath', settings['lastExportPath']) # Preserve export path
+        with open(newConfigPath, 'w', encoding='utf-8') as configFile:
+            json.dump(settings, configFile, indent=2) # Write JSON
+        if Logic.debug: print("[DEBUG] Converted config.ini to user.config")
+    elif Logic.debug:
+        print("[DEBUG] No config.ini found or user.config exists, skipping conversion")
 
 def initializeQueryWindow(window, rbCustomDateTime, dteStartDate, dteEndDate): 
     rbCustomDateTime.setChecked(True) # Default to custom
