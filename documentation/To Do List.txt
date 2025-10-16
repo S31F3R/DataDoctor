@@ -25,7 +25,6 @@
     -Two day set to beginning of previous day to current day current hour
 
 ####### DATA TABLE MODIFICATIONS #######
--Query window sized needs to stay fixed, basically no max button
 -Table first column doesn't adjust size to fit data AND header after clicking header to sort. Header is truncated on SDID 1721. Also can't resize header after sorting like that
 -Add refresh button to reset table sort
 -Export to CSV is seperating timestamps, it's using date,time. Need to export them in a single column, seperated by a space
