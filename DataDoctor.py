@@ -7,6 +7,7 @@ import datetime
 import configparser
 import keyring
 import os
+import json
 from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap 
 from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl 
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
@@ -201,9 +202,6 @@ class uiWebQuery(QMainWindow):
         self.cbInterval.addItem('HOUR') # Hourly data
         self.cbInterval.addItem('INSTANT') # Instantaneous data
         self.cbInterval.addItem('DAY') # Daily data
-        self.cbInterval.addItem('MONTH') # Monthly data
-        self.cbInterval.addItem('YEAR') # Year data
-        self.cbInterval.addItem('WY') # Water year data
 
         # Set initial state
         Logic.initializeQueryWindow(self, self.rbCustomDateTime, self.dteStartDate, self.dteEndDate) # Set custom date, 72h range
@@ -251,16 +249,20 @@ class uiWebQuery(QMainWindow):
         for i in range(self.listQueryList.count()):
             itemText = self.listQueryList.item(i).text().strip()
             parts = itemText.split('|')
+
             if Logic.debug: print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
             if len(parts) != 3:
                 print(f"[WARN] Invalid item skipped: {itemText}")
                 continue
+
             dataID, interval, database = parts
             mrid = '0' # Default MRID
             SDID = dataID
+
             if database.startswith('USBR-') and '-' in dataID:
                 SDID, mrid = dataID.rsplit('-', 1) # Split SDID-MRID
             queryItems.append((dataID, interval, database, mrid, i)) # Include orig index
+
             if Logic.debug: print(f"[DEBUG] Added queryItem: {(dataID, interval, database, mrid, i)}")
         
         # Add single query from qleDataID if list empty
@@ -270,9 +272,11 @@ class uiWebQuery(QMainWindow):
             database = self.cbDatabase.currentText()
             mrid = '0' # Default
             SDID = dataID
+
             if database.startswith('USBR-') and '-' in dataID:
                 SDID, mrid = dataID.rsplit('-', 1)
             queryItems.append((dataID, interval, database, mrid, 0)) # origIndex=0
+
             if Logic.debug: print(f"[DEBUG] Added single query: {(dataID, interval, database, mrid, 0)}")
         elif not queryItems:
             print("[WARN] No valid query items.")
@@ -284,9 +288,11 @@ class uiWebQuery(QMainWindow):
         # First interval for timestamps
         firstInterval = queryItems[0][1]
         firstDb = queryItems[0][2] # First database
+
         if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
             firstInterval = 'HOUR' # USBR INSTANT quirk
         timestamps = Logic.buildTimestamps(startDate, endDate, firstInterval)
+
         if not timestamps:
             QMessageBox.warning(self, "Date Error", "Invalid dates or interval.")
             return
@@ -296,9 +302,11 @@ class uiWebQuery(QMainWindow):
         
         # Group by (db, mrid, interval)
         groups = defaultdict(list)
+
         for dataID, interval, db, mrid, origIndex in queryItems:
             groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
             groups[groupKey].append((origIndex, dataID)) # Group by key
+
         if Logic.debug: print(f"[DEBUG] Formed {len(groups)} groups.")
         
         # Collect values
@@ -306,8 +314,10 @@ class uiWebQuery(QMainWindow):
         for (db, mrid, interval), groupItems in groups.items():
             if Logic.debug: print(f"[DEBUG] Processing group: db={db}, mrid={mrid}, interval={interval}, items={len(groupItems)}")
             SDIDs = []
+
             for origIndex, dataID in groupItems:
                 SDID = dataID
+
                 if db.startswith('USBR-') and '-' in dataID:
                     SDID, _ = dataID.rsplit('-', 1) # Recalc SDID
                 SDIDs.append(SDID)
@@ -326,6 +336,7 @@ class uiWebQuery(QMainWindow):
                 continue
             for idx, (origIndex, dataID) in enumerate(groupItems):
                 SDID = SDIDs[idx]
+
                 if SDID in result:
                     outputData = result[SDID]
                     alignedData = Logic.gapCheck(timestamps, outputData, dataID)
@@ -339,18 +350,22 @@ class uiWebQuery(QMainWindow):
         originalDataIds = [item[0] for item in queryItems] # dataID
         originalIntervals = [item[1] for item in queryItems] # For labels
         lookupIds = []
+
         for item in queryItems:
             dataID, interval, db, mrid, origIndex = item
             lookupId = dataID
+
             if db.startswith('USBR-') and '-' in dataID:
                 lookupId = dataID.split('-')[0] # Base SDID
             lookupIds.append(lookupId)
         
         # Build data
         data = []
+
         for r in range(len(timestamps)):
             rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
             data.append(f"{timestamps[r]},{','.join(rowValues)}")
+
         if Logic.debug: print(f"[DEBUG] Built {len(data)} data rows")
         
         # Build headers
@@ -367,6 +382,7 @@ class uiWebQuery(QMainWindow):
         
         # Close query window
         self.close()
+
         if Logic.debug: print("[DEBUG] Web query window closed after query")
 
     def btnAddQueryPressed(self):
@@ -374,6 +390,7 @@ class uiWebQuery(QMainWindow):
         self.listQueryList.addItem(item) # Add to list
         self.qleDataID.clear() # Clear input
         self.qleDataID.setFocus() # Refocus
+
         if Logic.debug: print(f"[DEBUG] Added query item: {item}")
 
     def btnRemoveQueryPressed(self):
@@ -390,17 +407,26 @@ class uiWebQuery(QMainWindow):
         winQuickLook.exec() # Show dialog
         self.raise_() # Counter Plasma focus loss
         self.activateWindow()
+
         if Logic.debug: print("[DEBUG] Save Quick Look dialog opened")
 
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList) # Load selected quick look
-        config = configparser.ConfigParser()
-        config.read(Logic.getConfigPath())
-        if 'Settings' not in config:
-            config['Settings'] = {}
-        config['Settings']['lastQuickLook'] = self.cbQuickLook.currentText() # Save selection
-        with open(Logic.getConfigPath(), 'w') as configFile:
-            config.write(configFile)
+        configPath = Logic.getConfigPath() # Get JSON path
+        config = {}
+
+        if os.path.exists(configPath):
+            try:
+                with open(configPath, 'r', encoding='utf-8') as configFile:
+                    config = json.load(configFile) # Read JSON
+            except Exception as e:
+                if Logic.debug: print(f"[ERROR] Failed to load user.config: {e}")
+
+        config['lastQuickLook'] = self.cbQuickLook.currentText() # Save quick look
+
+        with open(configPath, 'w', encoding='utf-8') as configFile:
+            json.dump(config, configFile, indent=2) # Write JSON
+
         if Logic.debug: print(f"[DEBUG] Loaded quick look: {self.cbQuickLook.currentText()}")
 
     def btnClearQueryPressed(self):
@@ -476,9 +502,6 @@ class uiInternalQuery(QMainWindow):
         self.cbInterval.addItem('HOUR') # Hourly data
         self.cbInterval.addItem('INSTANT') # Instantaneous data
         self.cbInterval.addItem('DAY') # Daily data
-        self.cbInterval.addItem('MONTH') # Monthly data
-        self.cbInterval.addItem('YEAR') # Year data
-        self.cbInterval.addItem('WY') # Water year data
 
         # Set initial state
         Logic.initializeQueryWindow(self, self.rbCustomDateTime, self.dteStartDate, self.dteEndDate) # Set custom date, 72h range
@@ -500,11 +523,14 @@ class uiInternalQuery(QMainWindow):
         if obj == self.qleDataID and event.type() == QEvent.Type.FocusIn:
             if Logic.debug: print("[DEBUG] qleDataID focus in, setting Add Query default")
             Logic.setDefaultButton(self, self.qleDataID, self.btnAddQuery, self.btnQuery) # Add Query default
+
         elif obj == self.qleDataID and event.type() == QEvent.Type.FocusOut:
             if Logic.debug: print("[DEBUG] qleDataID focus out, setting Query Data default")
             Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery) # Query default
+
         elif event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if Logic.debug: print("[DEBUG] Enter key pressed")
+
             if self.qleDataID.hasFocus():
                 if Logic.debug: print("[DEBUG] qleDataID focused, triggering btnAddQueryPressed")
                 self.btnAddQueryPressed() # Trigger Add Query
@@ -512,6 +538,7 @@ class uiInternalQuery(QMainWindow):
                 if Logic.debug: print("[DEBUG] btnQuery is default, triggering btnQueryPressed")
                 self.btnQueryPressed() # Trigger Query Data
             return True # Consume Enter key
+
         return super().eventFilter(obj, event)
 
     def btnQueryPressed(self):
@@ -526,6 +553,7 @@ class uiInternalQuery(QMainWindow):
         for i in range(self.listQueryList.count()):
             itemText = self.listQueryList.item(i).text().strip()
             parts = itemText.split('|')
+
             if Logic.debug: print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
             if len(parts) != 3:
                 print(f"[WARN] Invalid item skipped: {itemText}")
@@ -533,9 +561,11 @@ class uiInternalQuery(QMainWindow):
             dataID, interval, database = parts
             mrid = '0' # Default MRID
             SDID = dataID
+
             if database.startswith('USBR-') and '-' in dataID:
                 SDID, mrid = dataID.rsplit('-', 1) # Split SDID-MRID
             queryItems.append((dataID, interval, database, mrid, i)) # Include orig index
+
             if Logic.debug: print(f"[DEBUG] Added queryItem: {(dataID, interval, database, mrid, i)}")
         
         # Add single query from qleDataID if list empty
@@ -545,6 +575,7 @@ class uiInternalQuery(QMainWindow):
             database = self.cbDatabase.currentText()
             mrid = '0' # Default
             SDID = dataID
+
             if database.startswith('USBR-') and '-' in dataID:
                 SDID, mrid = dataID.rsplit('-', 1)
             queryItems.append((dataID, interval, database, mrid, 0)) # origIndex=0
@@ -555,6 +586,7 @@ class uiInternalQuery(QMainWindow):
         
         # Filter out USGS-NWIS items (from quickLooks)
         queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
+
         if not queryItems:
             QMessageBox.warning(self, "No Valid Items", "No valid internal query items (USGS skipped).")
             return
@@ -565,9 +597,12 @@ class uiInternalQuery(QMainWindow):
         # First interval for timestamps
         firstInterval = queryItems[0][1]
         firstDb = queryItems[0][2] # First database
+
         if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
             firstInterval = 'HOUR' # USBR INSTANT quirk
+
         timestamps = Logic.buildTimestamps(startDate, endDate, firstInterval)
+
         if not timestamps:
             QMessageBox.warning(self, "Date Error", "Invalid dates or interval.")
             return
@@ -581,6 +616,7 @@ class uiInternalQuery(QMainWindow):
         for dataID, interval, db, mrid, origIndex in queryItems:
             groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
             groups[groupKey].append((origIndex, dataID)) # Group by key
+
         if Logic.debug: print(f"[DEBUG] Formed {len(groups)} groups.")
         
         # Collect values
@@ -588,8 +624,10 @@ class uiInternalQuery(QMainWindow):
         for (db, mrid, interval), groupItems in groups.items():
             if Logic.debug: print(f"[DEBUG] Processing group: db={db}, mrid={mrid}, interval={interval}, items={len(groupItems)}")
             SDIDs = []
+
             for origIndex, dataID in groupItems:
                 SDID = dataID
+
                 if db.startswith('USBR-') and '-' in dataID:
                     SDID, _ = dataID.rsplit('-', 1) # Recalc SDID
                 SDIDs.append(SDID)
@@ -608,6 +646,7 @@ class uiInternalQuery(QMainWindow):
                 continue
             for idx, (origIndex, dataID) in enumerate(groupItems):
                 SDID = SDIDs[idx]
+
                 if SDID in result:
                     if db == 'AQUARIUS':
                         outputData = result[SDID]['data']
@@ -625,18 +664,22 @@ class uiInternalQuery(QMainWindow):
         originalDataIds = [item[0] for item in queryItems] # dataID
         originalIntervals = [item[1] for item in queryItems] # For labels
         lookupIds = []
+
         for item in queryItems:
             dataID, interval, db, mrid, origIndex = item
             lookupId = dataID
+
             if db.startswith('USBR-') and '-' in dataID:
                 lookupId = dataID.split('-')[0] # Base SDID
             lookupIds.append(lookupId)
         
         # Build data
         data = []
+
         for r in range(len(timestamps)):
             rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
             data.append(f"{timestamps[r]},{','.join(rowValues)}")
+
         if Logic.debug: print(f"[DEBUG] Built {len(data)} data rows")
         
         # Build headers
@@ -653,6 +696,7 @@ class uiInternalQuery(QMainWindow):
         
         # Close query window
         self.close()
+
         if Logic.debug: print("[DEBUG] Internal query window closed after query")
 
     def btnAddQueryPressed(self):
@@ -660,10 +704,12 @@ class uiInternalQuery(QMainWindow):
         self.listQueryList.addItem(item) # Add to list
         self.qleDataID.clear() # Clear input
         self.qleDataID.setFocus() # Refocus
+
         if Logic.debug: print(f"[DEBUG] Added query item: {item}")
 
     def btnRemoveQueryPressed(self):
         item = self.listQueryList.currentItem()
+
         if item:
             self.listQueryList.takeItem(self.listQueryList.row(item)) # Remove selected
             if Logic.debug: print(f"[DEBUG] Removed query item: {item.text()}")
@@ -676,17 +722,25 @@ class uiInternalQuery(QMainWindow):
         winQuickLook.exec() # Show dialog
         self.raise_() # Counter Plasma focus loss
         self.activateWindow()
+
         if Logic.debug: print("[DEBUG] Save Quick Look dialog opened")
 
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList) # Load selected quick look
-        config = configparser.ConfigParser()
-        config.read(Logic.getConfigPath())
-        if 'Settings' not in config:
-            config['Settings'] = {}
-        config['Settings']['lastQuickLook'] = self.cbQuickLook.currentText() # Save selection
-        with open(Logic.getConfigPath(), 'w') as configFile:
-            config.write(configFile)
+        configPath = Logic.getConfigPath() # Get JSON path
+        config = {}
+
+        if os.path.exists(configPath):
+            try:
+                with open(configPath, 'r', encoding='utf-8') as configFile:
+                    config = json.load(configFile) # Read JSON
+            except Exception as e:
+                if Logic.debug: print(f"[ERROR] Failed to load user.config: {e}")
+
+        config['lastQuickLook'] = self.cbQuickLook.currentText() # Save quick look
+
+        with open(configPath, 'w', encoding='utf-8') as configFile:
+            json.dump(config, configFile, indent=2) # Write JSON
         if Logic.debug: print(f"[DEBUG] Loaded quick look: {self.cbQuickLook.currentText()}")
 
     def btnClearQueryPressed(self):
@@ -708,47 +762,46 @@ class uiDataDictionary(QMainWindow):
         uic.loadUi(Logic.resourcePath('ui/winDataDictionary.ui'), self) # Load the .ui file
 
         # Define the controls
-        self.mainTable = self.findChild(QTableWidget, 'dataDictionaryTable')  
-        self.btnSave = self.findChild(QPushButton, 'btnSave') 
-        self.btnAddRow = self.findChild(QPushButton, 'btnAddRow') 
+        self.mainTable = self.findChild(QTableWidget, 'dataDictionaryTable') # Data dictionary table
+        self.btnSave = self.findChild(QPushButton, 'btnSave') # Save button
+        self.btnAddRow = self.findChild(QPushButton, 'btnAddRow') # Add row button
 
         # Create events
-        self.btnSave.clicked.connect(self.btnSavePressed)  
-        self.btnAddRow.clicked.connect(self.btnAddRowPressed) 
+        self.btnSave.clicked.connect(self.btnSavePressed) # Save dictionary
+        self.btnAddRow.clicked.connect(self.btnAddRowPressed) # Add row
 
         # Set button style
         Logic.buttonStyle(self.btnSave)
-        Logic.buttonStyle(self.btnAddRow)
+        Logic.buttonStyle(self.btnAddRow) 
 
     def showEvent(self, event):
-        Logic.centerWindowToParent(self)
+        Logic.centerWindowToParent(self) # Center on parent
         super().showEvent(event)
 
     def btnSavePressed(self):
-        data = []    
+        data = [] # Initialize data list
 
-        # Open the data dictionary file
-        f = open(Logic.resourcePath('DataDictionary.csv'), 'r', encoding='utf-8-sig') 
-        data.append(f.readlines()[0]) 
+        with open(Logic.resourcePath('DataDictionary.csv'), 'r', encoding='utf-8-sig') as f:
+            data.append(f.readlines()[0]) # Keep header
+
+        for r in range(self.mainTable.rowCount()):
+            rowData = []
+
+            for c in range(self.mainTable.columnCount()):
+                item = self.mainTable.item(r, c)
+                rowData.append(item.text() if item else '') # Collect row data
+            data.append(','.join(rowData)) # Add row as CSV
+
+        with open(Logic.resourcePath('DataDictionary.csv'), 'w', encoding='utf-8-sig') as f:
+            f.writelines('\n'.join(data)) # Write CSV
+        for c in range(self.mainTable.columnCount()):
+            self.mainTable.resizeColumnToContents(c) # Auto-size columns
+
+        if Logic.debug: print("[DEBUG] DataDictionary saved and columns resized")
     
-        # Close the file
-        f.close()
-
-        # Check each column and each row in the table. Place data into array
-        for r in range(0, self.mainTable.rowCount()):            
-            for c in range(0, self.mainTable.columnCount()):            
-                if c == 0: data.append(self.mainTable.item(r, c).text())
-                else: data[r + 1] = f'{data[r + 1]},{self.mainTable.item(r, c).text()}'
-
-        # Write the data to the file
-        f = open(Logic.resourcePath('DataDictionary.csv'), 'w', encoding='utf-8-sig')  
-        f.writelines(data)  
-
-        # Close the file
-        f.close()
-
     def btnAddRowPressed(self):
-        self.mainTable.setRowCount(self.mainTable.rowCount() + 1)   
+        self.mainTable.setRowCount(self.mainTable.rowCount() + 1) # Add new row
+        if Logic.debug: print("[DEBUG] Added row to DataDictionary")
         
 class uiQuickLook(QDialog):
     """Quick look save dialog: Names and stores query presets."""
@@ -934,32 +987,47 @@ class uiOptions(QDialog):
         if Logic.debug: print("[DEBUG] USGS API key re-masked")
 
     def loadSettings(self):
-        config = configparser.ConfigParser()
-        config.read(Logic.getConfigPath()) # Load config
-        if 'Settings' in config:
-            self.cbUTCOffset.setCurrentText(config['Settings'].get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London")) # Set UTC offset
-            retroFont = config['Settings'].getboolean('retroFont', True) # Default checked
-            self.cbRetroFont.setChecked(retroFont) # Set retro font
-            qaqc = config['Settings'].getboolean('qaqc', True) # Default checked
-            self.cbQAQC.setChecked(qaqc) # Set QAQC
-            rawData = config['Settings'].getboolean('rawData', False) # Default unchecked
-            self.cbRawData.setChecked(rawData) # Set raw data
-            debugMode = config['Settings'].getboolean('debugMode', False) # Default unchecked
-            self.cbDebug.setChecked(debugMode) # Set debug
-            tnsPath = config['Settings'].get('tnsNamesLocation', '') # TNS path
-            if tnsPath.startswith(Logic.appRoot):
-                tnsPath = tnsPath.replace(Logic.appRoot, '%AppRoot%') # Shorten path
-            self.textTNSNames.setPlainText(tnsPath) # Set TNS path
-            hourMethod = config['Settings'].get('hourTimestampMethod', 'EOP') # Default EOP
-            if hourMethod == 'EOP':
-                self.rbEOP.setChecked(True) # Set EOP
-            else:
-                self.rbBOP.setChecked(True) # Set BOP
+        configPath = Logic.getConfigPath() # Get JSON path
+        config = {}
+        if os.path.exists(configPath):
+            try:
+                with open(configPath, 'r', encoding='utf-8') as configFile:
+                    config = json.load(configFile) # Read JSON
+                if Logic.debug: print(f"[DEBUG] Loaded config from user.config: {config}")
+            except Exception as e:
+                if Logic.debug: print(f"[ERROR] Failed to load user.config: {e}")
+        utcOffset = config.get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London") # Get UTC
+        index = self.cbUTCOffset.findText(utcOffset)
+        if index != -1:
+            self.cbUTCOffset.setCurrentIndex(index) # Set UTC
+            if Logic.debug: print(f"[DEBUG] Set cbUTCOffset to {utcOffset}")
+        else:
+            self.cbUTCOffset.setCurrentIndex(14) # Default UTC+00:00
+            if Logic.debug: print("[DEBUG] utcOffset not found, set to default UTC+00:00")
+        self.cbRetroFont.setChecked(bool(config.get('retroFont', True))) # Set retro
+        if Logic.debug: print(f"[DEBUG] Set cbRetroFont to {self.cbRetroFont.isChecked()}")
+        self.cbQAQC.setChecked(bool(config.get('qaqc', True))) # Set QAQC
+        if Logic.debug: print(f"[DEBUG] Set cbQAQC to {self.cbQAQC.isChecked()}")
+        self.cbRawData.setChecked(bool(config.get('rawData', False))) # Set raw
+        if Logic.debug: print(f"[DEBUG] Set cbRawData to {self.cbRawData.isChecked()}")
+        self.cbDebug.setChecked(bool(config.get('debugMode', False))) # Set debug
+        if Logic.debug: print(f"[DEBUG] Set cbDebug to {self.cbDebug.isChecked()}")
+        tnsPath = config.get('tnsNamesLocation', '') # Get TNS path
+        if tnsPath.startswith(Logic.appRoot):
+            tnsPath = tnsPath.replace(Logic.appRoot, '%AppRoot%') # Shorten path
+        self.textTNSNames.setPlainText(tnsPath) # Set TNS path
         if not self.textTNSNames.toPlainText():
-            envTns = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin')) # Default TNS path
+            envTns = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin')) # Default TNS
             if envTns.startswith(Logic.appRoot):
-                envTns = envTns.replace(Logic.appRoot, '%AppRoot%') # Shorten path
-            self.textTNSNames.setPlainText(envTns) # Set TNS path
+                envTns = envTns.replace(Logic.appRoot, '%AppRoot%') # Shorten
+            self.textTNSNames.setPlainText(envTns) # Set TNS
+        if Logic.debug: print(f"[DEBUG] Set textTNSNames to {tnsPath}")
+        hourMethod = config.get('hourTimestampMethod', 'EOP') # Get period
+        if hourMethod == 'EOP':
+            self.rbEOP.setChecked(True) # Set EOP
+        else:
+            self.rbBOP.setChecked(True) # Set BOP
+        if Logic.debug: print(f"[DEBUG] Set hourTimestampMethod to {hourMethod}")
         self.textAQServer.setPlainText(keyring.get_password("DataDoctor", "aqServer") or "") # Load AQ server
         self.textAQUser.setPlainText(keyring.get_password("DataDoctor", "aqUser") or "") # Load AQ user
         self.qleAQPassword.setText(keyring.get_password("DataDoctor", "aqPassword") or "") # Load AQ password
@@ -967,23 +1035,33 @@ class uiOptions(QDialog):
         if Logic.debug: print("[DEBUG] Settings loaded")
 
     def onSavePressed(self):
-        config = configparser.ConfigParser()
-        config.read(Logic.getConfigPath()) # Read config
-        previousRetro = config['Settings'].getboolean('retroFont', True) if 'Settings' in config else True # Save previous retro state
+        configPath = Logic.getConfigPath() # Get JSON path
+        config = {}
+        if os.path.exists(configPath):
+            try:
+                with open(configPath, 'r', encoding='utf-8') as configFile:
+                    config = json.load(configFile) # Read existing
+                if Logic.debug: print(f"[DEBUG] Read existing user.config: {config}")
+            except Exception as e:
+                if Logic.debug: print(f"[ERROR] Failed to load user.config for save: {e}")
+        previousRetro = config.get('retroFont', True) # Save previous retro
         tnsPath = self.textTNSNames.toPlainText() # Get TNS path
         if '%AppRoot%' in tnsPath:
             tnsPath = tnsPath.replace('%AppRoot%', Logic.appRoot) # Expand path
-        if 'Settings' not in config:
-            config['Settings'] = {} # Initialize settings
-        config['Settings']['utcOffset'] = self.cbUTCOffset.currentText() # Save UTC offset
-        config['Settings']['retroFont'] = 'True' if self.cbRetroFont.isChecked() else 'False' # Save retro font
-        config['Settings']['qaqc'] = 'True' if self.cbQAQC.isChecked() else 'False' # Save QAQC
-        config['Settings']['rawData'] = 'True' if self.cbRawData.isChecked() else 'False' # Save raw data
-        config['Settings']['debugMode'] = 'True' if self.cbDebug.isChecked() else 'False' # Save debug
-        config['Settings']['tnsNamesLocation'] = tnsPath # Save TNS path
-        config['Settings']['hourTimestampMethod'] = 'EOP' if self.rbEOP.isChecked() else 'BOP' # Save period method
-        with open(Logic.getConfigPath(), 'w') as configFile:
-            config.write(configFile) # Write config
+        config.update({
+            'utcOffset': self.cbUTCOffset.currentText(), # Save UTC
+            'retroFont': self.cbRetroFont.isChecked(), # Save retro
+            'qaqc': self.cbQAQC.isChecked(), # Save QAQC
+            'rawData': self.cbRawData.isChecked(), # Save raw
+            'debugMode': self.cbDebug.isChecked(), # Save debug
+            'tnsNamesLocation': tnsPath, # Save TNS
+            'hourTimestampMethod': 'EOP' if self.rbEOP.isChecked() else 'BOP', # Save period
+            'colorMode': config.get('colorMode', 'light'), # Preserve color
+            'lastExportPath': config.get('lastExportPath', '') # Preserve export
+        })
+        with open(configPath, 'w', encoding='utf-8') as configFile:
+            json.dump(config, configFile, indent=2) # Write JSON
+        if Logic.debug: print("[DEBUG] Saved user.config")
         Logic.reloadGlobals() # Reload globals
         if self.cbRetroFont.isChecked():
             fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf') # Load retro font
@@ -1007,18 +1085,28 @@ class uiOptions(QDialog):
                 os.execl(python, python, *sys.argv) # Relaunch app
             else:
                 self.cbRetroFont.setChecked(previousRetro) # Revert checkbox
-                config = configparser.ConfigParser()
-                config.read(Logic.getConfigPath())
-                config['Settings']['retroFont'] = 'True' if previousRetro else 'False'
-                with open(Logic.getConfigPath(), 'w') as configFile:
-                    config.write(configFile) # Write reverted config
+                config['retroFont'] = previousRetro # Update config
+                with open(configPath, 'w', encoding='utf-8') as configFile:
+                    json.dump(config, configFile, indent=2) # Write reverted
                 Logic.reloadGlobals() # Reload globals
                 if Logic.debug: print("[DEBUG] Reverted retro font setting")
-        keyring.set_password("DataDoctor", "aqServer", self.textAQServer.toPlainText()) # Save AQ server
-        keyring.set_password("DataDoctor", "aqUser", self.textAQUser.toPlainText()) # Save AQ user
-        keyring.set_password("DataDoctor", "aqPassword", self.qleAQPassword.text()) # Save AQ password
-        keyring.set_password("DataDoctor", "usgsApiKey", self.qleUSGSAPIKey.text()) # Save USGS key
-        if Logic.debug: print("[DEBUG] Settings saved")
+        # Save credentials to keyring with validation
+        credentials = [
+            ("aqServer", self.textAQServer.toPlainText()),
+            ("aqUser", self.textAQUser.toPlainText()),
+            ("aqPassword", self.qleAQPassword.text()),
+            ("usgsApiKey", self.qleUSGSAPIKey.text())
+        ]
+        for key, value in credentials:
+            if value and isinstance(value, str) and value.strip(): # Save only valid strings
+                try:
+                    keyring.set_password("DataDoctor", key, value) # Save to keyring
+                    if Logic.debug: print(f"[DEBUG] Saved {key} to keyring")
+                except Exception as e:
+                    if Logic.debug: print(f"[ERROR] Failed to save {key} to keyring: {e}")
+                    QMessageBox.warning(self, "Credential Save Error", f"Failed to save {key}: {e}")
+            elif Logic.debug:
+                print(f"[DEBUG] Skipped saving {key} to keyring: empty or invalid")
 
     def togglePasswordVisibility(self):
         if self.lastCharTimer.isActive():

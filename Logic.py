@@ -2,6 +2,7 @@ import os
 import sys
 import datetime
 import configparser
+import json
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths
 from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont
@@ -261,7 +262,7 @@ def buildDataDictionary(table):
     with open(resourcePath('DataDictionary.csv'), 'r', encoding='utf-8-sig') as f:
         data = [line.strip().split(',') for line in f.readlines()] # Read CSV
     if not data:
-        if Logic.debug: print("[DEBUG] DataDictionary.csv empty")
+        if debug: print("[DEBUG] DataDictionary.csv empty")
         return
 
     table.setRowCount(len(data) - 1) # Skip header
@@ -280,7 +281,7 @@ def buildDataDictionary(table):
     for c in range(table.columnCount()):
         table.resizeColumnToContents(c) # Auto-size to header
         
-    if Logic.debug: print(f"[DEBUG] Built DataDictionary with {table.rowCount()} rows, {table.columnCount()} columns")
+    if debug: print(f"[DEBUG] Built DataDictionary with {table.rowCount()} rows, {table.columnCount()} columns")
 
 def getDataDictionaryItem(table, dataId):
     for r in range(table.rowCount()):
@@ -490,13 +491,13 @@ def loadConfig():
             settings['qaqc'] = config.get('qaqc', settings['qaqc']) # Load QAQC
             settings['rawData'] = config.get('rawData', settings['rawData']) # Load raw
             settings['lastQuickLook'] = config.get('lastQuickLook', settings['lastQuickLook']) # Load quick look
-            if Logic.debug: print("[DEBUG] Loaded settings from user.config")
+            if debug: print("[DEBUG] Loaded settings from user.config")
         except Exception as e:
-            if Logic.debug: print(f"[ERROR] Failed to load user.config: {e}")
+            if debug: print(f"[ERROR] Failed to load user.config: {e}")
     else:
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(settings, configFile, indent=2) # Write default JSON
-        if Logic.debug: print("[DEBUG] Created default user.config")
+        if debug: print("[DEBUG] Created default user.config")
     return settings
 
 def exportTableToCSV(table, fileLocation, fileName):
@@ -755,7 +756,7 @@ def reloadGlobals():
     qaqcEnabled = settings['qaqc'] # Set QAQC
     rawData = settings['rawData'] # Set raw
 
-    if Logic.debug: print("[DEBUG] Globals reloaded from user.config")
+    if debug: print("[DEBUG] Globals reloaded from user.config")
 
 def applyRetroFont(widget, pointSize=10):
     fontPath = resourcePath('ui/fonts/PressStart2P-Regular.ttf') # Load from path
@@ -827,7 +828,8 @@ def convertConfigToJson():
         config = configparser.ConfigParser()
         config.read(oldConfigPath) # Read old ini
 
-        if Logic.debug: print("[DEBUG] Found config.ini, converting to user.config")
+        if debug: print("[DEBUG] Found config.ini, converting to user.config")
+
         settings = {
             'utcOffset': "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
             'retroFont': True,
@@ -842,19 +844,31 @@ def convertConfigToJson():
         }
         if 'Settings' in config:
             settings['utcOffset'] = config['Settings'].get('utcOffset', settings['utcOffset']) # Preserve UTC
+            if debug: print(f"[DEBUG] Converted utcOffset: {settings['utcOffset']}")
             settings['retroFont'] = config['Settings'].getboolean('retroFont', settings['retroFont']) # Preserve retro
+            if debug: print(f"[DEBUG] Converted retroFont: {settings['retroFont']}")
             settings['qaqc'] = config['Settings'].getboolean('qaqc', settings['qaqc']) # Preserve QAQC
+            if debug: print(f"[DEBUG] Converted qaqc: {settings['qaqc']}")
             settings['rawData'] = config['Settings'].getboolean('rawData', settings['rawData']) # Preserve raw
+            if debug: print(f"[DEBUG] Converted rawData: {settings['rawData']}")
             settings['debugMode'] = config['Settings'].getboolean('debugMode', settings['debugMode']) # Preserve debug
+            if debug: print(f"[DEBUG] Converted debugMode: {settings['debugMode']}")
             settings['tnsNamesLocation'] = config['Settings'].get('tnsNamesLocation', settings['tnsNamesLocation']) # Preserve TNS
+            if debug: print(f"[DEBUG] Converted tnsNamesLocation: {settings['tnsNamesLocation']}")
             settings['hourTimestampMethod'] = config['Settings'].get('hourTimestampMethod', settings['hourTimestampMethod']) # Preserve period
+            if debug: print(f"[DEBUG] Converted hourTimestampMethod: {settings['hourTimestampMethod']}")
             settings['lastQuickLook'] = config['Settings'].get('lastQuickLook', settings['lastQuickLook']) # Preserve quick look
+            if debug: print(f"[DEBUG] Converted lastQuickLook: {settings['lastQuickLook']}")
             settings['colorMode'] = config['Settings'].get('colorMode', settings['colorMode']) # Preserve color
+            if debug: print(f"[DEBUG] Converted colorMode: {settings['colorMode']}")
             settings['lastExportPath'] = config['Settings'].get('lastExportPath', settings['lastExportPath']) # Preserve export path
+            if debug: print(f"[DEBUG] Converted lastExportPath: {settings['lastExportPath']}")
+
         with open(newConfigPath, 'w', encoding='utf-8') as configFile:
             json.dump(settings, configFile, indent=2) # Write JSON
-        if Logic.debug: print("[DEBUG] Converted config.ini to user.config")
-    elif Logic.debug:
+
+        if debug: print("[DEBUG] Converted config.ini to user.config")
+    elif debug:
         print("[DEBUG] No config.ini found or user.config exists, skipping conversion")
 
 def initializeQueryWindow(window, rbCustomDateTime, dteStartDate, dteEndDate): 

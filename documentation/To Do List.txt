@@ -1,4 +1,4 @@
--Config should be saved as an xml and label is user.config instead of config.ini, maybe json instead of xml
+-Add to current button style, hover and press effects
 -Logging and debugging, best practices
 -Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
     -Search will need a combobox to allow the user to search by dataID, label, or database
@@ -22,8 +22,3 @@
 -Add refresh button to reset table sort
 -Export to CSV is seperating timestamps, it's using date,time. Need to export them in a single column, seperated by a space
 -SDID with MRID in them are not running through data dictionary properly, which means they are not getting proper headers
-
-####### DATA DICTIONARY TABLE MODIFICATIONS #######
--DataDictionary table needs to auto size columns
--DataDictionary needs sort, similar to the date table sort
--Buttons need to run through button logic
