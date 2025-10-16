@@ -18,12 +18,6 @@
 -USG API key needs masking button
 -Add USBR/USGS/AQUARIUS query limiter as an option in respective sections
 
-####### QUERY INTERFACE MODIFICATIONS #######
--Fix last quick look not working
--Internal query list box needs to be wider
--Add in some quick time changes from 48 hours and 7 days
-    -Two day set to beginning of previous day to current day current hour
-
 ####### DATA TABLE MODIFICATIONS #######
 -Table first column doesn't adjust size to fit data AND header after clicking header to sort. Header is truncated on SDID 1721. Also can't resize header after sorting like that
 -Add refresh button to reset table sort
