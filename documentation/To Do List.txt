@@ -1,11 +1,20 @@
 -Add to current button style, hover and press effects
--Clean up user.config and remove unused options, like color mode
+-Remove color mode as a user.config item
 -Logging and debugging, best practices
+    -Any current [DEBUG] after an exception should be a ERROR and logged, no matter if DEBUG = true
 -Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
     -Search will need a combobox to allow the user to search by dataID, label, or database
 -Change quick look save text box into a q line edit
 -Aquairus headers need to be laevl /n location /n uid
 -When the user hits add query and the query list gets too long and requires a scroll bar, make the list scroll to the bottom so user can see new entry
+-Create a plot tool that allows users to build different data plots and save that plot config as a quick look
+    -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
+-Save dialog for CSV needs wider columns or auto size needs to be fixed
+-Need an option to change font size in the program
+
+
+
+-Export to CSV needs work. Remembering path isn't working across platform, possibly Qt issue. Lots of trial and error code left in there, needs to be removed when completed
 
 ####### MAIN INTERFACE MODIFICATIONS #######
 -Stress relief button that makes screaming goat sounds
@@ -30,6 +39,7 @@
 -Add refresh button to reset table sort
 -Export to CSV is seperating timestamps, it's using date,time. Need to export them in a single column, seperated by a space
 -SDID with MRID in them are not running through data dictionary properly, which means they are not getting proper headers
+-Column resize doesn't seem to work until 2nd query
 
 ####### GIT MODIFICATIONS #######
 -Figure out why __pycache__ is not being ignored
