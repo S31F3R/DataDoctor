@@ -3,8 +3,8 @@ import QueryUSBR
 import QueryUSGS
 import QueryAquarius
 import Logic
-import datetime
-import configparser
+#import datetime
+#import configparser
 import keyring
 import os
 import json
@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
                              QTextEdit, QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
                              QMessageBox, QDialog, QSizePolicy, QTabWidget, QRadioButton, QButtonGroup,
                              QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox)
-from datetime import datetime, timedelta
+#from datetime import datetime, timedelta
 from PyQt6 import uic
 from PyQt6.QtMultimedia import QSoundEffect
 from collections import defaultdict
