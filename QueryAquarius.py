@@ -5,12 +5,11 @@ from datetime import datetime, timedelta
 import Logic # For globals like debug and utcOffset
 import platform # For OS check
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-from requests_ntlm import HttpNtlmAuth # Fallback probe (if needed)
+from webdriver_manager.microsoft import EdgeChromiumDriverManager
 
 # Module-level cache (secure in-memory only, no disk)
 cachedSession = None
@@ -19,63 +18,52 @@ cachedServer = None
 cacheExpiry = None # datetime for TTL (1hr)
 
 def getAdSession(server):
-    global cachedSession, cachedServer, cacheExpiry
-    now = datetime.now()
-
-    # Check cache validity
-    if cachedSession and cachedServer and cacheExpiry and now < cacheExpiry:
-        if Logic.debug == True: print("[DEBUG] Using cached AD session.")
-        return cachedSession
-
-    # Setup headless Chrome
-    chromeOptions = Options()
-    chromeOptions.add_argument("--headless")
-    chromeOptions.add_argument("--no-sandbox")
-    chromeOptions.add_argument("--disable-dev-shm-usage")
-    driver = webdriver.Chrome(options=chromeOptions, executable_path=ChromeDriverManager().install())
+    """Fetch AD auth session via headless Edge, cache cookies in keyring."""
+    if Logic.debug == True: print("[DEBUG] Initiating AD auth session probe.")
+    if platform.system() != 'Windows':
+        if Logic.debug == True: print("[DEBUG] AD auth skipped on non-Windows.")
+        return None
 
     try:
-        if Logic.debug == True: print("[DEBUG] Loading AD auth page: {}/AQUARIUS".format(server))
-        driver.get("{}/AQUARIUS".format(server))
+        # Setup headless Edge
+        edgeOptions = EdgeOptions()
+        edgeOptions.add_argument("--headless")
+        edgeOptions.add_argument("--disable-gpu") # Stability on headless
+        edgeOptions.add_argument("--no-sandbox") # Safe for Manjaro/Win
+        driver = webdriver.Edge(EdgeChromiumDriverManager().install(), options=edgeOptions)
 
-        # Find and click Windows Button (submit input by name)
+        # Navigate to login page
+        loginUrl = f'{server}/AQUARIUS'
+        driver.get(loginUrl)
+
+        # Find and click the Windows Button (by name, direct body input)
         button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.NAME, "Windows Button"))
+            EC.element_to_be_clickable((By.XPATH, "//input[@name='Windows Button']"))
         )
-        button.click()
+        button.click() # Submit triggers AD auth
 
-        # Wait for redirect (assume Springboard or 200 status)
+        # Wait for redirect to Springboard dashboard (success check)
         WebDriverWait(driver, 10).until(
-            lambda d: d.execute_script("return document.readyState") == "complete" and d.current_url != "{}/AQUARIUS".format(server)
+            EC.url_contains('/AQUARIUS/apps/springboard/app/#/locations')
         )
 
         # Extract all cookies
         cookies = driver.get_cookies()
         cookieDict = {c['name']: c['value'] for c in cookies}
-        session = requests.Session()
-        for name, value in cookieDict.items():
-            session.cookies.set(name, value)
+        expiry = datetime.now() + timedelta(hours=1) # 1hr TTL
 
-        # Cache session and expiry
-        cachedSession = session
-        cachedServer = server
-        cacheExpiry = now + timedelta(hours=1)
-        keyring.set_password("DataDoctor", "aqAdCookies", json.dumps(cookieDict)) # Secure JSON
-        keyring.set_password("DataDoctor", "aqAdExpiry", str(cacheExpiry.timestamp())) # Secure expiry
-        if Logic.debug == True: print("[DEBUG] AD auth success, cached session with {} cookies.".format(len(cookies)))
+        # Cache in keyring (secure JSON, same as creds)
+        keyring.set_password("DataDoctor", "aqAdCookies", json.dumps({'cookies': cookieDict, 'expiry': expiry.isoformat()}))
+        if Logic.debug == True: print("[DEBUG] AD auth success, cookies cached.")
+
+        driver.quit()
+        return cookieDict
 
     except Exception as e:
         if Logic.debug == True: print("[WARN] AD auth failed: {}, falling to creds.".format(e))
-        cachedSession = None
-        cachedServer = None
-        cacheExpiry = None
-        keyring.delete_password("DataDoctor", "aqAdCookies", quiet=True) # Clear on fail
-        keyring.delete_password("DataDoctor", "aqAdExpiry", quiet=True)
-
-    finally:
-        driver.quit() # Clean up
-
-    return cachedSession
+        if 'driver' in locals():
+            driver.quit()
+        return None
 
 def apiRead(dataIDs, startDate, endDate, interval):
     global cachedSession, cachedToken, cachedServer, cacheExpiry # For secure reuse/clear
@@ -122,53 +110,81 @@ def apiRead(dataIDs, startDate, endDate, interval):
     startDate = f'{startDateTimeOffset.year}-{startMonth}-{startDay} {startHour}:{startMinute}'
     endDate = f'{endDateTimeOffset.year}-{endMonth}-{endDay} {endHour}:{endMinute}'
 
-    # Try AD session first
-    server = keyring.get_password("DataDoctor", "aqServer") or ''
-    if not server:
-        print("[ERROR] Missing Aquarius server.")
-        return {uid: {'data': [], 'label': uid} for uid in dataIDs}
+    # Check cache validity (1hr TTL, secure expiry)
+    now = datetime.now()
+    if cachedSession and cachedServer and cacheExpiry and now < cacheExpiry:
+        if Logic.debug == True: print("[DEBUG] Using cached session/server.")
+        session = cachedSession
+        if cachedToken: # Creds mode
+            headers = {'X-Authentication-Token': cachedToken}
+        else: # AD mode
+            headers = None
+    else:
+        # Clear expired cache
+        cachedSession = None
+        cachedToken = None
+        cachedServer = None
+        cacheExpiry = None
+        session = None
+        headers = None
 
-    session = getAdSession(server)
-    headers = None # AD uses cookies
-
-    if not session:
-        # Fallback to creds
-        user = keyring.get_password("DataDoctor", "aqUser") or ''
-        password = keyring.get_password("DataDoctor", "aqPassword") or ''
-
-        if not user or not password:
-            print("[ERROR] Missing Aquarius credentials for fallback.")
+        # Load server
+        server = keyring.get_password("DataDoctor", "aqServer") or ''
+        if not server:
+            print("[ERROR] Missing Aquarius server.")
             return {uid: {'data': [], 'label': uid} for uid in dataIDs}
 
-        # Authenticate session
-        authData = {'Username': user, 'EncryptedPassword': password}
-        authResponse = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=authData, verify=False)
+        # Try AD auth first (Windows only)
+        if platform.system() == 'Windows' and dataIDs:
+            if Logic.debug == True: print("[DEBUG] Probing AD auth via headless Edge.")
+            cachedCookies = getAdSession(server)
+            if cachedCookies:
+                session = requests.Session()
+                for name, value in cachedCookies.items():
+                    session.cookies.set(name, value)
+                cachedSession = session
+                cachedServer = server
+                cacheExpiry = datetime.fromisoformat(cachedCookies.get('expiry', (now + timedelta(hours=1)).isoformat()))
+                headers = None # Cookies handle auth
+                if Logic.debug == True: print("[DEBUG] AD auth success, caching session.")
 
-        if authResponse.status_code != 200:
-            print("[ERROR] Aquarius authentication failed.")
-            # Clear creds post-fail
+        if not session: # Creds fallback (or AD fail/non-Win/empty dataIDs)
+            user = keyring.get_password("DataDoctor", "aqUser") or ''
+            password = keyring.get_password("DataDoctor", "aqPassword") or ''
+
+            if not user or not password:
+                print("[ERROR] Missing Aquarius credentials for fallback.")
+                return {uid: {'data': [], 'label': uid} for uid in dataIDs}
+
+            # Authenticate session
+            authData = {'Username': user, 'EncryptedPassword': password}
+            authResponse = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=authData, verify=False)
+
+            if authResponse.status_code != 200:
+                print("[ERROR] Aquarius authentication failed.")
+                # Clear creds post-fail
+                user = None
+                password = None
+                return {uid: {'data': [], 'label': uid} for uid in dataIDs}
+
+            token = authResponse.text.strip('"') # Strip quotes if present
+            headers = {'X-Authentication-Token': token}
+
+            # Cache creds session/token
+            cachedSession = requests.Session()
+            cachedSession.headers.update(headers)
+            cachedToken = token
+            cachedServer = server
+            cacheExpiry = now + timedelta(hours=1)
+            session = cachedSession
+            if Logic.debug == True: print("[DEBUG] Creds auth success, caching token.")
+
+            # Clear creds immediately after use   
             user = None
             password = None
-            return {uid: {'data': [], 'label': uid} for uid in dataIDs}
 
-        token = authResponse.text.strip('"') # Strip quotes if present
-        headers = {'X-Authentication-Token': token}
-
-        # Cache creds session/token
-        cachedSession = requests.Session()
-        cachedSession.headers.update(headers)
-        cachedToken = token
-        cachedServer = server
-        cacheExpiry = now + timedelta(hours=1)
-        session = cachedSession
-        if Logic.debug == True: print("[DEBUG] Creds auth success, caching token.")
-
-        # Clear creds immediately after use   
-        user = None
-        password = None
-
-    # Clear server post-auth (but cached)
-    server = None
+        # Clear server post-auth (but cached)
+        server = None
 
     result = {}
     uids = dataIDs
