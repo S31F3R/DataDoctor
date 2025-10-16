@@ -17,9 +17,6 @@
 -non data dictionary dataID should still run through missing and repeating
 -modify and test for day, month, year, and water year queries
 
-####### OPTIONS INTERFACE MODIFICATIONS #######
--USG API key needs masking button
-
 ####### DATA TABLE MODIFICATIONS #######
 -Table first column doesn't adjust size to fit data AND header after clicking header to sort. Header is truncated on SDID 1721. Also can't resize header after sorting like that
 -Add refresh button to reset table sort
