@@ -1,5 +1,7 @@
 -Config should be saved as an xml and label is user.config instead of config.ini, maybe json instead of xml
 -Logging and debugging, best practices
+-Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
+    -Search will need a combobox to allow the user to search by dataID, label, or database
 
 ####### MAIN INTERFACE MODIFICATIONS #######
 -Stress relief button that makes screaming goat sounds
