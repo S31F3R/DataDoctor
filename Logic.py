@@ -4,7 +4,7 @@ import datetime
 import configparser
 import json
 from datetime import datetime, timedelta
-from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths
+from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDir
 from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget, QTreeView, QSplitter
 
@@ -510,24 +510,30 @@ def loadConfig():
 
 def exportTableToCSV(table, fileLocation, fileName):
     if table.rowCount() == 0:
-        print("Empty table—no export.")
+        if debug: print("[DEBUG] exportTableToCSV: Empty table-no export")
         return
 
-    # Get last path from config (default to Documents)
-    config = configparser.ConfigParser()
-    config.read(getConfigPath())
-    lastPath = config['Settings'].get('lastExportPath', os.path.expanduser("~/Documents")) if 'Settings' in config else os.path.expanduser("~/Documents")
+    # Get full settings from config (merges defaults, preserves all keys)
+    settings = loadConfig()
+    if debug: print(f"[DEBUG] exportTableToCSV: Loaded full settings: {settings}")    
+    lastPath = settings.get('lastExportPath', os.path.expanduser("~/Documents"))
 
-    # Force Documents if lastPath empty/invalid
+    # Normalize loaded path to platform slashes/abs (handles cross-save)
+    lastPath = os.path.normpath(os.path.abspath(lastPath)) if lastPath else None
+    if debug: print(f"[DEBUG] exportTableToCSV: Normalized lastPath: {lastPath}")
+
+    # Force Documents if lastPath exmpty/invalid
     if not lastPath or not os.path.exists(lastPath):
-        lastPath = os.path.expanduser("~/Documents")
+        lastPath = os.path.normpath(os.path.expanduser("~/Documents"))
+        if debug: print("[DEBUG] exportTableToCSV: Used fallback Documents path")
 
     defaultDir = lastPath
 
     # Timestamped default name (yyyy-mm-dd HH:mm:ss Export.csv)
     timestamp = datetime.now().strftime('%Y-%m-%d %H%M%S')
     defaultName = f"{timestamp} Export.csv"
-    suggestedPath = os.path.join(defaultDir, defaultName)
+    suggestedPath = os.path.normpath(os.path.join(defaultDir, defaultName))
+    if debug: print(f"[DEBUG] exportTableToCSV: Suggested path: {suggestedPath}")
 
     # Instantiate dialog for control (non-static)
     dlg = QFileDialog(None)
@@ -535,18 +541,20 @@ def exportTableToCSV(table, fileLocation, fileName):
     dlg.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
     dlg.setNameFilter("CSV files (*.csv)")
     dlg.selectFile(defaultName)
-    dlg.setDirectory(defaultDir)
+    dlg.setDirectory(QDir.fromNativeSeparators(defaultDir))  
     dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True) # Force Qt-based for font control (cross-platform)
 
     if retroFont:
         applyRetroFont(dlg, 9) # Apply smaller retro font recursively
-        dlg.resize(800, 600) # Set custom size only for retro
+        dlg.resize(1200, 600) # Set custom size only for retro
         dlg.setViewMode(QFileDialog.ViewMode.Detail) # Ensure details view for columns
         
         # Force sidebar width via splitter (adjust 150 as needed for your font/setup)
         splitter = dlg.findChild(QSplitter)
+
         if splitter:
             splitter.setSizes([150, dlg.width() - 150]) # Sidebar 150px, main the rest
+            if debug: print("[DEBUG] exportTableToCSV: Adjusted splitter sizes")
         
         # Optional: Auto-resize main view columns (sidebar fixed, so skipped for it)
         mainView = dlg.findChild(QTreeView, "fileview") # Main view (may vary; fallback to first)
@@ -556,17 +564,20 @@ def exportTableToCSV(table, fileLocation, fileName):
         if mainView:
             header = mainView.header()
 
-            for i in range(header.count()):
-                mainView.resizeColumnToContents(i) # Auto-size main columns
+            for i in range(header.count()):                        
+                mainView.resizeColumnToContents(i) # Auto-size main columns                
+            if debug: print("[DEBUG] exportTableToCSV: Resized main view columns")
 
     if dlg.exec():
         filePath = dlg.selectedFiles()[0]
+        if debug: print(f"[DEBUG] exportTableToCSV: User canceled dialog")
     else:
         return # User canceled
 
     # Build CSV
     headers = [table.horizontalHeaderItem(h).text().replace('\n', ' | ') for h in range(table.columnCount())]
-    csvLines = [',Timestamp,' + ','.join(headers)] # Header with Timestamp
+    csvLines = ['Date/Time,' + ','.join(headers)] # Header with Timestamp
+    if debug: print(f"[DEBUG] exportTableToCSV: Built headers: {csvLines[0]}")
 
     # Add timestamps as first column
     timestamps = [table.verticalHeaderItem(r).text() if table.verticalHeaderItem(r) else '' for r in range(table.rowCount())]
@@ -576,18 +587,29 @@ def exportTableToCSV(table, fileLocation, fileName):
         csvLines.append(timestamps[r] + ',' + ','.join(rowData))
 
     # Write
-    with open(filePath, 'w', encoding='utf-8-sig', newline='') as f:
-        f.write('\n'.join(csvLines))
+    try:
+        with open(filePath, 'w', encoding='utf-8-sig', newline='') as f:
+            f.write('\n'.join(csvLines))
 
-    # Save last path to config (dir only, preserve others)
-    exportDir = os.path.dirname(filePath)
-    if 'Settings' not in config:
-        config['Settings'] = {}
+        if debug: print(f"[DEBUG] exportTableToCSV: Successfully wrote CSV to {filePath}")
+    except Exception as e:
+        if debug: print(f"[DEBUG] exportTableToCSV: Failed to write CSV: {e}")
+        return
 
-    config['Settings']['lastExportPath'] = exportDir
+    # Save last path to full settings (dir only, preserve others)
+    exportDir = os.path.normpath(os.path.dirname(filePath))
+    if debug: print("[DEBUG] exportTableToCSV: Updating lastExportPath to {exportDir}")
+    settings['lastExportPath'] = exportDir
+    if debug: print("[DEBUG] exportTableToCSV: Full settings after update: {settings}")
 
-    with open(getConfigPath(), 'w') as configFile:
-        config.write(configFile) 
+    configPath = getConfigPath()
+
+    try:
+        with open(configPath, 'w', encoding='utf-8') as configFile:
+            json.dump(settings, configFile, indent=2)
+        if debug: print("[DEBUG] exportTableToCSV: Updated user.config with new lastExportPath-full file preserved")
+    except Exception as e:
+        if debug: print(f"[DEBUG] exportTableToCSV: Failed to update user.config: {e}")       
 
 def customSortTable(table, col, dataDictionaryTable):
     # Prevent overlap (ignore if sorting already)
