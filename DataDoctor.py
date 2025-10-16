@@ -801,47 +801,54 @@ class uiQuickLook(QDialog):
 class uiOptions(QDialog):
     """Options editor: Stores database connection information and application settings."""
     def __init__(self, parent=None):
-        super(uiOptions, self).__init__(parent) # Call the inherited classes __init__ method
-        uic.loadUi(Logic.resourcePath('ui/winOptions.ui'), self) # Load the .ui file
+        super(uiOptions, self).__init__(parent) # Call inherited __init__
+        uic.loadUi(Logic.resourcePath('ui/winOptions.ui'), self) # Load UI file
 
-        # Define the controls            
-        self.cbUTCOffset = self.findChild(QComboBox,'cbUTCOffset')  
-        self.textAQServer = self.findChild(QTextEdit,'textAQServer') 
-        self.textAQUser = self.findChild(QTextEdit,'textAQUser') 
-        self.qleAQPassword = self.findChild(QLineEdit,'qleAQPassword') 
-        self.textUSGSAPIKey = self.findChild(QTextEdit,'textUSGSAPIKey') 
-        self.textTNSNames = self.findChild(QTextEdit, 'textTNSNames')
-        self.textSQLNetOra = self.findChild(QTextEdit, 'textSQLNetOra')
-        self.textOracleWallet = self.findChild(QTextEdit, 'textOracleWallet')
-        self.rbBOP = self.findChild(QRadioButton, 'rbBOP')
-        self.rbEOP = self.findChild(QRadioButton, 'rbEOP')
-        self.btnbOptions = self.findChild(QDialogButtonBox, 'btnbOptions') 
-        self.cbRetroFont = self.findChild(QCheckBox, 'cbRetroFont')
-        self.cbQAQC = self.findChild(QCheckBox, 'cbQAQC')
-        self.cbRawData = self.findChild(QCheckBox, 'cbRawData')
-        self.cbDebug = self.findChild(QCheckBox, 'cbDebug')
-        self.tabWidget = self.findChild(QTabWidget, 'tabWidget') 
-        self.btnShowPassword = self.findChild(QPushButton, 'btnShowPassword')   
-
-        # Add to general tab
-        generalTab = self.tabWidget.widget(0)     
+        # Define controls
+        self.cbUTCOffset = self.findChild(QComboBox, 'cbUTCOffset') # UTC offset selector
+        self.textAQServer = self.findChild(QTextEdit, 'textAQServer') # Aquarius server
+        self.textAQUser = self.findChild(QTextEdit, 'textAQUser') # Aquarius user
+        self.qleAQPassword = self.findChild(QLineEdit, 'qleAQPassword') # Aquarius password
+        self.qleUSGSAPIKey = self.findChild(QLineEdit, 'qleUSGSAPIKey') # USGS API key
+        self.textTNSNames = self.findChild(QTextEdit, 'textTNSNames') # TNS names path
+        self.rbBOP = self.findChild(QRadioButton, 'rbBOP') # Begin of period
+        self.rbEOP = self.findChild(QRadioButton, 'rbEOP') # End of period
+        self.btnbOptions = self.findChild(QDialogButtonBox, 'btnbOptions') # Save/Cancel buttons
+        self.cbRetroFont = self.findChild(QCheckBox, 'cbRetroFont') # Retro font toggle
+        self.cbQAQC = self.findChild(QCheckBox, 'cbQAQC') # QAQC toggle
+        self.cbRawData = self.findChild(QCheckBox, 'cbRawData') # Raw data toggle
+        self.cbDebug = self.findChild(QCheckBox, 'cbDebug') # Debug toggle
+        self.tabWidget = self.findChild(QTabWidget, 'tabWidget') # Settings tabs
+        self.btnShowPassword = self.findChild(QPushButton, 'btnShowPassword') # AQ password toggle
+        self.btnShowUSGSKey = self.findChild(QPushButton, 'btnShowUSGSKey') # USGS key toggle
 
         # Set button style
-        Logic.buttonStyle(self.btnShowPassword)       
+        Logic.buttonStyle(self.btnShowPassword) # Apply flat style
+        Logic.buttonStyle(self.btnShowUSGSKey) # Apply flat style
 
-        # Timer for password show (restored to fix error)
-        self.lastCharTimer = QTimer(self) # Timer for masking after show
-        self.lastCharTimer.timeout.connect(self.maskLastChar)
+        # Timers for password and USGS key show
+        self.lastCharTimer = QTimer(self) # Timer for AQ password
+        self.lastCharTimer.setSingleShot(True) # Single-shot to prevent overlap
+        self.lastCharTimer.timeout.connect(self.maskLastChar) # Re-mask AQ password
+        self.lastCharTimerUSGS = QTimer(self) # Timer for USGS key
+        self.lastCharTimerUSGS.setSingleShot(True) # Single-shot to prevent overlap
+        self.lastCharTimerUSGS.timeout.connect(self.maskLastCharUSGS) # Re-mask USGS key
 
         # Create events
-        self.btnbOptions.accepted.connect(self.onSavePressed)
-        self.btnShowPassword.clicked.connect(self.togglePasswordVisibility)
+        self.btnbOptions.accepted.connect(self.onSavePressed) # Save settings
+        self.btnShowPassword.clicked.connect(self.togglePasswordVisibility) # Toggle AQ password
+        self.btnShowUSGSKey.clicked.connect(self.toggleUSGSKeyVisibility) # Toggle USGS key
 
-        # Mask password by default
-        self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)  
+        # Mask password and USGS key by default
+        self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password) # Mask AQ password
+        self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Password) # Mask USGS key
+
+        # Install event filters for keypress
+        self.qleAQPassword.installEventFilter(self) # AQ password
+        self.qleUSGSAPIKey.installEventFilter(self) # USGS key
 
         # Populate UTC offset combobox
-        self.cbUTCOffset.addItem("UTC-12:00 | Baker Island")
+        self.cbUTCOffset.addItem("UTC-12:00 | Baker Island") # Add UTC options
         self.cbUTCOffset.addItem("UTC-11:00 | American Samoa")
         self.cbUTCOffset.addItem("UTC-10:00 | Hawaii")
         self.cbUTCOffset.addItem("UTC-09:30 | Marquesas Islands")
@@ -880,178 +887,162 @@ class uiOptions(QDialog):
         self.cbUTCOffset.addItem("UTC+13:00 | Samoa")
         self.cbUTCOffset.addItem("UTC+14:00 | Kiritimati")
 
-        # Set default for first-time usage (UTC+00:00 in the "middle")
-        self.cbUTCOffset.setCurrentIndex(14)
+        # Set default UTC offset
+        self.cbUTCOffset.setCurrentIndex(14) # UTC+00:00 default
+        if Logic.debug: print("[DEBUG] uiOptions initialized")
 
     def showEvent(self, event):
-        Logic.centerWindowToParent(self)
+        Logic.centerWindowToParent(self) # Center on parent
         super().showEvent(event)
-        self.loadSettings()
-        self.tabWidget.setCurrentIndex(0) # Default to tabGeneral (index 0)
+        self.loadSettings() # Load settings
+        self.tabWidget.setCurrentIndex(0) # Default to general tab
+        if Logic.debug: print("[DEBUG] uiOptions showEvent")
 
     def eventFilter(self, obj, event):
         if obj == self.qleAQPassword and event.type() == QEvent.Type.KeyPress:
-            # Show last char on key press
-            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.lastCharTimer.start(500) # 500ms delay then mask
+            if self.lastCharTimer.isActive():
+                self.lastCharTimer.stop() # Stop timer to prevent overlap
+            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal) # Show AQ password
+            self.lastCharTimer.start(500) # 500ms re-mask
+            if Logic.debug: print("[DEBUG] AQ password keypress, showing temporarily")
+        elif obj == self.qleUSGSAPIKey and event.type() == QEvent.Type.KeyPress:
+            if self.lastCharTimerUSGS.isActive():
+                self.lastCharTimerUSGS.stop() # Stop timer to prevent overlap
+            self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Normal) # Show USGS key
+            self.lastCharTimerUSGS.start(500) # 500ms re-mask
+            if Logic.debug: print("[DEBUG] USGS API key keypress, showing temporarily")
+        elif obj == self.qleUSGSAPIKey and event.type() == QEvent.Type.InputMethod:
+            if self.lastCharTimerUSGS.isActive():
+                self.lastCharTimerUSGS.stop() # Stop timer for paste
+            self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Normal) # Show for paste
+            self.lastCharTimerUSGS.start(500) # 500ms re-mask
+            if Logic.debug: print("[DEBUG] USGS API key paste, showing temporarily")
+        elif obj == self.qleAQPassword and event.type() == QEvent.Type.InputMethod:
+            if self.lastCharTimer.isActive():
+                self.lastCharTimer.stop() # Stop timer for paste
+            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal) # Show for paste
+            self.lastCharTimer.start(500) # 500ms re-mask
+            if Logic.debug: print("[DEBUG] AQ password paste, showing temporarily")
         return super().eventFilter(obj, event)
 
     def maskLastChar(self):
-        self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)
+        self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password) # Re-mask AQ password
+        if Logic.debug: print("[DEBUG] AQ password re-masked")
+
+    def maskLastCharUSGS(self):
+        self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Password) # Re-mask USGS key
+        if Logic.debug: print("[DEBUG] USGS API key re-masked")
 
     def loadSettings(self):
         config = configparser.ConfigParser()
-        config.read(Logic.getConfigPath()) # Use helper
-
-        # Non-sensitive from config.ini (with defaults if new)
+        config.read(Logic.getConfigPath()) # Load config
         if 'Settings' in config:
-            self.cbUTCOffset.setCurrentText(config['Settings'].get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London"))
+            self.cbUTCOffset.setCurrentText(config['Settings'].get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London")) # Set UTC offset
             retroFont = config['Settings'].getboolean('retroFont', True) # Default checked
-            self.cbRetroFont.setChecked(retroFont)
+            self.cbRetroFont.setChecked(retroFont) # Set retro font
             qaqc = config['Settings'].getboolean('qaqc', True) # Default checked
-            self.cbQAQC.setChecked(qaqc)
+            self.cbQAQC.setChecked(qaqc) # Set QAQC
             rawData = config['Settings'].getboolean('rawData', False) # Default unchecked
-            self.cbRawData.setChecked(rawData)
-            debugMode = config['Settings'].getboolean('debugMode', False)
-            self.cbDebug.setChecked(debugMode)
-            tnsPath = config['Settings'].get('tnsNamesLocation', '')
-            sqlNetPath = config['Settings'].get('sqlNetOraLocation', '')
-            walletPath = config['Settings'].get('oracleWalletLocation', '')
-
-            # Shorten if starts with appRoot
+            self.cbRawData.setChecked(rawData) # Set raw data
+            debugMode = config['Settings'].getboolean('debugMode', False) # Default unchecked
+            self.cbDebug.setChecked(debugMode) # Set debug
+            tnsPath = config['Settings'].get('tnsNamesLocation', '') # TNS path
             if tnsPath.startswith(Logic.appRoot):
-                tnsPath = tnsPath.replace(Logic.appRoot, '%AppRoot%')
-            if sqlNetPath.startswith(Logic.appRoot):
-                sqlNetPath = sqlNetPath.replace(Logic.appRoot, '%AppRoot%')
-            if walletPath.startswith(Logic.appRoot):
-                walletPath = walletPath.replace(Logic.appRoot, '%AppRoot%')
-
-            self.textTNSNames.setPlainText(tnsPath)
-            self.textSQLNetOra.setPlainText(sqlNetPath)
-            self.textOracleWallet.setPlainText(walletPath)
-            hourMethod = config['Settings'].get('hourTimestampMethod', 'EOP')
-
+                tnsPath = tnsPath.replace(Logic.appRoot, '%AppRoot%') # Shorten path
+            self.textTNSNames.setPlainText(tnsPath) # Set TNS path
+            hourMethod = config['Settings'].get('hourTimestampMethod', 'EOP') # Default EOP
             if hourMethod == 'EOP':
-                self.rbEOP.setChecked(True)
+                self.rbEOP.setChecked(True) # Set EOP
             else:
-                self.rbBOP.setChecked(True)  
-
-        # Auto-populate Oracle from env if blank
+                self.rbBOP.setChecked(True) # Set BOP
         if not self.textTNSNames.toPlainText():
-            envTns = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin'))
-
+            envTns = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin')) # Default TNS path
             if envTns.startswith(Logic.appRoot):
-                envTns = envTns.replace(Logic.appRoot, '%AppRoot%')
-            self.textTNSNames.setPlainText(envTns)
-        if not self.textSQLNetOra.toPlainText():
-            envSql = os.environ.get('SQLNET_ORA', Logic.resourcePath('oracle/network/admin'))
-
-            if envSql.startswith(Logic.appRoot):
-                envSql = envSql.replace(Logic.appRoot, '%AppRoot%')
-            self.textSQLNetOra.setPlainText(envSql)
-        if not self.textOracleWallet.toPlainText():
-            envWallet = os.environ.get('ORACLE_WALLET', Logic.resourcePath('oracle/network/admin/wallet'))
-
-            if envWallet.startswith(Logic.appRoot):
-                envWallet = envWallet.replace(Logic.appRoot, '%AppRoot%')
-            self.textOracleWallet.setPlainText(envWallet)
-
-        # Sensitive from keyring (defaults to empty)
-        self.textAQServer.setPlainText(keyring.get_password("DataDoctor", "aqServer") or "")
-        self.textAQUser.setPlainText(keyring.get_password("DataDoctor", "aqUser") or "")
-        self.qleAQPassword.setText(keyring.get_password("DataDoctor", "aqPassword") or "") 
-        self.textUSGSAPIKey.setPlainText(keyring.get_password("DataDoctor", "usgsApiKey") or "")
+                envTns = envTns.replace(Logic.appRoot, '%AppRoot%') # Shorten path
+            self.textTNSNames.setPlainText(envTns) # Set TNS path
+        self.textAQServer.setPlainText(keyring.get_password("DataDoctor", "aqServer") or "") # Load AQ server
+        self.textAQUser.setPlainText(keyring.get_password("DataDoctor", "aqUser") or "") # Load AQ user
+        self.qleAQPassword.setText(keyring.get_password("DataDoctor", "aqPassword") or "") # Load AQ password
+        self.qleUSGSAPIKey.setText(keyring.get_password("DataDoctor", "usgsApiKey") or "") # Load USGS key
+        if Logic.debug: print("[DEBUG] Settings loaded")
 
     def onSavePressed(self):
         config = configparser.ConfigParser()
-        config.read(Logic.getConfigPath()) # Read existing to preserve keys
-
-        # Read previous retro before update
-        previousRetro = config['Settings'].getboolean('retroFont', True) if 'Settings' in config else True
-
-        tnsPath = self.textTNSNames.toPlainText()
-        sqlNetPath = self.textSQLNetOra.toPlainText()
-        walletPath = self.textOracleWallet.toPlainText()
-
-        # Expand %AppRoot% to full if present
+        config.read(Logic.getConfigPath()) # Read config
+        previousRetro = config['Settings'].getboolean('retroFont', True) if 'Settings' in config else True # Save previous retro state
+        tnsPath = self.textTNSNames.toPlainText() # Get TNS path
         if '%AppRoot%' in tnsPath:
-            tnsPath = tnsPath.replace('%AppRoot%', Logic.appRoot)
-        if '%AppRoot%' in sqlNetPath:
-            sqlNetPath = sqlNetPath.replace('%AppRoot%', Logic.appRoot)
-        if '%AppRoot%' in walletPath:
-            walletPath = walletPath.replace('%AppRoot%', Logic.appRoot)
-
-        # Update only options keys (preserve others)
+            tnsPath = tnsPath.replace('%AppRoot%', Logic.appRoot) # Expand path
         if 'Settings' not in config:
-            config['Settings'] = {}
-
-        config['Settings']['utcOffset'] = self.cbUTCOffset.currentText()
-        config['Settings']['retroFont'] = 'True' if self.cbRetroFont.isChecked() else 'False'
-        config['Settings']['qaqc'] = 'True' if self.cbQAQC.isChecked() else 'False'
-        config['Settings']['rawData'] = 'True' if self.cbRawData.isChecked() else 'False'
-        config['Settings']['debugMode'] = 'True' if self.cbDebug.isChecked() else 'False'
-        config['Settings']['tnsNamesLocation'] = tnsPath
-        config['Settings']['sqlNetOraLocation'] = sqlNetPath
-        config['Settings']['oracleWalletLocation'] = walletPath
-        config['Settings']['hourTimestampMethod'] = 'EOP' if self.rbEOP.isChecked() else 'BOP'
-
+            config['Settings'] = {} # Initialize settings
+        config['Settings']['utcOffset'] = self.cbUTCOffset.currentText() # Save UTC offset
+        config['Settings']['retroFont'] = 'True' if self.cbRetroFont.isChecked() else 'False' # Save retro font
+        config['Settings']['qaqc'] = 'True' if self.cbQAQC.isChecked() else 'False' # Save QAQC
+        config['Settings']['rawData'] = 'True' if self.cbRawData.isChecked() else 'False' # Save raw data
+        config['Settings']['debugMode'] = 'True' if self.cbDebug.isChecked() else 'False' # Save debug
+        config['Settings']['tnsNamesLocation'] = tnsPath # Save TNS path
+        config['Settings']['hourTimestampMethod'] = 'EOP' if self.rbEOP.isChecked() else 'BOP' # Save period method
         with open(Logic.getConfigPath(), 'w') as configFile:
-            config.write(configFile)
-
-        # Reload and set globals after save
-        Logic.reloadGlobals()
-
-        # Apply retro font if checked
+            config.write(configFile) # Write config
+        Logic.reloadGlobals() # Reload globals
         if self.cbRetroFont.isChecked():
-            fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
+            fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf') # Load retro font
             fontId = QFontDatabase.addApplicationFont(fontPath)
-
             if fontId != -1:
                 fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-                retroFontObj = QFont(fontFamily, 10)  # Fixed size
+                retroFontObj = QFont(fontFamily, 10) # Fixed size
                 retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing
-                app.setFont(retroFontObj)
-                
-                # Re-apply to all open windows
+                app.setFont(retroFontObj) # Set app font
                 for window in [winMain, winWebQuery, winDataDictionary, winQuickLook, winOptions, winAbout]:
-                    Logic.applyRetroFont(window)
+                    Logic.applyRetroFont(window) # Apply to all windows
+                if Logic.debug: print("[DEBUG] Applied retro font")
         else:
-            app.setFont(QFont()) # System default
-
-        # Show restart message if retro font changed (in either direction)
+            app.setFont(QFont()) # System default font
+            if Logic.debug: print("[DEBUG] Reverted to system font")
         newRetro = self.cbRetroFont.isChecked()
         if newRetro != previousRetro:
             reply = QMessageBox.question(self, "Font Change", "Restart DataDoctor for the font change to take effect?\nOK to restart now, Cancel to revert to previous setting.", QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
             if reply == QMessageBox.StandardButton.Ok:
-                # Auto-restart app (cross-platform)
                 python = sys.executable
-                os.execl(python, python, *sys.argv) # Relaunch with same args
+                os.execl(python, python, *sys.argv) # Relaunch app
             else:
-                # Revert checkbox and config
-                self.cbRetroFont.setChecked(previousRetro)
+                self.cbRetroFont.setChecked(previousRetro) # Revert checkbox
                 config = configparser.ConfigParser()
                 config.read(Logic.getConfigPath())
                 config['Settings']['retroFont'] = 'True' if previousRetro else 'False'
-
                 with open(Logic.getConfigPath(), 'w') as configFile:
-                    config.write(configFile)
-
-                # Re-apply previous font setting
-                Logic.reloadGlobals() # Reload to apply revert immediately
-
-        # Sensitive to keyring
-        keyring.set_password("DataDoctor", "aqServer", self.textAQServer.toPlainText())
-        keyring.set_password("DataDoctor", "aqUser", self.textAQUser.toPlainText())
-        keyring.set_password("DataDoctor", "aqPassword", self.qleAQPassword.text())
-        keyring.set_password("DataDoctor", "usgsApiKey", self.textUSGSAPIKey.toPlainText())
+                    config.write(configFile) # Write reverted config
+                Logic.reloadGlobals() # Reload globals
+                if Logic.debug: print("[DEBUG] Reverted retro font setting")
+        keyring.set_password("DataDoctor", "aqServer", self.textAQServer.toPlainText()) # Save AQ server
+        keyring.set_password("DataDoctor", "aqUser", self.textAQUser.toPlainText()) # Save AQ user
+        keyring.set_password("DataDoctor", "aqPassword", self.qleAQPassword.text()) # Save AQ password
+        keyring.set_password("DataDoctor", "usgsApiKey", self.qleUSGSAPIKey.text()) # Save USGS key
+        if Logic.debug: print("[DEBUG] Settings saved")
 
     def togglePasswordVisibility(self):
+        if self.lastCharTimer.isActive():
+            self.lastCharTimer.stop() # Stop timer to prevent conflict
         if self.qleAQPassword.echoMode() == QLineEdit.EchoMode.Password:
-            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal)         
-            self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png'))) 
+            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal) # Show AQ password
+            self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png'))) # Update icon
+            if Logic.debug: print("[DEBUG] AQ password shown via button")
         else:
-            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)         
-            self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
+            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password) # Mask AQ password
+            self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png'))) # Update icon
+            if Logic.debug: print("[DEBUG] AQ password masked via button")
+
+    def toggleUSGSKeyVisibility(self):
+        if self.lastCharTimerUSGS.isActive():
+            self.lastCharTimerUSGS.stop() # Stop timer to prevent conflict
+        if self.qleUSGSAPIKey.echoMode() == QLineEdit.EchoMode.Password:
+            self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Normal) # Show USGS key
+            self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png'))) # Update icon
+            if Logic.debug: print("[DEBUG] USGS API key shown via button")
+        else:
+            self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Password) # Mask USGS key
+            self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png'))) # Update icon
+            if Logic.debug: print("[DEBUG] USGS API key masked via button")
 
 class uiAbout(QDialog):
     """About dialog: Retro PNG bg with transparent info overlay and looping sound."""
