@@ -788,3 +788,58 @@ def valuePrecision(value):
 def cleanShutdown():
     pool = QThreadPool.globalInstance()
     pool.waitForDone(5000) # Wait up to 5s for threads to finish (adjust if needed)
+
+def setQueryDateRange(window, radioButton, dteStartDate, dteEndDate): 
+    now = datetime.now()
+    
+    if radioButton == window.rbCustomDateTime: # Custom: Enable edits, use existing or 72h default
+        dteStartDate.setEnabled(True)
+        dteEndDate.setEnabled(True)
+        if dteStartDate.dateTime() >= dteEndDate.dateTime(): # Ensure valid range
+            dteStartDate.setDateTime(now - timedelta(hours=72))
+            dteEndDate.setDateTime(now)
+    elif radioButton == window.rbPrevDayToCurrent: # Yesterday 01:00 to now
+        dteStartDate.setEnabled(False)
+        dteEndDate.setEnabled(False)
+        yesterday = now - timedelta(days=1)
+        dteStartDate.setDateTime(yesterday.replace(hour=1, minute=0, second=0))
+        dteEndDate.setDateTime(now)
+    elif radioButton == window.rbPrevWeekToCurrent: # 7 days ago 01:00 to now
+        dteStartDate.setEnabled(False)
+        dteEndDate.setEnabled(False)
+        weekAgo = now - timedelta(days=7)
+        dteStartDate.setDateTime(weekAgo.replace(hour=1, minute=0, second=0))
+        dteEndDate.setDateTime(now)
+    else:
+        if debug: print("[DEBUG] Unknown radio button in setQueryDateRange")
+
+def setDefaultButton(window, widget, btnAddQuery, btnQuery): 
+    if widget == window.leDataID: # leDataID focused: Add Query default
+        btnAddQuery.setDefault(True)
+        btnQuery.setDefault(False)
+    else: # Otherwise: Query Data default
+        btnAddQuery.setDefault(False)
+        btnQuery.setDefault(True)
+
+def initializeQueryWindow(window, rbCustomDateTime, dteStartDate, dteEndDate): 
+    rbCustomDateTime.setChecked(True) # Default to custom
+    dteStartDate.setEnabled(True) # Enable for custom
+    dteEndDate.setEnabled(True)
+    dteStartDate.setDateTime(datetime.now() - timedelta(hours=72)) # 72h default
+    dteEndDate.setDateTime(datetime.now())
+
+def loadLastQuickLook(cbQuickLook): 
+    config = configparser.ConfigParser()
+    config.read(getConfigPath())
+
+    if 'Settings' in config and 'lastQuickLook' in config['Settings']: # Check saved quick look
+        lastQuickLook = config['Settings']['lastQuickLook']
+        index = cbQuickLook.findText(lastQuickLook)
+        
+        if index != -1: # Set if found
+            cbQuickLook.setCurrentIndex(index)
+        else:
+            if debug: print(f"[DEBUG] Last quick look '{lastQuickLook}' not found, setting to -1")
+            cbQuickLook.setCurrentIndex(-1) # Fallback
+    else:
+        cbQuickLook.setCurrentIndex(-1) # No config, blank
