@@ -1,8 +1,6 @@
 import requests
-import QueryAquarius
 import json
 from datetime import datetime, timedelta
-from PyQt6.QtWidgets import QMessageBox # For error popup
 import Logic # For buildTimestamps, gapCheck, combineParameters
 
 periodOffset = True # Global for end of period shift/pad (USBR HOUR only; toggle via config later)
