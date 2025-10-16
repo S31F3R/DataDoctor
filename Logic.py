@@ -3,8 +3,8 @@ import sys
 import datetime
 import configparser
 from datetime import datetime, timedelta
-from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer, QByteArray, QStandardPaths
-from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QStyleHints, QFontDatabase, QFont
+from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths
+from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget, QTreeView, QSplitter
 
 def resourcePath(relativePath):
