@@ -7,3 +7,11 @@ python -m venv env # Creates a folder called 'env' with isolated python
 source env/bin/activate # On Linux/Mac; use env\Scripts\activate on Windows
 pip install # Package here
 deactivate
+
+
+
+
+
+
+git rm -r --cached __pycache__
+git commit -m "Remove __pycache__ from tracking"

@@ -1,23 +1,26 @@
--Add to current button style, hover and press effects
+####### HOUSE KEEPING #######
 -Remove color mode as a user.config item
 -Logging and debugging, best practices
     -Any current [DEBUG] after an exception should be a ERROR and logged, no matter if DEBUG = true
--Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
-    -Search will need a combobox to allow the user to search by dataID, label, or database
--Change quick look save text box into a q line edit
--Aquairus headers need to be laevl /n location /n uid
--When the user hits add query and the query list gets too long and requires a scroll bar, make the list scroll to the bottom so user can see new entry
--Create a plot tool that allows users to build different data plots and save that plot config as a quick look
-    -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
 -Save dialog for CSV needs wider columns or auto size needs to be fixed
 -Need an option to change font size in the program
 
-
+####### NEW FEATURES #######
+-Create a plot tool that allows users to build different data plots and save that plot config as a quick look
+    -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
 
 -Export to CSV needs work. Remembering path isn't working across platform, possibly Qt issue. Lots of trial and error code left in there, needs to be removed when completed
+-Raw data option not working
 
 ####### MAIN INTERFACE MODIFICATIONS #######
 -Stress relief button that makes screaming goat sounds
+-Add to current button style, hover and press effects
+
+####### QUERY WINDOW MODIFICATIONS #######
+-Change quick look save text box into a q line edit
+-When the user hits add query and the query list gets too long and requires a scroll bar, make the list scroll to the bottom so user can see new entry
+-Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
+    -Search will need a combobox to allow the user to search by dataID, label, or database
 
 ####### QUERY ENHANCMENTS MODIFICATIONS #######
 -Update INSTANT interval to include 1, 15, or 60 minute instant intervals
@@ -35,6 +38,7 @@
 -See if there is a better way to get around unverified cert when using HTTPS on Aquarius query
 
 ####### DATA TABLE MODIFICATIONS #######
+-Aquairus headers need to be label /n location /n uid
 -Table first column doesn't adjust size to fit data AND header after clicking header to sort. Header is truncated on SDID 1721. Also can't resize header after sorting like that
 -Add refresh button to reset table sort
 -Export to CSV is seperating timestamps, it's using date,time. Need to export them in a single column, seperated by a space
