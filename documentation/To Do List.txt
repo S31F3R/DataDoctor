@@ -13,6 +13,8 @@
 -Raw data option not working
 
 ####### MAIN INTERFACE MODIFICATIONS #######
+-Retro mouse cursor for entire program if retro font is selected
+    -Rename retro font to retro mode!
 -Stress relief button that makes screaming goat sounds
 -Add to current button style, hover and press effects
 
@@ -39,10 +41,6 @@
 
 ####### DATA TABLE MODIFICATIONS #######
 -Aquairus headers need to be label /n location /n uid
--Table first column doesn't adjust size to fit data AND header after clicking header to sort. Header is truncated on SDID 1721. Also can't resize header after sorting like that
--Add refresh button to reset table sort
--Export to CSV is seperating timestamps, it's using date,time. Need to export them in a single column, seperated by a space
--SDID with MRID in them are not running through data dictionary properly, which means they are not getting proper headers
 -Column resize doesn't seem to work until 2nd query
 
 ####### GIT MODIFICATIONS #######

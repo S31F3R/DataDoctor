@@ -2,11 +2,15 @@ import os
 import sys
 import datetime
 import configparser
+import QueryUSBR
+import QueryUSGS
+import QueryAquarius
 import json
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDir
 from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont
-from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget, QTreeView, QSplitter
+from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget, QTreeView, QSplitter, QMessageBox
+from collections import defaultdict
 
 def resourcePath(relativePath):
     """Get absolute path to resource, works for dev and PyInstaller"""
@@ -161,50 +165,41 @@ def combineParameters(data, newData):
 
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None):
     table.clear()
-    
     if not data:
-        return  
-  
-    # Assume buildHeader is list; split if str
+        if debug: print("[DEBUG] buildTable: No data to display.")
+        return
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
-    
-    # Build processed headers
     processedHeaders = []
-
     for i, h in enumerate(buildHeader):
-        headerText = h.strip() # Strip raw header
+        dataID = h.strip()
         intervalStr = intervals[i].upper()
-
-        dictRow = getDataDictionaryItem(dataDictionaryTable, headerText)
-
+        dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataID)
         if dictRow != -1:
-            siteItem = dataDictionaryTable.item(dictRow, 1) 
-            datatypeItem = dataDictionaryTable.item(dictRow, 2) 
-            baseLabel = (siteItem.text().strip() + ' ' + datatypeItem.text().strip()) if siteItem and datatypeItem else headerText
+            siteItem = dataDictionaryTable.item(dictRow, 1)
+            datatypeItem = dataDictionaryTable.item(dictRow, 2)
+            baseLabel = (siteItem.text().strip() + ' ' + datatypeItem.text().strip()) if siteItem and datatypeItem else dataID
+            fullLabel = baseLabel + ' \n' + intervalStr + ' \n' + dataID
         else:
-            baseLabel = labelsDict.get(headerText, headerText) if labelsDict else headerText
-
-        fullLabel = baseLabel + ' \n' + intervalStr
-
-        if dictRow != -1:
-            fullLabel += ' \n' + h
-
+            if labelsDict and dataID in labelsDict:
+                apiFull = labelsDict[dataID]
+                parts = apiFull.split('\n')
+                if len(parts) >= 2:
+                    location = parts[0].strip()
+                    label = parts[1].strip() if len(parts) > 1 else dataID
+                    fullLabel = label + ' \n' + location + ' \n' + dataID  # Aquarius: label first, then location, uid
+                else:
+                    fullLabel = dataID + ' \n' + intervalStr
+            else:
+                fullLabel = dataID + ' \n' + intervalStr
         processedHeaders.append(fullLabel)
-    
-    # Headers: Processed only (no Date prepend)
     headers = processedHeaders
-    
-    # Conditional skip for main table (skip date col 0)
-    skipDateCol = dataDictionaryTable is not None  # True for main (has dict), False for dict itself
-    
+    skipDateCol = dataDictionaryTable is not None
     numCols = len(headers)
     numRows = len(data)
     table.setRowCount(numRows)
     table.setColumnCount(numCols)
     table.setHorizontalHeaderLabels(headers)
-    
-    # Vertical: Timestamps for main table only (dict table no dates)
     if dataDictionaryTable:
         timestamps = [row.split(',')[0].strip() for row in data]
         table.setVerticalHeaderLabels(timestamps)
@@ -212,56 +207,30 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         table.verticalHeader().setVisible(True)
     else:
-        table.verticalHeader().setVisible(False) # Hide for dict
-    
-    # Load config once outside loop
-    configPath = getConfigPath() # Get JSON path
-    config = {}
-
-    if os.path.exists(configPath):
-        try:
-            with open(configPath, 'r', encoding='utf-8') as configFile:
-                config = json.load(configFile) # Read JSON
-        except Exception as e:
-            if debug: print(f"[ERROR] Failed to load user.config: {e}")
-
-    rawData = config['Settings'].getboolean('rawData', False) if 'Settings' in config else False
-    qaqcToggle = config['Settings'].getboolean('qaqc', True) if 'Settings' in config else True
-    
-    # Populate data (conditional skip, center all)
-    for rowIDx, row_str in enumerate(data):
-        rowData = row_str.split(',')[1:] if skipDateCol else row_str.split(',') # Skip date for main
-        
-        for colIDx in range(min(numCols, len(rowData))):
-            cellText = rowData[colIDx].strip() if colIDx < len(rowData) else ''
+        table.verticalHeader().setVisible(False)
+    config = loadConfig()
+    rawData = config.get('rawData', False)
+    qaqcToggle = config.get('qaqc', True)
+    for rowIdx, rowStr in enumerate(data):
+        rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
+        for colIdx in range(min(numCols, len(rowData))):
+            cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-
-            if not rawData and cellText.strip(): # Apply formatting if not raw
+            if not rawData and cellText.strip():
                 item.setText(valuePrecision(cellText))
-
-            table.setItem(rowIDx, colIDx, item)
-    
-    # Resize all columns to fit headers + data
-    for col in range(numCols):
-        table.resizeColumnToContents(col)
-    
-    # dataIds for QAQC: raw buildHeader
+            table.setItem(rowIdx, colIdx, item)
+    from PyQt6.QtCore import QTimer
+    QTimer.singleShot(0, lambda: [table.resizeColumnToContents(c) for c in range(numCols)])
+    if debug: print(f"[DEBUG] Deferred resizeColumnsToContents for {numCols} columns.")
     dataIds = buildHeader
-    
-    # Apply QAQC if toggled
     if qaqcToggle:
         qaqc(table, dataDictionaryTable, dataIds)
     else:
-        # Clear colors if off (transparent for stylesheet)
         for r in range(table.rowCount()):
             for c in range(table.columnCount()):
                 item = table.item(r, c)
-
-                if item:
-                    item.setBackground(QColor(0, 0, 0, 0)) # Transparent
-
-    # Connect custom sort (syncs timestamps)
+                if item: item.setBackground(QColor(0, 0, 0, 0))
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
     
 def buildDataDictionary(table):
@@ -651,37 +620,40 @@ def customSortTable(table, col, dataDictionaryTable):
     header.setSortIndicator(col, Qt.SortOrder.AscendingOrder if ascending else Qt.SortOrder.DescendingOrder)
 
 def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col):
-    # Re-populate on main thread
-    table.setSortingEnabled(False) # Disable default sort
+    table.setSortingEnabled(False)
     numRows = len(sortedRows)
-
-    for rowIDx, row in enumerate(sortedRows):
-        # Vertical: Timestamp
-        table.setVerticalHeaderItem(rowIDx, QTableWidgetItem(row[0]))
-
-        # Data cols
+    for rowIdx, row in enumerate(sortedRows):
+        table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row[0]))
         for c in range(table.columnCount()):
-            cellText = row[c + 1]
+            cellText = row[c + 1] if c + 1 < len(row) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-            table.setItem(rowIDx, c, item)
-
-    # Lock widths before QAQC (no reflow/shift)
-    for c in range(table.columnCount()):
-        table.setColumnWidth(c, table.columnWidth(c)) # Lock current
-
-    # Re-apply QAQC colors
+            table.setItem(rowIdx, c, item)
+    if debug: print("[DEBUG] Updated table after sort; widths not locked.")
     headerLabels = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
-    dataID = [label.split('\n')[-1].strip() for label in headerLabels] # Last line = raw ID
-    qaqc(table, dataDictionaryTable, dataID)
-
-    # Re-freeze col 0 (locked, no resize)
-    table.setColumnWidth(0, 150)
-    table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-    table.setViewportMargins(150, 0, 0, 0)
-
-    # Re-enable selection (after sort, for normal use)
+    dataIds = [label.split('\n')[-1].strip() for label in headerLabels]
+    qaqc(table, dataDictionaryTable, dataIds)
     table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+
+def timestampSortTable(table, dataDictionaryTable):
+    if debug: print("[DEBUG] timestampSortTable: Starting sort by timestamps.")
+    numRows = table.rowCount()
+    rows = []
+    for rowIdx in range(numRows):
+        timestamp = table.verticalHeaderItem(rowIdx).text() if table.verticalHeaderItem(rowIdx) else ''
+        rowData = [table.item(rowIdx, c).text() if table.item(rowIdx, c) else '' for c in range(table.columnCount())]
+        rows.append([timestamp] + rowData)
+    def sortKey(row):
+        try:
+            return datetime.strptime(row[0], '%m/%d/%y %H:%M:00')
+        except ValueError:
+            return datetime.min
+    rows.sort(key=sortKey)
+    pool = QThreadPool.globalInstance()
+    worker = sortWorker(rows, -1, True)
+    worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, -1))
+    pool.start(worker)
+    if debug: print("[DEBUG] Timestamp sort worker started.")
 
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)
@@ -932,3 +904,71 @@ def loadLastQuickLook(cbQuickLook):
             cbQuickLook.setCurrentIndex(-1) # Fallback
     else:
         cbQuickLook.setCurrentIndex(-1) # No config, blank
+
+def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable):
+    if debug: print(f"[DEBUG] executeQuery: isInternal={isInternal}, items={len(queryItems)}")
+    if isInternal:
+        queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
+        if not queryItems:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
+            return
+    queryItems.sort(key=lambda x: x[4])
+    firstInterval = queryItems[0][1]
+    firstDb = queryItems[0][2]
+    if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
+        firstInterval = 'HOUR'
+    timestamps = buildTimestamps(startDate, endDate, firstInterval)
+    if not timestamps:
+        QMessageBox.warning(mainWindow, "Date Error", "Invalid dates or interval.")
+        return
+    defaultBlanks = [''] * len(timestamps)
+    labelsDict = {} if isInternal else None
+    groups = defaultdict(list)
+    for dataID, interval, db, mrid, origIndex in queryItems:
+        groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
+        SDID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
+        groups[groupKey].append((origIndex, dataID, SDID))
+    valueDict = {}
+    for groupKey, groupItems in groups.items():
+        db, mrid, interval = groupKey
+        SDIDs = [item[2] for item in groupItems]
+        try:
+            if db.startswith('USBR-'):
+                svr = db.split('-')[1].lower()
+                table = 'M' if mrid != '0' else 'R'
+                result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, interval, mrid, table)
+            elif db == 'AQUARIUS' and isInternal:
+                result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
+            elif db == 'USGS-NWIS' and not isInternal:
+                result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
+            else:
+                if debug: print(f"[DEBUG] Unknown db skipped: {db}")
+                continue
+        except Exception as e:
+            QMessageBox.warning(mainWindow, "Query Error", f"Query failed for group {db}: {e}")
+            continue
+        for idx, (origIndex, dataID, SDID) in enumerate(groupItems):
+            if SDID in result:
+                if db == 'AQUARIUS':
+                    outputData = result[SDID]['data']
+                    labelsDict[dataID] = result[SDID].get('label', dataID)
+                else:
+                    outputData = result[SDID]
+                alignedData = gapCheck(timestamps, outputData, dataID)
+                values = [line.split(',')[1] if line else '' for line in alignedData]
+                valueDict[dataID] = values
+            else:
+                valueDict[dataID] = defaultBlanks
+    originalDataIds = [item[0] for item in queryItems]
+    originalIntervals = [item[1] for item in queryItems]
+    lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
+    data = []
+    for r in range(len(timestamps)):
+        rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
+        data.append(f"{timestamps[r]},{','.join(rowValues)}")
+    mainWindow.mainTable.clear()
+    buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict)
+    if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
+        mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
+    if debug: print("[DEBUG] Query executed and table updated.")

@@ -6,6 +6,9 @@ import Logic
 import keyring
 import os
 import json
+import keyring
+from keyring.backends.null import Keyring as NullKeyring # Safe fallback if needed
+from datetime import datetime
 from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap 
 from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
@@ -15,8 +18,6 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
 from PyQt6 import uic
 from PyQt6.QtMultimedia import QSoundEffect
 from collections import defaultdict
-import keyring
-from keyring.backends.null import Keyring as NullKeyring # Safe fallback if needed
 
 # No backend forcing: Rely on keyring defaults (KWallet on KDE/Linux, Credential Manager on Windows, Keychain on macOS)
 
@@ -34,6 +35,12 @@ class uiMain(QMainWindow):
         self.btnOptions = self.findChild(QPushButton, 'btnOptions')   
         self.btnInfo = self.findChild(QPushButton, 'btnInfo')    
         self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
+        self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
+        self.btnUndo = self.findChild(QPushButton, 'btnUndo')
+        self.lastQueryType = None  # 'web' or 'internal'
+        self.lastQueryItems = []  # List of (dataID, interval, database, mrid, origIndex)
+        self.lastStartDate = None
+        self.lastEndDate = None
 
         # Set button style
         Logic.buttonStyle(self.btnPublicQuery)
@@ -102,6 +109,8 @@ class uiMain(QMainWindow):
         self.btnOptions.clicked.connect(self.btnOptionsPressed) 
         self.btnInfo.clicked.connect(self.btnInfoPressed) 
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
+        self.btnRefresh.clicked.connect(self.btnRefreshPressed)
+        self.btnUndo.clicked.connect(self.btnUndoPressed)
 
         # Center window when opened
         rect = self.frameGeometry()
@@ -137,6 +146,25 @@ class uiMain(QMainWindow):
 
     def exitPressed(self):
         app.exit()
+
+    def btnRefreshPressed(self):
+        if Logic.debug: print("[DEBUG] btnRefreshPressed: Starting refresh process.")
+
+        if not self.lastQueryType:
+            if Logic.debug: print("[DEBUG] No last query to refresh.")
+            return
+        
+        now = datetime.now()
+        endDateTime = datetime.strptime(self.lastEndDate, '%Y-%m-%d %H:%M')
+
+        if endDateTime.date() == now.date():
+            self.lastEndDate = now.strftime('%Y-%m-%d %H:%M')
+            if Logic.debug: print(f"[DEBUG] Updated end date to current: {self.lastEndDate}")
+        Logic.executeQuery(self, self.lastQueryItems, self.lastStartDate, self.lastEndDate, self.lastQueryType == 'internal')
+
+    def btnUndoPressed(self):
+        if Logic.debug: print("[DEBUG] btnUndoPressed: Resetting to timestamp sort.")
+        Logic.timestampSortTable(self.mainTable, winDataDictionary.mainTable)
 
 class uiWebQuery(QMainWindow):
     """Public query window: Builds and executes public API calls."""
@@ -236,151 +264,46 @@ class uiWebQuery(QMainWindow):
 
     def btnQueryPressed(self):
         if Logic.debug: print("[DEBUG] btnQueryPressed: Starting query process.")
-        
-        # Get start/end dates
-        startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm') # Format for query
-        endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm') # Format for query
-        
-        # Collect and parse query items
+        startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
+        endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
         queryItems = []
         for i in range(self.listQueryList.count()):
             itemText = self.listQueryList.item(i).text().strip()
             parts = itemText.split('|')
-
             if Logic.debug: print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
             if len(parts) != 3:
                 print(f"[WARN] Invalid item skipped: {itemText}")
                 continue
-
             dataID, interval, database = parts
-            mrid = '0' # Default MRID
+            mrid = '0'
             SDID = dataID
-
             if database.startswith('USBR-') and '-' in dataID:
-                SDID, mrid = dataID.rsplit('-', 1) # Split SDID-MRID
-            queryItems.append((dataID, interval, database, mrid, i)) # Include orig index
-
+                SDID, mrid = dataID.rsplit('-', 1)
+            queryItems.append((dataID, interval, database, mrid, i))
             if Logic.debug: print(f"[DEBUG] Added queryItem: {(dataID, interval, database, mrid, i)}")
-        
-        # Add single query from qleDataID if list empty
         if not queryItems and self.qleDataID.text().strip():
             dataID = self.qleDataID.text().strip()
             interval = self.cbInterval.currentText()
             database = self.cbDatabase.currentText()
-            mrid = '0' # Default
+            mrid = '0'
             SDID = dataID
-
             if database.startswith('USBR-') and '-' in dataID:
                 SDID, mrid = dataID.rsplit('-', 1)
-            queryItems.append((dataID, interval, database, mrid, 0)) # origIndex=0
-
+            queryItems.append((dataID, interval, database, mrid, 0))
             if Logic.debug: print(f"[DEBUG] Added single query: {(dataID, interval, database, mrid, 0)}")
         elif not queryItems:
             print("[WARN] No valid query items.")
             return
-        
-        # Sort by original index
-        queryItems.sort(key=lambda x: x[4]) # Ensure order
-        
-        # First interval for timestamps
-        firstInterval = queryItems[0][1]
-        firstDb = queryItems[0][2] # First database
-
-        if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
-            firstInterval = 'HOUR' # USBR INSTANT quirk
-        timestamps = Logic.buildTimestamps(startDate, endDate, firstInterval)
-
-        if not timestamps:
-            QMessageBox.warning(self, "Date Error", "Invalid dates or interval.")
-            return
-        
-        # Default blanks for missing data
-        defaultBlanks = [''] * len(timestamps)
-        
-        # Group by (db, mrid, interval)
-        groups = defaultdict(list)
-
-        for dataID, interval, db, mrid, origIndex in queryItems:
-            groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
-            groups[groupKey].append((origIndex, dataID)) # Group by key
-
-        if Logic.debug: print(f"[DEBUG] Formed {len(groups)} groups.")
-        
-        # Collect values
-        valueDict = {}
-        for (db, mrid, interval), groupItems in groups.items():
-            if Logic.debug: print(f"[DEBUG] Processing group: db={db}, mrid={mrid}, interval={interval}, items={len(groupItems)}")
-            SDIDs = []
-
-            for origIndex, dataID in groupItems:
-                SDID = dataID
-
-                if db.startswith('USBR-') and '-' in dataID:
-                    SDID, _ = dataID.rsplit('-', 1) # Recalc SDID
-                SDIDs.append(SDID)
-            try:
-                if db.startswith('USBR-'):
-                    svr = db.split('-')[1].lower()
-                    table = 'M' if mrid != '0' else 'R'
-                    result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, interval, mrid, table)
-                elif db == 'USGS-NWIS':
-                    result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
-                else:
-                    print(f"[WARN] Unknown db skipped: {db}")
-                    continue
-            except Exception as e:
-                QMessageBox.warning(self, "Query Error", f"Query failed for group {db}: {e}")
-                continue
-            for idx, (origIndex, dataID) in enumerate(groupItems):
-                SDID = SDIDs[idx]
-
-                if SDID in result:
-                    outputData = result[SDID]
-                    alignedData = Logic.gapCheck(timestamps, outputData, dataID)
-                    values = [line.split(',')[1] if line else '' for line in alignedData]
-                    valueDict[dataID] = values
-                else:
-                    valueDict[dataID] = defaultBlanks # Full blanks
-                if Logic.debug: print(f"[DEBUG] Processed dataID {dataID}: {len(valueDict[dataID])} values")
-        
-        # Recombine in original order
-        originalDataIds = [item[0] for item in queryItems] # dataID
-        originalIntervals = [item[1] for item in queryItems] # For labels
-        lookupIds = []
-
-        for item in queryItems:
-            dataID, interval, db, mrid, origIndex = item
-            lookupId = dataID
-
-            if db.startswith('USBR-') and '-' in dataID:
-                lookupId = dataID.split('-')[0] # Base SDID
-            lookupIds.append(lookupId)
-        
-        # Build data
-        data = []
-
-        for r in range(len(timestamps)):
-            rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
-            data.append(f"{timestamps[r]},{','.join(rowValues)}")
-
-        if Logic.debug: print(f"[DEBUG] Built {len(data)} data rows")
-        
-        # Build headers
-        buildHeader = originalDataIds
-        intervalsForHeaders = originalIntervals
-        
-        # Build table
-        winMain.mainTable.clear() # Clear existing
-        Logic.buildTable(winMain.mainTable, data, buildHeader, winDataDictionary.mainTable, intervalsForHeaders, lookupIds)
-        
-        # Show tab if hidden
-        if winMain.tabWidget.indexOf(winMain.tabMain) == -1:
-            winMain.tabWidget.addTab(winMain.tabMain, 'Data Query') # Show Data Query tab
-        
-        # Close query window
+        winMain.lastQueryType = 'web'
+        winMain.lastQueryItems = queryItems
+        winMain.lastStartDate = startDate
+        winMain.lastEndDate = endDate
+        winMain.lastDatabase = self.cbDatabase.currentText() if not queryItems else None
+        winMain.lastInterval = self.cbInterval.currentText() if not queryItems else None
+        if Logic.debug: print("[DEBUG] Stored last query as web.")
+        Logic.executeQuery(winMain, queryItems, startDate, endDate, False, winDataDictionary.mainTable)
         self.close()
-
-        if Logic.debug: print("[DEBUG] Web query window closed after query")
+        if Logic.debug: print("[DEBUG] Web query window closed after query.")
 
     def btnAddQueryPressed(self):
         item = f'{self.qleDataID.text().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}' # Build query item
@@ -540,161 +463,50 @@ class uiInternalQuery(QMainWindow):
 
     def btnQueryPressed(self):
         if Logic.debug: print("[DEBUG] btnQueryPressed: Starting query process.")
-        
-        # Get start/end dates
-        startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm') # Format for query
-        endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm') # Format for query
-        
-        # Collect and parse query items
+        startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
+        endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
         queryItems = []
         for i in range(self.listQueryList.count()):
             itemText = self.listQueryList.item(i).text().strip()
             parts = itemText.split('|')
-
             if Logic.debug: print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
             if len(parts) != 3:
                 print(f"[WARN] Invalid item skipped: {itemText}")
                 continue
             dataID, interval, database = parts
-            mrid = '0' # Default MRID
+            mrid = '0'
             SDID = dataID
-
             if database.startswith('USBR-') and '-' in dataID:
-                SDID, mrid = dataID.rsplit('-', 1) # Split SDID-MRID
-            queryItems.append((dataID, interval, database, mrid, i)) # Include orig index
-
+                SDID, mrid = dataID.rsplit('-', 1)
+            queryItems.append((dataID, interval, database, mrid, i))
             if Logic.debug: print(f"[DEBUG] Added queryItem: {(dataID, interval, database, mrid, i)}")
-        
-        # Add single query from qleDataID if list empty
         if not queryItems and self.qleDataID.text().strip():
             dataID = self.qleDataID.text().strip()
             interval = self.cbInterval.currentText()
             database = self.cbDatabase.currentText()
-            mrid = '0' # Default
+            mrid = '0'
             SDID = dataID
-
             if database.startswith('USBR-') and '-' in dataID:
                 SDID, mrid = dataID.rsplit('-', 1)
-            queryItems.append((dataID, interval, database, mrid, 0)) # origIndex=0
+            queryItems.append((dataID, interval, database, mrid, 0))
             if Logic.debug: print(f"[DEBUG] Added single query: {(dataID, interval, database, mrid, 0)}")
         elif not queryItems:
             print("[WARN] No valid query items.")
             return
-        
-        # Filter out USGS-NWIS items (from quickLooks)
         queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
-
         if not queryItems:
             QMessageBox.warning(self, "No Valid Items", "No valid internal query items (USGS skipped).")
             return
-        
-        # Sort by original index
-        queryItems.sort(key=lambda x: x[4]) # Ensure order
-        
-        # First interval for timestamps
-        firstInterval = queryItems[0][1]
-        firstDb = queryItems[0][2] # First database
-
-        if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
-            firstInterval = 'HOUR' # USBR INSTANT quirk
-
-        timestamps = Logic.buildTimestamps(startDate, endDate, firstInterval)
-
-        if not timestamps:
-            QMessageBox.warning(self, "Date Error", "Invalid dates or interval.")
-            return
-        
-        # Default blanks for missing data
-        defaultBlanks = [''] * len(timestamps)
-        labelsDict = {} # For Aquarius API labels
-        
-        # Group by (db, mrid, interval)
-        groups = defaultdict(list)
-        for dataID, interval, db, mrid, origIndex in queryItems:
-            groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
-            groups[groupKey].append((origIndex, dataID)) # Group by key
-
-        if Logic.debug: print(f"[DEBUG] Formed {len(groups)} groups.")
-        
-        # Collect values
-        valueDict = {}
-        for (db, mrid, interval), groupItems in groups.items():
-            if Logic.debug: print(f"[DEBUG] Processing group: db={db}, mrid={mrid}, interval={interval}, items={len(groupItems)}")
-            SDIDs = []
-
-            for origIndex, dataID in groupItems:
-                SDID = dataID
-
-                if db.startswith('USBR-') and '-' in dataID:
-                    SDID, _ = dataID.rsplit('-', 1) # Recalc SDID
-                SDIDs.append(SDID)
-            try:
-                if db.startswith('USBR-'):
-                    svr = db.split('-')[1].lower()
-                    table = 'M' if mrid != '0' else 'R'
-                    result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, interval, mrid, table)
-                elif db == 'AQUARIUS':
-                    result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
-                else:
-                    print(f"[WARN] Unknown db skipped: {db}")
-                    continue
-            except Exception as e:
-                QMessageBox.warning(self, "Query Error", f"Query failed for group {db}: {e}")
-                continue
-            for idx, (origIndex, dataID) in enumerate(groupItems):
-                SDID = SDIDs[idx]
-
-                if SDID in result:
-                    if db == 'AQUARIUS':
-                        outputData = result[SDID]['data']
-                        labelsDict[dataID] = result[SDID].get('label', dataID)
-                    else:
-                        outputData = result[SDID]
-                    alignedData = Logic.gapCheck(timestamps, outputData, dataID)
-                    values = [line.split(',')[1] if line else '' for line in alignedData]
-                    valueDict[dataID] = values
-                else:
-                    valueDict[dataID] = defaultBlanks # Full blanks
-                if Logic.debug: print(f"[DEBUG] Processed dataID {dataID}: {len(valueDict[dataID])} values")
-        
-        # Recombine in original order
-        originalDataIds = [item[0] for item in queryItems] # dataID
-        originalIntervals = [item[1] for item in queryItems] # For labels
-        lookupIds = []
-
-        for item in queryItems:
-            dataID, interval, db, mrid, origIndex = item
-            lookupId = dataID
-
-            if db.startswith('USBR-') and '-' in dataID:
-                lookupId = dataID.split('-')[0] # Base SDID
-            lookupIds.append(lookupId)
-        
-        # Build data
-        data = []
-
-        for r in range(len(timestamps)):
-            rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
-            data.append(f"{timestamps[r]},{','.join(rowValues)}")
-
-        if Logic.debug: print(f"[DEBUG] Built {len(data)} data rows")
-        
-        # Build headers
-        buildHeader = originalDataIds
-        intervalsForHeaders = originalIntervals
-        
-        # Build table
-        winMain.mainTable.clear() # Clear existing
-        Logic.buildTable(winMain.mainTable, data, buildHeader, winDataDictionary.mainTable, intervalsForHeaders, lookupIds, labelsDict)
-        
-        # Show tab if hidden
-        if winMain.tabWidget.indexOf(winMain.tabMain) == -1:
-            winMain.tabWidget.addTab(winMain.tabMain, 'Data Query') # Show Data Query tab
-        
-        # Close query window
+        winMain.lastQueryType = 'internal'
+        winMain.lastQueryItems = queryItems
+        winMain.lastStartDate = startDate
+        winMain.lastEndDate = endDate
+        winMain.lastDatabase = self.cbDatabase.currentText() if not queryItems else None
+        winMain.lastInterval = self.cbInterval.currentText() if not queryItems else None
+        if Logic.debug: print("[DEBUG] Stored last query as internal.")
+        Logic.executeQuery(winMain, queryItems, startDate, endDate, True, winDataDictionary.mainTable)
         self.close()
-
-        if Logic.debug: print("[DEBUG] Internal query window closed after query")
+        if Logic.debug: print("[DEBUG] Internal query window closed after query.")
 
     def btnAddQueryPressed(self):
         item = f'{self.qleDataID.text().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}' # Build query item

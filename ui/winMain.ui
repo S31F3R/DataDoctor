@@ -77,6 +77,40 @@
          <bool>true</bool>
         </property>
        </widget>
+       <widget class="QPushButton" name="btnRefresh">
+        <property name="geometry">
+         <rect>
+          <x>4</x>
+          <y>6</y>
+          <width>131</width>
+          <height>28</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Refresh Query</string>
+        </property>
+        <property name="icon">
+         <iconset>
+          <normaloff>icons/Refresh.png</normaloff>icons/Refresh.png</iconset>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="btnUndo">
+        <property name="geometry">
+         <rect>
+          <x>4</x>
+          <y>36</y>
+          <width>131</width>
+          <height>28</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Reset Sort</string>
+        </property>
+        <property name="icon">
+         <iconset>
+          <normaloff>icons/Reset.png</normaloff>icons/Reset.png</iconset>
+        </property>
+       </widget>
       </widget>
       <widget class="QWidget" name="tabSQL">
        <attribute name="title">
