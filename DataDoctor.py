@@ -9,7 +9,7 @@ import json
 import keyring
 from keyring.backends.null import Keyring as NullKeyring # Safe fallback if needed
 from datetime import datetime
-from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap 
+from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap , QFontMetrics
 from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
                              QTextEdit, QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
@@ -26,6 +26,9 @@ class uiMain(QMainWindow):
     def __init__(self):
         super(uiMain, self).__init__() # Call the inherited classes __init__ method
         uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self) # Load the .ui file   
+
+        with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
+            app.setStyleSheet(f.read()) # Global stylesheet application
         
         # Define the controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
@@ -149,18 +152,16 @@ class uiMain(QMainWindow):
 
     def btnRefreshPressed(self):
         if Logic.debug: print("[DEBUG] btnRefreshPressed: Starting refresh process.")
-
         if not self.lastQueryType:
             if Logic.debug: print("[DEBUG] No last query to refresh.")
             return
-        
+        from datetime import datetime
         now = datetime.now()
         endDateTime = datetime.strptime(self.lastEndDate, '%Y-%m-%d %H:%M')
-
         if endDateTime.date() == now.date():
             self.lastEndDate = now.strftime('%Y-%m-%d %H:%M')
             if Logic.debug: print(f"[DEBUG] Updated end date to current: {self.lastEndDate}")
-        Logic.executeQuery(self, self.lastQueryItems, self.lastStartDate, self.lastEndDate, self.lastQueryType == 'internal')
+        Logic.executeQuery(self, self.lastQueryItems, self.lastStartDate, self.lastEndDate, self.lastQueryType == 'internal', winDataDictionary.mainTable)
 
     def btnUndoPressed(self):
         if Logic.debug: print("[DEBUG] btnUndoPressed: Resetting to timestamp sort.")

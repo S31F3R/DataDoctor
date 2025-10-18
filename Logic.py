@@ -7,9 +7,11 @@ import QueryUSGS
 import QueryAquarius
 import json
 from datetime import datetime, timedelta
-from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDir
-from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont
-from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget, QTreeView, QSplitter, QMessageBox
+from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDir, QTimer
+from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont, QFontMetrics
+from PyQt6.QtWidgets import (QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget, 
+                            QTreeView, QSplitter, QMessageBox, QStyleOptionHeader, QSizePolicy,
+                            QHeaderView)
 from collections import defaultdict
 
 def resourcePath(relativePath):
@@ -165,34 +167,41 @@ def combineParameters(data, newData):
 
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None):
     table.clear()
+
     if not data:
         if debug: print("[DEBUG] buildTable: No data to display.")
         return
+
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
+
     processedHeaders = []
+
     for i, h in enumerate(buildHeader):
         dataID = h.strip()
         intervalStr = intervals[i].upper()
         dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataID)
+
         if dictRow != -1:
             siteItem = dataDictionaryTable.item(dictRow, 1)
             datatypeItem = dataDictionaryTable.item(dictRow, 2)
             baseLabel = (siteItem.text().strip() + ' ' + datatypeItem.text().strip()) if siteItem and datatypeItem else dataID
             fullLabel = baseLabel + ' \n' + intervalStr + ' \n' + dataID
         else:
-            if labelsDict and dataID in labelsDict:
+            if labelsDict and dataID in labelsDict and 'AQUARIUS' in (dataDictionaryTable.parent().objectName() if dataDictionaryTable else ''):
                 apiFull = labelsDict[dataID]
                 parts = apiFull.split('\n')
+
                 if len(parts) >= 2:
-                    location = parts[0].strip()
-                    label = parts[1].strip() if len(parts) > 1 else dataID
-                    fullLabel = label + ' \n' + location + ' \n' + dataID  # Aquarius: label first, then location, uid
+                    label, location = parts[1].strip(), parts[0].strip()
+                    fullLabel = label + ' \n' + location + ' \n' + dataID
                 else:
                     fullLabel = dataID + ' \n' + intervalStr
             else:
                 fullLabel = dataID + ' \n' + intervalStr
+
         processedHeaders.append(fullLabel)
+
     headers = processedHeaders
     skipDateCol = dataDictionaryTable is not None
     numCols = len(headers)
@@ -200,30 +209,113 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.setRowCount(numRows)
     table.setColumnCount(numCols)
     table.setHorizontalHeaderLabels(headers)
+
     if dataDictionaryTable:
         timestamps = [row.split(',')[0].strip() for row in data]
         table.setVerticalHeaderLabels(timestamps)
-        table.verticalHeader().setMinimumWidth(120)
-        table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        table.verticalHeader().setVisible(True)
+        vHeader = table.verticalHeader()
+        vHeader.setMinimumWidth(120)
+        vHeader.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        vHeader.setVisible(True)
     else:
         table.verticalHeader().setVisible(False)
     config = loadConfig()
     rawData = config.get('rawData', False)
     qaqcToggle = config.get('qaqc', True)
+
     for rowIdx, rowStr in enumerate(data):
         rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
+
         for colIdx in range(min(numCols, len(rowData))):
             cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+
             if not rawData and cellText.strip():
                 item.setText(valuePrecision(cellText))
             table.setItem(rowIdx, colIdx, item)
-    from PyQt6.QtCore import QTimer
-    QTimer.singleShot(0, lambda: [table.resizeColumnToContents(c) for c in range(numCols)])
-    if debug: print(f"[DEBUG] Deferred resizeColumnsToContents for {numCols} columns.")
+
+    # Ensure sort connection is set early
+    table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
+
+    # Custom auto-size for columns based on data and header character count
+    font = table.font()
+    metrics = QFontMetrics(font)
+    header = table.horizontalHeader()
+    vHeader = table.verticalHeader()
+    table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+    table.setMinimumSize(0, 0)
+    table.resize(table.size())
+    table.update()
+
+    # Set vertical header minimum with padding
+    if dataDictionaryTable:
+        maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
+        vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
+
+    # Set column widths based on max of cell content and header character count
+    charToPx = 8 # Approx pixels per char for 12pt font
+
+    for c in range(numCols):
+        cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data]
+        maxCellWidth = max(metrics.horizontalAdvance(val) for val in cellValues) if cellValues else 50
+
+        # Calculate header width based on max character count per line
+        headerLines = headers[c].split('\n')
+        maxHeaderLen = max(len(line) for line in headerLines) if headerLines else 0
+        headerWidth = maxHeaderLen * charToPx
+
+        # Adjust max width
+        finalWidth = max(maxCellWidth, headerWidth)
+
+        if headerWidth > maxCellWidth:
+            paddingIncrease = headerWidth - maxCellWidth
+            finalWidth = maxCellWidth + paddingIncrease
+        else:
+            finalWidth = maxCellWidth + 15
+
+        table.setColumnWidth(c, finalWidth)
+
+    # Set row heights based on font metrics with dynamic adjustment
+    rowHeight = metrics.height() + 10
+    sampleItem = QTableWidgetItem("189.5140")
+    sampleItem.setFont(font)
+    sampleCellHeight = sampleItem.sizeHint().height()
+
+    if sampleCellHeight <= 0:
+        sampleCellHeight = metrics.height()
+
+    tallestCellHeight = 0
+
+    for r in range(numRows):
+        for c in range(numCols):
+            item = table.item(r, c)
+
+            if item and item.text().strip():
+                height = item.sizeHint().height()
+
+                if height > 0:
+                    tallestCellHeight = max(tallestCellHeight, height)
+    if tallestCellHeight == 0:
+        tallestCellHeight = metrics.height()
+
+    adjustedRowHeight = max(rowHeight, tallestCellHeight + 2)
+    
+    if debug: print(f"[DEBUG] Sample cell height: {sampleCellHeight}, Tallest cell height: {tallestCellHeight}")
+
+    for r in range(numRows):
+        table.setRowHeight(r, adjustedRowHeight)
+
+    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.update()
+    table.horizontalScrollBar().setValue(0)
+    visibleWidth = table.columnWidth(1)
+
+    if debug: print(f"[DEBUG] Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
+
     dataIds = buildHeader
+
     if qaqcToggle:
         qaqc(table, dataDictionaryTable, dataIds)
     else:
@@ -231,7 +323,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             for c in range(table.columnCount()):
                 item = table.item(r, c)
                 if item: item.setBackground(QColor(0, 0, 0, 0))
-    table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
     
 def buildDataDictionary(table):
     table.clear() # Clear table
@@ -907,32 +998,42 @@ def loadLastQuickLook(cbQuickLook):
 
 def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable):
     if debug: print(f"[DEBUG] executeQuery: isInternal={isInternal}, items={len(queryItems)}")
+
     if isInternal:
         queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
-        if not queryItems:
-            from PyQt6.QtWidgets import QMessageBox
+
+        if not queryItems:            
             QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
             return
+
     queryItems.sort(key=lambda x: x[4])
     firstInterval = queryItems[0][1]
     firstDb = queryItems[0][2]
+
     if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
         firstInterval = 'HOUR'
+
     timestamps = buildTimestamps(startDate, endDate, firstInterval)
+
     if not timestamps:
         QMessageBox.warning(mainWindow, "Date Error", "Invalid dates or interval.")
         return
+
     defaultBlanks = [''] * len(timestamps)
     labelsDict = {} if isInternal else None
     groups = defaultdict(list)
+
     for dataID, interval, db, mrid, origIndex in queryItems:
         groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
         SDID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
         groups[groupKey].append((origIndex, dataID, SDID))
+
     valueDict = {}
+
     for groupKey, groupItems in groups.items():
         db, mrid, interval = groupKey
         SDIDs = [item[2] for item in groupItems]
+
         try:
             if db.startswith('USBR-'):
                 svr = db.split('-')[1].lower()
@@ -955,6 +1056,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     labelsDict[dataID] = result[SDID].get('label', dataID)
                 else:
                     outputData = result[SDID]
+
                 alignedData = gapCheck(timestamps, outputData, dataID)
                 values = [line.split(',')[1] if line else '' for line in alignedData]
                 valueDict[dataID] = values
@@ -964,11 +1066,14 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     originalIntervals = [item[1] for item in queryItems]
     lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
     data = []
+
     for r in range(len(timestamps)):
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append(f"{timestamps[r]},{','.join(rowValues)}")
+
     mainWindow.mainTable.clear()
     buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict)
+    
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
     if debug: print("[DEBUG] Query executed and table updated.")

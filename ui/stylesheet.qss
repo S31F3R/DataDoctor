@@ -1,16 +1,24 @@
 QTabBar::close-button {
-    image: url(ui/icons/Tab-close-dark.png);  /* Dark */    
-    border-radius: 8px;  /* Full circle for square size */
-    background: transparent;  /* Transparent bg */
+    image: url(ui/icons/Tab-close-dark.png); /* Dark */
+    border-radius: 8px; /* Full circle for square size */
+    background: transparent; /* Transparent bg */
     subcontrol-position: right;
     width: 16px;
     height: 16px;
 }
-
 QTabBar::close-button:hover {
-    image: url(ui/icons/Tab-close-light.png);  /* Light invert */
+    image: url(ui/icons/Tab-close-light.png); /* Light invert */
 }
-
 QTabBar::close-button:pressed {
-    image: url(ui/icons/Tab-close-dark.png);  /* Darker for press */
+    image: url(ui/icons/Tab-close-dark.png); /* Darker for press */
+}
+QHeaderView::section {
+    padding: 5px;
+    margin: 0px;
+    border: none;
+    min-width: 0px;
+    max-width: none; /* Allow full expansion */
+}
+QTableWidget {
+    gridline-color: transparent; /* Prevent gridlines from affecting size */
 }
