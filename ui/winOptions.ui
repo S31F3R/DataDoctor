@@ -153,7 +153,7 @@
       <string/>
      </property>
     </widget>
-    <widget class="QCheckBox" name="cbRetroFont">
+    <widget class="QCheckBox" name="cbRetroMode">
      <property name="geometry">
       <rect>
        <x>90</x>
@@ -166,7 +166,7 @@
       <string/>
      </property>
     </widget>
-    <widget class="QLabel" name="lbRetroFont">
+    <widget class="QLabel" name="lbRetroMode">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -176,7 +176,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>Retro Font:</string>
+      <string>Retro Mode:</string>
      </property>
     </widget>
     <zorder>lbUTCOffset</zorder>
@@ -187,8 +187,8 @@
     <zorder>lbDebug</zorder>
     <zorder>cbQAQC</zorder>
     <zorder>cbDebug</zorder>
-    <zorder>lbRetroFont</zorder>
-    <zorder>cbRetroFont</zorder>
+    <zorder>lbRetroMode</zorder>
+    <zorder>cbRetroMode</zorder>
    </widget>
    <widget class="QWidget" name="tabAquarius">
     <attribute name="title">
