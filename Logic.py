@@ -531,41 +531,91 @@ def loadConfig():
         'colorMode': 'light',
         'lastExportPath': '',
         'debugMode': False,
-        'utcOffset': -7,
+        'utcOffset': 'UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London',
         'periodOffset': True,
         'retroFont': True,
         'qaqc': True,
         'rawData': False,
         'lastQuickLook': ''
     }
+
     if os.path.exists(configPath):
         try:
             with open(configPath, 'r', encoding='utf-8') as configFile:
                 config = json.load(configFile) # Read JSON
+            if debug: print("[DEBUG] Loaded config: {}".format(config))
+
+            # Migrate integer utcOffset to full string
+            utcOffset = config.get('utcOffset', settings['utcOffset'])
+            if isinstance(utcOffset, (int, float)):
+                if debug: print("[DEBUG] Migrating integer utcOffset {} to full string".format(utcOffset))
+
+                # Mapping of integer/float offsets to full strings (from uiOptions.cbUTCOffset)
+                offsetMap = {
+                    -12: "UTC-12:00 | Baker Island",
+                    -11: "UTC-11:00 | American Samoa",
+                    -10: "UTC-10:00 | Hawaii",
+                    -9.5: "UTC-09:30 | Marquesas Islands",
+                    -9: "UTC-09:00 | Alaska",
+                    -8: "UTC-08:00 | Pacific Time (US & Canada)",
+                    -7: "UTC-07:00 | Mountain Time (US & Canada)/Arizona",
+                    -6: "UTC-06:00 | Central Time (US & Canada)",
+                    -5: "UTC-05:00 | Eastern Time (US & Canada)",
+                    -4: "UTC-04:00 | Atlantic Time (Canada)",
+                    -3.5: "UTC-03:30 | Newfoundland",
+                    -3: "UTC-03:00 | Brasilia",
+                    -2: "UTC-02:00 | Mid-Atlantic",
+                    -1: "UTC-01:00 | Cape Verde Is.",
+                    0: "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
+                    1: "UTC+01:00 | Central European Time : Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna",
+                    2: "UTC+02:00 | Eastern European Time : Athens, Bucharest, Istanbul",
+                    3: "UTC+03:00 | Moscow, St. Petersburg, Volgograd",
+                    3.5: "UTC+03:30 | Tehran",
+                    4: "UTC+04:00 | Abu Dhabi, Muscat",
+                    4.5: "UTC+04:30 | Kabul",
+                    5: "UTC+05:00 | Islamabad, Karachi, Tashkent",
+                    5.5: "UTC+05:30 | Chennai, Kolkata, Mumbai, New Delhi",
+                    5.75: "UTC+05:45 | Kathmandu",
+                    6: "UTC+06:00 | Astana, Dhaka",
+                    6.5: "UTC+06:30 | Yangon (Rangoon)",
+                    7: "UTC+07:00 | Bangkok, Hanoi, Jakarta",
+                    8: "UTC+08:00 | Beijing, Chongqing, Hong Kong, Urumqi",
+                    8.75: "UTC+08:45 | Eucla",
+                    9: "UTC+09:00 | Osaka, Sapporo, Tokyo",
+                    9.5: "UTC+09:30 | Adelaide, Darwin",
+                    10: "UTC+10:00 | Brisbane, Canberra, Melbourne, Sydney",
+                    10.5: "UTC+10:30 | Lord Howe Island",
+                    11: "UTC+11:00 | Solomon Is., New Caledonia",
+                    12: "UTC+12:00 | Auckland, Wellington",
+                    12.75: "UTC+12:45 | Chatham Islands",
+                    13: "UTC+13:00 | Samoa",
+                    14: "UTC+14:00 | Kiritimati"
+                }
+                
+                utcOffset = offsetMap.get(utcOffset, settings['utcOffset']) # Map to string or default
+                config['utcOffset'] = utcOffset # Update config
+                # Write updated config back to file
+                with open(configPath, 'w', encoding='utf-8') as configFile:
+                    json.dump(config, configFile, indent=2)
+                if debug: print("[DEBUG] Migrated utcOffset to: {}".format(utcOffset))
             settings['colorMode'] = config.get('colorMode', settings['colorMode']) # Load color
             settings['lastExportPath'] = config.get('lastExportPath', settings['lastExportPath']) # Load export path
             settings['debugMode'] = config.get('debugMode', settings['debugMode']) # Load debug
-            settings['utcOffset'] = config.get('utcOffset', settings['utcOffset']) # Load UTC
-
-            if isinstance(settings['utcOffset'], str):
-                try:
-                    offsetPart = settings['utcOffset'].split(' | ')[0].replace('UTC', '').split(':')[0] # Parse UTC
-                    settings['utcOffset'] = int(offsetPart)
-                except ValueError:
-                    settings['utcOffset'] = -7 # Fallback
-
+            settings['utcOffset'] = utcOffset # Load full UTC string
+            if debug: print("[DEBUG] utcOffset loaded as: {}".format(settings['utcOffset']))
             settings['periodOffset'] = config.get('hourTimestampMethod', 'EOP') == 'EOP' # Load period
             settings['retroFont'] = config.get('retroFont', settings['retroFont']) # Load retro
             settings['qaqc'] = config.get('qaqc', settings['qaqc']) # Load QAQC
             settings['rawData'] = config.get('rawData', settings['rawData']) # Load raw
             settings['lastQuickLook'] = config.get('lastQuickLook', settings['lastQuickLook']) # Load quick look
-            if debug: print("[DEBUG] Loaded settings from user.config")
+            if debug: print("[DEBUG] Loaded settings from user.config: {}".format(settings))
         except Exception as e:
-            if debug: print(f"[ERROR] Failed to load user.config: {e}")
+            if debug: print("[ERROR] Failed to load user.config: {}".format(e))
     else:
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(settings, configFile, indent=2) # Write default JSON
-        if debug: print("[DEBUG] Created default user.config")
+            
+        if debug: print("[DEBUG] Created default user.config with settings: {}".format(settings))
     return settings
 
 def exportTableToCSV(table, fileLocation, fileName):
@@ -1073,7 +1123,21 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
     mainWindow.mainTable.clear()
     buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict)
-    
+
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
     if debug: print("[DEBUG] Query executed and table updated.")
+
+def getUtcOffsetInt(utcOffsetStr):
+    """Extract UTC offset as float from full string (e.g., 'UTC-09:30 | Marquesas Islands' -> -9.5)."""
+    try:
+        offsetPart = utcOffsetStr.split(' | ')[0].replace('UTC', '') # Get 'UTC-09:30'
+        offsetParts = offsetPart.split(':') # Split on colon
+        hours = int(offsetParts[0]) # Extract hours
+        minutes = int(offsetParts[1]) if len(offsetParts) > 1 and offsetParts[1] else 0 # Extract minutes
+        offset = hours + (minutes / 60.0) * (-1 if hours < 0 else 1) # Convert to float (e.g., -9:30 -> -9.5)
+        if debug: print("[DEBUG] getUtcOffsetInt: Parsed '{}' to {} hours".format(utcOffsetStr, offset))
+        return offset
+    except (ValueError, IndexError) as e:
+        if debug: print("[ERROR] getUtcOffsetInt: Failed to parse '{}': {}. Returning 0".format(utcOffsetStr, e))
+        return 0.0 # Fallback to UTC+00:00
