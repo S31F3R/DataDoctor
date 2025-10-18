@@ -25,34 +25,35 @@ class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
     def __init__(self):
         super(uiMain, self).__init__() # Call the inherited classes __init__ method
-        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self) # Load the .ui file   
-
+        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self) # Load the .ui file
         with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
             app.setStyleSheet(f.read()) # Global stylesheet application
-        
+
         # Define the controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
-        self.mainTable = self.findChild(QTableWidget, 'mainTable')          
-        self.btnDataDictionary = self.findChild(QPushButton,'btnDataDictionary')           
-        self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')       
-        self.btnOptions = self.findChild(QPushButton, 'btnOptions')   
-        self.btnInfo = self.findChild(QPushButton, 'btnInfo')    
+        self.mainTable = self.findChild(QTableWidget, 'mainTable')
+        self.btnDataDictionary = self.findChild(QPushButton, 'btnDataDictionary')
+        self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')
+        self.btnOptions = self.findChild(QPushButton, 'btnOptions')
+        self.btnInfo = self.findChild(QPushButton, 'btnInfo')
         self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
         self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
         self.btnUndo = self.findChild(QPushButton, 'btnUndo')
-        self.lastQueryType = None  # 'web' or 'internal'
-        self.lastQueryItems = []  # List of (dataID, interval, database, mrid, origIndex)
+        self.lastQueryType = None # 'web' or 'internal'
+        self.lastQueryItems = [] # List of (dataID, interval, database, mrid, origIndex)
         self.lastStartDate = None
         self.lastEndDate = None
 
-        # Set button style
+        # Set button style (exclude btnRefresh and btnUndo)
         Logic.buttonStyle(self.btnPublicQuery)
-        Logic.buttonStyle(self.btnDataDictionary)        
+        Logic.buttonStyle(self.btnDataDictionary)
         Logic.buttonStyle(self.btnExportCSV)
         Logic.buttonStyle(self.btnOptions)
         Logic.buttonStyle(self.btnInfo)
         Logic.buttonStyle(self.btnInternalQuery)
-        
+        Logic.buttonStyle(self.btnUndo)
+        Logic.buttonStyle(self.btnRefresh)
+
         # Set up stretch for central grid layout (make tab row expand)
         centralLayout = self.centralWidget().layout()
 
@@ -61,37 +62,37 @@ class uiMain(QMainWindow):
             centralLayout.setRowStretch(0, 0) # Toolbar row fixed
             centralLayout.setRowStretch(1, 1) # Tab row expanding
             centralLayout.setColumnStretch(0, 1) # Single column expanding
-        
+
         # Ensure tab widget expands
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
 
         if self.tabWidget:
             self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-            # Connect close button signal
-            self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
-        
+        # Connect close button signal
+        self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
+
         # Set up Data Query tab (tabMain QWidget)
         self.tabMain = self.findChild(QWidget, 'tabMain')
 
         if self.tabMain:
             self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-            
-            # Add layout if none exists
-            if not self.tabMain.layout():
-                layout = QVBoxLayout(self.tabMain)
-                layout.addWidget(self.mainTable)
-                layout.setContentsMargins(0, 0, 0, 0)
-                layout.setSpacing(0)
 
-            # Reset table geometry to let layout manage sizing
-            self.mainTable.setGeometry(0, 0, 0, 0)
-        
+        # Add layout if none exists
+        if not self.tabMain.layout():
+            layout = QVBoxLayout(self.tabMain)
+            layout.addWidget(self.mainTable)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+
+        # Reset table geometry to let layout manage sizing
+        self.mainTable.setGeometry(0, 0, 0, 0)
+
         # Set table to expand within its layout
         self.mainTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        
+
         # Hide tabs on startup (both Data Query and SQL)
-        if self.tabWidget:            
+        if self.tabWidget:
             # Hide Data Query
             dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
 
@@ -104,13 +105,13 @@ class uiMain(QMainWindow):
 
             if sqlIndex != -1:
                 self.tabWidget.removeTab(sqlIndex)
-        
+
         # Create events
-        self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)  
-        self.btnDataDictionary.clicked.connect(self.showDataDictionary)         
-        self.btnExportCSV.clicked.connect(self.btnExportCSVPressed) 
-        self.btnOptions.clicked.connect(self.btnOptionsPressed) 
-        self.btnInfo.clicked.connect(self.btnInfoPressed) 
+        self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)
+        self.btnDataDictionary.clicked.connect(self.showDataDictionary)
+        self.btnExportCSV.clicked.connect(self.btnExportCSVPressed)
+        self.btnOptions.clicked.connect(self.btnOptionsPressed)
+        self.btnInfo.clicked.connect(self.btnInfoPressed)
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
@@ -120,9 +121,9 @@ class uiMain(QMainWindow):
         centerPoint = QGuiApplication.primaryScreen().availableGeometry().center()
         rect.moveCenter(centerPoint)
         self.move(rect.topLeft())
-        
+
         # Show the GUI on application start
-        self.show()      
+        self.show()
 
     def onTabCloseRequested(self, index):
         """Handle tab close button clicks by removing the tab."""
@@ -680,7 +681,7 @@ class uiOptions(QDialog):
         self.rbBOP = self.findChild(QRadioButton, 'rbBOP') # Begin of period
         self.rbEOP = self.findChild(QRadioButton, 'rbEOP') # End of period
         self.btnbOptions = self.findChild(QDialogButtonBox, 'btnbOptions') # Save/Cancel buttons
-        self.cbRetroFont = self.findChild(QCheckBox, 'cbRetroFont') # Retro font toggle
+        self.cbRetroMode = self.findChild(QCheckBox, 'cbRetroMode') # Retro mode toggle
         self.cbQAQC = self.findChild(QCheckBox, 'cbQAQC') # QAQC toggle
         self.cbRawData = self.findChild(QCheckBox, 'cbRawData') # Raw data toggle
         self.cbDebug = self.findChild(QCheckBox, 'cbDebug') # Debug toggle
@@ -728,9 +729,9 @@ class uiOptions(QDialog):
         self.cbUTCOffset.addItem("UTC-03:00 | Brasilia")
         self.cbUTCOffset.addItem("UTC-02:00 | Mid-Atlantic")
         self.cbUTCOffset.addItem("UTC-01:00 | Cape Verde Is.")
-        self.cbUTCOffset.addItem("UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London")
-        self.cbUTCOffset.addItem("UTC+01:00 | Central European Time : Amsterdam, Berlin, Bern, \nRome, Stockholm, Vienna")
-        self.cbUTCOffset.addItem("UTC+02:00 | Eastern European Time : Athens, Bucharest, \nIstanbul")
+        self.cbUTCOffset.addItem("UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London")
+        self.cbUTCOffset.addItem("UTC+01:00 | Central European Time : Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna")
+        self.cbUTCOffset.addItem("UTC+02:00 | Eastern European Time : Athens, Bucharest, Istanbul")
         self.cbUTCOffset.addItem("UTC+03:00 | Moscow, St. Petersburg, Volgograd")
         self.cbUTCOffset.addItem("UTC+03:30 | Tehran")
         self.cbUTCOffset.addItem("UTC+04:00 | Abu Dhabi, Muscat")
@@ -820,9 +821,8 @@ class uiOptions(QDialog):
         else:
             self.cbUTCOffset.setCurrentIndex(14) # Default UTC+00:00
             if Logic.debug: print("[DEBUG] utcOffset '{}' not found, set to default UTC+00:00".format(utcOffset))
-
-        self.cbRetroFont.setChecked(bool(config.get('retroFont', True))) # Set retro
-        if Logic.debug: print("[DEBUG] Set cbRetroFont to: {}".format(self.cbRetroFont.isChecked()))
+        self.cbRetroMode.setChecked(bool(config.get('retroMode', True))) # Set retro
+        if Logic.debug: print("[DEBUG] Set cbRetroMode to: {}".format(self.cbRetroMode.isChecked()))
         self.cbQAQC.setChecked(bool(config.get('qaqc', True))) # Set QAQC
         if Logic.debug: print("[DEBUG] Set cbQAQC to: {}".format(self.cbQAQC.isChecked()))
         self.cbRawData.setChecked(bool(config.get('rawData', False))) # Set raw
@@ -832,18 +832,15 @@ class uiOptions(QDialog):
         tnsPath = config.get('tnsNamesLocation', '') # Get TNS path
         if tnsPath.startswith(Logic.appRoot):
             tnsPath = tnsPath.replace(Logic.appRoot, '%AppRoot%') # Shorten path
-
         self.textTNSNames.setPlainText(tnsPath) # Set TNS path
 
         if not self.textTNSNames.toPlainText():
             envTns = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin')) # Default TNS
-
             if envTns.startswith(Logic.appRoot):
                 envTns = envTns.replace(Logic.appRoot, '%AppRoot%') # Shorten
             self.textTNSNames.setPlainText(envTns) # Set TNS
 
         if Logic.debug: print("[DEBUG] Set textTNSNames to: {}".format(tnsPath))
-
         hourMethod = config.get('hourTimestampMethod', 'EOP') # Get period
 
         if hourMethod == 'EOP':
@@ -859,7 +856,7 @@ class uiOptions(QDialog):
             self.qleUSGSAPIKey.setText(keyring.get_password("DataDoctor", "usgsApiKey") or "") # Load USGS key
             if Logic.debug: print("[DEBUG] Successfully loaded keyring credentials")
         except Exception as e:
-            if Logic.debug: print("[ERROR] Failed to load keyring credentials: {}".format(e))
+            if Logic.debug: print("[ERROR] Failed to load keyring credentials: {}. Using empty strings".format(e))
             self.textAQServer.setPlainText("") # Fallback
             self.textAQUser.setPlainText("") # Fallback
             self.qleAQPassword.setText("") # Fallback
@@ -874,66 +871,46 @@ class uiOptions(QDialog):
             try:
                 with open(configPath, 'r', encoding='utf-8') as configFile:
                     config = json.load(configFile) # Read existing
-                if Logic.debug: print(f"[DEBUG] Read existing user.config: {config}")
+                if Logic.debug: print("[DEBUG] Read existing user.config: {}".format(config))
             except Exception as e:
-                if Logic.debug: print(f"[ERROR] Failed to load user.config for save: {e}")
-        previousRetro = config.get('retroFont', True) # Save previous retro
+                if Logic.debug: print("[ERROR] Failed to load user.config for save: {}".format(e))
+
+        previousRetro = config.get('retroMode', True) # Save previous retro
+        newRetro = self.cbRetroMode.isChecked()
         tnsPath = self.textTNSNames.toPlainText() # Get TNS path
 
         if '%AppRoot%' in tnsPath:
             tnsPath = tnsPath.replace('%AppRoot%', Logic.appRoot) # Expand path
         config.update({
             'utcOffset': self.cbUTCOffset.currentText(), # Save UTC
-            'retroFont': self.cbRetroFont.isChecked(), # Save retro
+            'retroMode': newRetro, # Save retro
             'qaqc': self.cbQAQC.isChecked(), # Save QAQC
             'rawData': self.cbRawData.isChecked(), # Save raw
             'debugMode': self.cbDebug.isChecked(), # Save debug
             'tnsNamesLocation': tnsPath, # Save TNS
             'hourTimestampMethod': 'EOP' if self.rbEOP.isChecked() else 'BOP', # Save period
-            'colorMode': config.get('colorMode', 'light'), # Preserve color
             'lastExportPath': config.get('lastExportPath', '') # Preserve export
         })
+
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(config, configFile, indent=2) # Write JSON
-        if Logic.debug: print("[DEBUG] Saved user.config")
+        if Logic.debug: print("[DEBUG] Saved user.config with retroMode: {}".format(newRetro))
 
         Logic.reloadGlobals() # Reload globals
 
-        if self.cbRetroFont.isChecked():
-            fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf') # Load retro font
-            fontId = QFontDatabase.addApplicationFont(fontPath)
-
-            if fontId != -1:
-                fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-                retroFontObj = QFont(fontFamily, 10) # Fixed size
-                retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing
-                app.setFont(retroFontObj) # Set app font
-
-                for window in [winMain, winWebQuery, winDataDictionary, winQuickLook, winOptions, winAbout]:
-                    Logic.applyRetroFont(window) # Apply to all windows
-                if Logic.debug: print("[DEBUG] Applied retro font")
-        else:
-            app.setFont(QFont()) # System default font
-            if Logic.debug: print("[DEBUG] Reverted to system font")
-
-        newRetro = self.cbRetroFont.isChecked()
-
         if newRetro != previousRetro:
-            reply = QMessageBox.question(self, "Font Change", "Restart DataDoctor for the font change to take effect?\nOK to restart now, Cancel to revert to previous setting.", QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
-            
+            reply = QMessageBox.question(self, "Retro Mode Change", "Restart DataDoctor for the retro mode change to take effect?\nOK to restart now, Cancel to revert to previous setting.", QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
             if reply == QMessageBox.StandardButton.Ok:
                 python = sys.executable
                 os.execl(python, python, *sys.argv) # Relaunch app
             else:
-                self.cbRetroFont.setChecked(previousRetro) # Revert checkbox
-                config['retroFont'] = previousRetro # Update config
-
+                self.cbRetroMode.setChecked(previousRetro) # Revert checkbox
+                config['retroMode'] = previousRetro # Update config
                 with open(configPath, 'w', encoding='utf-8') as configFile:
                     json.dump(config, configFile, indent=2) # Write reverted
-
                 Logic.reloadGlobals() # Reload globals
-                
-                if Logic.debug: print("[DEBUG] Reverted retro font setting")
+                if Logic.debug: print("[DEBUG] Reverted retro mode to {}".format(previousRetro))
+
         # Save credentials to keyring with validation
         credentials = [
             ("aqServer", self.textAQServer.toPlainText()),
@@ -941,16 +918,17 @@ class uiOptions(QDialog):
             ("aqPassword", self.qleAQPassword.text()),
             ("usgsApiKey", self.qleUSGSAPIKey.text())
         ]
+
         for key, value in credentials:
             if value and isinstance(value, str) and value.strip(): # Save only valid strings
                 try:
                     keyring.set_password("DataDoctor", key, value) # Save to keyring
-                    if Logic.debug: print(f"[DEBUG] Saved {key} to keyring")
+                    if Logic.debug: print("[DEBUG] Saved {} to keyring".format(key))
                 except Exception as e:
-                    if Logic.debug: print(f"[ERROR] Failed to save {key} to keyring: {e}")
-                    QMessageBox.warning(self, "Credential Save Error", f"Failed to save {key}: {e}")
+                    if Logic.debug: print("[ERROR] Failed to save {} to keyring: {}".format(key, e))
+                    QMessageBox.warning(self, "Credential Save Error", "Failed to save {}: {}".format(key, e))
             elif Logic.debug:
-                print(f"[DEBUG] Skipped saving {key} to keyring: empty or invalid")
+                print("[DEBUG] Skipped saving {} to keyring: empty or invalid".format(key))
 
     def togglePasswordVisibility(self):
         if self.lastCharTimer.isActive():
@@ -1061,12 +1039,12 @@ class uiAbout(QDialog):
 
         super().closeEvent(event)
 
-# Create an instance of QApplication     
-app = QApplication(sys.argv) 
+# Create an instance of QApplication
+app = QApplication(sys.argv)
 app.setApplicationName("Data Doctor")
 
 # Create an instance of our class
-winMain = uiMain() 
+winMain = uiMain()
 winWebQuery = uiWebQuery(winMain) # Pass parent
 winInternalQuery = uiInternalQuery(winMain) # Pass parent
 winDataDictionary = uiDataDictionary(winMain) # Pass parent
@@ -1079,28 +1057,28 @@ config = Logic.loadConfig()
 Logic.debug = config['debugMode']
 Logic.utcOffset = config['utcOffset']
 Logic.periodOffset = config['periodOffset'] # True for EOP
-Logic.retroFont = config.get('retroFont', True) # Set global
+Logic.retroMode = config.get('retroMode', True) # Set global
 
 # Apply retro font if enabled
-if Logic.retroFont:
+if Logic.retroMode:
     fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
     fontId = QFontDatabase.addApplicationFont(fontPath)
-
     if fontId != -1:
         fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
         retroFontObj = QFont(fontFamily, 10) # Fixed size
         retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing for crisp retro
         app.setFont(retroFontObj)
+        if Logic.debug: print("[DEBUG] Applied retro font at startup")
+    Logic.setRetroStyles(app, True, winMain.mainTable, winWebQuery.listQueryList, winInternalQuery.listQueryList) # Apply retro styles
+else:
+    Logic.setRetroStyles(app, False, winMain.mainTable, winWebQuery.listQueryList, winInternalQuery.listQueryList) # Reset styles
 
-# Load minimal qss if system dark
-if QGuiApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark:
-    qssPath = Logic.resourcePath('ui/stylesheet.qss')
-    
-    with open(qssPath, 'r') as f:
-        app.setStyleSheet(f.read())
+# Load stylesheet
+with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
+    app.setStyleSheet(f.read())
 
 # Load in data dictionary
-Logic.buildDataDictionary(winDataDictionary.mainTable) 
+Logic.buildDataDictionary(winDataDictionary.mainTable)
 
 # Load quick looks for both windows
 Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)

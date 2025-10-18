@@ -9,9 +9,9 @@ import json
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDir, QTimer
 from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont, QFontMetrics
-from PyQt6.QtWidgets import (QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget, 
+from PyQt6.QtWidgets import (QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget,
                             QTreeView, QSplitter, QMessageBox, QStyleOptionHeader, QSizePolicy,
-                            QHeaderView)
+                            QHeaderView, QTableWidget, QListWidget)
 from collections import defaultdict
 
 def resourcePath(relativePath):
@@ -528,29 +528,27 @@ def loadConfig():
     convertConfigToJson() # Convert if needed
     configPath = getConfigPath() # Get JSON path
     settings = {
-        'colorMode': 'light',
         'lastExportPath': '',
         'debugMode': False,
         'utcOffset': 'UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London',
         'periodOffset': True,
-        'retroFont': True,
+        'retroMode': True,
         'qaqc': True,
         'rawData': False,
         'lastQuickLook': ''
     }
-
     if os.path.exists(configPath):
         try:
             with open(configPath, 'r', encoding='utf-8') as configFile:
                 config = json.load(configFile) # Read JSON
+
             if debug: print("[DEBUG] Loaded config: {}".format(config))
 
-            # Migrate integer utcOffset to full string
+            # Migrate integer utcOffset and retroFont
             utcOffset = config.get('utcOffset', settings['utcOffset'])
+
             if isinstance(utcOffset, (int, float)):
                 if debug: print("[DEBUG] Migrating integer utcOffset {} to full string".format(utcOffset))
-
-                # Mapping of integer/float offsets to full strings (from uiOptions.cbUTCOffset)
                 offsetMap = {
                     -12: "UTC-12:00 | Baker Island",
                     -11: "UTC-11:00 | American Samoa",
@@ -591,20 +589,29 @@ def loadConfig():
                     13: "UTC+13:00 | Samoa",
                     14: "UTC+14:00 | Kiritimati"
                 }
-                
                 utcOffset = offsetMap.get(utcOffset, settings['utcOffset']) # Map to string or default
                 config['utcOffset'] = utcOffset # Update config
-                # Write updated config back to file
-                with open(configPath, 'w', encoding='utf-8') as configFile:
-                    json.dump(config, configFile, indent=2)
                 if debug: print("[DEBUG] Migrated utcOffset to: {}".format(utcOffset))
-            settings['colorMode'] = config.get('colorMode', settings['colorMode']) # Load color
+
+            if 'retroFont' in config:
+                if debug: print("[DEBUG] Migrating retroFont to retroMode")
+                config['retroMode'] = config.pop('retroFont') # Rename key
+                if debug: print("[DEBUG] Migrated retroMode to: {}".format(config['retroMode']))
+
+            if 'colorMode' in config:
+                if debug: print("[DEBUG] Removing obsolete colorMode")
+                config.pop('colorMode') # Remove key
+
+            # Write updated config back to file
+            with open(configPath, 'w', encoding='utf-8') as configFile:
+                json.dump(config, configFile, indent=2)
+
             settings['lastExportPath'] = config.get('lastExportPath', settings['lastExportPath']) # Load export path
             settings['debugMode'] = config.get('debugMode', settings['debugMode']) # Load debug
             settings['utcOffset'] = utcOffset # Load full UTC string
             if debug: print("[DEBUG] utcOffset loaded as: {}".format(settings['utcOffset']))
             settings['periodOffset'] = config.get('hourTimestampMethod', 'EOP') == 'EOP' # Load period
-            settings['retroFont'] = config.get('retroFont', settings['retroFont']) # Load retro
+            settings['retroMode'] = config.get('retroMode', settings['retroMode']) # Load retro
             settings['qaqc'] = config.get('qaqc', settings['qaqc']) # Load QAQC
             settings['rawData'] = config.get('rawData', settings['rawData']) # Load raw
             settings['lastQuickLook'] = config.get('lastQuickLook', settings['lastQuickLook']) # Load quick look
@@ -614,8 +621,8 @@ def loadConfig():
     else:
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(settings, configFile, indent=2) # Write default JSON
-            
         if debug: print("[DEBUG] Created default user.config with settings: {}".format(settings))
+
     return settings
 
 def exportTableToCSV(table, fileLocation, fileName):
@@ -625,17 +632,17 @@ def exportTableToCSV(table, fileLocation, fileName):
 
     # Get full settings from config (merges defaults, preserves all keys)
     settings = loadConfig()
-    if debug: print(f"[DEBUG] exportTableToCSV: Loaded full settings: {settings}")    
+    if debug: print("[DEBUG] exportTableToCSV: Loaded full settings: {}".format(settings))
     lastPath = settings.get('lastExportPath', os.path.expanduser("~/Documents"))
 
     # Normalize loaded path to platform slashes/abs (handles cross-save)
     lastPath = os.path.normpath(os.path.abspath(lastPath)) if lastPath else None
-    if debug: print(f"[DEBUG] exportTableToCSV: Normalized lastPath: {lastPath}")
+    if debug: print("[DEBUG] exportTableToCSV: Normalized lastPath: {}".format(lastPath))
 
-    # Force Documents if lastPath exmpty/invalid
+    # Force Documents if lastPath empty/invalid
     if not lastPath or not os.path.exists(lastPath):
         lastPath = os.path.normpath(os.path.expanduser("~/Documents"))
-        if debug: print("[DEBUG] exportTableToCSV: Used fallback Documents path")
+    if debug: print("[DEBUG] exportTableToCSV: Used fallback Documents path")
 
     defaultDir = lastPath
 
@@ -643,7 +650,7 @@ def exportTableToCSV(table, fileLocation, fileName):
     timestamp = datetime.now().strftime('%Y-%m-%d %H%M%S')
     defaultName = f"{timestamp} Export.csv"
     suggestedPath = os.path.normpath(os.path.join(defaultDir, defaultName))
-    if debug: print(f"[DEBUG] exportTableToCSV: Suggested path: {suggestedPath}")
+    if debug: print("[DEBUG] exportTableToCSV: Suggested path: {}".format(suggestedPath))
 
     # Instantiate dialog for control (non-static)
     dlg = QFileDialog(None)
@@ -651,47 +658,48 @@ def exportTableToCSV(table, fileLocation, fileName):
     dlg.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
     dlg.setNameFilter("CSV files (*.csv)")
     dlg.selectFile(defaultName)
-    dlg.setDirectory(QDir.fromNativeSeparators(defaultDir))  
+    dlg.setDirectory(QDir.fromNativeSeparators(defaultDir))
     dlg.setOption(QFileDialog.Option.DontUseNativeDialog, True) # Force Qt-based for font control (cross-platform)
 
-    if retroFont:
+    if retroMode:
         applyRetroFont(dlg, 9) # Apply smaller retro font recursively
         dlg.resize(1200, 600) # Set custom size only for retro
         dlg.setViewMode(QFileDialog.ViewMode.Detail) # Ensure details view for columns
-        
-        # Force sidebar width via splitter (adjust 150 as needed for your font/setup)
-        splitter = dlg.findChild(QSplitter)
 
-        if splitter:
-            splitter.setSizes([150, dlg.width() - 150]) # Sidebar 150px, main the rest
-            if debug: print("[DEBUG] exportTableToCSV: Adjusted splitter sizes")
-        
-        # Optional: Auto-resize main view columns (sidebar fixed, so skipped for it)
-        mainView = dlg.findChild(QTreeView, "fileview") # Main view (may vary; fallback to first)
+    # Force sidebar width via splitter (adjust 150 as needed for your font/setup)
+    splitter = dlg.findChild(QSplitter)
 
-        if not mainView:
-            mainView = dlg.findChild(QTreeView) # Fallback if named differently
-        if mainView:
-            header = mainView.header()
+    if splitter:
+        splitter.setSizes([150, dlg.width() - 150]) # Sidebar 150px, main the rest
 
-            for i in range(header.count()):                        
-                mainView.resizeColumnToContents(i) # Auto-size main columns                
-            if debug: print("[DEBUG] exportTableToCSV: Resized main view columns")
+    if debug: print("[DEBUG] exportTableToCSV: Adjusted splitter sizes")
 
+    # Optional: Auto-resize main view columns (sidebar fixed, so skipped for it)
+    mainView = dlg.findChild(QTreeView, "fileview") # Main view (may vary; fallback to first)
+
+    if not mainView:
+        mainView = dlg.findChild(QTreeView) # Fallback if named differently
+    if mainView:
+        header = mainView.header()
+
+        for i in range(header.count()):
+            mainView.resizeColumnToContents(i) # Auto-size main columns
+
+    if debug: print("[DEBUG] exportTableToCSV: Resized main view columns")
     if dlg.exec():
         filePath = dlg.selectedFiles()[0]
-        if debug: print(f"[DEBUG] exportTableToCSV: User canceled dialog")
     else:
+        if debug: print("[DEBUG] exportTableToCSV: User canceled dialog")
         return # User canceled
 
     # Build CSV
     headers = [table.horizontalHeaderItem(h).text().replace('\n', ' | ') for h in range(table.columnCount())]
     csvLines = ['Date/Time,' + ','.join(headers)] # Header with Timestamp
-    if debug: print(f"[DEBUG] exportTableToCSV: Built headers: {csvLines[0]}")
+    if debug: print("[DEBUG] exportTableToCSV: Built headers: {}".format(csvLines[0]))
 
     # Add timestamps as first column
     timestamps = [table.verticalHeaderItem(r).text() if table.verticalHeaderItem(r) else '' for r in range(table.rowCount())]
-    
+
     for r in range(table.rowCount()):
         rowData = [table.item(r, c).text() if table.item(r, c) else '' for c in range(table.columnCount())]
         csvLines.append(timestamps[r] + ',' + ','.join(rowData))
@@ -700,18 +708,16 @@ def exportTableToCSV(table, fileLocation, fileName):
     try:
         with open(filePath, 'w', encoding='utf-8-sig', newline='') as f:
             f.write('\n'.join(csvLines))
-
-        if debug: print(f"[DEBUG] exportTableToCSV: Successfully wrote CSV to {filePath}")
+        if debug: print("[DEBUG] exportTableToCSV: Successfully wrote CSV to {}".format(filePath))
     except Exception as e:
-        if debug: print(f"[DEBUG] exportTableToCSV: Failed to write CSV: {e}")
+        if debug: print("[DEBUG] exportTableToCSV: Failed to write CSV: {}".format(e))
         return
 
     # Save last path to full settings (dir only, preserve others)
     exportDir = os.path.normpath(os.path.dirname(filePath))
-    if debug: print("[DEBUG] exportTableToCSV: Updating lastExportPath to {exportDir}")
+    if debug: print("[DEBUG] exportTableToCSV: Updating lastExportPath to {}".format(exportDir))
     settings['lastExportPath'] = exportDir
-    if debug: print("[DEBUG] exportTableToCSV: Full settings after update: {settings}")
-
+    if debug: print("[DEBUG] exportTableToCSV: Full settings after update: {}".format(settings))
     configPath = getConfigPath()
 
     try:
@@ -719,7 +725,7 @@ def exportTableToCSV(table, fileLocation, fileName):
             json.dump(settings, configFile, indent=2)
         if debug: print("[DEBUG] exportTableToCSV: Updated user.config with new lastExportPath-full file preserved")
     except Exception as e:
-        if debug: print(f"[DEBUG] exportTableToCSV: Failed to update user.config: {e}")       
+        if debug: print("[DEBUG] exportTableToCSV: Failed to update user.config: {}".format(e))  
 
 def customSortTable(table, col, dataDictionaryTable):
     # Prevent overlap (ignore if sorting already)
@@ -891,27 +897,38 @@ def getQuickLookDir():
 
 def reloadGlobals():
     settings = loadConfig() # Load JSON settings
-    global debug, utcOffset, periodOffset, retroFont, qaqcEnabled, rawData # Update globals
+    global debug, utcOffset, periodOffset, retroMode, qaqcEnabled, rawData # Update globals
     debug = settings['debugMode'] # Set debug
     utcOffset = settings['utcOffset'] # Set UTC
     periodOffset = settings['periodOffset'] # Set period
-    retroFont = settings['retroFont'] # Set retro
+    retroMode = settings['retroMode'] # Set retro
     qaqcEnabled = settings['qaqc'] # Set QAQC
     rawData = settings['rawData'] # Set raw
-
     if debug: print("[DEBUG] Globals reloaded from user.config")
 
 def applyRetroFont(widget, pointSize=10):
-    fontPath = resourcePath('ui/fonts/PressStart2P-Regular.ttf') # Load from path
-    fontId = QFontDatabase.addApplicationFont(fontPath)
+    if retroMode:
+        fontPath = resourcePath('ui/fonts/PressStart2P-Regular.ttf') # Load from path
+        fontId = QFontDatabase.addApplicationFont(fontPath)
 
-    if fontId != -1:
-        fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-        retroFontObj = QFont(fontFamily, pointSize)
-        retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing for crisp retro
-        widget.setFont(retroFontObj)
+        if fontId != -1:
+            fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
+            retroFontObj = QFont(fontFamily, pointSize)
+            retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing for crisp retro
+            widget.setFont(retroFontObj)
+
+            for child in widget.findChildren(QWidget): # Recursive to all children
+                child.setFont(retroFontObj)
+            if debug: print("[DEBUG] Applied retro font to widget: {}".format(widget.objectName()))
+        else:
+            if debug: print("[ERROR] Failed to load retro font from {}".format(fontPath))
+    else:
+        widget.setFont(QFont()) # System default font
+
         for child in widget.findChildren(QWidget): # Recursive to all children
-            child.setFont(retroFontObj)
+            child.setFont(QFont())
+
+        if debug: print("[DEBUG] Reverted widget {} to system font".format(widget.objectName()))
 
 def valuePrecision(value):
     """Format value to 2 decimals if <10, 1 if 10-99, 0 if >=100."""
@@ -1141,3 +1158,55 @@ def getUtcOffsetInt(utcOffsetStr):
     except (ValueError, IndexError) as e:
         if debug: print("[ERROR] getUtcOffsetInt: Failed to parse '{}': {}. Returning 0".format(utcOffsetStr, e))
         return 0.0 # Fallback to UTC+00:00
+
+def setRetroCursor(app, enable):
+    """Set or reset custom cursor based on retroMode."""
+    if enable:
+        cursorPath = resourcePath('ui/RetroCursor.png')
+
+        if os.path.exists(cursorPath):
+            try:
+                pixmap = QPixmap(cursorPath).scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                cursor = QCursor(pixmap, 0, 0) # Explicit hotspot at (0,0)
+                app.setOverrideCursor(cursor)
+                if debug: print("[DEBUG] Set retro cursor from {}".format(cursorPath))
+            except Exception as e:
+                if debug: print("[ERROR] Failed to load retro cursor '{}': {}. Using fallback cursor".format(cursorPath, e))
+                app.setOverrideCursor(QCursor(Qt.CursorShape.CrossCursor)) # Fallback
+        else:
+            if debug: print("[ERROR] Retro cursor file '{}' not found. Using fallback cursor".format(cursorPath))
+            app.setOverrideCursor(QCursor(Qt.CursorShape.CrossCursor)) # Fallback
+    else:
+        app.restoreOverrideCursor()
+        if debug: print("[DEBUG] Restored default cursor")
+
+def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQueryList=None):
+    """Apply or remove retro mode styles (e.g., scroll bars) dynamically."""
+    retroStyles = """
+        QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+            background: #00FF00; /* Neon green handle */
+            border-radius: 4px;
+        }
+        QScrollBar:vertical, QScrollBar:horizontal {
+            background: #333333; /* Dark track for contrast */
+            width: 12px;
+            height: 12px;
+        }
+    """
+    if enable:
+        # Apply to specific widgets
+        for widget in [mainTable, webQueryList, internalQueryList]:
+            if widget:
+                widget.setStyleSheet(retroStyles)
+                if debug: print("[DEBUG] Applied retro scroll bar styles to {}".format(widget.objectName()))
+        app.setStyleSheet(app.styleSheet() + retroStyles)
+        if debug: print("[DEBUG] Applied retro scroll bar styles globally")
+    else:
+        # Reset to base stylesheet
+        with open(resourcePath('ui/stylesheet.qss'), 'r') as f:
+            app.setStyleSheet(f.read())
+        for widget in [mainTable, webQueryList, internalQueryList]:
+            if widget:
+                widget.setStyleSheet("")
+                if debug: print("[DEBUG] Cleared retro scroll bar styles from {}".format(widget.objectName()))
+        if debug: print("[DEBUG] Reverted to base stylesheet")
