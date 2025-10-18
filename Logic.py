@@ -312,7 +312,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.horizontalScrollBar().setValue(0)
     visibleWidth = table.columnWidth(1)
 
-    if debug: print(f"[DEBUG] Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
+    if debug and numCols > 1: print(f"[DEBUG] Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")   
 
     dataIds = buildHeader
 
