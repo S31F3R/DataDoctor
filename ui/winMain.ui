@@ -67,7 +67,7 @@
        <widget class="QTableWidget" name="mainTable">
         <property name="geometry">
          <rect>
-          <x>0</x>
+          <x>-20</x>
           <y>0</y>
           <width>1581</width>
           <height>611</height>
@@ -89,10 +89,10 @@
        <widget class="QPushButton" name="btnRefresh">
         <property name="geometry">
          <rect>
-          <x>4</x>
-          <y>6</y>
-          <width>141</width>
-          <height>28</height>
+          <x>26</x>
+          <y>22</y>
+          <width>32</width>
+          <height>32</height>
          </rect>
         </property>
         <property name="font">
@@ -103,29 +103,47 @@
           <fontweight></fontweight>
          </font>
         </property>
+        <property name="toolTip">
+         <string>Refresh current query</string>
+        </property>
         <property name="text">
-         <string>Refresh Query</string>
+         <string/>
         </property>
         <property name="icon">
          <iconset>
           <normaloff>icons/Refresh.png</normaloff>icons/Refresh.png</iconset>
         </property>
+        <property name="iconSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
        </widget>
        <widget class="QPushButton" name="btnUndo">
         <property name="geometry">
          <rect>
-          <x>4</x>
-          <y>36</y>
-          <width>141</width>
-          <height>28</height>
+          <x>76</x>
+          <y>22</y>
+          <width>32</width>
+          <height>32</height>
          </rect>
         </property>
+        <property name="toolTip">
+         <string>Reset colum sort</string>
+        </property>
         <property name="text">
-         <string>Timestamp Sort</string>
+         <string/>
         </property>
         <property name="icon">
          <iconset>
           <normaloff>icons/Reset.png</normaloff>icons/Reset.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
         </property>
        </widget>
       </widget>
