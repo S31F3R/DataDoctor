@@ -919,6 +919,7 @@ def applyRetroFont(widget, pointSize=10):
 
             for child in widget.findChildren(QWidget): # Recursive to all children
                 child.setFont(retroFontObj)
+                
             if debug: print("[DEBUG] Applied retro font to widget: {}".format(widget.objectName()))
         else:
             if debug: print("[ERROR] Failed to load retro font from {}".format(fontPath))
@@ -1198,8 +1199,11 @@ def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQuery
         for widget in [mainTable, webQueryList, internalQueryList]:
             if widget:
                 widget.setStyleSheet(retroStyles)
+
                 if debug: print("[DEBUG] Applied retro scroll bar styles to {}".format(widget.objectName()))
+
         app.setStyleSheet(app.styleSheet() + retroStyles)
+
         if debug: print("[DEBUG] Applied retro scroll bar styles globally")
     else:
         # Reset to base stylesheet
@@ -1208,5 +1212,7 @@ def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQuery
         for widget in [mainTable, webQueryList, internalQueryList]:
             if widget:
                 widget.setStyleSheet("")
+
                 if debug: print("[DEBUG] Cleared retro scroll bar styles from {}".format(widget.objectName()))
+
         if debug: print("[DEBUG] Reverted to base stylesheet")
