@@ -201,7 +201,7 @@ class uiWebQuery(QMainWindow):
 
         # Set button style
         Logic.buttonStyle(self.btnDataIdInfo) # Apply flat style
-        Logic.buttonStyle(self.btnIntervalInfo) # Apply flat style
+        Logic.buttonStyle(self.btnIntervalInfo) # Apply flat style      
         
         # Create events
         self.btnQuery.clicked.connect(self.btnQueryPressed) # Query button
@@ -802,54 +802,74 @@ class uiOptions(QDialog):
     def loadSettings(self):
         configPath = Logic.getConfigPath() # Get JSON path
         config = {}
+
         if os.path.exists(configPath):
             try:
                 with open(configPath, 'r', encoding='utf-8') as configFile:
                     config = json.load(configFile) # Read JSON
-                if Logic.debug: print(f"[DEBUG] Loaded config from user.config: {config}")
+                if Logic.debug: print("[DEBUG] Loaded config from user.config: {}".format(config))
             except Exception as e:
-                if Logic.debug: print(f"[ERROR] Failed to load user.config: {e}")
-        utcOffset = config.get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, \nLisbon, London") # Get UTC
+                if Logic.debug: print("[ERROR] Failed to load user.config: {}".format(e))
+
+        utcOffset = config.get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London") # Get UTC string
         index = self.cbUTCOffset.findText(utcOffset)
+
         if index != -1:
             self.cbUTCOffset.setCurrentIndex(index) # Set UTC
-            if Logic.debug: print(f"[DEBUG] Set cbUTCOffset to {utcOffset}")
+            if Logic.debug: print("[DEBUG] Set cbUTCOffset to: {}".format(utcOffset))
         else:
             self.cbUTCOffset.setCurrentIndex(14) # Default UTC+00:00
-            if Logic.debug: print("[DEBUG] utcOffset not found, set to default UTC+00:00")
+            if Logic.debug: print("[DEBUG] utcOffset '{}' not found, set to default UTC+00:00".format(utcOffset))
+
         self.cbRetroFont.setChecked(bool(config.get('retroFont', True))) # Set retro
-        if Logic.debug: print(f"[DEBUG] Set cbRetroFont to {self.cbRetroFont.isChecked()}")
+        if Logic.debug: print("[DEBUG] Set cbRetroFont to: {}".format(self.cbRetroFont.isChecked()))
         self.cbQAQC.setChecked(bool(config.get('qaqc', True))) # Set QAQC
-        if Logic.debug: print(f"[DEBUG] Set cbQAQC to {self.cbQAQC.isChecked()}")
+        if Logic.debug: print("[DEBUG] Set cbQAQC to: {}".format(self.cbQAQC.isChecked()))
         self.cbRawData.setChecked(bool(config.get('rawData', False))) # Set raw
-        if Logic.debug: print(f"[DEBUG] Set cbRawData to {self.cbRawData.isChecked()}")
+        if Logic.debug: print("[DEBUG] Set cbRawData to: {}".format(self.cbRawData.isChecked()))
         self.cbDebug.setChecked(bool(config.get('debugMode', False))) # Set debug
-        if Logic.debug: print(f"[DEBUG] Set cbDebug to {self.cbDebug.isChecked()}")
+        if Logic.debug: print("[DEBUG] Set cbDebug to: {}".format(self.cbDebug.isChecked()))
         tnsPath = config.get('tnsNamesLocation', '') # Get TNS path
         if tnsPath.startswith(Logic.appRoot):
             tnsPath = tnsPath.replace(Logic.appRoot, '%AppRoot%') # Shorten path
+
         self.textTNSNames.setPlainText(tnsPath) # Set TNS path
+
         if not self.textTNSNames.toPlainText():
             envTns = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin')) # Default TNS
+
             if envTns.startswith(Logic.appRoot):
                 envTns = envTns.replace(Logic.appRoot, '%AppRoot%') # Shorten
             self.textTNSNames.setPlainText(envTns) # Set TNS
-        if Logic.debug: print(f"[DEBUG] Set textTNSNames to {tnsPath}")
+
+        if Logic.debug: print("[DEBUG] Set textTNSNames to: {}".format(tnsPath))
+
         hourMethod = config.get('hourTimestampMethod', 'EOP') # Get period
+
         if hourMethod == 'EOP':
             self.rbEOP.setChecked(True) # Set EOP
         else:
             self.rbBOP.setChecked(True) # Set BOP
-        if Logic.debug: print(f"[DEBUG] Set hourTimestampMethod to {hourMethod}")
-        self.textAQServer.setPlainText(keyring.get_password("DataDoctor", "aqServer") or "") # Load AQ server
-        self.textAQUser.setPlainText(keyring.get_password("DataDoctor", "aqUser") or "") # Load AQ user
-        self.qleAQPassword.setText(keyring.get_password("DataDoctor", "aqPassword") or "") # Load AQ password
-        self.qleUSGSAPIKey.setText(keyring.get_password("DataDoctor", "usgsApiKey") or "") # Load USGS key
+        if Logic.debug: print("[DEBUG] Set hourTimestampMethod to: {}".format(hourMethod))
+
+        try:
+            self.textAQServer.setPlainText(keyring.get_password("DataDoctor", "aqServer") or "") # Load AQ server
+            self.textAQUser.setPlainText(keyring.get_password("DataDoctor", "aqUser") or "") # Load AQ user
+            self.qleAQPassword.setText(keyring.get_password("DataDoctor", "aqPassword") or "") # Load AQ password
+            self.qleUSGSAPIKey.setText(keyring.get_password("DataDoctor", "usgsApiKey") or "") # Load USGS key
+            if Logic.debug: print("[DEBUG] Successfully loaded keyring credentials")
+        except Exception as e:
+            if Logic.debug: print("[ERROR] Failed to load keyring credentials: {}".format(e))
+            self.textAQServer.setPlainText("") # Fallback
+            self.textAQUser.setPlainText("") # Fallback
+            self.qleAQPassword.setText("") # Fallback
+            self.qleUSGSAPIKey.setText("") # Fallback
         if Logic.debug: print("[DEBUG] Settings loaded")
 
     def onSavePressed(self):
         configPath = Logic.getConfigPath() # Get JSON path
         config = {}
+
         if os.path.exists(configPath):
             try:
                 with open(configPath, 'r', encoding='utf-8') as configFile:
@@ -859,6 +879,7 @@ class uiOptions(QDialog):
                 if Logic.debug: print(f"[ERROR] Failed to load user.config for save: {e}")
         previousRetro = config.get('retroFont', True) # Save previous retro
         tnsPath = self.textTNSNames.toPlainText() # Get TNS path
+
         if '%AppRoot%' in tnsPath:
             tnsPath = tnsPath.replace('%AppRoot%', Logic.appRoot) # Expand path
         config.update({
@@ -875,33 +896,43 @@ class uiOptions(QDialog):
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(config, configFile, indent=2) # Write JSON
         if Logic.debug: print("[DEBUG] Saved user.config")
+
         Logic.reloadGlobals() # Reload globals
+
         if self.cbRetroFont.isChecked():
             fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf') # Load retro font
             fontId = QFontDatabase.addApplicationFont(fontPath)
+
             if fontId != -1:
                 fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
                 retroFontObj = QFont(fontFamily, 10) # Fixed size
                 retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing
                 app.setFont(retroFontObj) # Set app font
+
                 for window in [winMain, winWebQuery, winDataDictionary, winQuickLook, winOptions, winAbout]:
                     Logic.applyRetroFont(window) # Apply to all windows
                 if Logic.debug: print("[DEBUG] Applied retro font")
         else:
             app.setFont(QFont()) # System default font
             if Logic.debug: print("[DEBUG] Reverted to system font")
+
         newRetro = self.cbRetroFont.isChecked()
+
         if newRetro != previousRetro:
             reply = QMessageBox.question(self, "Font Change", "Restart DataDoctor for the font change to take effect?\nOK to restart now, Cancel to revert to previous setting.", QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+            
             if reply == QMessageBox.StandardButton.Ok:
                 python = sys.executable
                 os.execl(python, python, *sys.argv) # Relaunch app
             else:
                 self.cbRetroFont.setChecked(previousRetro) # Revert checkbox
                 config['retroFont'] = previousRetro # Update config
+
                 with open(configPath, 'w', encoding='utf-8') as configFile:
                     json.dump(config, configFile, indent=2) # Write reverted
+
                 Logic.reloadGlobals() # Reload globals
+                
                 if Logic.debug: print("[DEBUG] Reverted retro font setting")
         # Save credentials to keyring with validation
         credentials = [
