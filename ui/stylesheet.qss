@@ -12,13 +12,3 @@ QTabBar::close-button:hover {
 QTabBar::close-button:pressed {
     image: url(ui/icons/Tab-close-dark.png); /* Darker for press */
 }
-QHeaderView::section {
-    padding: 5px;
-    margin: 0px;
-    border: none;
-    min-width: 0px;
-    max-width: none; /* Allow full expansion */
-}
-QTableWidget {
-    gridline-color: transparent; /* Prevent gridlines from affecting size */
-}
