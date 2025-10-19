@@ -3,13 +3,11 @@
     -Any current [DEBUG] after an exception should be a ERROR and logged, no matter if DEBUG = true
 -Save dialog for CSV needs wider columns or auto size needs to be fixed (linux is fine)
 -Break apart Logic.py into more .py files based on type of logic
+-Export to CSV needs work. Remembering path isn't working across platform, possibly Qt issue. Lots of trial and error code left in there, needs to be removed when completed
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
-
--Export to CSV needs work. Remembering path isn't working across platform, possibly Qt issue. Lots of trial and error code left in there, needs to be removed when completed
--Raw data option not working
 
 ####### MAIN INTERFACE MODIFICATIONS #######
 -Stress relief button that makes screaming goat sounds
