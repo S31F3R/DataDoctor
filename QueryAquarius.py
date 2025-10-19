@@ -94,7 +94,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
             # Build label from response
             location = readFile.get('LocationIdentifier', uid)
             label = readFile.get('Label', '')
-            fullLabel = f'{location} \n{label}'
+            fullLabel = f'{label} \n{location}'
             points = readFile['Points']
             if Logic.debug: print("[DEBUG] Fetched {} points for uid '{}'.".format(len(points), uid))
             outputData = []
