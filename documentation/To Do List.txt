@@ -15,11 +15,9 @@
 ####### QUERY WINDOW MODIFICATIONS #######
 -Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
     -Search will need a combobox to allow the user to search by dataID, label, or database
+-Add up and down arrows to reorganize items in the query list. Can add a move 1, move 5, move Max
 
-####### QUERY ENHANCMENTS MODIFICATIONS #######
--Update INSTANT interval to include 1, 15, or 60 minute instant intervals
-    -Pass the different intervals as INSTANT-15, INSTANT-60 etc
-    -Can remove USBR quirk of INSTANT always being HOUR interval whent his is implemented
+####### QUERY ENHANCEMENTS MODIFICATIONS #######
 -Aquarius query seems to take longer than it should. Look at possible threading solutions
     -If increasing Aquarius threads, make it an option to set how many threads can be used
 -Have USBR, USGS, Aquarius queries all run at the same time and collect at the end    
@@ -27,11 +25,10 @@
     -Set to 2 decimals for now
     -Look into Aquarius query to pull value percision each query to get fresh rules
         -/AQUARIUS/Publish/v2/GetParameterList?format=json
--non data dictionary dataID should still run through missing and repeating
 -modify and test for day, month, year, and water year queries
 -See if there is a better way to get around unverified cert when using HTTPS on Aquarius query
 
-####### GIT MODIFICATIONS #######
+####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme
 -Need documentation on different installers and pre req, maybe add in wiki or readme
 -Provide links to stuff like requesting USGS API key, Reclamation website, USGS data browser, and documention on how to find USGS information to create dataID
