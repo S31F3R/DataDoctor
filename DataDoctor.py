@@ -312,8 +312,8 @@ class uiWebQuery(QMainWindow):
         self.listQueryList.addItem(item) # Add to list
         self.qleDataID.clear() # Clear input
         self.qleDataID.setFocus() # Refocus
-
-        if Logic.debug: print(f"[DEBUG] Added query item: {item}")
+        self.listQueryList.scrollToBottom() # Scroll to bottom to show new item
+        if Logic.debug: print(f"[DEBUG] Added query item: {item}, scrolled to bottom")
 
     def btnRemoveQueryPressed(self):
         item = self.listQueryList.currentItem()
@@ -515,8 +515,8 @@ class uiInternalQuery(QMainWindow):
         self.listQueryList.addItem(item) # Add to list
         self.qleDataID.clear() # Clear input
         self.qleDataID.setFocus() # Refocus
-
-        if Logic.debug: print(f"[DEBUG] Added query item: {item}")
+        self.listQueryList.scrollToBottom() # Scroll to bottom to show new item
+        if Logic.debug: print(f"[DEBUG] Added query item: {item}, scrolled to bottom")
 
     def btnRemoveQueryPressed(self):
         item = self.listQueryList.currentItem()
@@ -621,38 +621,40 @@ class uiQuickLook(QDialog):
         uic.loadUi(Logic.resourcePath('ui/winQuickLook.ui'), self) # Load the .ui file
 
         # Define the controls
-        self.btnSave = self.findChild(QPushButton, 'btnSave')   
-        self.btnCancel = self.findChild(QPushButton, 'btnCancel')  
-        self.textQuickLookName = self.findChild(QTextEdit,'textQuickLookName')  
+        self.btnSave = self.findChild(QPushButton, 'btnSave')
+        self.btnCancel = self.findChild(QPushButton, 'btnCancel')
+        self.qleQuickLookName = self.findChild(QLineEdit, 'qleQuickLookName')
 
         # Temp attrs for dynamic query widgets
         self.currentListQueryList = None
         self.CurrentCbQuickLook = None
 
         # Create events
-        self.btnSave.clicked.connect(self.btnSavePressed)  
-        self.btnCancel.clicked.connect(self.btnCancelPressed)  
+        self.btnSave.clicked.connect(self.btnSavePressed)
+        self.btnCancel.clicked.connect(self.btnCancelPressed)
+        if Logic.debug: print("[DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName")
 
     def showEvent(self, event):
         Logic.centerWindowToParent(self)
         super().showEvent(event)
 
-    def btnSavePressed(self):       
+    def btnSavePressed(self):
         # Save quick look
         if self.currentListQueryList and self.CurrentCbQuickLook:
             if Logic.debug: print("[DEBUG] Saving quick look using currentListQueryList with count:", self.currentListQueryList.count())
-            Logic.saveQuickLook(self.textQuickLookName, self.currentListQueryList)
+            Logic.saveQuickLook(self.qleQuickLookName, self.currentListQueryList)
 
-            # Reload quick looks on both windows
-            if Logic.debug: print("[DEBUG] Reloading quick looks on web and internal windows")
-            Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
-            Logic.loadAllQuickLooks(winInternalQuery.cbQuickLook)
+        # Reload quick looks on both windows
+        if Logic.debug: print("[DEBUG] Reloading quick looks on web and internal windows")
+        Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
+        Logic.loadAllQuickLooks(winInternalQuery.cbQuickLook)
 
         # Clear the controls
         self.clear()
 
         # Close the window
-        winQuickLook.close() 
+        winQuickLook.close()
+        if Logic.debug: print("[DEBUG] Quick look saved and window closed")
 
     def btnCancelPressed(self): 
         # Clear the controls
@@ -663,7 +665,8 @@ class uiQuickLook(QDialog):
 
     def clear(self):
         # Clear all controls
-        self.textQuickLookName.clear()
+        self.qleQuickLookName.clear()
+        if Logic.debug: print("[DEBUG] Cleared qleQuickLookName")
 
 class uiOptions(QDialog):
     """Options editor: Stores database connection information and application settings."""
