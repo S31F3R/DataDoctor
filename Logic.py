@@ -165,7 +165,7 @@ def combineParameters(data, newData):
 
     return data
 
-def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None):
+def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None):
     table.clear()
 
     if not data:
@@ -180,29 +180,42 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     for i, h in enumerate(buildHeader):
         dataId = h.strip()
         intervalStr = intervals[i].upper()
+        database = databases[i] if databases and i < len(databases) else None
         dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataId)
 
         if dictRow != -1:
             siteItem = dataDictionaryTable.item(dictRow, 1)
             datatypeItem = dataDictionaryTable.item(dictRow, 2)
-            baseLabel = (siteItem.text().strip() + ' ' + datatypeItem.text().strip()) if siteItem and datatypeItem else dataId
-            fullLabel = baseLabel + ' \n' + intervalStr + ' \n' + dataId
-            if debug: print(f"[DEBUG] buildTable: Used dict for header {i}: {fullLabel}")
+            baseLabel = siteItem.text().strip() if siteItem else dataId
+
+            if database == 'USGS-NWIS':
+                parts = dataId.split('-')
+
+                if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
+                    fullLabel = f"{baseLabel} \n{intervalStr} \n{parts[1]}"
+                    if debug: print(f"[DEBUG] buildTable: USGS in dict, header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{baseLabel} \n{intervalStr} \n{dataId}"
+                    if debug: print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
+            else:
+                fullLabel = f"{baseLabel} \n{intervalStr} \n{dataId}"
+                if debug: print(f"[DEBUG] buildTable: Used dict for header {i}: {fullLabel}")
         else:
-            # Modify for USGS: parse if matches format (site-methodOrUuid-param)
             parts = dataId.split('-')
 
-            if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
+            if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit() and database == 'USGS-NWIS':
                 fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr} \n{parts[1]}"
                 if debug: print(f"[DEBUG] buildTable: Parsed USGS header {i}: {fullLabel}")
             elif labelsDict and dataId in labelsDict and 'AQUARIUS' in (dataDictionaryTable.parent().objectName() if dataDictionaryTable else ''):
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
+
                 if len(parts) >= 2:
                     label, location = parts[1].strip(), parts[0].strip()
                     fullLabel = label + ' \n' + location + ' \n' + dataId
                 else:
                     fullLabel = dataId + ' \n' + intervalStr
+
                 if debug: print(f"[DEBUG] buildTable: Used labelsDict for header {i}: {fullLabel}")
             else:
                 fullLabel = dataId + ' \n' + intervalStr
@@ -241,12 +254,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
             if not rawData and cellText.strip():
                 item.setText(valuePrecision(cellText))
+
             table.setItem(rowIdx, colIdx, item)
 
-    # Ensure sort connection is set early
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
-
-    # Custom auto-size for columns based on data and header character count
     font = table.font()
     metrics = QFontMetrics(font)
     header = table.horizontalHeader()
@@ -255,36 +266,29 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.setMinimumSize(0, 0)
     table.resize(table.size())
     table.update()
-
-    # Prevent last column stretch
     header.setStretchLastSection(False)
-    if debug: print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
 
-    # Set vertical header minimum with padding
+    if debug: print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
     if dataDictionaryTable:
         maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
         vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
 
-    # Set column widths based on metrics for both cells and multi-line headers
     for c in range(numCols):
         cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data]
         maxCellWidth = max(metrics.horizontalAdvance(val) for val in cellValues) if cellValues else 50
-
-        # Use metrics for header lines
         headerLines = headers[c].split('\n')
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
         if debug: print(f"[DEBUG] buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
-
-        # Adjust final width with padding
         finalWidth = max(maxCellWidth, headerWidth)
+
         if headerWidth > maxCellWidth:
             paddingIncrease = headerWidth - maxCellWidth
-            finalWidth = maxCellWidth + paddingIncrease + 10  # Extra padding for headers
+            finalWidth = maxCellWidth + paddingIncrease + 10
         else:
-            finalWidth += 20  # Base padding
+            finalWidth += 20
+
         table.setColumnWidth(c, finalWidth)
 
-    # Set row heights based on font metrics with dynamic adjustment
     rowHeight = metrics.height() + 10
     sampleItem = QTableWidgetItem("189.5140")
     sampleItem.setFont(font)
@@ -306,10 +310,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     if tallestCellHeight == 0:
         tallestCellHeight = metrics.height()
-        
-    adjustedRowHeight = max(rowHeight, tallestCellHeight + 2)
-    if debug: print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Tallest cell height: {tallestCellHeight}, Adjusted row height: {adjustedRowHeight}")
 
+    adjustedRowHeight = max(rowHeight, tallestCellHeight + 2)
+    
+    if debug: print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Tallest cell height: {tallestCellHeight}, Adjusted row height: {adjustedRowHeight}")
     for r in range(numRows):
         table.setRowHeight(r, adjustedRowHeight)
 
@@ -318,7 +322,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.update()
     table.horizontalScrollBar().setValue(0)
     visibleWidth = table.columnWidth(1) if numCols > 1 else 0
-
     if debug and numCols > 1: print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
     dataIds = buildHeader
 
@@ -328,7 +331,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         for r in range(table.rowCount()):
             for c in range(table.columnCount()):
                 item = table.item(r, c)
-                
                 if item: item.setBackground(QColor(0, 0, 0, 0))
     
 def buildDataDictionary(table):
@@ -1073,13 +1075,11 @@ def loadLastQuickLook(cbQuickLook):
 
 def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable):
     if debug: print(f"[DEBUG] executeQuery: isInternal={isInternal}, items={len(queryItems)}")
-
     if isInternal:
         queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
-
-        if not queryItems:            
-            QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
-            return
+    if not queryItems:
+        QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
+        return
 
     queryItems.sort(key=lambda x: x[4])
     firstInterval = queryItems[0][1]
@@ -1137,18 +1137,19 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 valueDict[dataID] = values
             else:
                 valueDict[dataID] = defaultBlanks
+
     originalDataIds = [item[0] for item in queryItems]
     originalIntervals = [item[1] for item in queryItems]
+    databases = [item[2] for item in queryItems]
     lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
     data = []
-
+    
     for r in range(len(timestamps)):
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append(f"{timestamps[r]},{','.join(rowValues)}")
-
     mainWindow.mainTable.clear()
-    buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict)
-
+    buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
+    
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
     if debug: print("[DEBUG] Query executed and table updated.")

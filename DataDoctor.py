@@ -597,22 +597,34 @@ class uiDataDictionary(QMainWindow):
         data = [] # Initialize data list
 
         with open(Logic.resourcePath('DataDictionary.csv'), 'r', encoding='utf-8-sig') as f:
-            data.append(f.readlines()[0]) # Keep header
+            header = f.readlines()[0].rstrip('\n') # Keep header, strip trailing \n
+            data.append(header)
+            if Logic.debug: print(f"[DEBUG] Appended stripped header: {header}")
 
         for r in range(self.mainTable.rowCount()):
             rowData = []
+            isEmptyRow = True # Track if row is empty
 
             for c in range(self.mainTable.columnCount()):
                 item = self.mainTable.item(r, c)
-                rowData.append(item.text() if item else '') # Collect row data
-            data.append(','.join(rowData)) # Add row as CSV
+                cellText = item.text().strip() if item else ''
+                rowData.append(cellText) # Collect row data
+                if cellText: # Non-empty cell found
+                    isEmptyRow = False
+
+            if not isEmptyRow: # Only append non-empty rows
+                data.append(','.join(rowData)) # Add row as CSV
+                if Logic.debug: print(f"[DEBUG] Saved row {r} with data: {rowData}")
+            else:
+                if Logic.debug: print(f"[DEBUG] Skipped empty row {r}")
 
         with open(Logic.resourcePath('DataDictionary.csv'), 'w', encoding='utf-8-sig') as f:
-            f.writelines('\n'.join(data)) # Write CSV
+            f.write('\n'.join(data) + '\n') # Write with \n between, add final \n for standard
+
         for c in range(self.mainTable.columnCount()):
             self.mainTable.resizeColumnToContents(c) # Auto-size columns
-
-        if Logic.debug: print("[DEBUG] DataDictionary saved and columns resized")
+            
+        if Logic.debug: print(f"[DEBUG] DataDictionary saved with {len(data)-1} rows and columns resized")
     
     def btnAddRowPressed(self):
         self.mainTable.setRowCount(self.mainTable.rowCount() + 1) # Add new row

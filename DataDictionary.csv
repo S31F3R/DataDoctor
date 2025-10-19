@@ -1,5 +1,4 @@
 ﻿dataID,Site, Datatype,Expected Min,Expected Max,Cutoff Min,Cutoff Max,Rate of Change
-
 1721,HDMLC - Lake Mead,storage,7120000,27377000,7120000,27377000,7000
 1863,HDMLC - Lake Mead,power release,200,46000,0,76000,30000
 1930,HDMLC - Lake Mead,res el eop,1070,1088,1045,1229,0.06
