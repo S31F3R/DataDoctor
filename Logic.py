@@ -178,27 +178,35 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     processedHeaders = []
 
     for i, h in enumerate(buildHeader):
-        dataID = h.strip()
+        dataId = h.strip()
         intervalStr = intervals[i].upper()
-        dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataID)
+        dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataId)
 
         if dictRow != -1:
             siteItem = dataDictionaryTable.item(dictRow, 1)
             datatypeItem = dataDictionaryTable.item(dictRow, 2)
-            baseLabel = (siteItem.text().strip() + ' ' + datatypeItem.text().strip()) if siteItem and datatypeItem else dataID
-            fullLabel = baseLabel + ' \n' + intervalStr + ' \n' + dataID
+            baseLabel = (siteItem.text().strip() + ' ' + datatypeItem.text().strip()) if siteItem and datatypeItem else dataId
+            fullLabel = baseLabel + ' \n' + intervalStr + ' \n' + dataId
+            if debug: print(f"[DEBUG] buildTable: Used dict for header {i}: {fullLabel}")
         else:
-            if labelsDict and dataID in labelsDict and 'AQUARIUS' in (dataDictionaryTable.parent().objectName() if dataDictionaryTable else ''):
-                apiFull = labelsDict[dataID]
-                parts = apiFull.split('\n')
+            # Modify for USGS: parse if matches format (site-methodOrUuid-param)
+            parts = dataId.split('-')
 
+            if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
+                fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr} \n{parts[1]}"
+                if debug: print(f"[DEBUG] buildTable: Parsed USGS header {i}: {fullLabel}")
+            elif labelsDict and dataId in labelsDict and 'AQUARIUS' in (dataDictionaryTable.parent().objectName() if dataDictionaryTable else ''):
+                apiFull = labelsDict[dataId]
+                parts = apiFull.split('\n')
                 if len(parts) >= 2:
                     label, location = parts[1].strip(), parts[0].strip()
-                    fullLabel = label + ' \n' + location + ' \n' + dataID
+                    fullLabel = label + ' \n' + location + ' \n' + dataId
                 else:
-                    fullLabel = dataID + ' \n' + intervalStr
+                    fullLabel = dataId + ' \n' + intervalStr
+                if debug: print(f"[DEBUG] buildTable: Used labelsDict for header {i}: {fullLabel}")
             else:
-                fullLabel = dataID + ' \n' + intervalStr
+                fullLabel = dataId + ' \n' + intervalStr
+                if debug: print(f"[DEBUG] buildTable: Default header {i}: {fullLabel}")
 
         processedHeaders.append(fullLabel)
 
@@ -248,32 +256,32 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.resize(table.size())
     table.update()
 
+    # Prevent last column stretch
+    header.setStretchLastSection(False)
+    if debug: print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
+
     # Set vertical header minimum with padding
     if dataDictionaryTable:
         maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
         vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
 
-    # Set column widths based on max of cell content and header character count
-    charToPx = 8 # Approx pixels per char for 12pt font
-
+    # Set column widths based on metrics for both cells and multi-line headers
     for c in range(numCols):
         cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data]
         maxCellWidth = max(metrics.horizontalAdvance(val) for val in cellValues) if cellValues else 50
 
-        # Calculate header width based on max character count per line
+        # Use metrics for header lines
         headerLines = headers[c].split('\n')
-        maxHeaderLen = max(len(line) for line in headerLines) if headerLines else 0
-        headerWidth = maxHeaderLen * charToPx
+        headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
+        if debug: print(f"[DEBUG] buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
 
-        # Adjust max width
+        # Adjust final width with padding
         finalWidth = max(maxCellWidth, headerWidth)
-
         if headerWidth > maxCellWidth:
             paddingIncrease = headerWidth - maxCellWidth
-            finalWidth = maxCellWidth + paddingIncrease
+            finalWidth = maxCellWidth + paddingIncrease + 10  # Extra padding for headers
         else:
-            finalWidth = maxCellWidth + 15
-
+            finalWidth += 20  # Base padding
         table.setColumnWidth(c, finalWidth)
 
     # Set row heights based on font metrics with dynamic adjustment
@@ -284,7 +292,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     if sampleCellHeight <= 0:
         sampleCellHeight = metrics.height()
-
     tallestCellHeight = 0
 
     for r in range(numRows):
@@ -296,12 +303,12 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
                 if height > 0:
                     tallestCellHeight = max(tallestCellHeight, height)
+
     if tallestCellHeight == 0:
         tallestCellHeight = metrics.height()
-
+        
     adjustedRowHeight = max(rowHeight, tallestCellHeight + 2)
-    
-    if debug: print(f"[DEBUG] Sample cell height: {sampleCellHeight}, Tallest cell height: {tallestCellHeight}")
+    if debug: print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Tallest cell height: {tallestCellHeight}, Adjusted row height: {adjustedRowHeight}")
 
     for r in range(numRows):
         table.setRowHeight(r, adjustedRowHeight)
@@ -310,10 +317,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     table.update()
     table.horizontalScrollBar().setValue(0)
-    visibleWidth = table.columnWidth(1)
+    visibleWidth = table.columnWidth(1) if numCols > 1 else 0
 
-    if debug and numCols > 1: print(f"[DEBUG] Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")   
-
+    if debug and numCols > 1: print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
     dataIds = buildHeader
 
     if qaqcToggle:
@@ -322,6 +328,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         for r in range(table.rowCount()):
             for c in range(table.columnCount()):
                 item = table.item(r, c)
+                
                 if item: item.setBackground(QColor(0, 0, 0, 0))
     
 def buildDataDictionary(table):
