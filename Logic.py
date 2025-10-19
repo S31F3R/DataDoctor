@@ -213,12 +213,13 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                     if debug: print(f"[DEBUG] buildTable: USGS in dict, header {i}: {fullLabel}")
                 else:
                     fullLabel = f"{baseLabel} \n{intervalStr}"
-                    if debug: print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
+                    if debug: print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")                    
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
-                location = parts[0].strip() if len(parts) >= 1 else dataId
-                fullLabel = f"{baseLabel} \n{location}"
+                label = parts[0].strip() if len(parts) >= 1 else dataId  # Label is first line
+                location = parts[1].strip() if len(parts) >= 2 else dataId  # Location is second line
+                fullLabel = f"{label} \n{location}"
                 if debug: print(f"[DEBUG] buildTable: Aquarius in dict, header {i}: {fullLabel}")
             else:
                 if mrid and mrid != '0':
@@ -240,8 +241,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
-                label = parts[1].strip() if len(parts) >= 2 else dataId
-                location = parts[0].strip() if len(parts) >= 1 else dataId
+                label = parts[0].strip() if len(parts) >= 1 else dataId  # Label is first line
+                location = parts[1].strip() if len(parts) >= 2 else dataId  # Location is second line
                 fullLabel = f"{label} \n{location}"
                 if debug: print(f"[DEBUG] buildTable: Aquarius not in dict, header {i}: {fullLabel}")
             else:
@@ -286,7 +287,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
             if not rawData and cellText.strip():
                 item.setText(valuePrecision(cellText))
-
             table.setItem(rowIdx, colIdx, item)
 
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
@@ -298,9 +298,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.setMinimumSize(0, 0)
     table.resize(table.size())
     table.update()
-    header.setStretchLastSection(False)
-
+    header.setStretchLastSection(False)    
     if debug: print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
+
     if dataDictionaryTable:
         maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
         vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
@@ -311,7 +311,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
         if debug: print(f"[DEBUG] buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
         finalWidth = max(maxCellWidth, headerWidth)
-
         if headerWidth > maxCellWidth:
             paddingIncrease = headerWidth - maxCellWidth
             finalWidth = maxCellWidth + paddingIncrease + 10
@@ -338,7 +337,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
                 if height > 0:
                     tallestCellHeight = max(tallestCellHeight, height)
-
     if tallestCellHeight == 0:
         tallestCellHeight = metrics.height()
 
@@ -348,7 +346,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     for r in range(numRows):
         table.setRowHeight(r, adjustedRowHeight)
 
-    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)    
     vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     table.update()
     table.horizontalScrollBar().setValue(0)
