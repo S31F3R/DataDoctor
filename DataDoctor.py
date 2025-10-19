@@ -576,14 +576,18 @@ class uiDataDictionary(QMainWindow):
         self.mainTable = self.findChild(QTableWidget, 'dataDictionaryTable') # Data dictionary table
         self.btnSave = self.findChild(QPushButton, 'btnSave') # Save button
         self.btnAddRow = self.findChild(QPushButton, 'btnAddRow') # Add row button
+        self.btnDeleteRow = self.findChild(QPushButton, 'btnDeleteRow') # Remove row button
 
         # Create events
         self.btnSave.clicked.connect(self.btnSavePressed) # Save dictionary
         self.btnAddRow.clicked.connect(self.btnAddRowPressed) # Add row
+        self.btnDeleteRow.clicked.connect(self.btnDeleteRowPressed) # Remove selected row
 
         # Set button style
         Logic.buttonStyle(self.btnSave)
-        Logic.buttonStyle(self.btnAddRow) 
+        Logic.buttonStyle(self.btnAddRow)
+        Logic.buttonStyle(self.btnDeleteRow)
+        if Logic.debug: print("[DEBUG] uiDataDictionary initialized with btnDeleteRow")
 
     def showEvent(self, event):
         Logic.centerWindowToParent(self) # Center on parent
@@ -612,7 +616,17 @@ class uiDataDictionary(QMainWindow):
     
     def btnAddRowPressed(self):
         self.mainTable.setRowCount(self.mainTable.rowCount() + 1) # Add new row
-        if Logic.debug: print("[DEBUG] Added row to DataDictionary")
+        self.mainTable.scrollToBottom() # Scroll to show the new row
+        if Logic.debug: print(f"[DEBUG] Added row to DataDictionary, scrolled to bottom, new row count: {self.mainTable.rowCount()}")
+
+    def btnDeleteRowPressed(self):
+        currentRow = self.mainTable.currentRow() # Get the currently selected row
+
+        if currentRow >= 0: # Valid row selected
+            self.mainTable.removeRow(currentRow) # Remove the selected row
+            if Logic.debug: print(f"[DEBUG] Removed row {currentRow} from DataDictionary, new row count: {self.mainTable.rowCount()}")
+        else:
+            if Logic.debug: print("[DEBUG] No row selected for removal in DataDictionary")
         
 class uiQuickLook(QDialog):
     """Quick look save dialog: Names and stores query presets."""
@@ -651,7 +665,7 @@ class uiQuickLook(QDialog):
 
         # Clear the controls
         self.clear()
-        
+
         # Close the window
         winQuickLook.close()
         if Logic.debug: print("[DEBUG] Quick look saved and window closed")

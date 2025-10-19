@@ -27,6 +27,47 @@
        </size>
       </property>
       <layout class="QGridLayout" name="gridLayout">
+       <item row="0" column="1">
+        <widget class="QPushButton" name="btnAddRow">
+         <property name="toolTip">
+          <string>Add Row</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normalon>icons/Plus.png</normalon>
+          </iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="2">
+        <widget class="QPushButton" name="btnDeleteRow">
+         <property name="toolTip">
+          <string>Deleted Selected Row</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/Delete.png</normaloff>icons/Delete.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
        <item row="0" column="0">
         <widget class="QPushButton" name="btnSave">
          <property name="baseSize">
@@ -44,27 +85,6 @@
          <property name="icon">
           <iconset>
            <normalon>icons/Save.png</normalon>
-          </iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>36</width>
-           <height>36</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="1">
-        <widget class="QPushButton" name="btnAddRow">
-         <property name="toolTip">
-          <string>Add Row</string>
-         </property>
-         <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset>
-           <normalon>icons/Plus.png</normalon>
           </iconset>
          </property>
          <property name="iconSize">
