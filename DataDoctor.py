@@ -24,10 +24,10 @@ from collections import defaultdict
 class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
     def __init__(self):
-            super(uiMain, self).__init__()  # Call the inherited classes __init__ method
-            uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self)  # Load the .ui file
+            super(uiMain, self).__init__() # Call the inherited classes __init__ method
+            uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self) # Load the .ui file
             with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
-                app.setStyleSheet(f.read())  # Global stylesheet application
+                app.setStyleSheet(f.read()) # Global stylesheet application
 
             # Define the controls
             self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
@@ -39,8 +39,8 @@ class uiMain(QMainWindow):
             self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
             self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
             self.btnUndo = self.findChild(QPushButton, 'btnUndo')
-            self.lastQueryType = None  # 'web' or 'internal'
-            self.lastQueryItems = []  # List of (dataID, interval, database, mrid, origIndex)
+            self.lastQueryType = None # 'web' or 'internal'
+            self.lastQueryItems = [] # List of (dataID, interval, database, mrid, origIndex)
             self.lastStartDate = None
             self.lastEndDate = None
 
@@ -58,9 +58,9 @@ class uiMain(QMainWindow):
             centralLayout = self.centralWidget().layout()
             if isinstance(centralLayout, QGridLayout):
                 centralLayout.setContentsMargins(0, 0, 0, 0)
-                centralLayout.setRowStretch(0, 0)  # Toolbar row fixed
-                centralLayout.setRowStretch(1, 1)  # Tab row expanding
-                centralLayout.setColumnStretch(0, 1)  # Single column expanding
+                centralLayout.setRowStretch(0, 0) # Toolbar row fixed
+                centralLayout.setRowStretch(1, 1) # Tab row expanding
+                centralLayout.setColumnStretch(0, 1) # Single column expanding
 
             # Ensure tab widget expands
             self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
@@ -111,8 +111,8 @@ class uiMain(QMainWindow):
             self.btnRefresh.clicked.connect(self.btnRefreshPressed)
             self.btnUndo.clicked.connect(self.btnUndoPressed)
             self.mainTable.horizontalHeader().sectionClicked.connect(lambda col: Logic.customSortTable(self.mainTable, col, winDataDictionary.mainTable))
-            self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)  # Enable right-click menu
-            self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)  # Connect right-click signal
+            self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu) # Enable right-click menu
+            self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu) # Connect right-click signal
 
             # Center window when opened
             rect = self.frameGeometry()
