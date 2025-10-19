@@ -240,8 +240,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
+                label = parts[1].strip() if len(parts) >= 2 else dataId
                 location = parts[0].strip() if len(parts) >= 1 else dataId
-                fullLabel = f"{dataId} \n{location}"
+                fullLabel = f"{label} \n{location}"
                 if debug: print(f"[DEBUG] buildTable: Aquarius not in dict, header {i}: {fullLabel}")
             else:
                 if mrid and mrid != '0':
@@ -270,6 +271,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         vHeader.setVisible(True)
     else:
         table.verticalHeader().setVisible(False)
+
     config = loadConfig()
     rawData = config.get('rawData', False)
     qaqcToggle = config.get('qaqc', True)
@@ -281,10 +283,12 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+
             if not rawData and cellText.strip():
                 item.setText(valuePrecision(cellText))
+
             table.setItem(rowIdx, colIdx, item)
-            
+
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
     font = table.font()
     metrics = QFontMetrics(font)
@@ -295,8 +299,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.resize(table.size())
     table.update()
     header.setStretchLastSection(False)
-    if debug: print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
 
+    if debug: print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
     if dataDictionaryTable:
         maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
         vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
@@ -334,6 +338,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
                 if height > 0:
                     tallestCellHeight = max(tallestCellHeight, height)
+
     if tallestCellHeight == 0:
         tallestCellHeight = metrics.height()
 
@@ -348,7 +353,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.update()
     table.horizontalScrollBar().setValue(0)
     visibleWidth = table.columnWidth(1) if numCols > 1 else 0
-
     if debug and numCols > 1: print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
     dataIds = buildHeader
 
@@ -358,6 +362,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         for r in range(table.rowCount()):
             for c in range(table.columnCount()):
                 item = table.item(r, c)
+                
                 if item: item.setBackground(QColor(0, 0, 0, 0))
     
 def buildDataDictionary(table):
