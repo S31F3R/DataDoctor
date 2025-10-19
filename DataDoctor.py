@@ -642,7 +642,7 @@ class uiQuickLook(QDialog):
         # Save quick look
         if self.currentListQueryList and self.CurrentCbQuickLook:
             if Logic.debug: print("[DEBUG] Saving quick look using currentListQueryList with count:", self.currentListQueryList.count())
-            Logic.saveQuickLook(self.qleQuickLookName, self.currentListQueryList)
+            Logic.saveQuickLook(self.qleQuickLookName.text().strip(), self.currentListQueryList)
 
         # Reload quick looks on both windows
         if Logic.debug: print("[DEBUG] Reloading quick looks on web and internal windows")
@@ -651,7 +651,7 @@ class uiQuickLook(QDialog):
 
         # Clear the controls
         self.clear()
-
+        
         # Close the window
         winQuickLook.close()
         if Logic.debug: print("[DEBUG] Quick look saved and window closed")
