@@ -13,8 +13,6 @@
 -Stress relief button that makes screaming goat sounds
 
 ####### QUERY WINDOW MODIFICATIONS #######
--Change quick look save text box into a q line edit
--When the user hits add query and the query list gets too long and requires a scroll bar, make the list scroll to the bottom so user can see new entry
 -Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
     -Search will need a combobox to allow the user to search by dataID, label, or database
 
