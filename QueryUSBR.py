@@ -7,24 +7,25 @@ periodOffset = True # Global for end of period shift/pad (USBR HOUR only; toggle
 
 def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     if Logic.debug == True: print(f"[DEBUG] QueryUSBR.api called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table='R'")
-    
+
     # Map for URL only
     if interval == 'HOUR':
         tstp = 'HR'
-    elif interval == 'INSTANT':
+    elif interval.startswith('INSTANT'):
         tstp = 'IN'
     elif interval == 'DAY':
         tstp = 'DY'
     else:
         print("[ERROR] Unsupported interval: {}".format(interval))
         return {}
-    
+
     # Use original interval for timestamps
     timestamps = Logic.buildTimestamps(startDate, endDate, interval)
+
     if not timestamps:
         print("[ERROR] No timestamps generated - invalid dates or interval.")
         return {}
-    
+
     # Parse start (with pad if periodOffset and HOUR)
     startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
 
@@ -36,7 +37,7 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     startDay = f'{startDateTime.day:02d}'
     startHour = f'{startDateTime.hour:02d}'
     startMinute = f'{startDateTime.minute:02d}'
-    
+
     # Parse end (no pad needed, as offset is on points)
     endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
     endYear = endDateTime.year
@@ -44,10 +45,9 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     endDay = f'{endDateTime.day:02d}'
     endHour = f'{endDateTime.hour:02d}'
     endMinute = f'{endDateTime.minute:02d}'
-    
     queryLimit = 50
     resultDict = {}
-    
+
     for groupStart in range(0, len(SDIDs), queryLimit):
         groupSDIDs = SDIDs[groupStart:groupStart + queryLimit]
         groupSDIDStr = ','.join(groupSDIDs)
@@ -63,10 +63,9 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         except Exception as e:
             print("[ERROR] USBR fetch failed: {}".format(e))
             continue
-        
         for SDID in groupSDIDs:
             matchingSeries = None
-            
+
             for series in seriesList:
                 jsonSDID = series['SDI']
 
@@ -75,18 +74,17 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                 if str(jsonSDID) == SDID: # Str comparison
                     matchingSeries = series
                     break
-            
+
             if not matchingSeries:
                 print(f"[WARN] No matching series for SDID '{SDID}'.")
                 resultDict[SDID] = [] # Blanks
                 continue
-            
+
             dataPoints = matchingSeries['Data']
             if Logic.debug == True: print(f"[DEBUG] Found series for '{SDID}': {len(dataPoints)} points.")
-            
             outputData = []
 
-            for point in dataPoints:  
+            for point in dataPoints:
                 value = point['v']
                 dateTime = point['t'] # MM/DD/YY HH:MM:SS AM/PM
                 dateTimeParts = dateTime.split(' ')
@@ -98,26 +96,25 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                 day = int(dateParts[1])
                 hour = int(hourMinuteSecond[0])
                 minute = int(hourMinuteSecond[1])
-                second = int(hourMinuteSecond[2]) if len(hourMinuteSecond) > 2 else 0                    
+                second = int(hourMinuteSecond[2]) if len(hourMinuteSecond) > 2 else 0
                 dateTime = datetime(year, month, day, hour, minute, second)
-                
+
                 if periodOffset and interval == 'HOUR':
                     dateTime = dateTime + timedelta(hours=1)
-                
+
                 # Change time from 12 hour clock to 24
                 if amPm == 'AM' and hour == 12:
                     dateTime = dateTime - timedelta(hours=12)
                 elif amPm == 'PM' and hour < 12:
                     dateTime = dateTime + timedelta(hours=12)
-                
-                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00') # Standard, zero sec  
+
+                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00') # Standard, zero sec
                 outputData.append(f'{formattedTs},{value}')
-                
+
             resultDict[SDID] = outputData
-    
     if not resultDict:
         print("[WARN] No data after processing all batches.")
-    
+        
     return resultDict
 
 # QueryUSBR.py - Updated (add new def sqlRead at bottom)

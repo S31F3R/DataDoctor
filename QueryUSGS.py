@@ -18,7 +18,7 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
         return []
 
     # Set interval for USGS ('iv' for HOUR/INSTANT, 'dv' for DAY)
-    if interval in ['HOUR', 'INSTANT']:
+    if interval in ['HOUR'] or interval.startswith('INSTANT:'):
         usgsInterval = 'iv'
     elif interval == 'DAY':
         usgsInterval = 'dv'
@@ -35,6 +35,7 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
     except ValueError as e:
         print("[ERROR] Date parse failed: {}".format(e))
         return []
+
     queryLimit = 50
     resultDict = {}
 
@@ -46,8 +47,8 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
         # Parse group: collect unique sites, params (methods filter post-fetch)
         sites = []
         params = []
-        methods = []  # For post-filter
-        uidMap = {}  # uid -> (site, method, param)
+        methods = [] # For post-filter
+        uidMap = {} # uid -> (site, method, param)
 
         for uid in groupUids:
             parts = uid.split('-')
@@ -63,11 +64,12 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                 print("[ERROR] UUID method {} in uid {} not supported by old method. Use new API with DAY interval.".format(method, uid))
                 return []
 
-            # Use param as is (unpadded for old API)
-            params.append(param)
+            # Pad param to 5 digits for old API
+            params.append(param.zfill(5))
             sites.append(site)
             methods.append(method)
             uidMap[uid] = (site, method, param)
+
         if not sites:
             continue
 
@@ -79,11 +81,12 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
         url = "https://waterservices.usgs.gov/nwis/{}/?format=json&sites={}&startDT={}&endDT={}&parameterCd={}&siteStatus=all".format(
             usgsInterval, sites, startFormatted, endFormatted, joinedParams
         )
-        if Logic.debug: print("[DEBUG] Fetching USGS URL: {}".format(url))
-        max_retries = 3
-        timeout = 10  # Increased timeout in seconds
 
-        for attempt in range(max_retries):
+        if Logic.debug: print("[DEBUG] Fetching USGS URL: {}".format(url))
+        maxRetries = 3
+        timeout = 10 # Increased timeout in seconds
+
+        for attempt in range(maxRetries):
             try:
                 response = requests.get(url, timeout=timeout, verify=True)
                 response.raise_for_status()
@@ -93,10 +96,10 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                 if Logic.debug: print("[DEBUG] Fetched {} timeSeries entries.".format(len(timeSeriesList)))
                 break
             except requests.exceptions.SSLError as e:
-                if attempt < max_retries - 1:
-                    print("[WARN] Retry {} of {}: SSL error: {}. Retrying with increased timeout and disabled verification...".format(attempt + 1, max_retries, e))
-                    timeout *= 2  # Double timeout for next attempt
-                    time.sleep(2 ** attempt)  # Exponential backoff
+                if attempt < maxRetries - 1:
+                    print("[WARN] Retry {} of {}: SSL error: {}. Retrying with increased timeout and disabled verification...".format(attempt + 1, maxRetries, e))
+                    timeout *= 2 # Double timeout for next attempt
+                    time.sleep(2 ** attempt) # Exponential backoff
                     response = requests.get(url, timeout=timeout, verify=False)
                     response.raise_for_status()
                     readFile = json.loads(response.content)
@@ -109,10 +112,10 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                     print("[ERROR] Max retries exceeded: {} for URL: {}. Update OpenSSL or use a different network.".format(e, url))
                     return []
             except requests.exceptions.RequestException as e:
-                if attempt < max_retries - 1:
-                    print("[WARN] Retry {} of {}: Request failed: {} for URL: {}. Retrying...".format(attempt + 1, max_retries, e, url))
-                    timeout *= 2  # Double timeout for next attempt
-                    time.sleep(2 ** attempt)  # Exponential backoff
+                if attempt < maxRetries - 1:
+                    print("[WARN] Retry {} of {}: Request failed: {} for URL: {}. Retrying...".format(attempt + 1, maxRetries, e, url))
+                    timeout *= 2 # Double timeout for next attempt
+                    time.sleep(2 ** attempt) # Exponential backoff
                 else:
                     print("[ERROR] Max retries exceeded: {} for URL: {}".format(e, url))
                     return []
@@ -122,7 +125,7 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
             site, method, param = uidMap.get(uid, (None, None, None))
 
             if not site:
-                resultDict[uid] = []  # Blank
+                resultDict[uid] = [] # Blank
                 continue
 
             # Find matching timeSeries
@@ -132,7 +135,7 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                 seriesSite = series['sourceInfo']['siteCode'][0]['value'] if 'sourceInfo' in series and 'siteCode' in series['sourceInfo'] else None
                 seriesParam = series['variable']['variableCode'][0]['value'] if 'variable' in series and 'variableCode' in series['variable'] else None
 
-                if seriesSite == site and seriesParam == param:  # Match unpadded param
+                if seriesSite == site and seriesParam == param.zfill(5): # Match padded param
                     seriesValues = series['values']
 
                     if seriesValues and 'method' in seriesValues[0] and seriesValues[0]['method']:
@@ -141,9 +144,10 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                         if str(seriesMethodId) == method:
                             matchingSeries = series
                             break
+
             if not matchingSeries:
                 print("[WARN] No matching series for uid '{}': site={}, param={}, method={}. Skipping.".format(uid, site, param, method))
-                resultDict[uid] = []  # Blank
+                resultDict[uid] = [] # Blank
                 continue
 
             # Extract points
@@ -153,18 +157,19 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
 
             for point in dataPoints:
                 value = point['value']
-                dateTimeStr = point['dateTime'].replace('T', ' ').split('.')[0]  # YYYY-MM-DD HH:MM:SS
+                dateTimeStr = point['dateTime'].replace('T', ' ').split('.')[0] # YYYY-MM-DD HH:MM:SS
 
                 try:
-                    dateTime = datetime.fromisoformat(f"{dateTimeStr.replace(' ', 'T')}")  # Ensure ISO for parse
-                    formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')  # Standard
+                    dateTime = datetime.fromisoformat(f"{dateTimeStr.replace(' ', 'T')}") # Ensure ISO for parse
+                    formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00') # Standard
                     outputData.append(f"{formattedTs},{value}")
                 except ValueError as e:
                     print("[WARN] Invalid point ts skipped for '{}': {} - {}".format(uid, dateTimeStr, e))
+
             # Gap check
             outputData = Logic.gapCheck(timestamps, outputData, uid)
             resultDict[uid] = outputData
-
+            
     return resultDict
 
 def apiRead(dataID, interval, startDate, endDate):
@@ -177,158 +182,158 @@ def apiRead(dataID, interval, startDate, endDate):
         print("[ERROR] No timestamps generated - invalid dates or interval.")
         return []
 
-    # Use new API only for DAY with UUID methods
-    if interval != 'DAY':
-        print("[WARN] Interval {} not supported by new API. Use DAY interval with UUID-based UIDs.".format(interval))
-        return []
+    # Use new API only for DAY with UID methods
+    if interval == 'DAY':
 
-    # Check all UIDs for UUID methods
-    hasNonUuid = False
+        # Check all UIDs for UID methods
+        hasNonUid = False
 
-    for uid in dataID:
-        parts = uid.split('-')
-
-        if len(parts) != 3 or not re.match(r'^[0-9a-fA-F]{32}$', parts[1]):  # Match 32-char hex without hyphens
-            hasNonUuid = True
-            if Logic.debug: print("[DEBUG] Non-UUID method {} detected in uid {}".format(parts[1], uid))
-            break
-
-    if hasNonUuid:
-        print("[WARN] Non-UUID method detected. Use numeric methodIDs with legacy method or UUIDs with DAY interval.")
-        return []
-
-    # Format start/end for new API (UTC, midnight for DAY)
-    try:
-        startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
-        endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
-
-        # Apply UTC offset for new API (negative to convert local to UTC)
-        offsetHours = Logic.getUtcOffsetInt(Logic.utcOffset)
-        startDateTime = startDateTime - timedelta(hours=offsetHours)
-        endDateTime = endDateTime - timedelta(hours=offsetHours)
-
-        # Set to midnight for daily
-        startFormatted = startDateTime.replace(hour=0, minute=0, second=0).strftime('%Y-%m-%dT00:00:00Z')
-        endFormatted = endDateTime.replace(hour=0, minute=0, second=0).strftime('%Y-%m-%dT00:00:00Z')
-    except ValueError as e:
-        print("[ERROR] Date parse failed: {}".format(e))
-        return []
-
-    queryLimit = 50
-    resultDict = {}
-
-    # Batch uids into groups of queryLimit
-    for groupStart in range(0, len(dataID), queryLimit):
-        groupUids = dataID[groupStart:groupStart + queryLimit]
-        if Logic.debug: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))
-
-        # Parse group: collect unique sites, params, and check method
-        sites = []
-        params = []
-        uidMap = {}  # uid -> (site, method, param)
-
-        for uid in groupUids:
+        for uid in dataID:
             parts = uid.split('-')
-            if len(parts) != 3:
-                print("[WARN] Invalid uid format skipped: {}".format(uid))
-                continue
 
-            site, method, param = parts
-            if Logic.debug: print("[DEBUG] UID parts: site={}, method={}, param={}".format(site, method, param))
-
-            # Prepend USGS- for new API
-            sites.append('USGS-' + site)
-
-            # Pad param to 5 digits for new API
-            params.append(param.zfill(5))
-            uidMap[uid] = (site, method, param)
-        if not sites:
-            continue
-
-        # Unique for efficiency
-        sites = ','.join(set(sites))
-        joinedParams = ','.join(set(params))
-
-        # Get API key if available, otherwise proceed without
-        apiKey = keyring.get_password("DataDoctor", "usgsApiKey") or ''
-        headers = {'X-Api-Key': apiKey} if apiKey else {}
-
-        # Construct URL for daily collection
-        url = "https://api.waterdata.usgs.gov/ogcapi/v0/collections/daily/items?f=json&monitoring_location_id={}&time={}/{}&parameter_code={}&statistic_id=00003".format(
-            sites, startFormatted, endFormatted, joinedParams
-        )
-        
-        if Logic.debug: print("[DEBUG] Fetching USGS new API URL: {}".format(url))
-        max_retries = 3
-
-        for attempt in range(max_retries):
-            try:
-                response = requests.get(url, headers=headers)
-                response.raise_for_status()
-                readFile = json.loads(response.content)
-                if Logic.debug: print("[DEBUG] API response: {}".format(readFile))  # Debug full response
-                features = readFile.get('features', [])
-                if Logic.debug: print("[DEBUG] Fetched {} feature entries.".format(len(features)))
+            if len(parts) != 3 or not re.match(r'^[0-9a-fA-F]{32}$', parts[1]): # Match 32-char hex without hyphens
+                hasNonUid = True
+                if Logic.debug: print("[DEBUG] Non-UID method {} detected in uid {}".format(parts[1], uid))
                 break
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    print("[WARN] Retry {} of {}: USGS new API fetch failed: {} for URL: {}. Retrying...".format(attempt + 1, max_retries, e, url))
-                    time.sleep(2 ** attempt)  # Exponential backoff
-                else:
-                    print("[ERROR] Max retries exceeded: {} for URL: {}".format(e, url))
-                    return []
 
-        # Process features
-        for uid in groupUids:
-            site, method, param = uidMap.get(uid, (None, None, None))
+        if hasNonUid:
+            print("[WARN] Non-UID method detected. Use numeric methodIDs with legacy method or UIDs with DAY interval.")
+            return []
 
-            if not site:
-                resultDict[uid] = []  # Blank
+        # Format start/end for new API (UTC, midnight for DAY)
+        try:
+            startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
+            endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
+
+            # Apply UTC offset for new API (negative to convert local to UTC)
+            offsetHours = Logic.getUtcOffsetInt(Logic.utcOffset)
+            startDateTime = startDateTime - timedelta(hours=offsetHours)
+            endDateTime = endDateTime - timedelta(hours=offsetHours)
+
+            # Set to midnight for daily
+            startFormatted = startDateTime.replace(hour=0, minute=0, second=0).strftime('%Y-%m-%dT00:00:00Z')
+            endFormatted = endDateTime.replace(hour=0, minute=0, second=0).strftime('%Y-%m-%dT00:00:00Z')
+        except ValueError as e:
+            print("[ERROR] Date parse failed: {}".format(e))
+            return []
+
+        queryLimit = 50
+        resultDict = {}
+
+        # Batch uids into groups of queryLimit
+        for groupStart in range(0, len(dataID), queryLimit):
+            groupUids = dataID[groupStart:groupStart + queryLimit]
+            if Logic.debug: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))
+
+            # Parse group: collect unique sites, params, and check method
+            sites = []
+            params = []
+            uidMap = {} # uid -> (site, method, param)
+
+            for uid in groupUids:
+                parts = uid.split('-')
+
+                if len(parts) != 3:
+                    print("[WARN] Invalid uid format skipped: {}".format(uid))
+                    continue
+
+                site, method, param = parts
+                if Logic.debug: print("[DEBUG] UID parts: site={}, method={}, param={}".format(site, method, param))
+
+                # Prepend USGS- for new API
+                sites.append('USGS-' + site)
+
+                # Pad param to 5 digits for new API
+                params.append(param.zfill(5))
+                uidMap[uid] = (site, method, param)
+            if not sites:
                 continue
 
-            # Match by site, param, and time_series_id
-            matchingFeature = None
+            # Unique for efficiency
+            sites = ','.join(set(sites))
+            joinedParams = ','.join(set(params))
 
-            for feature in features:
-                featureSite = feature['properties'].get('monitoring_location_id')
-                featureParam = feature['properties'].get('parameter_code')
-                featureTimeSeriesId = feature['properties'].get('time_series_id')
+            # Get API key if available, otherwise proceed without
+            apiKey = keyring.get_password("DataDoctor", "usgsApiKey") or ''
+            headers = {'X-Api-Key': apiKey} if apiKey else {}
 
-                if featureSite == 'USGS-' + site and featureParam == param.zfill(5) and featureTimeSeriesId == method:
-                    matchingFeature = feature
-                    break
+            # Construct URL for daily collection
+            url = "https://api.waterdata.usgs.gov/ogcapi/v0/collections/daily/items?f=json&monitoring_location_id={}&time={}/{}&parameter_code={}&statistic_id=00003".format(
+                sites, startFormatted, endFormatted, joinedParams
+            )
 
-            if not matchingFeature:
-                print("[WARN] No matching feature for uid '{}': site={}, param={}, method={}. Skipping.".format(uid, site, param, method))
-                resultDict[uid] = []  # Blank
-                continue
+            if Logic.debug: print("[DEBUG] Fetching USGS new API URL: {}".format(url))
+            maxRetries = 3
 
-            # Extract points
-            if Logic.debug: print("[DEBUG] Found feature for '{}': properties={}".format(uid, matchingFeature['properties']))
-            outputData = []
-
-            # Collect all matching features for the UID
-            matchingFeatures = [f for f in features if f['properties'].get('time_series_id') == method]
-
-            # Sort by 'time' chronologically
-            matchingFeatures.sort(key=lambda f: f['properties'].get('time'))
-
-            for feature in matchingFeatures:
-                value = feature['properties'].get('value')
-                dateTimeStr = feature['properties'].get('time') + 'T00:00:00Z'  # Use UTC midnight
-
+            for attempt in range(maxRetries):
                 try:
-                    dateTime = datetime.fromisoformat(dateTimeStr)
-                    formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+                    response = requests.get(url, headers=headers)
+                    response.raise_for_status()
+                    readFile = json.loads(response.content)
+                    if Logic.debug: print("[DEBUG] API response: {}".format(readFile)) # Debug full response
+                    features = readFile.get('features', [])
+                    if Logic.debug: print("[DEBUG] Fetched {} feature entries.".format(len(features)))
+                    break
+                except Exception as e:
+                    if attempt < maxRetries - 1:
+                        print("[WARN] Retry {} of {}: USGS new API fetch failed: {} for URL: {}. Retrying...".format(attempt + 1, maxRetries, e, url))
+                        time.sleep(2 ** attempt) # Exponential backoff
+                    else:
+                        print("[ERROR] Max retries exceeded: {} for URL: {}".format(e, url))
+                        return []
 
-                    if value is not None:  # Ensure value exists
-                        outputData.append(f"{formattedTs},{value}")
-                except ValueError as e:
-                    print("[WARN] Invalid point ts skipped for '{}': {} - {}".format(uid, dateTimeStr, e))
-            if Logic.debug: print("[DEBUG] Extracted {} points for '{}': {}".format(len(outputData), uid, outputData))
+            # Process features
+            for uid in groupUids:
+                site, method, param = uidMap.get(uid, (None, None, None))
 
-            # Gap check
-            outputData = Logic.gapCheck(timestamps, outputData, uid)
-            resultDict[uid] = outputData
+                if not site:
+                    resultDict[uid] = [] # Blank
+                    continue
 
-    return resultDict
+                # Match by site, param, and time_series_id
+                matchingFeature = None
+
+                for feature in features:
+                    featureSite = feature['properties'].get('monitoring_location_id')
+                    featureParam = feature['properties'].get('parameter_code')
+                    featureTimeSeriesId = feature['properties'].get('time_series_id')
+
+                    if featureSite == 'USGS-' + site and featureParam == param.zfill(5) and featureTimeSeriesId == method:
+                        matchingFeature = feature
+                        break
+                if not matchingFeature:
+                    print("[WARN] No matching feature for uid '{}': site={}, param={}, method={}. Skipping.".format(uid, site, param, method))
+                    resultDict[uid] = [] # Blank
+                    continue
+
+                # Extract points
+                if Logic.debug: print("[DEBUG] Found feature for '{}': properties={}".format(uid, matchingFeature['properties']))
+                outputData = []
+
+                # Collect all matching features for the UID
+                matchingFeatures = [f for f in features if f['properties'].get('time_series_id') == method]
+
+                # Sort by 'time' chronologically
+                matchingFeatures.sort(key=lambda f: f['properties'].get('time'))
+
+                for feature in matchingFeatures:
+                    value = feature['properties'].get('value')
+                    dateTimeStr = feature['properties'].get('time') + 'T00:00:00Z' # Use UTC midnight
+
+                    try:
+                        dateTime = datetime.fromisoformat(dateTimeStr)
+                        formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+                        if value is not None: # Ensure value exists
+                            outputData.append(f"{formattedTs},{value}")
+                    except ValueError as e:
+                        print("[WARN] Invalid point ts skipped for '{}': {} - {}".format(uid, dateTimeStr, e))
+
+                if Logic.debug: print("[DEBUG] Extracted {} points for '{}': {}".format(len(outputData), uid, outputData))
+
+                # Gap check
+                outputData = Logic.gapCheck(timestamps, outputData, uid)
+                resultDict[uid] = outputData
+
+        return resultDict
+    else:
+        return apiReadOldMethod(dataID, interval, startDate, endDate)
