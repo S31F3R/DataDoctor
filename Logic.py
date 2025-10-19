@@ -32,7 +32,7 @@ rawData = False
 fontSize = 10 # Default app-wide retro font size
 
 def buildTimestamps(startDateStr, endDateStr, intervalStr):
-    if debug == True: print("[DEBUG] buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
+    if debug: print("[DEBUG] buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
 
     try:
         start = datetime.strptime(startDateStr, '%Y-%m-%d %H:%M')
@@ -40,37 +40,45 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
     except ValueError as e:
         print("[ERROR] Invalid date format in buildTimestamps: {}".format(e))
         return []
-    
+
     if intervalStr == 'HOUR':
         delta = timedelta(hours=1)
-
-        # Truncate start down to top of hour
         start = start.replace(minute=0, second=0)
-    elif intervalStr == 'INSTANT':
-        delta = timedelta(minutes=15)
+    elif intervalStr.startswith('INSTANT:'):
+        try:
+            minutes = int(intervalStr.split(':')[1])
+            delta = timedelta(minutes=minutes)
+            start = start.replace(second=0)
 
-        # Truncate down to nearest 15min
-        minute = (start.minute // 15) * 15
-        start = start.replace(minute=minute, second=0)
+            if minutes == 1:
+                pass
+            elif minutes == 15:
+                minute = (start.minute // 15) * 15
+                start = start.replace(minute=minute)
+            elif minutes == 60:
+                start = start.replace(minute=0)
+            else:
+                print("[ERROR] Unsupported INSTANT interval: {}".format(intervalStr))
+                return []
+        except (IndexError, ValueError) as e:
+            print("[ERROR] Invalid INSTANT interval format: {}".format(e))
+            return []
     elif intervalStr == 'DAY':
         delta = timedelta(days=1)
-
-        # Truncate down to midnight
         start = start.replace(hour=0, minute=0, second=0)
     else:
         print("[ERROR] Unknown intervalStr: {}".format(intervalStr))
         return []
-    
+
     timestamps = []
     current = start
-    
+
     while current < end:
         ts = current.strftime('%m/%d/%y %H:%M:00')
         timestamps.append(ts)
         current += delta
-    
-    if debug == True: print("[DEBUG] Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
 
+    if debug: print("[DEBUG] Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
     return timestamps
 
 def gapCheck(timestamps, data, dataID=''):
@@ -180,8 +188,18 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     for i, h in enumerate(buildHeader):
         dataId = h.strip()
         intervalStr = intervals[i].upper()
+
+        if intervalStr.startswith('INSTANT:'):
+            intervalStr = 'INSTANT'
+
         database = databases[i] if databases and i < len(databases) else None
         dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataId)
+        mrid = None
+
+        if database and database.startswith('USBR-') and '-' in dataId:
+            parts = dataId.rsplit('-', 1)
+            dataId = parts[0]
+            mrid = parts[1] if len(parts) > 1 else '0'
 
         if dictRow != -1:
             siteItem = dataDictionaryTable.item(dictRow, 1)
@@ -191,43 +209,47 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 parts = dataId.split('-')
 
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
-                    fullLabel = f"{baseLabel} \n{intervalStr} \n{parts[1]}"
+                    fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
                     if debug: print(f"[DEBUG] buildTable: USGS in dict, header {i}: {fullLabel}")
                 else:
-                    fullLabel = f"{baseLabel} \n{intervalStr} \n{dataId}"
-                    if debug: print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")                    
+                    fullLabel = f"{baseLabel} \n{intervalStr}"
+                    if debug: print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
-
-                if len(parts) >= 2:
-                    location = parts[0].strip()
-                    fullLabel = f"{baseLabel} \n{location} \n{dataId}"
-                else:
-                    fullLabel = f"{baseLabel} \n{intervalStr} \n{dataId}"
+                location = parts[0].strip() if len(parts) >= 1 else dataId
+                fullLabel = f"{baseLabel} \n{location}"
                 if debug: print(f"[DEBUG] buildTable: Aquarius in dict, header {i}: {fullLabel}")
             else:
-                fullLabel = f"{baseLabel} \n{intervalStr} \n{dataId}"
-                if debug: print(f"[DEBUG] buildTable: Used dict for header {i}: {fullLabel}")
+                if mrid and mrid != '0':
+                    fullLabel = f"{baseLabel} \n{dataId}-{mrid}"
+                    if debug: print(f"[DEBUG] buildTable: USBR in dict with MRID, header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{baseLabel} \n{dataId}"
+                    if debug: print(f"[DEBUG] buildTable: USBR in dict, header {i}: {fullLabel}")
         else:
-            parts = dataId.split('-')
+            if database == 'USGS-NWIS':
+                parts = dataId.split('-')
 
-            if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit() and database == 'USGS-NWIS':
-                fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr} \n{parts[1]}"
-                if debug: print(f"[DEBUG] buildTable: Parsed USGS header {i}: {fullLabel}")
-            elif labelsDict and dataId in labelsDict and database == 'AQUARIUS':
+                if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
+                    fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+                    if debug: print(f"[DEBUG] buildTable: Parsed USGS header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{dataId} \n{intervalStr}"
+                    if debug: print(f"[DEBUG] buildTable: USGS not in dict, header {i}: {fullLabel}")
+            elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
-
-                if len(parts) >= 2:
-                    label, location = parts[1].strip(), parts[0].strip()
-                    fullLabel = f"{label} \n{location} \n{dataId}"
-                else:
-                    fullLabel = f"{dataId} \n{intervalStr} \n{dataId}"
-                if debug: print(f"[DEBUG] buildTable: Used labelsDict for Aquarius header {i}: {fullLabel}")
+                location = parts[0].strip() if len(parts) >= 1 else dataId
+                fullLabel = f"{dataId} \n{location}"
+                if debug: print(f"[DEBUG] buildTable: Aquarius not in dict, header {i}: {fullLabel}")
             else:
-                fullLabel = f"{dataId} \n{intervalStr} \n{dataId}"
-                if debug: print(f"[DEBUG] buildTable: Default header {i}: {fullLabel}")
+                if mrid and mrid != '0':
+                    fullLabel = f"{dataId}-{mrid} \n{intervalStr}"
+                    if debug: print(f"[DEBUG] buildTable: USBR not in dict with MRID, header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{dataId} \n{intervalStr}"
+                    if debug: print(f"[DEBUG] buildTable: USBR not in dict, header {i}: {fullLabel}")
 
         processedHeaders.append(fullLabel)
 
@@ -248,7 +270,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         vHeader.setVisible(True)
     else:
         table.verticalHeader().setVisible(False)
-
     config = loadConfig()
     rawData = config.get('rawData', False)
     qaqcToggle = config.get('qaqc', True)
@@ -260,11 +281,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-
             if not rawData and cellText.strip():
                 item.setText(valuePrecision(cellText))
             table.setItem(rowIdx, colIdx, item)
-
+            
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
     font = table.font()
     metrics = QFontMetrics(font)
@@ -275,18 +295,16 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.resize(table.size())
     table.update()
     header.setStretchLastSection(False)
-
     if debug: print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
+
     if dataDictionaryTable:
         maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
         vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
-
     for c in range(numCols):
         cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data]
         maxCellWidth = max(metrics.horizontalAdvance(val) for val in cellValues) if cellValues else 50
         headerLines = headers[c].split('\n')
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
-
         if debug: print(f"[DEBUG] buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
         finalWidth = max(maxCellWidth, headerWidth)
 
@@ -316,13 +334,12 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
                 if height > 0:
                     tallestCellHeight = max(tallestCellHeight, height)
-
     if tallestCellHeight == 0:
         tallestCellHeight = metrics.height()
 
     adjustedRowHeight = max(rowHeight, tallestCellHeight + 2)
     if debug: print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Tallest cell height: {tallestCellHeight}, Adjusted row height: {adjustedRowHeight}")
-    
+
     for r in range(numRows):
         table.setRowHeight(r, adjustedRowHeight)
 
@@ -334,7 +351,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     if debug and numCols > 1: print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
     dataIds = buildHeader
-    
+
     if qaqcToggle:
         qaqc(table, dataDictionaryTable, dataIds)
     else:
@@ -380,49 +397,42 @@ def getDataDictionaryItem(table, dataId):
     return -1 # Not found
 
 def qaqc(table, dataDictionaryTable, lookupIds):
-    if not dataDictionaryTable:
+    if not qaqcEnabled:
+        if debug: print("[DEBUG] qaqc: Skipped, QAQC disabled in config")
+        for r in range(table.rowCount()):
+            for c in range(table.columnCount()):
+                item = table.item(r, c)
+                if item: item.setBackground(QColor(0, 0, 0, 0))
         return
-    
-    now = datetime.now() # Current time for future check
-    
+
+    now = datetime.now()
+
     for col, lookupId in enumerate(lookupIds):
+        if debug: print("[DEBUG] qaqc: Processing column {} for lookupId {}".format(col, lookupId))
         rowIndex = getDataDictionaryItem(dataDictionaryTable, lookupId)
-
-        if rowIndex == -1:
-            continue # Skip QAQC for non-dict
-        
-        # Expected min/max etc. (with strip)
         expectedMin = None
-        expectedMinItem = dataDictionaryTable.item(rowIndex, 3)
-        
-        if expectedMinItem and expectedMinItem.text().strip():
-            expectedMin = float(expectedMinItem.text().strip())
-        
         expectedMax = None
-        expectedMaxItem = dataDictionaryTable.item(rowIndex, 4)
-
-        if expectedMaxItem and expectedMaxItem.text().strip():
-            expectedMax = float(expectedMaxItem.text().strip())
-        
         cutoffMin = None
-        cutoffMinItem = dataDictionaryTable.item(rowIndex, 5)
-
-        if cutoffMinItem and cutoffMinItem.text().strip():
-            cutoffMin = float(cutoffMinItem.text().strip())
-        
         cutoffMax = None
-        cutoffMaxItem = dataDictionaryTable.item(rowIndex, 6)
-
-        if cutoffMaxItem and cutoffMaxItem.text().strip():
-            cutoffMax = float(cutoffMaxItem.text().strip())
-        
         rateOfChange = None
-        rateOfChangeItem = dataDictionaryTable.item(rowIndex, 7)
 
-        if rateOfChangeItem and rateOfChangeItem.text().strip():
-            rateOfChange = float(rateOfChangeItem.text().strip())
-        
-        # Iterate over rows for colors
+        if rowIndex != -1:
+            expectedMinItem = dataDictionaryTable.item(rowIndex, 3)
+            if expectedMinItem and expectedMinItem.text().strip():
+                expectedMin = float(expectedMinItem.text().strip())
+            expectedMaxItem = dataDictionaryTable.item(rowIndex, 4)
+            if expectedMaxItem and expectedMaxItem.text().strip():
+                expectedMax = float(expectedMaxItem.text().strip())
+            cutoffMinItem = dataDictionaryTable.item(rowIndex, 5)
+            if cutoffMinItem and cutoffMinItem.text().strip():
+                cutoffMin = float(cutoffMinItem.text().strip())
+            cutoffMaxItem = dataDictionaryTable.item(rowIndex, 6)
+            if cutoffMaxItem and cutoffMaxItem.text().strip():
+                cutoffMax = float(cutoffMaxItem.text().strip())
+            rateOfChangeItem = dataDictionaryTable.item(rowIndex, 7)
+            if rateOfChangeItem and rateOfChangeItem.text().strip():
+                rateOfChange = float(rateOfChangeItem.text().strip())
+
         prevVal = None
 
         for r in range(table.rowCount()):
@@ -430,13 +440,11 @@ def qaqc(table, dataDictionaryTable, lookupIds):
 
             if not item:
                 continue
-            
-            # Reset foreground to system default first
+
             item.setData(Qt.ItemDataRole.ForegroundRole, None)
-            
             cellText = item.text().strip()
 
-            if cellText == '': # Missing data blue (only if in dict and ts <= now)
+            if cellText == '':
                 tsItem = table.verticalHeaderItem(r)
 
                 if tsItem:
@@ -446,39 +454,39 @@ def qaqc(table, dataDictionaryTable, lookupIds):
                         tsDt = datetime.strptime(tsStr, '%m/%d/%y %H:%M:00')
 
                         if tsDt <= now:
-                            item.setBackground(QColor(100, 195, 247)) # Light blue for past/present missing
+                            item.setBackground(QColor(100, 195, 247))
                     except ValueError:
-                        pass # Skip invalid ts
+                        pass
                 continue
-            
             try:
                 val = float(cellText)
             except ValueError:
-                continue # Skip non-numeric
-            
-            # Min/Max colors (apply regardless of ts, for model future data)
-            if expectedMin is not None and val < expectedMin:
-                item.setBackground(QColor(249, 240, 107)) # Light Yellow  
-                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0))) # Black text                            
-            elif expectedMax is not None and val > expectedMax:
-                item.setBackground(QColor(249, 194, 17)) # Yellow
-                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0))) # Black text  
-            elif cutoffMin is not None and val < cutoffMin:
-                item.setBackground(QColor(255, 163, 72)) # Orange
-            elif cutoffMax is not None and val > cutoffMax:
-                item.setBackground(QColor(192, 28, 40)) # Red
-            
-            # Rate of change (apply regardless)
-            if rateOfChange is not None and prevVal is not None:
-                if abs(val - prevVal) > rateOfChange:
-                    item.setBackground(QColor(246, 97, 81)) # Red
+                continue
 
-            # Repeat (apply regardless)
+            if rowIndex != -1:
+                if expectedMin is not None and val < expectedMin:
+                    item.setBackground(QColor(249, 240, 107))
+                    item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))
+                elif expectedMax is not None and val > expectedMax:
+                    item.setBackground(QColor(249, 194, 17))
+                    item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))
+                elif cutoffMin is not None and val < cutoffMin:
+                    item.setBackground(QColor(255, 163, 72))
+                    item.setData(Qt.ItemDataRole.ForegroundRole, None)
+                elif cutoffMax is not None and val > cutoffMax:
+                    item.setBackground(QColor(192, 28, 40))
+                    item.setData(Qt.ItemDataRole.ForegroundRole, None)
+                if rateOfChange is not None and prevVal is not None:
+                    if abs(val - prevVal) > rateOfChange:
+                        item.setBackground(QColor(246, 97, 81))    
+                        item.setData(Qt.ItemDataRole.ForegroundRole, None)                  
+
             if prevVal is not None and val == prevVal:
-                item.setBackground(QColor(87, 227, 137)) # Green 
-                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0))) # Black text                
+                item.setBackground(QColor(87, 227, 137))
+                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))
+            prevVal = val
 
-            prevVal = val                 
+        if debug: print("[DEBUG] qaqc: Processed column {} for lookupId {}".format(col, lookupId))          
            
 def loadAllQuickLooks(cbQuickLook):     
     cbQuickLook.clear()
@@ -524,24 +532,39 @@ def loadQuickLook(cbQuickLook, listQueryList):
     quickLookName = cbQuickLook.currentText()
 
     if not quickLookName:
+        if debug: print("[DEBUG] loadQuickLook: No quick look selected")
         return
 
     listQueryList.clear()
-    userQuickLookPath = os.path.join(getQuickLookDir(), f'{quickLookName}.txt')
-    exampleQuickLookPath = resourcePath(f'quickLook/{quickLookName}.txt')
+    userQuickLookPath = os.path.join(getQuickLookDir(), '{}.txt'.format(quickLookName))
+    exampleQuickLookPath = resourcePath('quickLook/{}.txt'.format(quickLookName))
     quickLookPath = userQuickLookPath if os.path.exists(userQuickLookPath) else exampleQuickLookPath
 
     try:
         with open(quickLookPath, 'r', encoding='utf-8-sig') as f:
             content = f.read().strip()
+        if content:
+            data = content.split(',')
 
-            if content:
-                data = content.split(',')
-                for itemText in data:
-                    listQueryList.addItem(itemText.strip())
+            for itemText in data:
+                parts = itemText.strip().split('|')
 
+                if len(parts) == 3:
+                    dataID, interval, database = parts
+                    if interval == 'INSTANT':
+                        if database.startswith('USBR-'):
+                            interval = 'INSTANT:60'
+                        elif database == 'USGS-NWIS':
+                            interval = 'INSTANT:15'
+                        elif database == 'AQUARIUS':
+                            interval = 'INSTANT:1'
+
+                    listQueryList.addItem('{}|{}|{}'.format(dataID, interval, database))
+                    if debug: print("[DEBUG] loadQuickLook: Added item {}".format('{}|{}|{}'.format(dataID, interval, database)))
     except FileNotFoundError:
-        print(f"Quick look '{quickLookName}' not found.")
+        print("[WARN] Quick look '{}' not found.".format(quickLookName))
+
+    if debug: print("[DEBUG] loadQuickLook: Loaded '{}' with {} items".format(quickLookName, listQueryList.count()))
 
 def loadConfig():
     convertConfigToJson() # Convert if needed
@@ -1084,19 +1107,25 @@ def loadLastQuickLook(cbQuickLook):
         cbQuickLook.setCurrentIndex(-1) # No config, blank
 
 def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable):
-    if debug: print(f"[DEBUG] executeQuery: isInternal={isInternal}, items={len(queryItems)}")
+    if debug: print("[DEBUG] executeQuery: isInternal={}, items={}".format(isInternal, len(queryItems)))
+
     if isInternal:
         queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
-    if not queryItems:
-        QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
-        return
+
+        if not queryItems:
+            QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
+            return
 
     queryItems.sort(key=lambda x: x[4])
     firstInterval = queryItems[0][1]
     firstDb = queryItems[0][2]
 
     if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
-        firstInterval = 'HOUR'
+        firstInterval = 'INSTANT:60'
+    elif firstInterval == 'INSTANT' and firstDb == 'USGS-NWIS':
+        firstInterval = 'INSTANT:15'
+    elif firstInterval == 'INSTANT' and firstDb == 'AQUARIUS':
+        firstInterval = 'INSTANT:1'
 
     timestamps = buildTimestamps(startDate, endDate, firstInterval)
 
@@ -1109,6 +1138,14 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     groups = defaultdict(list)
 
     for dataID, interval, db, mrid, origIndex in queryItems:
+        if interval == 'INSTANT':
+            if db.startswith('USBR-'):
+                interval = 'INSTANT:60'
+            elif db == 'USGS-NWIS':
+                interval = 'INSTANT:15'
+            elif db == 'AQUARIUS':
+                interval = 'INSTANT:1'
+
         groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
         SDID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
         groups[groupKey].append((origIndex, dataID, SDID))
@@ -1123,17 +1160,19 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             if db.startswith('USBR-'):
                 svr = db.split('-')[1].lower()
                 table = 'M' if mrid != '0' else 'R'
-                result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, interval, mrid, table)
+                apiInterval = interval  # Pass full interval (e.g., INSTANT:60)
+                result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, apiInterval, mrid, table)
             elif db == 'AQUARIUS' and isInternal:
                 result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
             elif db == 'USGS-NWIS' and not isInternal:
                 result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
             else:
-                if debug: print(f"[DEBUG] Unknown db skipped: {db}")
+                if debug: print("[DEBUG] Unknown db skipped: {}".format(db))
                 continue
         except Exception as e:
-            QMessageBox.warning(mainWindow, "Query Error", f"Query failed for group {db}: {e}")
+            QMessageBox.warning(mainWindow, "Query Error", "Query failed for group {}: {}".format(db, e))
             continue
+
         for idx, (origIndex, dataID, SDID) in enumerate(groupItems):
             if SDID in result:
                 if db == 'AQUARIUS':
@@ -1141,7 +1180,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     labelsDict[dataID] = result[SDID].get('label', dataID)
                 else:
                     outputData = result[SDID]
-
                 alignedData = gapCheck(timestamps, outputData, dataID)
                 values = [line.split(',')[1] if line else '' for line in alignedData]
                 valueDict[dataID] = values
@@ -1153,15 +1191,17 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     databases = [item[2] for item in queryItems]
     lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
     data = []
-    
+
     for r in range(len(timestamps)):
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
-        data.append(f"{timestamps[r]},{','.join(rowValues)}")
+        data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
+
     mainWindow.mainTable.clear()
     buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
-    
+
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
+
     if debug: print("[DEBUG] Query executed and table updated.")
 
 def getUtcOffsetInt(utcOffsetStr):
