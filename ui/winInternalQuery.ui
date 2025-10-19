@@ -411,7 +411,6 @@
    <zorder>label_4</zorder>
    <zorder>btnAddQuery</zorder>
    <zorder>label_5</zorder>
-   <zorder>label_6</zorder>
    <zorder>btnRemoveQuery</zorder>
    <zorder>btnSaveQuickLook</zorder>
    <zorder>label_7</zorder>
@@ -424,11 +423,12 @@
    <zorder>cbDatabase</zorder>
    <zorder>dteStartDate</zorder>
    <zorder>dteEndDate</zorder>
-   <zorder>listQueryList</zorder>
    <zorder>rbCustomDateTime</zorder>
    <zorder>rbPrevDayToCurrent</zorder>
    <zorder>rbPrevWeekToCurrent</zorder>
    <zorder>label_8</zorder>
+   <zorder>label_6</zorder>
+   <zorder>listQueryList</zorder>
   </widget>
  </widget>
  <resources/>
