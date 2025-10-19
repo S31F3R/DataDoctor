@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
                              QTextEdit, QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
                              QMessageBox, QDialog, QSizePolicy, QTabWidget, QRadioButton, QButtonGroup,
-                             QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox)
+                             QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox, QMenu)
 from PyQt6 import uic
 from PyQt6.QtMultimedia import QSoundEffect
 from collections import defaultdict
@@ -24,106 +24,124 @@ from collections import defaultdict
 class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
     def __init__(self):
-        super(uiMain, self).__init__() # Call the inherited classes __init__ method
-        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self) # Load the .ui file
-        with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
-            app.setStyleSheet(f.read()) # Global stylesheet application
+            super(uiMain, self).__init__()  # Call the inherited classes __init__ method
+            uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self)  # Load the .ui file
+            with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
+                app.setStyleSheet(f.read())  # Global stylesheet application
 
-        # Define the controls
-        self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
-        self.mainTable = self.findChild(QTableWidget, 'mainTable')
-        self.btnDataDictionary = self.findChild(QPushButton, 'btnDataDictionary')
-        self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')
-        self.btnOptions = self.findChild(QPushButton, 'btnOptions')
-        self.btnInfo = self.findChild(QPushButton, 'btnInfo')
-        self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
-        self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
-        self.btnUndo = self.findChild(QPushButton, 'btnUndo')
-        self.lastQueryType = None # 'web' or 'internal'
-        self.lastQueryItems = [] # List of (dataID, interval, database, mrid, origIndex)
-        self.lastStartDate = None
-        self.lastEndDate = None
+            # Define the controls
+            self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
+            self.mainTable = self.findChild(QTableWidget, 'mainTable')
+            self.btnDataDictionary = self.findChild(QPushButton, 'btnDataDictionary')
+            self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')
+            self.btnOptions = self.findChild(QPushButton, 'btnOptions')
+            self.btnInfo = self.findChild(QPushButton, 'btnInfo')
+            self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
+            self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
+            self.btnUndo = self.findChild(QPushButton, 'btnUndo')
+            self.lastQueryType = None  # 'web' or 'internal'
+            self.lastQueryItems = []  # List of (dataID, interval, database, mrid, origIndex)
+            self.lastStartDate = None
+            self.lastEndDate = None
 
-        # Set button style (exclude btnRefresh and btnUndo)
-        Logic.buttonStyle(self.btnPublicQuery)
-        Logic.buttonStyle(self.btnDataDictionary)
-        Logic.buttonStyle(self.btnExportCSV)
-        Logic.buttonStyle(self.btnOptions)
-        Logic.buttonStyle(self.btnInfo)
-        Logic.buttonStyle(self.btnInternalQuery)
-        Logic.buttonStyle(self.btnUndo)
-        Logic.buttonStyle(self.btnRefresh)
+            # Set button style (exclude btnRefresh and btnUndo)
+            Logic.buttonStyle(self.btnPublicQuery)
+            Logic.buttonStyle(self.btnDataDictionary)
+            Logic.buttonStyle(self.btnExportCSV)
+            Logic.buttonStyle(self.btnOptions)
+            Logic.buttonStyle(self.btnInfo)
+            Logic.buttonStyle(self.btnInternalQuery)
+            Logic.buttonStyle(self.btnUndo)
+            Logic.buttonStyle(self.btnRefresh)
 
-        # Set up stretch for central grid layout (make tab row expand)
-        centralLayout = self.centralWidget().layout()
+            # Set up stretch for central grid layout (make tab row expand)
+            centralLayout = self.centralWidget().layout()
+            if isinstance(centralLayout, QGridLayout):
+                centralLayout.setContentsMargins(0, 0, 0, 0)
+                centralLayout.setRowStretch(0, 0)  # Toolbar row fixed
+                centralLayout.setRowStretch(1, 1)  # Tab row expanding
+                centralLayout.setColumnStretch(0, 1)  # Single column expanding
 
-        if isinstance(centralLayout, QGridLayout):
-            centralLayout.setContentsMargins(0, 0, 0, 0)
-            centralLayout.setRowStretch(0, 0) # Toolbar row fixed
-            centralLayout.setRowStretch(1, 1) # Tab row expanding
-            centralLayout.setColumnStretch(0, 1) # Single column expanding
+            # Ensure tab widget expands
+            self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
+            if self.tabWidget:
+                self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Ensure tab widget expands
-        self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
+            # Connect close button signal
+            self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
 
-        if self.tabWidget:
-            self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            # Set up Data Query tab (tabMain QWidget)
+            self.tabMain = self.findChild(QWidget, 'tabMain')
+            if self.tabMain:
+                self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Connect close button signal
-        self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
+            # Add layout if none exists
+            if not self.tabMain.layout():
+                layout = QVBoxLayout(self.tabMain)
+                layout.addWidget(self.mainTable)
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setSpacing(0)
 
-        # Set up Data Query tab (tabMain QWidget)
-        self.tabMain = self.findChild(QWidget, 'tabMain')
+            # Reset table geometry to let layout manage sizing
+            self.mainTable.setGeometry(0, 0, 0, 0)
 
-        if self.tabMain:
-            self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            # Set table to expand within its layout
+            self.mainTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Add layout if none exists
-        if not self.tabMain.layout():
-            layout = QVBoxLayout(self.tabMain)
-            layout.addWidget(self.mainTable)
-            layout.setContentsMargins(0, 0, 0, 0)
-            layout.setSpacing(0)
+            # Hide tabs on startup (both Data Query and SQL)
+            if self.tabWidget:
+                # Hide Data Query
+                dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
+                if dataQueryIndex != -1:
+                    self.tabWidget.removeTab(dataQueryIndex)
 
-        # Reset table geometry to let layout manage sizing
-        self.mainTable.setGeometry(0, 0, 0, 0)
+                # Hide SQL
+                sqlTab = self.findChild(QWidget, 'tabSQL')
+                sqlIndex = self.tabWidget.indexOf(sqlTab)
+                if sqlIndex != -1:
+                    self.tabWidget.removeTab(sqlIndex)
 
-        # Set table to expand within its layout
-        self.mainTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            # Create events
+            self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)
+            self.btnDataDictionary.clicked.connect(self.showDataDictionary)
+            self.btnExportCSV.clicked.connect(self.btnExportCSVPressed)
+            self.btnOptions.clicked.connect(self.btnOptionsPressed)
+            self.btnInfo.clicked.connect(self.btnInfoPressed)
+            self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
+            self.btnRefresh.clicked.connect(self.btnRefreshPressed)
+            self.btnUndo.clicked.connect(self.btnUndoPressed)
+            self.mainTable.horizontalHeader().sectionClicked.connect(lambda col: Logic.customSortTable(self.mainTable, col, winDataDictionary.mainTable))
+            self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)  # Enable right-click menu
+            self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)  # Connect right-click signal
 
-        # Hide tabs on startup (both Data Query and SQL)
-        if self.tabWidget:
-            # Hide Data Query
-            dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
+            # Center window when opened
+            rect = self.frameGeometry()
+            centerPoint = QGuiApplication.primaryScreen().availableGeometry().center()
+            rect.moveCenter(centerPoint)
+            self.move(rect.topLeft())
 
-            if dataQueryIndex != -1:
-                self.tabWidget.removeTab(dataQueryIndex)
+            # Show the GUI on application start
+            self.show()
+            if Logic.debug: print("[DEBUG] uiMain initialized with header context menu")
 
-            # Hide SQL
-            sqlTab = self.findChild(QWidget, 'tabSQL')
-            sqlIndex = self.tabWidget.indexOf(sqlTab)
+    def showHeaderContextMenu(self, pos):
+        """Show context menu for header right-click to display full query info."""
+        header = self.mainTable.horizontalHeader()
+        col = header.logicalIndexAt(pos)
+        if col < 0 or col >= len(self.lastQueryItems):
+            if Logic.debug: print("[DEBUG] showHeaderContextMenu: Invalid column {} clicked".format(col))
+            return
+        queryInfo = f"{self.lastQueryItems[col][0]}|{self.lastQueryItems[col][1]}|{self.lastQueryItems[col][2]}"
+        menu = QMenu(self)
+        action = menu.addAction("Show Query Info")
+        action.triggered.connect(lambda: self.showDataIdMessage(queryInfo))
+        menu.exec(header.mapToGlobal(pos))
+        if Logic.debug: print("[DEBUG] showHeaderContextMenu: Displayed menu for column {}, queryInfo {}".format(col, queryInfo))
 
-            if sqlIndex != -1:
-                self.tabWidget.removeTab(sqlIndex)
-
-        # Create events
-        self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)
-        self.btnDataDictionary.clicked.connect(self.showDataDictionary)
-        self.btnExportCSV.clicked.connect(self.btnExportCSVPressed)
-        self.btnOptions.clicked.connect(self.btnOptionsPressed)
-        self.btnInfo.clicked.connect(self.btnInfoPressed)
-        self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
-        self.btnRefresh.clicked.connect(self.btnRefreshPressed)
-        self.btnUndo.clicked.connect(self.btnUndoPressed)
-
-        # Center window when opened
-        rect = self.frameGeometry()
-        centerPoint = QGuiApplication.primaryScreen().availableGeometry().center()
-        rect.moveCenter(centerPoint)
-        self.move(rect.topLeft())
-
-        # Show the GUI on application start
-        self.show()
+    def showDataIdMessage(self, queryInfo):
+        """Display QMessageBox with full query info."""
+        QMessageBox.information(self, "Full Query Info", queryInfo)
+        if Logic.debug: print("[DEBUG] showDataIdMessage: Showed queryInfo {}".format(queryInfo))
 
     def onTabCloseRequested(self, index):
         """Handle tab close button clicks by removing the tab."""
@@ -226,9 +244,15 @@ class uiWebQuery(QMainWindow):
         self.cbDatabase.addItem('USGS-NWIS') # USGS
 
         # Populate interval combobox
-        self.cbInterval.addItem('HOUR') # Hourly data
-        self.cbInterval.addItem('INSTANT') # Instantaneous data
-        self.cbInterval.addItem('DAY') # Daily data
+        self.cbDatabase.addItem('AQUARIUS')
+        self.cbDatabase.addItem('USBR-LCHDB')
+        self.cbDatabase.addItem('USBR-YAOHDB')
+        self.cbDatabase.addItem('USBR-UCHDB2')
+        self.cbInterval.addItem('HOUR')
+        self.cbInterval.addItem('INSTANT:1')
+        self.cbInterval.addItem('INSTANT:15')
+        self.cbInterval.addItem('INSTANT:60')
+        self.cbInterval.addItem('DAY')
 
         # Set initial state
         Logic.initializeQueryWindow(self, self.rbCustomDateTime, self.dteStartDate, self.dteEndDate) # Set custom date, 72h range
@@ -269,13 +293,16 @@ class uiWebQuery(QMainWindow):
         startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
         endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
         queryItems = []
+
         for i in range(self.listQueryList.count()):
             itemText = self.listQueryList.item(i).text().strip()
             parts = itemText.split('|')
+
             if Logic.debug: print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
             if len(parts) != 3:
                 print(f"[WARN] Invalid item skipped: {itemText}")
                 continue
+
             dataID, interval, database = parts
             mrid = '0'
             SDID = dataID
@@ -421,9 +448,15 @@ class uiInternalQuery(QMainWindow):
         self.cbDatabase.addItem('USBR-UCHDB2') # Upper Colorado
 
         # Populate interval combobox
-        self.cbInterval.addItem('HOUR') # Hourly data
-        self.cbInterval.addItem('INSTANT') # Instantaneous data
-        self.cbInterval.addItem('DAY') # Daily data
+        self.cbDatabase.addItem('AQUARIUS')
+        self.cbDatabase.addItem('USBR-LCHDB')
+        self.cbDatabase.addItem('USBR-YAOHDB')
+        self.cbDatabase.addItem('USBR-UCHDB2')
+        self.cbInterval.addItem('HOUR')
+        self.cbInterval.addItem('INSTANT:1')
+        self.cbInterval.addItem('INSTANT:15')
+        self.cbInterval.addItem('INSTANT:60')
+        self.cbInterval.addItem('DAY')
 
         # Set initial state
         Logic.initializeQueryWindow(self, self.rbCustomDateTime, self.dteStartDate, self.dteEndDate) # Set custom date, 72h range
