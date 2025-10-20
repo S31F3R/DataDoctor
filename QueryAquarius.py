@@ -3,6 +3,8 @@ import json
 import keyring
 from datetime import datetime, timedelta
 import Logic # For globals like debug and utcOffset
+import threading
+import queue
 
 def apiRead(dataIDs, startDate, endDate, interval):
     if Logic.debug: print("[DEBUG] QueryAquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}".format(dataIDs, interval, startDate, endDate))
@@ -72,23 +74,34 @@ def apiRead(dataIDs, startDate, endDate, interval):
     user = None
     password = None
     result = {}
-    uids = dataIDs
-    queryLimit = 100
 
-    # Batch uids into groups of queryLimit (serial fetch per uid in group)
-    for groupStart in range(0, len(uids), queryLimit):
-        groupUids = uids[groupStart:groupStart + queryLimit]
-        if Logic.debug: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))
+    # Threading setup
+    maxThreads = 5 # Configurable number of threads
+    numThreads = min(maxThreads, len(dataIDs)) # Use fewer threads if fewer UIDs
+    resultQueue = queue.Queue() # Thread-safe queue for results
+    uids = dataIDs
+
+    # Split UIDs into groups
+    groupSize = (len(uids) + numThreads - 1) // numThreads # Ceiling division
+    uidGroups = [uids[i:i + groupSize] for i in range(0, len(uids), groupSize)]
+    if Logic.debug: print(f"[DEBUG] Split {len(uids)} UIDs into {numThreads} groups: {[len(group) for group in uidGroups]}")
+
+    def queryGroup(groupUids, threadId):
+        """Process a group of UIDs in a single thread."""
+        if Logic.debug: print(f"[DEBUG] Thread {threadId} processing {len(groupUids)} UIDs: {groupUids[:3] if groupUids else []}")
+        groupResult = {}
 
         for uid in groupUids:
             # Query the data
-            response = requests.get(f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={startDate}&QueryTo={endDate}&utcOffset={offsetHours}&GetParts=PointsOnly&format=json', headers=headers, verify=False)
-            
+            response = requests.get(
+                f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={startDate}&QueryTo={endDate}&utcOffset={offsetHours}&GetParts=PointsOnly&format=json',
+                headers=headers, verify=False
+            )
             try:
                 readFile = json.loads(response.content)
             except Exception as e:
-                print("[WARN] Aquarius fetch failed for uid '{}': {}".format(uid, e))
-                result[uid] = {'data': [], 'label': uid} # Fallback label
+                print(f"[WARN] Aquarius fetch failed for uid '{uid}' in thread {threadId}: {e}")
+                groupResult[uid] = {'data': [], 'label': uid} # Fallback label
                 continue
 
             # Build label from response
@@ -96,7 +109,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
             label = readFile.get('Label', '')
             fullLabel = f'{label} \n{location}'
             points = readFile['Points']
-            if Logic.debug: print("[DEBUG] Fetched {} points for uid '{}'.".format(len(points), uid))
+            if Logic.debug: print(f"[DEBUG] Thread {threadId} fetched {len(points)} points for uid '{uid}'")
             outputData = []
 
             for point in points:
@@ -108,13 +121,44 @@ def apiRead(dataIDs, startDate, endDate, interval):
                 dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}')
                 formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
                 value = point['Value'].get('Numeric', None)
-
                 if value is not None:
                     outputData.append(f'{formattedTs},{value}')
-            result[uid] = {'data': outputData, 'label': fullLabel}
-            
+
+            groupResult[uid] = {'data': outputData, 'label': fullLabel}
+
+        resultQueue.put(groupResult) # Store thread results in queue
+        if Logic.debug: print(f"[DEBUG] Thread {threadId} completed with {len(groupResult)} UIDs")
+
+    # Start threads
+    threads = []
+    for i, group in enumerate(uidGroups):
+        if group: # Only start thread for non-empty groups
+            t = threading.Thread(target=queryGroup, args=(group, i))
+            threads.append(t)
+            t.start()
+            if Logic.debug: print(f"[DEBUG] Started thread {i} for group of {len(group)} UIDs")
+
+    # Wait for all threads to complete
+    for t in threads:
+        t.join()
+        if Logic.debug: print(f"[DEBUG] Thread {threads.index(t)} joined")
+
+    # Combine results from queue
+    result = {}
+
+    while not resultQueue.empty():
+        result.update(resultQueue.get())
+
+    if Logic.debug: print(f"[DEBUG] Combined results from {len(threads)} threads with {len(result)} UIDs")
+
+    # Ensure all UIDs are in result (add empty for any missed)
+    for uid in uids:
+        if uid not in result:
+            result[uid] = {'data': [], 'label': uid}
+            if Logic.debug: print(f"[DEBUG] Added empty result for UID {uid}")
+
     # Clear server variable
     server = None
-    if Logic.debug: print("[DEBUG] Returning result dict with {} UIDs.".format(len(result)))
+    if Logic.debug: print(f"[DEBUG] Returning result dict with {len(result)} UIDs")
 
     return result
