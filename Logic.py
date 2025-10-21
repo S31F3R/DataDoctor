@@ -6,6 +6,7 @@ import QueryUSBR
 import QueryUSGS
 import QueryAquarius
 import json
+import queue
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDir, QTimer
 from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont, QFontMetrics
@@ -1137,10 +1138,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
     if isInternal:
         queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
-
-        if not queryItems:
-            QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
-            return
+    if not queryItems:
+        QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
+        return
 
     queryItems.sort(key=lambda x: x[4])
     firstInterval = queryItems[0][1]
@@ -1176,41 +1176,96 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         SDID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
         groups[groupKey].append((origIndex, dataID, SDID))
 
-    valueDict = {}
+    # Threading setup
+    maxDbThreads = 3  # One thread per unique database type (AQUARIUS, USBR, USGS)
+    resultQueue = queue.Queue()  # Thread-safe queue for results
 
-    for groupKey, groupItems in groups.items():
+    def queryGroup(groupKey, groupItems, threadId):
+        """Process a group of items in a single thread."""
+        if debug: print(f"[DEBUG] Thread {threadId} processing group {groupKey} with {len(groupItems)} items")
         db, mrid, interval = groupKey
         SDIDs = [item[2] for item in groupItems]
+        groupResult = {}
+        groupLabels = {} if db == 'AQUARIUS' else None
 
         try:
             if db.startswith('USBR-'):
                 svr = db.split('-')[1].lower()
                 table = 'M' if mrid != '0' else 'R'
-                apiInterval = interval  # Pass full interval (e.g., INSTANT:60)
+                apiInterval = interval
                 result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, apiInterval, mrid, table)
             elif db == 'AQUARIUS' and isInternal:
                 result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
             elif db == 'USGS-NWIS' and not isInternal:
                 result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
             else:
-                if debug: print("[DEBUG] Unknown db skipped: {}".format(db))
-                continue
-        except Exception as e:
-            QMessageBox.warning(mainWindow, "Query Error", "Query failed for group {}: {}".format(db, e))
-            continue
+                if debug: print(f"[DEBUG] Thread {threadId}: Unknown db skipped: {db}")
+                resultQueue.put((groupKey, groupResult, groupLabels))
+                return
+            for idx, (origIndex, dataID, SDID) in enumerate(groupItems):
+                if SDID in result:
+                    if db == 'AQUARIUS':
+                        outputData = result[SDID]['data']
+                        groupLabels[dataID] = result[SDID].get('label', dataID)
+                    else:
+                        outputData = result[SDID]
 
-        for idx, (origIndex, dataID, SDID) in enumerate(groupItems):
-            if SDID in result:
-                if db == 'AQUARIUS':
-                    outputData = result[SDID]['data']
-                    labelsDict[dataID] = result[SDID].get('label', dataID)
+                    alignedData = gapCheck(timestamps, outputData, dataID)
+                    values = [line.split(',')[1] if line else '' for line in alignedData]
+                    groupResult[dataID] = values
                 else:
-                    outputData = result[SDID]
-                alignedData = gapCheck(timestamps, outputData, dataID)
-                values = [line.split(',')[1] if line else '' for line in alignedData]
-                valueDict[dataID] = values
-            else:
-                valueDict[dataID] = defaultBlanks
+                    groupResult[dataID] = defaultBlanks
+                    
+            if debug: print(f"[DEBUG] Thread {threadId} completed group {groupKey} with {len(groupResult)} items")
+        except Exception as e:
+            QMessageBox.warning(mainWindow, "Query Error", f"Query failed for group {db} in thread {threadId}: {e}")
+            if debug: print(f"[DEBUG] Thread {threadId} failed for group {groupKey}: {e}")
+
+        resultQueue.put((groupKey, groupResult, groupLabels))
+        
+    # Start threads
+    threads = []
+    numThreads = min(maxDbThreads, len(groups))  # One thread per group, up to maxDbThreads
+    if debug: print(f"[DEBUG] Starting {numThreads} threads for {len(groups)} groups")
+
+    for i, groupKey in enumerate(groups.keys()):
+        t = threading.Thread(target=queryGroup, args=(groupKey, groups[groupKey], i))
+        threads.append(t)
+        t.start()
+        if debug: print(f"[DEBUG] Started thread {i} for group {groupKey}")
+
+    # Wait for threads with timeout
+    timeoutSeconds = 300  # 5 minutes
+
+    for t in threads:
+        t.join(timeout=timeoutSeconds)
+        threadId = threads.index(t)
+
+        if t.is_alive():
+            if debug: print(f"[DEBUG] Thread {threadId} timed out after {timeoutSeconds} seconds")
+            print(f"[WARN] Query for group timed out after {timeoutSeconds} seconds; some data may be missing")
+        else:
+            if debug: print(f"[DEBUG] Thread {threadId} joined")
+
+    # Combine results
+    valueDict = {}
+
+    for _ in range(len(groups)):
+        try:
+            groupKey, groupResult, groupLabels = resultQueue.get_nowait()
+            valueDict.update(groupResult)
+            if groupLabels and labelsDict is not None:
+                labelsDict.update(groupLabels)
+            if debug: print(f"[DEBUG] Collected results for group {groupKey} with {len(groupResult)} items")
+        except queue.Empty:
+            if debug: print("[DEBUG] No more results in queue")
+            break
+
+    # Ensure all dataIDs are in valueDict
+    for dataID, _, _, _, _ in queryItems:
+        if dataID not in valueDict:
+            valueDict[dataID] = defaultBlanks
+            if debug: print(f"[DEBUG] Added empty result for dataID {dataID}")
 
     originalDataIds = [item[0] for item in queryItems]
     originalIntervals = [item[1] for item in queryItems]
@@ -1224,10 +1279,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
     mainWindow.mainTable.clear()
     buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
-
+    
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
-
     if debug: print("[DEBUG] Query executed and table updated.")
 
 def getUtcOffsetInt(utcOffsetStr):
