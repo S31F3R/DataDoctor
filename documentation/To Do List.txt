@@ -34,6 +34,7 @@
         -/AQUARIUS/Publish/v2/GetParameterList?format=json
     -Need to combine aquarius parameters to HDB data types for formatting rules
 -modify and test for day, month, year, and water year queries
+-executeQuery uses SDID wrong, need to fix this
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme
