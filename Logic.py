@@ -274,9 +274,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             return
         
     if debug: print(f"[DEBUG] buildTable: Setting table to {numRows} rows, {numCols} columns")
-    table.setRowCount(numCols)
+    table.setRowCount(numRows)
     table.setColumnCount(numCols)
     table.setHorizontalHeaderLabels(headers)
+    table.show()    
 
     if dataDictionaryTable:
         timestamps = [row.split(',')[0].strip() for row in data]
@@ -1162,13 +1163,8 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         firstInterval = 'INSTANT:15'
     elif firstInterval == 'INSTANT' and firstDb == 'AQUARIUS':
         firstInterval = 'INSTANT:1'
-
-    offsetHours = getUtcOffsetInt(utcOffset) # Parse float offset
-    startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M') - timedelta(hours=offsetHours)
-    endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M') - timedelta(hours=offsetHours)
-    startDate = startDateTime.strftime('%Y-%m-%d %H:%M')
-    endDate = endDateTime.strftime('%Y-%m-%d %H:%M')
-    timestamps = buildTimestamps(startDate, endDate, firstInterval)
+    
+    timestamps = buildTimestamps(startDate, endDate, firstInterval)   
 
     if not timestamps:
         progressDialog.cancel()
@@ -1343,10 +1339,13 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
 
+    if debug: print(f"[DEBUG] executeQuery: Built {len(data)} rows for table")
+
     if not progressDialog.wasCanceled():
         progressDialog.setLabelText("Building table...")
         if debug: print("[DEBUG] executeQuery: Updating progress dialog for table building")
         QGuiApplication.processEvents() # Pump event loop before table building
+
         mainWindow.mainTable.clear()
         buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
         progressDialog.setValue(100) # Complete
