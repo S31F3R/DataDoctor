@@ -1140,29 +1140,37 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     if not queryItems:
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
         return
+
     # Set up progress dialog
-    progressDialog = QProgressDialog("Loading data...", "Cancel", 0, 100, mainWindow)
-    progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
-    progressDialog.setMinimumDuration(1000)  # Show after 1s
-    progressDialog.setValue(0)
-    if debug: print("[DEBUG] executeQuery: Initialized progress dialog")
     queryItems.sort(key=lambda x: x[4])
+    progressDialog = QProgressDialog("Loading data...", "Cancel", 0 , 100, mainWindow)
+    progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
+    progressDialog.setAutoReset(False)
+    progressDialog.setAutoClose(False)
+    progressDialog.show() # Force immediate display
+    progressDialog.setValue(0)
+    if debug: print("[DEBUG] executeQuery: Initialized and showed progress dialog")
     firstInterval = queryItems[0][1]
     firstDb = queryItems[0][2]
+
     if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
         firstInterval = 'INSTANT:60'
     elif firstInterval == 'INSTANT' and firstDb == 'USGS-NWIS':
         firstInterval = 'INSTANT:15'
     elif firstInterval == 'INSTANT' and firstDb == 'AQUARIUS':
         firstInterval = 'INSTANT:1'
+
     timestamps = buildTimestamps(startDate, endDate, firstInterval)
+
     if not timestamps:
         progressDialog.cancel()
         QMessageBox.warning(mainWindow, "Date Error", "Invalid dates or interval.")
         return
+    
     defaultBlanks = [''] * len(timestamps)
     labelsDict = {} if isInternal else None
     groups = defaultdict(list)
+
     for dataID, interval, db, mrid, origIndex in queryItems:
         if interval == 'INSTANT':
             if db.startswith('USBR-'):
@@ -1171,12 +1179,15 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 interval = 'INSTANT:15'
             elif db == 'AQUARIUS':
                 interval = 'INSTANT:1'
+
         groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
         SDID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
         groups[groupKey].append((origIndex, dataID, SDID))
+
     # Threading setup
-    maxDbThreads = 3  # One thread per unique database type (AQUARIUS, USBR, USGS)
-    resultQueue = queue.Queue()  # Thread-safe queue for results
+    maxDbThreads = 6 # One thread per unique database type (AQUARIUS, USBR, USGS)
+    resultQueue = queue.Queue() # Thread-safe queue for results
+
     def queryGroup(groupKey, groupItems, threadId):
         """Process a group of items in a single thread."""
         if debug: print(f"[DEBUG] Thread {threadId} processing group {groupKey} with {len(groupItems)} items")
@@ -1184,6 +1195,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         SDIDs = [item[2] for item in groupItems]
         groupResult = {}
         groupLabels = {} if db == 'AQUARIUS' else None
+
         try:
             if db.startswith('USBR-'):
                 svr = db.split('-')[1].lower()
@@ -1210,77 +1222,102 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     groupResult[dataID] = values
                 else:
                     groupResult[dataID] = defaultBlanks
+
             if debug: print(f"[DEBUG] Thread {threadId} completed group {groupKey} with {len(groupResult)} items")
+
         except Exception as e:
             QMessageBox.warning(mainWindow, "Query Error", f"Query failed for group {db} in thread {threadId}: {e}")
             if debug: print(f"[DEBUG] Thread {threadId} failed for group {groupKey}: {e}")
+
         resultQueue.put((groupKey, groupResult, groupLabels))
+
     # Start threads
     threads = []
-    numThreads = min(maxDbThreads, len(groups))  # One thread per group, up to maxDbThreads
+    numThreads = min(maxDbThreads, len(groups)) # One thread per group, up to maxDbThreads
     if debug: print(f"[DEBUG] Starting {numThreads} threads for {len(groups)} groups")
+
     for i, groupKey in enumerate(groups.keys()):
         t = threading.Thread(target=queryGroup, args=(groupKey, groups[groupKey], i))
         threads.append(t)
         t.start()
         if debug: print(f"[DEBUG] Started thread {i} for group {groupKey}")
+
     # Wait for threads with timeout and update progress
-    timeoutSeconds = 300  # 5 minutes
-    progressPerThread = 90 // max(1, numThreads)  # Allocate 90% for queries
+    timeoutSeconds = 300 # 5 minutes
+    progressPerThread = 90 // max(1, numThreads) # Allocate 90% for queries
+
     for t in threads:
         t.join(timeout=timeoutSeconds)
         threadId = threads.index(t)
+
         if t.is_alive():
             if debug: print(f"[DEBUG] Thread {threadId} timed out after {timeoutSeconds} seconds")
             print(f"[WARN] Query for group timed out after {timeoutSeconds} seconds; some data may be missing")
         else:
             if debug: print(f"[DEBUG] Thread {threadId} joined")
+
         if not progressDialog.wasCanceled():
             progressDialog.setValue(progressDialog.value() + progressPerThread)
+
+        QGuiApplication.processEvents() # Pump event loop for dialog updates
+
     if progressDialog.wasCanceled():
         if debug: print("[DEBUG] executeQuery: User canceled via progress dialog")
         progressDialog.cancel()
         return
+    
     # Combine results
     valueDict = {}
+
     for _ in range(len(groups)):
         try:
             groupKey, groupResult, groupLabels = resultQueue.get_nowait()
             valueDict.update(groupResult)
+
             if groupLabels and labelsDict is not None:
                 labelsDict.update(groupLabels)
             if debug: print(f"[DEBUG] Collected results for group {groupKey} with {len(groupResult)} items")
         except queue.Empty:
             if debug: print("[DEBUG] No more results in queue")
             break
+
     # Ensure all dataIDs are in valueDict
     for dataID, _, _, _, _ in queryItems:
         if dataID not in valueDict:
             valueDict[dataID] = defaultBlanks
             if debug: print(f"[DEBUG] Added empty result for dataID {dataID}")
+
     originalDataIds = [item[0] for item in queryItems]
     originalIntervals = [item[1] for item in queryItems]
     databases = [item[2] for item in queryItems]
     lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
     data = []
+
     for r in range(len(timestamps)):
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
+
     if not progressDialog.wasCanceled():
         progressDialog.setLabelText("Building table...")
         if debug: print("[DEBUG] executeQuery: Updating progress dialog for table building")
+        QGuiApplication.processEvents() # Pump event loop before table building
         mainWindow.mainTable.clear()
         buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
-        progressDialog.setValue(100)  # Complete
+        progressDialog.setValue(100) # Complete
         if debug: print("[DEBUG] executeQuery: Table built, progress dialog completed")
+        QGuiApplication.processEvents() # Pump event loop after table building
+
     if progressDialog.wasCanceled():
         if debug: print("[DEBUG] executeQuery: User canceled during table building")
         progressDialog.cancel()
         return
+    
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
+
     if debug: print("[DEBUG] Query executed and table updated.")
-    progressDialog.cancel()  # Close dialog
+    progressDialog.cancel() # Close dialog
+    QGuiApplication.processEvents() # Ensure cleanup renders
 
 def getUtcOffsetInt(utcOffsetStr):
     """Extract UTC offset as float from full string (e.g., 'UTC-09:30 | Marquesas Islands' -> -9.5)."""
