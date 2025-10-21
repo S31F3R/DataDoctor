@@ -1214,9 +1214,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             groupLabels = {} if db == 'AQUARIUS' else None
 
             try:
-                if debug: print(f"[DEBUG] QueryWorker: Emitting 20% for {db} start")
-                self.signals.progressSignal.emit(20, f"Starting {db} query...") # Start progress
-
                 if db.startswith('USBR-'):
                     svr = db.split('-')[1].lower()
                     table = 'M' if mrid != '0' else 'R'
@@ -1229,8 +1226,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 else:
                     if debug: print(f"[DEBUG] QueryWorker: Unknown db skipped: {db}")     
                     self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels))           
-                    return (groupKey, groupResult, groupLabels)
-                self.signals.progressSignal.emit(50, f"{db} API complete, processing data...") # Mid-progress
+                    return (groupKey, groupResult, groupLabels)          
 
                 for idx, (origIndex, dataID, SDID) in enumerate(self.groupItems):
                     if SDID in result:
@@ -1246,13 +1242,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     else:
                         groupResult[dataID] = defaultBlanks                
                 
-                if debug: print(f"[DEBUG] QueryWorker: Completed group {groupKey} with {len(groupResult)} items")
-                if debug: print(f"[DEBUG] QueryWorker: Emitting 80% for {db} merged")
-                self.signals.progressSignal.emit(80, f"{db} data merged") # End progress
+                if debug: print(f"[DEBUG] QueryWorker: Completed group {groupKey} with {len(groupResult)} items")          
             except Exception as e:
-                if debug: print(f"[DEBUG] QueryWorker: Failed for group {groupKey}: {e}")
-                if debug: print(f"[DEBUG] QueryWorker: Emitting 0% for {db} failed")
-                self.signals.progressSignal.emit(0, f"{db} query failed") # Error progress
+                if debug: print(f"[DEBUG] QueryWorker: Failed for group {groupKey}: {e}")          
 
             self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels)) 
 
@@ -1262,38 +1254,30 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     for i, groupKey in enumerate(groups.keys()):
         signals = QueryWorkerSignals()
         worker = QueryWorker(groupKey, groups[groupKey], signals)
-        signals.resultSignal.connect(lambda result: resultQueue.put(result)) # Collect results
-        
-        def updateProgress(val, label):
-            if not progressDialog.wasCanceled():
-                progressDialog.setValue(val)
-                progressDialog.setLabelText(label)
-                if debug: print(f"[DEBUG] executeQuery: Progress updated to {val}%: {label}")
-            
-            QApplication.processEvents()
-
-        signals.progressSignal.connect(updateProgress)
+        signals.resultSignal.connect(lambda result: resultQueue.put(result)) # Collect results  
         pool.start(worker)
         threadsStarted += 1
         if debug: print(f"[DEBUG] executeQuery: Started backgroundworker {i} for group {groupKey}")
 
         if not progressDialog.wasCanceled():
-            progressDialog.setValue(10 + (threadsStarted * 20)) # Coarse: 10% base + 20% per thread start
+            progressDialog.setValue(10) # Fix base after all workers start
+            if debug: print(f"[DEBUG] executeQuery: All workers started, progress at 10%")
         
         QApplication.processEvents() # Pump for dialog
 
-    # Non-blocking wait for pool with timer for responsivemess
+    # Wait for pool to finish with timeout, pumping events for dialog
     timeoutSeconds = 300 # 5 minutes
     startTime = time.time()
-    progressBase = 70 # Start dradual progress at 70% after workers start
+    progressBase = 10 # Start gradual progress at 10% after workers start
 
     while pool.activeThreadCount() > 0 and (time.time() - startTime) < timeoutSeconds:
-        time.sleep(0.1) # Brief sleep to avoid busy-wait
+        time.sleep(11) # SLeep is to reduce CPU, pump every second
         elapsed = time.time() - startTime
 
         if not progressDialog.wasCanceled():
             progress = progressBase + int((elapsed / timeoutSeconds) * 20) # Gradual 70-9-%
-            progressDialog.setValue(min(progress, 89)) # Cap at 89% until done
+            progressDialog.setValue(min(progress, 69)) # Cap at 69% until done
+            progressDialog.setLabelText(f"Processing queries... ({int(elapsed)}s)")
 
         QApplication.processEvents() # Pump for dialog updates and responsiveness
 
@@ -1308,6 +1292,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
     if not progressDialog.wasCanceled():            
         progressDialog.setValue(90) # Queries complete
+        progressDialog.setLabelText("Queries commplete, merging data...")
         if debug: print("[DEBUG] executeQUery: Queries complete, progress at 90%")
 
     QApplication.processEvents() # Pump for responsiveness
@@ -1328,7 +1313,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             if debug: print(f"[DEBUG] executeQuery: Collected results for group {groupKey} with {len(groupResult)} items")
 
             if not progressDialog.wasCanceled():
-                progressDialog.setValue(90 + (collected * 3)) # Gradual 90-99% during merging
+                progressDialog.setValue(70 + (collected * 10)) # Gradual 70-90% during merging
 
             QGuiApplication.processEvents() # Pump for dialog responsiveness
         except queue.Empty:

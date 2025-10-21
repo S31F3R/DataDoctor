@@ -100,36 +100,27 @@ def apiRead(dataIDs, startDate, endDate, interval):
     user = None
     password = None
 
-    # Calculate total points (approximate to avoid full list for large ranges)
-    totalDuration = endDateTime - startDateTime
-
-    if interval == 'HOUR':
-        delta = timedelta(hours=1)
-    elif interval.startswith('INSTANT:'):
-        minutes = int(interval.split(':')[1])
-        delta = timedelta(minutes=minutes)
-    elif interval == 'DAY':
-        delta = timedelta(days=1)
-    else:
-        print(f"[ERROR] Unsupported interval: {interval}")
-        return {uid: {'data': [], 'label': uid} for uid in dataIDs}
-    totalPoints = int(totalDuration.total_seconds() / delta.total_seconds()) + 1
-
-    numChunks = (totalPoints + queryLimit - 1) // queryLimit  # Ceiling division
-    if Logic.debug: print(f"[DEBUG] Estimated {totalPoints} points, splitting into {numChunks} chunks of ~{queryLimit} points each")
+    # Get full timestams for exact chunking
+    timestamps = Logic.buildTimestamps(startDate, endDate, interval)
+    totalPoints = len(timestamps)
+    numChunks = (totalPoints + queryLimit - 1) // queryLimit # Ceiling division
+    if Logic.debug: print(f"[DEBUG] Generated {totalPoints} timestamps, splitting into {numChunks} chunks of ~{queryLimit} points each")
 
     # Generate sub-ranges
-    subRanges = []
-    chunkDuration = totalDuration / numChunks
+    subRanges = []    
 
     for i in range(numChunks):
-        subStart = startDateTime + i * chunkDuration
-        subEnd = subStart + chunkDuration if i < numChunks - 1 else endDateTime
-
-        # Format for API
-        subStartStr = subStart.strftime('%Y-%m-%d %H:%M')
-        subEndStr = subEnd.strftime('%Y-%m-%d %H:%M')
-        subRanges.append((subStartStr, subEndStr))
+        chunkStartIdx = i * queryLimit
+        chunkEndIdx = min(chunkStartIdx + queryLimit, totalPoints)
+        chunkTimestamps = timestamps[chunkStartIdx:chunkEndIdx]
+        
+        if chunkTimestamps:
+            # Format for API
+            subStart = Logic.datetime.strptime(chunkTimestamps[0], '%Y-%m-%d %H:%M:00')
+            subEnd = Logic.datetime.strptime(chunkTimestamps[-1], '%Y-%m-%d %H:%M:00') + timedelta(minutes=1) # +1 min for inclusive end
+            subStartStr = subStart.strftime('%Y-%m-%d %H:%M')
+            subEndStr = subEnd.strftime('%Y-%m-%d %H:%M')
+            subRanges.append((subStartStr, subEndStr))
 
     if Logic.debug: print(f"[DEBUG] Generated {len(subRanges)} sub-ranges: {[(s, e) for s, e in subRanges[:3]]}")
 
