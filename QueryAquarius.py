@@ -100,26 +100,36 @@ def apiRead(dataIDs, startDate, endDate, interval):
     user = None
     password = None
 
-    # Get full timestams for exact chunking
-    timestamps = Logic.buildTimestamps(startDate, endDate, interval)
-    totalPoints = len(timestamps)
-    numChunks = (totalPoints + queryLimit - 1) // queryLimit # Ceiling division
-    if Logic.debug: print(f"[DEBUG] Generated {totalPoints} timestamps, splitting into {numChunks} chunks of ~{queryLimit} points each")
+    # Calculate total points (approximate to avoid full list for large ranges)
+    totalDuration = endDateTime - startDateTime
+
+    if interval == 'HOUR':
+        delta = timedelta(hours=1)
+    elif interval.startswith('INSTANT:'):
+        minutes = int(interval.split(':')[1])
+        delta = timedelta(minutes=minutes)
+    elif interval == 'DAY':
+        delta = timedelta(days=1)
+    else:
+        print(f"[ERROR] Unsupported interval: {interval}")
+        return {uid: {'data': [], 'label': uid} for uid in dataIDs}
+    totalPoints = int(totalDuration.total_seconds() / delta.total_seconds()) + 1
+
+    numChunks = (totalPoints + queryLimit - 1) // queryLimit  # Ceiling division
+    if Logic.debug: print(f"[DEBUG] Estimated {totalPoints} points, splitting into {numChunks} chunks of ~{queryLimit} points each")
 
     # Generate sub-ranges
-    subRanges = []    
+    subRanges = []
+    chunkDuration = totalDuration / numChunks
 
     for i in range(numChunks):
-        chunkStartIdx = i * queryLimit
-        chunkEndIdx = min(chunkStartIdx + queryLimit, totalPoints)
-        chunkTimestamps = timestamps[chunkStartIdx:chunkEndIdx]
-        
-        if chunkTimestamps:            
-            subStart = Logic.datetime.strptime(chunkTimestamps[0], '%m/%d/%y %H:%M:00')
-            subEnd = Logic.datetime.strptime(chunkTimestamps[-1], '%m/%d/%y %H:%M:00') + timedelta(minutes=1) # +1 min for inclusive end
-            subStartStr = subStart.strftime('%Y-%m-%d %H:%M')
-            subEndStr = subEnd.strftime('%Y-%m-%d %H:%M')
-            subRanges.append((subStartStr, subEndStr))
+        subStart = startDateTime + i * chunkDuration
+        subEnd = subStart + chunkDuration if i < numChunks - 1 else endDateTime
+
+        # Format for API
+        subStartStr = subStart.strftime('%Y-%m-%d %H:%M')
+        subEndStr = subEnd.strftime('%Y-%m-%d %H:%M')
+        subRanges.append((subStartStr, subEndStr))
 
     if Logic.debug: print(f"[DEBUG] Generated {len(subRanges)} sub-ranges: {[(s, e) for s, e in subRanges[:3]]}")
 
@@ -179,13 +189,11 @@ def apiRead(dataIDs, startDate, endDate, interval):
             parseDate[1] = parseDate[1].split('.')[0]
 
             # Format to standard
-            dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}') + timedelta(hours=offsetHours) 
+            dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}')
             formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
             value = point['Value'].get('Numeric', None)
-
             if value is not None:
                 outputData.append(f'{formattedTs},{value}')
-                
         resultQueue.put((uid, {'data': outputData, 'label': fullLabel}))
         if Logic.debug: print(f"[DEBUG] Thread {threadId} completed task for UID {uid} with {len(outputData)} points")
 
