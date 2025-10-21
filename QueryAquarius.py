@@ -66,7 +66,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
     # Authenticate session with fallback for SSL verification
     authData = {'Username': user, 'EncryptedPassword': password}
     certPath = Logic.resourcePath('certs/aquarius.pem')
-    verify_mode = True # Start with system trust store
+    verifyMode = True # Start with system trust store
 
     for attempt in ['system', 'custom_cert', 'unverified']:
         try:
@@ -74,17 +74,17 @@ def apiRead(dataIDs, startDate, endDate, interval):
                 if Logic.debug: print("[DEBUG] No certificate found at '{}', skipping to unverified.".format(certPath))
                 continue
 
-            verify_mode = certPath if attempt == 'custom_cert' else False if attempt == 'unverified' else True
-            authResponse = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=authData, verify=verify_mode)
+            verifyMode = certPath if attempt == 'custom_cert' else False if attempt == 'unverified' else True
+            authResponse = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=authData, verify=verifyMode)
             authResponse.raise_for_status()
 
-            if Logic.debug: print(f"[DEBUG] Authentication succeeded with verify={verify_mode}")
+            if Logic.debug: print(f"[DEBUG] Authentication succeeded with verify={verifyMode}")
             if attempt == 'unverified' and Logic.debug:
                 print("[WARN] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.")
             break
 
         except requests.exceptions.SSLError as e:
-            if Logic.debug: print(f"[DEBUG] SSL error with verify={verify_mode}: {e}")
+            if Logic.debug: print(f"[DEBUG] SSL error with verify={verifyMode}: {e}")
             continue
         except requests.exceptions.RequestException as e:
             print(f"[ERROR] Authentication failed: {e}")
@@ -165,7 +165,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
         # Query the data
         response = requests.get(
             f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={subStartStr}&QueryTo={subEndStr}&utcOffset={offsetHours}&GetParts=PointsOnly&format=json',
-            headers=headers, verify=verify_mode
+            headers=headers, verify=verifyMode
         )
         try:
             readFile = json.loads(response.content)
