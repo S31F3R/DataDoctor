@@ -30,24 +30,23 @@ qt.multimedia.ffmpeg: Using Qt multimedia with FFmpeg version 7.1.1 LGPL version
 [DEBUG] Stored last query as internal.
 [DEBUG] executeQuery: isInternal=True, items=6
 [DEBUG] executeQuery: Initialized and showed progress dialog
-[DEBUG] buildTimestamps called with start: 2025-10-20 01:00, end: 2025-10-21 10:19, interval: HOUR
+[DEBUG] buildTimestamps called with start: 2025-10-20 01:00, end: 2025-10-21 10:38, interval: HOUR
 [DEBUG] Generated 34 timestamps, sample first 3: ['10/20/25 01:00:00', '10/20/25 02:00:00', '10/20/25 03:00:00']
 [DEBUG] executeQuery: Starting 2 threads for 2 groups in background
 [DEBUG] executeQuery: Started backgroundworker 0 for group ('AQUARIUS', None, 'HOUR')
 [DEBUG] QueryWorker: Emitting 20% for AQUARIUS start
-[DEBUG] QueryAquarius.apiRead called with dataIDs: ['93a07e0e8c7e42cfa691fe97eb5de3ea', 'c56ebd0f03ca491cb6577167d451c2f6', 'b9af5c7f873749c090f164b8d7899733'], interval: HOUR, start: 2025-10-20 01:00, end: 2025-10-21 10:19
+[DEBUG] QueryAquarius.apiRead called with dataIDs: ['93a07e0e8c7e42cfa691fe97eb5de3ea', 'c56ebd0f03ca491cb6577167d451c2f6', 'b9af5c7f873749c090f164b8d7899733'], interval: HOUR, start: 2025-10-20 01:00, end: 2025-10-21 10:38
 [DEBUG] getUtcOffsetInt: Parsed 'UTC-07:00 | Mountain Time (US & Canada)/Arizona' to -7.0 hours
 [DEBUG] executeQuery: Started backgroundworker 1 for group ('USBR-LCHDB', '0', 'HOUR')
 [DEBUG] executeQuery: Progress updated to 20%: Starting AQUARIUS query...
 [DEBUG] QueryWorker: Emitting 20% for USBR-LCHDB start
-[DEBUG] QueryUSBR.api called with svr: lchdb, SDIDs: ['5013', '5014', '5012'], interval: HOUR, start: 2025-10-20 01:00, end: 2025-10-21 10:19, mrid: 0, table='R'
-[DEBUG] buildTimestamps called with start: 2025-10-20 01:00, end: 2025-10-21 10:19, interval: HOUR
+[DEBUG] QueryUSBR.api called with svr: lchdb, SDIDs: ['5013', '5014', '5012'], interval: HOUR, start: 2025-10-20 01:00, end: 2025-10-21 10:38, mrid: 0, table='R'
+[DEBUG] buildTimestamps called with start: 2025-10-20 01:00, end: 2025-10-21 10:38, interval: HOUR
 [DEBUG] Generated 34 timestamps, sample first 3: ['10/20/25 01:00:00', '10/20/25 02:00:00', '10/20/25 03:00:00']
-[DEBUG] Fetching USBR URL: https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr=lchdb&SDI=5013,5014,5012&tstp=HR&t1=2025-10-20T00:00&t2=2025-10-21T10:19&table=R&mrid=0&format=json
+[DEBUG] Fetching USBR URL: https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr=lchdb&SDI=5013,5014,5012&tstp=HR&t1=2025-10-20T00:00&t2=2025-10-21T10:38&table=R&mrid=0&format=json
+[DEBUG] executeQuery: Progress updated to 20%: Starting USBR-LCHDB query...
 [DEBUG] SSL error with verify=True: HTTPSConnectionPool(host='ibrmazap013.bor.doi.net', port=443): Max retries exceeded with url: /AQUARIUS/Provisioning/v1/session (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1032)')))
 [DEBUG] No certificate found at 'C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\certs\aquarius.pem', skipping to unverified.
-c:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\env\Lib\site-packages\urllib3\connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ibrmazap013.bor.doi.net'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
-  warnings.warn(
 [DEBUG] Fetched 3 series entries.
 [DEBUG] Found series for '5013': 35 points.
 [DEBUG] Found series for '5014': 35 points.
@@ -59,28 +58,30 @@ c:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python
 [DEBUG] Removed 1 extra/mismatched rows from '5014': ts ['10/21/25 11:00:00']
 [DEBUG] Post-gapCheck len=34, sample first 3: ['10/20/25 01:00:00,0', '10/20/25 02:00:00,0', '10/20/25 03:00:00,0']
 [DEBUG] gapCheck for dataID '5012': timestamps len=34, data len=35
-[DEBUG] Removed 1 extra/mismatched rows from '5012': ts ['10/21/25 11:00:00']
+[DEBUG] Removed 1 extra/mismatched rows from '5012': ts ['10/21/25 11:00:00'][DEBUG] executeQuery: Progress updated to 50%: USBR-LCHDB API complete, processing data...
 [DEBUG] Post-gapCheck len=34, sample first 3: ['10/20/25 01:00:00,2.5897334426', '10/20/25 02:00:00,2.3265447763', '10/20/25 03:00:00,2.5527825950']
 [DEBUG] QueryWorker: Completed group ('USBR-LCHDB', '0', 'HOUR') with 3 items
 [DEBUG] QueryWorker: Emitting 80% for USBR-LCHDB merged
+[DEBUG] executeQuery: Progress updated to 80%: USBR-LCHDB data merged
 [DEBUG] Authentication succeeded with verify=False
 [WARN] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.
 [DEBUG] Estimated 35 points, splitting into 1 chunks of ~500 points each
-[DEBUG] Generated 1 sub-ranges: [('2025-10-20 07:00', '2025-10-21 17:20')]
+[DEBUG] Generated 1 sub-ranges: [('2025-10-20 07:00', '2025-10-21 17:39')]
 [DEBUG] Created 3 tasks for 3 UIDs across 1 sub-ranges, using 3 threads
-[DEBUG] Thread 0 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-10-20 07:00 to 2025-10-21 17:20[DEBUG] Started thread 0 for task processing
-[DEBUG] Thread 1 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-10-20 07:00 to 2025-10-21 17:20[DEBUG] Started thread 1 for task processing
-[DEBUG] Thread 2 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-10-20 07:00 to 2025-10-21 17:20[DEBUG] Started thread 2 for task processing
-[DEBUG] Thread 0 fetched 35 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-10-20 07:00 to 2025-10-21 17:20
+[DEBUG] Thread 0 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-10-20 07:00 to 2025-10-21 17:39[DEBUG] Started thread 0 for task processing
+[DEBUG] Thread 1 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-10-20 07:00 to 2025-10-21 17:39[DEBUG] Started thread 1 for task processing
+[DEBUG] Thread 2 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-10-20 07:00 to 2025-10-21 17:39[DEBUG] Started thread 2 for task processing
+[DEBUG] Thread 1 fetched 35 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-10-20 07:00 to 2025-10-21 17:39
+[DEBUG] Thread 1 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 35 points
+[DEBUG] Thread 1 found no more tasks
+[DEBUG] Thread 2 fetched 35 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-10-20 07:00 to 2025-10-21 17:39
+[DEBUG] Thread 2 completed task for UID b9af5c7f873749c090f164b8d7899733 with 35 points
+[DEBUG] Thread 2 found no more tasks
+[DEBUG] Thread 0 fetched 35 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-10-20 07:00 to 2025-10-21 17:39
 [DEBUG] Thread 0 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 35 points
 [DEBUG] Thread 0 found no more tasks
 [DEBUG] Thread 0 joined
-[DEBUG] Thread 1 fetched 35 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-10-20 07:00 to 2025-10-21 17:20
-[DEBUG] Thread 1 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 35 points
-[DEBUG] Thread 1 found no more tasks
-[DEBUG] Thread 2 fetched 35 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-10-20 07:00 to 2025-10-21 17:20
-[DEBUG] Thread 2 completed task for UID b9af5c7f873749c090f164b8d7899733 with 35 points
-[DEBUG] Thread 1 joined[DEBUG] Thread 2 found no more tasks
+[DEBUG] Thread 1 joined
 [DEBUG] Thread 2 joined
 [DEBUG] Combined results from 3 tasks with 3 UIDs
 [DEBUG] Returning result dict with 3 UIDs
@@ -95,11 +96,9 @@ c:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python
 [DEBUG] Post-gapCheck len=34, sample first 3: ['10/20/25 01:00:00,2.5897334426', '10/20/25 02:00:00,2.3265447763', '10/20/25 03:00:00,2.552782595']
 [DEBUG] QueryWorker: Completed group ('USBR-LCHDB', '0', 'HOUR') with 3 items
 [DEBUG] QueryWorker: Emitting 80% for AQUARIUS merged
-[DEBUG] executeQuery: Progress updated to 20%: Starting USBR-LCHDB query...
-[DEBUG] executeQuery: Progress updated to 50%: USBR-LCHDB API complete, processing data...
-[DEBUG] executeQuery: Progress updated to 80%: USBR-LCHDB data merged
 [DEBUG] executeQuery: Progress updated to 50%: AQUARIUS API complete, processing data...
 [DEBUG] executeQuery: Progress updated to 80%: AQUARIUS data merged
+[DEBUG] executeQUery: Queries complete, progress at 90%
 [DEBUG] executeQuery: Collected results for group ('USBR-LCHDB', '0', 'HOUR') with 3 items
 [DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, 'HOUR') with 3 items
 [DEBUG] executeQuery: Queue empty, waiting for more results
