@@ -1,3 +1,6 @@
+-Progress dialog stays on 10% if only 1 database is queried
+
+
 ####### HOUSE KEEPING #######
 -Logging and debugging, best practices
     -Any current [DEBUG] after an exception should be a ERROR and logged, no matter if DEBUG = true
