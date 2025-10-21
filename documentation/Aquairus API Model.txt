@@ -1,0 +1,77 @@
+TimeSeriesDataServiceResponse {
+UniqueId (string, optional): Unique id ,
+Parameter (string, optional): Parameter ,
+Label (string, optional): Label ,
+LocationIdentifier (string, optional): Location identifier ,
+NumPoints (integer, optional): Num points ,
+Unit (string, optional): Unit ,
+Approvals (Array[Approval], optional): Approvals ,
+Qualifiers (Array[Qualifier], optional): Qualifiers ,
+Methods (Array[Method], optional): Methods ,
+Grades (Array[Grade], optional): Grades ,
+GapTolerances (Array[GapTolerance], optional): Gap tolerances ,
+InterpolationTypes (Array[InterpolationType], optional): Interpolation types ,
+Notes (Array[Note], optional): Notes ,
+TimeRange (StatisticalTimeRange, optional): Time range ,
+Points (Array[TimeSeriesPoint], optional): Points ,
+ResponseVersion (integer, optional): Response version ,
+ResponseTime (string, optional): Response time ,
+Summary (string, optional): Summary
+}
+Approval {
+ApprovalLevel (integer, optional): Approval level ,
+DateAppliedUtc (string, optional): Date applied utc ,
+User (string, optional): User ,
+LevelDescription (string, optional): Level description ,
+Comment (string, optional): Comment ,
+StartTime (string, optional): Start time ,
+EndTime (string, optional): End time
+}
+Qualifier {
+Identifier (string, optional): Identifier ,
+DateApplied (string, optional): Date applied ,
+User (string, optional): User ,
+StartTime (string, optional): Start time ,
+EndTime (string, optional): End time
+}
+Method {
+MethodCode (string, optional): Method code ,
+StartTime (string, optional): Start time ,
+EndTime (string, optional): End time
+}
+Grade {
+GradeCode (string, optional): Grade code ,
+StartTime (string, optional): Start time ,
+EndTime (string, optional): End time
+}
+GapTolerance {
+ToleranceInMinutes (number, optional): Tolerance in minutes ,
+StartTime (string, optional): Start time ,
+EndTime (string, optional): End time
+}
+InterpolationType {
+Type (string, optional): Type ,
+StartTime (string, optional): Start time ,
+EndTime (string, optional): End time
+}
+Note {
+NoteText (string, optional): Note text ,
+StartTime (string, optional): Start time ,
+EndTime (string, optional): End time
+}
+StatisticalTimeRange {
+StartTime (StatisticalDateTimeOffset, optional): Start time ,
+EndTime (StatisticalDateTimeOffset, optional): End time
+}
+TimeSeriesPoint {
+Timestamp (StatisticalDateTimeOffset, optional): Timestamp ,
+Value (DoubleWithDisplay, optional): Value
+}
+StatisticalDateTimeOffset {
+DateTimeOffset (string, optional): Date time offset ,
+RepresentsEndOfTimePeriod (boolean, optional): Represents end of time period
+}
+DoubleWithDisplay {
+Numeric (number, optional): Numeric ,
+Display (string, optional): Display
+}
