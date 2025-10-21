@@ -1284,22 +1284,33 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
     # Non-blocking wait for pool with timer for responsivemess
     timeoutSeconds = 300 # 5 minutes
-    pool.waitForDone(timeoutSeconds * 1000) # ms
+    startTime = time.time()
+    progressBase = 70 # Start dradual progress at 70% after workers start
 
-    if pool.activeThreadCount() > 0:
+    while pool.activeThreadCount() > 0 and (time.time() - startTime) < timeoutSeconds:
+        time.sleep(0.1) # Brief sleep to avoid busy-wait
+        elapsed = time.time() - startTime
+
+        if not progressDialog.wasCanceled():
+            progress = progressBase + int((elapsed / timeoutSeconds) * 20) # Gradual 70-9-%
+            progressDialog.setValue(min(progress, 89)) # Cap at 89% until done
+
+        QApplication.processEvents() # Pump for dialog updates and responsiveness
+
+    if (time.time() - startTime) >= timeoutSeconds:
         if debug: print(f"[DEBUG] executeQuery: Pool timed out after {timeoutSeconds} seconds")
-        print(f"[WARN] Some queries timed out after {timeoutSeconds} seconds; partial data may be missing")  
-
-        if progressDialog.wasCanceled():            
-            if debug: print("[DEBUG] executeQUery: User canceled via progress dialog")
-            progressDialog.cancel()
-            return     
+        print(f"[WARN] Some queries timed out after {timeoutSeconds} seconds; partial data may be mmissing")
     
-        if not progressDialog.wasCanceled():            
-            progressDialog.setValue(90) # Queries complete
-            if debug: print("[DEBUG] executeQUery: Queries complete, progress at 90%")
+    if progressDialog.wasCanceled():            
+        if debug: print("[DEBUG] executeQUery: User canceled via progress dialog")
+        progressDialog.cancel()
+        return     
 
-        QApplication.processEvents() # Pump for responsiveness
+    if not progressDialog.wasCanceled():            
+        progressDialog.setValue(90) # Queries complete
+        if debug: print("[DEBUG] executeQUery: Queries complete, progress at 90%")
+
+    QApplication.processEvents() # Pump for responsiveness
     
     # Combine results
     valueDict = {}
