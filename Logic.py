@@ -174,46 +174,37 @@ def combineParameters(data, newData):
     return data
 
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None):
+    if debug: print("[DEBUG] buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
     table.clear()
-
     if not data:
         if debug: print("[DEBUG] buildTable: No data to display.")
         return
-
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
-
     processedHeaders = []
-
     for i, h in enumerate(buildHeader):
         dataId = h.strip()
         intervalStr = intervals[i].upper()
-
         if intervalStr.startswith('INSTANT:'):
             intervalStr = 'INSTANT'
-
         database = databases[i] if databases and i < len(databases) else None
         dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataId)
         mrid = None
-
         if database and database.startswith('USBR-') and '-' in dataId:
             parts = dataId.rsplit('-', 1)
             dataId = parts[0]
             mrid = parts[1] if len(parts) > 1 else '0'
-
         if dictRow != -1:
             siteItem = dataDictionaryTable.item(dictRow, 1)
             baseLabel = siteItem.text().strip() if siteItem else dataId
-
             if database == 'USGS-NWIS':
                 parts = dataId.split('-')
-
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                     fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
                     if debug: print(f"[DEBUG] buildTable: USGS in dict, header {i}: {fullLabel}")
                 else:
                     fullLabel = f"{baseLabel} \n{intervalStr}"
-                    if debug: print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")                    
+                    if debug: print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
@@ -231,7 +222,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         else:
             if database == 'USGS-NWIS':
                 parts = dataId.split('-')
-
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                     fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
                     if debug: print(f"[DEBUG] buildTable: Parsed USGS header {i}: {fullLabel}")
@@ -252,17 +242,23 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 else:
                     fullLabel = f"{dataId} \n{intervalStr}"
                     if debug: print(f"[DEBUG] buildTable: USBR not in dict, header {i}: {fullLabel}")
-
         processedHeaders.append(fullLabel)
-
     headers = processedHeaders
     skipDateCol = dataDictionaryTable is not None
     numCols = len(headers)
     numRows = len(data)
+    # Warn for large datasets
+    if numRows > 10000:
+        reply = QMessageBox.warning(None, "Large Dataset Warning",
+                                   f"Query returned {numRows} rows, which may slow down the UI. Consider a smaller date range or coarser interval (e.g., HOUR instead of INSTANT:1). Continue?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.No:
+            if debug: print(f"[DEBUG] buildTable: User canceled due to large dataset ({numRows} rows)")
+            return
+    if debug: print(f"[DEBUG] buildTable: Setting table to {numRows} rows, {numCols} columns")
     table.setRowCount(numRows)
     table.setColumnCount(numCols)
     table.setHorizontalHeaderLabels(headers)
-
     if dataDictionaryTable:
         timestamps = [row.split(',')[0].strip() for row in data]
         table.setVerticalHeaderLabels(timestamps)
@@ -272,41 +268,18 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         vHeader.setVisible(True)
     else:
         table.verticalHeader().setVisible(False)
-
     config = loadConfig()
     rawData = config.get('rawData', False)
     qaqcToggle = config.get('qaqc', True)
-
-    for rowIdx, rowStr in enumerate(data):
-        rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
-
-        for colIdx in range(min(numCols, len(rowData))):
-            cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
-            item = QTableWidgetItem(cellText)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-
-            if not rawData and cellText.strip():
-                item.setText(valuePrecision(cellText))
-            table.setItem(rowIdx, colIdx, item)
-
-    table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
+    # Pre-compute column widths using raw data (before valuePrecision)
     font = table.font()
     metrics = QFontMetrics(font)
-    header = table.horizontalHeader()
-    vHeader = table.verticalHeader()
-    table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-    table.setMinimumSize(0, 0)
-    table.resize(table.size())
-    table.update()
-    header.setStretchLastSection(False)    
-    if debug: print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
-
-    if dataDictionaryTable:
-        maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
-        vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
+    columnWidths = []
+    sampleRows = min(1000, numRows)  # Sample up to 1000 rows
+    if debug: print(f"[DEBUG] buildTable: Sampling {sampleRows} rows for column widths")
     for c in range(numCols):
-        cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data]
-        maxCellWidth = max(metrics.horizontalAdvance(val) for val in cellValues) if cellValues else 50
+        cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data[:sampleRows]]
+        maxCellWidth = max(metrics.horizontalAdvance(val) for val in cellValues if val) if cellValues else 50
         headerLines = headers[c].split('\n')
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
         if debug: print(f"[DEBUG] buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
@@ -316,51 +289,60 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             finalWidth = maxCellWidth + paddingIncrease + 10
         else:
             finalWidth += 20
-        table.setColumnWidth(c, finalWidth)
-
+        columnWidths.append(finalWidth)
+    # Disable updates for faster population
+    table.setUpdatesEnabled(False)
+    if debug: print("[DEBUG] buildTable: Disabled table updates for population")
+    for rowIdx, rowStr in enumerate(data):
+        rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
+        for colIdx in range(min(numCols, len(rowData))):
+            cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
+            item = QTableWidgetItem(cellText)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            if not rawData and cellText.strip():
+                item.setText(valuePrecision(cellText))
+            table.setItem(rowIdx, colIdx, item)
+    table.setUpdatesEnabled(True)
+    if debug: print("[DEBUG] buildTable: Re-enabled table updates after population corrects")
+    table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
+    header = table.horizontalHeader()
+    vHeader = table.verticalHeader()
+    table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+    table.setMinimumSize(0, 0)
+    table.update()
+    header.setStretchLastSection(False)
+    if debug: print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
+    if dataDictionaryTable:
+        maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
+        vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
+    # Apply pre-computed column widths
+    for c in range(numCols):
+        table.setColumnWidth(c, columnWidths[c])
+        if debug: print(f"[DEBUG] buildTable: Set column {c} width to {columnWidths[c]}")
+    # Use fixed row height based on font metrics
     rowHeight = metrics.height() + 10
     sampleItem = QTableWidgetItem("189.5140")
     sampleItem.setFont(font)
     sampleCellHeight = sampleItem.sizeHint().height()
-
     if sampleCellHeight <= 0:
         sampleCellHeight = metrics.height()
-
-    tallestCellHeight = 0
-
-    for r in range(numRows):
-        for c in range(numCols):
-            item = table.item(r, c)
-
-            if item and item.text().strip():
-                height = item.sizeHint().height()
-
-                if height > 0:
-                    tallestCellHeight = max(tallestCellHeight, height)
-    if tallestCellHeight == 0:
-        tallestCellHeight = metrics.height()
-
-    adjustedRowHeight = max(rowHeight, tallestCellHeight + 2)
-    if debug: print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Tallest cell height: {tallestCellHeight}, Adjusted row height: {adjustedRowHeight}")
-
+    adjustedRowHeight = max(rowHeight, sampleCellHeight + 2)
+    if debug: print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
     for r in range(numRows):
         table.setRowHeight(r, adjustedRowHeight)
-
-    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)    
+    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     table.update()
     table.horizontalScrollBar().setValue(0)
     visibleWidth = table.columnWidth(1) if numCols > 1 else 0
     if debug and numCols > 1: print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
     dataIds = buildHeader
-
     if qaqcToggle:
         qaqc(table, dataDictionaryTable, dataIds)
     else:
         for r in range(table.rowCount()):
             for c in range(table.columnCount()):
                 item = table.item(r, c)
-                
                 if item: item.setBackground(QColor(0, 0, 0, 0))
     
 def buildDataDictionary(table):
