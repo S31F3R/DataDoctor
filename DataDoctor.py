@@ -5,7 +5,7 @@ import os
 import json
 import keyring
 from keyring.backends.null import Keyring as NullKeyring # Safe fallback if needed
-from datetime import datetime
+#from datetime import datetime
 from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap 
 from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
                              QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox, QMenu)
 from PyQt6 import uic
 from PyQt6.QtMultimedia import QSoundEffect
-from collections import defaultdict
+#from collections import defaultdict
 
 # No backend forcing: Rely on keyring defaults (KWallet on KDE/Linux, Credential Manager on Windows, Keychain on macOS)
 

@@ -179,11 +179,13 @@ def apiRead(dataIDs, startDate, endDate, interval):
             parseDate[1] = parseDate[1].split('.')[0]
 
             # Format to standard
-            dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}')
+            dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}') + timedelta(hours=offsetHours) 
             formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
             value = point['Value'].get('Numeric', None)
+
             if value is not None:
                 outputData.append(f'{formattedTs},{value}')
+                
         resultQueue.put((uid, {'data': outputData, 'label': fullLabel}))
         if Logic.debug: print(f"[DEBUG] Thread {threadId} completed task for UID {uid} with {len(outputData)} points")
 
