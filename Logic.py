@@ -1164,10 +1164,10 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         firstInterval = 'INSTANT:1'
 
     offsetHours = getUtcOffsetInt(utcOffset) # Parse float offset
-    startDateTime = datetime.strptime(startDate, '%y-%m-%d %H:%M') - timedelta(hours=offsetHours)
-    endDateTime = datetime.strptime(endDate, '%y-%m-%d %H:%M') - timedelta(hours=offsetHours)
-    startDate = startDateTime.strftime('%y-%m-%d %H:%M')
-    endDate = endDateTime.strftime('%y-%m-%d %H:%M')
+    startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M') - timedelta(hours=offsetHours)
+    endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M') - timedelta(hours=offsetHours)
+    startDate = startDateTime.strftime('%Y-%m-%d %H:%M')
+    endDate = endDateTime.strftime('%Y-%m-%d %H:%M')
     timestamps = buildTimestamps(startDate, endDate, firstInterval)
 
     if not timestamps:
