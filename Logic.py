@@ -2,17 +2,18 @@ import os
 import sys
 import datetime
 import configparser
+import time
 import QueryUSBR
 import QueryUSGS
 import QueryAquarius
 import json
 import queue
-import threading
 from datetime import datetime, timedelta
-from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDir
+from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDir, QTimer
 from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont, QFontMetrics
 from PyQt6.QtWidgets import (QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget,
-                            QTreeView, QSplitter, QMessageBox, QSizePolicy, QHeaderView, QProgressDialog)
+                            QTreeView, QSplitter, QMessageBox, QSizePolicy, QHeaderView, QProgressDialog,
+                            QApplication)
                             
 from collections import defaultdict
 
@@ -1135,23 +1136,25 @@ def loadLastQuickLook(cbQuickLook):
 
 def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable):
     if debug: print("[DEBUG] executeQuery: isInternal={}, items={}".format(isInternal, len(queryItems)))
+    
     if isInternal:
         queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
     if not queryItems:
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
         return
 
-    # Set up progress dialog
-    queryItems.sort(key=lambda x: x[4])
+    # Set up progress dialog   
     progressDialog = QProgressDialog("Loading data...", "Cancel", 0 , 100, mainWindow)
     progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
     progressDialog.setAutoReset(False)
     progressDialog.setAutoClose(False)
+    progressDialog.setFixedSize(400, 100) # Lock size for messages, prevent resizing
     progressDialog.show() # Force immediate display
     progressDialog.setValue(0)
     if debug: print("[DEBUG] executeQuery: Initialized and showed progress dialog")
+    queryItems.sort(key=lambda x: x[4])
     firstInterval = queryItems[0][1]
-    firstDb = queryItems[0][2]
+    firstDb = queryItems[0][2]    
 
     if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
         firstInterval = 'INSTANT:60'
@@ -1185,101 +1188,143 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         groups[groupKey].append((origIndex, dataID, SDID))
 
     # Threading setup
-    maxDbThreads = 6 # One thread per unique database type (AQUARIUS, USBR, USGS)
+    pool = QThreadPool.globalInstance()
     resultQueue = queue.Queue() # Thread-safe queue for results
-
-    def queryGroup(groupKey, groupItems, threadId):
-        """Process a group of items in a single thread."""
-        if debug: print(f"[DEBUG] Thread {threadId} processing group {groupKey} with {len(groupItems)} items")
-        db, mrid, interval = groupKey
-        SDIDs = [item[2] for item in groupItems]
-        groupResult = {}
-        groupLabels = {} if db == 'AQUARIUS' else None
-
-        try:
-            if db.startswith('USBR-'):
-                svr = db.split('-')[1].lower()
-                table = 'M' if mrid != '0' else 'R'
-                apiInterval = interval
-                result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, apiInterval, mrid, table)
-            elif db == 'AQUARIUS' and isInternal:
-                result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
-            elif db == 'USGS-NWIS' and not isInternal:
-                result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
-            else:
-                if debug: print(f"[DEBUG] Thread {threadId}: Unknown db skipped: {db}")
-                resultQueue.put((groupKey, groupResult, groupLabels))
-                return
-            for idx, (origIndex, dataID, SDID) in enumerate(groupItems):
-                if SDID in result:
-                    if db == 'AQUARIUS':
-                        outputData = result[SDID]['data']
-                        groupLabels[dataID] = result[SDID].get('label', dataID)
-                    else:
-                        outputData = result[SDID]
-                    alignedData = gapCheck(timestamps, outputData, dataID)
-                    values = [line.split(',')[1] if line else '' for line in alignedData]
-                    groupResult[dataID] = values
-                else:
-                    groupResult[dataID] = defaultBlanks
-
-            if debug: print(f"[DEBUG] Thread {threadId} completed group {groupKey} with {len(groupResult)} items")
-
-        except Exception as e:
-            QMessageBox.warning(mainWindow, "Query Error", f"Query failed for group {db} in thread {threadId}: {e}")
-            if debug: print(f"[DEBUG] Thread {threadId} failed for group {groupKey}: {e}")
-
-        resultQueue.put((groupKey, groupResult, groupLabels))
-
-    # Start threads
-    threads = []
+    maxDbThreads = 6 # One thread per unique database type (AQUARIUS, USBR, USGS)
+    numGroups = len(groups)
     numThreads = min(maxDbThreads, len(groups)) # One thread per group, up to maxDbThreads
-    if debug: print(f"[DEBUG] Starting {numThreads} threads for {len(groups)} groups")
+    if debug: print(f"[DEBUG] executeQuery: Starting {numThreads} threads for {numGroups} groups in background")
+    
+    class QueryWorkerSignals(QObject):
+        progressSignal = pyqtSignal(int, str) # For dialog updates
+        resultSignal = pyqtSignal(tuple) # (groupKey, groupResult, groupLabels)        
+
+    # Define local QRunnable subclass for query groups
+    class QueryWorker(QRunnable):
+        def __init__(self, groupKey, groupItems, signals):
+            super().__init__()
+            self.groupKey = groupKey
+            self.groupItems = groupItems
+            self.signals = signals
+
+        def run(self):
+            db, mrid, interval = self.groupKey
+            SDIDs = [item[2] for item in self.groupItems]
+            groupResult = {}
+            groupLabels = {} if db == 'AQUARIUS' else None
+
+            try:
+                if debug: print(f"[DEBUG] QueryWorker: Emitting 20% for {db} start")
+                self.signals.progressSignal.emit(20, f"Starting {db} query...") # Start progress
+
+                if db.startswith('USBR-'):
+                    svr = db.split('-')[1].lower()
+                    table = 'M' if mrid != '0' else 'R'
+                    apiInterval = interval
+                    result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, apiInterval, mrid, table)
+                elif db == 'AQUARIUS' and isInternal:
+                    result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
+                elif db == 'USGS-NWIS' and not isInternal:
+                    result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
+                else:
+                    if debug: print(f"[DEBUG] QueryWorker: Unknown db skipped: {db}")     
+                    self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels))           
+                    return (groupKey, groupResult, groupLabels)
+                self.signals.progressSignal.emit(50, f"{db} API complete, processing data...") # Mid-progress
+
+                for idx, (origIndex, dataID, SDID) in enumerate(self.groupItems):
+                    if SDID in result:
+                        if db == 'AQUARIUS':
+                            outputData = result[SDID]['data']
+                            groupLabels[dataID] = result[SDID].get('label', dataID)
+                        else:
+                            outputData = result[SDID]
+
+                        alignedData = gapCheck(timestamps, outputData, dataID)
+                        values = [line.split(',')[1] if line else '' for line in alignedData]
+                        groupResult[dataID] = values
+                    else:
+                        groupResult[dataID] = defaultBlanks                
+                
+                if debug: print(f"[DEBUG] QueryWorker: Completed group {groupKey} with {len(groupResult)} items")
+                if debug: print(f"[DEBUG] QueryWorker: Emitting 80% for {db} merged")
+                self.signals.progressSignal.emit(80, f"{db} data merged") # End progress
+            except Exception as e:
+                if debug: print(f"[DEBUG] QueryWorker: Failed for group {groupKey}: {e}")
+                if debug: print(f"[DEBUG] QueryWorker: Emitting 0% for {db} failed")
+                self.signals.progressSignal.emit(0, f"{db} query failed") # Error progress
+
+            self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels)) 
+
+    # Start workers
+    threadsStarted = 0
 
     for i, groupKey in enumerate(groups.keys()):
-        t = threading.Thread(target=queryGroup, args=(groupKey, groups[groupKey], i))
-        threads.append(t)
-        t.start()
-        if debug: print(f"[DEBUG] Started thread {i} for group {groupKey}")
+        signals = QueryWorkerSignals()
+        worker = QueryWorker(groupKey, groups[groupKey], signals)
+        signals.resultSignal.connect(lambda result: resultQueue.put(result)) # Collect results
+        
+        def updateProgress(val, label):
+            if not progressDialog.wasCanceled():
+                progressDialog.setValue(val)
+                progressDialog.setLabelText(label)
+                if debug: print(f"[DEBUG] executeQuery: Progress updated to {val}%: {label}")
+            
+            QApplication.processEvents()
 
-    # Wait for threads with timeout and update progress
-    timeoutSeconds = 300 # 5 minutes
-    progressPerThread = 90 // max(1, numThreads) # Allocate 90% for queries
-
-    for t in threads:
-        t.join(timeout=timeoutSeconds)
-        threadId = threads.index(t)
-
-        if t.is_alive():
-            if debug: print(f"[DEBUG] Thread {threadId} timed out after {timeoutSeconds} seconds")
-            print(f"[WARN] Query for group timed out after {timeoutSeconds} seconds; some data may be missing")
-        else:
-            if debug: print(f"[DEBUG] Thread {threadId} joined")
+        signals.progressSignal.connect(updateProgress)
+        pool.start(worker)
+        threadsStarted += 1
+        if debug: print(f"[DEBUG] executeQuery: Started backgroundworker {i} for group {groupKey}")
 
         if not progressDialog.wasCanceled():
-            progressDialog.setValue(progressDialog.value() + progressPerThread)
+            progressDialog.setValue(10 + (threadsStarted * 20)) # Coarse: 10% base + 20% per thread start
+        
+        QApplication.processEvents() # Pump for dialog
 
-        QGuiApplication.processEvents() # Pump event loop for dialog updates
+    # Non-blocking wait for pool with timer for responsivemess
+    timeoutSeconds = 300 # 5 minutes
+    pool.waitForDone(timeoutSeconds * 1000) # ms
 
-    if progressDialog.wasCanceled():
-        if debug: print("[DEBUG] executeQuery: User canceled via progress dialog")
-        progressDialog.cancel()
-        return
+    if pool.activeThreadCount() > 0:
+        if debug: print(f"[DEBUG] executeQuery: Pool timed out after {timeoutSeconds} seconds")
+        print(f"[WARN] Some queries timed out after {timeoutSeconds} seconds; partial data may be missing")  
+
+        if progressDialog.wasCanceled():            
+            if debug: print("[DEBUG] executeQUery: User canceled via progress dialog")
+            progressDialog.cancel()
+            return     
+    
+        if not progressDialog.wasCanceled():            
+            progressDialog.setValue(90) # Queries complete
+            if debug: print("[DEBUG] executeQUery: Queries complete, progress at 90%")
+
+        QApplication.processEvents() # Pump for responsiveness
     
     # Combine results
     valueDict = {}
+    collected = 0
 
-    for _ in range(len(groups)):
+    while collected < numGroups:
         try:
             groupKey, groupResult, groupLabels = resultQueue.get_nowait()
             valueDict.update(groupResult)
 
             if groupLabels and labelsDict is not None:
                 labelsDict.update(groupLabels)
-            if debug: print(f"[DEBUG] Collected results for group {groupKey} with {len(groupResult)} items")
+
+            collected += 1
+            if debug: print(f"[DEBUG] executeQuery: Collected results for group {groupKey} with {len(groupResult)} items")
+
+            if not progressDialog.wasCanceled():
+                progressDialog.setValue(90 + (collected * 3)) # Gradual 90-99% during merging
+
+            QGuiApplication.processEvents() # Pump for dialog responsiveness
         except queue.Empty:
-            if debug: print("[DEBUG] No more results in queue")
-            break
+            time.sleep(0.1) # Brief sleep to avoid busy-wait
+            QGuiApplication.processEvents()             
+
+    if debug: print("[DEBUG] executeQuery: Queue empty, waiting for more results")
 
     # Ensure all dataIDs are in valueDict
     for dataID, _, _, _, _ in queryItems:
