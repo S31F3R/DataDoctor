@@ -7,6 +7,7 @@ import QueryUSGS
 import QueryAquarius
 import json
 import queue
+import threading
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDir, QTimer
 from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont, QFontMetrics
