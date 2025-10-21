@@ -1,7 +1,4 @@
 import sys
-import QueryUSBR
-import QueryUSGS
-import QueryAquarius
 import Logic
 import keyring
 import os
@@ -9,7 +6,7 @@ import json
 import keyring
 from keyring.backends.null import Keyring as NullKeyring # Safe fallback if needed
 from datetime import datetime
-from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap , QFontMetrics
+from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap 
 from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
                              QTextEdit, QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
