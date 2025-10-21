@@ -178,11 +178,10 @@ def apiRead(dataIDs, startDate, endDate, interval):
             try:
                 uid, subStart, subEnd = taskQueue.get_nowait()
                 queryTask(uid, subStart, subEnd, threadId)
+                taskQueue.task_done()  # Only call task_done after successful task retrieval and processing
             except queue.Empty:
                 if Logic.debug: print(f"[DEBUG] Thread {threadId} found no more tasks")
                 break
-            finally:
-                taskQueue.task_done()
     for i in range(numThreads):
         t = threading.Thread(target=worker, args=(i,))
         threads.append(t)
