@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStand
 from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont, QFontMetrics
 from PyQt6.QtWidgets import (QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget,
                             QTreeView, QSplitter, QMessageBox, QStyleOptionHeader, QSizePolicy,
-                            QHeaderView, QTableWidget, QListWidget)
+                            QHeaderView, QTableWidget, QListWidget, QProgressDialog)
 from collections import defaultdict
 
 def resourcePath(relativePath):
@@ -177,27 +177,20 @@ def combineParameters(data, newData):
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None):
     if debug: print("[DEBUG] buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
     table.clear()
-
     if not data:
         if debug: print("[DEBUG] buildTable: No data to display.")
         return
-
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
-
     processedHeaders = []
-
     for i, h in enumerate(buildHeader):
         dataId = h.strip()
         intervalStr = intervals[i].upper()
-
         if intervalStr.startswith('INSTANT:'):
             intervalStr = 'INSTANT'
-
         database = databases[i] if databases and i < len(databases) else None
         dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataId)
         mrid = None
-
         if database and database.startswith('USBR-') and '-' in dataId:
             parts = dataId.rsplit('-', 1)
             dataId = parts[0]
@@ -205,10 +198,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if dictRow != -1:
             siteItem = dataDictionaryTable.item(dictRow, 1)
             baseLabel = siteItem.text().strip() if siteItem else dataId
-
             if database == 'USGS-NWIS':
                 parts = dataId.split('-')
-
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                     fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
                     if debug: print(f"[DEBUG] buildTable: USGS in dict, header {i}: {fullLabel}")
@@ -232,7 +223,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         else:
             if database == 'USGS-NWIS':
                 parts = dataId.split('-')
-
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                     fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
                     if debug: print(f"[DEBUG] buildTable: Parsed USGS header {i}: {fullLabel}")
@@ -253,14 +243,11 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 else:
                     fullLabel = f"{dataId} \n{intervalStr}"
                     if debug: print(f"[DEBUG] buildTable: USBR not in dict, header {i}: {fullLabel}")
-
         processedHeaders.append(fullLabel)
-
     headers = processedHeaders
     skipDateCol = dataDictionaryTable is not None
     numCols = len(headers)
     numRows = len(data)
-
     # Warn for large datasets
     if numRows > 10000:
         reply = QMessageBox.warning(None, "Large Dataset Warning",
@@ -269,12 +256,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if reply == QMessageBox.StandardButton.No:
             if debug: print(f"[DEBUG] buildTable: User canceled due to large dataset ({numRows} rows)")
             return
-
     if debug: print(f"[DEBUG] buildTable: Setting table to {numRows} rows, {numCols} columns")
-    table.setRowCount(numRows)
+    table.setRowCount(numCols)
     table.setColumnCount(numCols)
     table.setHorizontalHeaderLabels(headers)
-
     if dataDictionaryTable:
         timestamps = [row.split(',')[0].strip() for row in data]
         table.setVerticalHeaderLabels(timestamps)
@@ -287,55 +272,42 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     config = loadConfig()
     rawData = config.get('rawData', False)
     qaqcToggle = config.get('qaqc', True)
-
     # Pre-compute column widths using raw data (before valuePrecision)
     font = table.font()
     metrics = QFontMetrics(font)
     columnWidths = []
     sampleRows = min(1000, numRows)  # Sample up to 1000 rows
     if debug: print(f"[DEBUG] buildTable: Sampling {sampleRows} rows for column widths")
-
     for c in range(numCols):
         cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data[:sampleRows]]
         nonEmptyValues = [val for val in cellValues if val]  # Filter empty strings
-
         if nonEmptyValues:
             maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
         else:
             maxCellWidth = metrics.horizontalAdvance("0.00")  # Fallback for empty column
             if debug: print(f"[DEBUG] buildTable col {c}: No non-empty values, using fallback width {maxCellWidth}")
-
         headerLines = headers[c].split('\n')
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
-
         if debug: print(f"[DEBUG] buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
         finalWidth = max(maxCellWidth, headerWidth)
-
         if headerWidth > maxCellWidth:
             paddingIncrease = headerWidth - maxCellWidth
             finalWidth = maxCellWidth + paddingIncrease + 10
         else:
             finalWidth += 20
-
         columnWidths.append(finalWidth)
-
     # Disable updates for faster population
     table.setUpdatesEnabled(False)
     if debug: print("[DEBUG] buildTable: Disabled table updates for population")
-
     for rowIdx, rowStr in enumerate(data):
         rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
-
         for colIdx in range(min(numCols, len(rowData))):
             cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-
             if not rawData and cellText.strip():
                 item.setText(valuePrecision(cellText))
-
             table.setItem(rowIdx, colIdx, item)
-
     table.setUpdatesEnabled(True)
     if debug: print("[DEBUG] buildTable: Re-enabled table updates after population")
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
@@ -346,31 +318,24 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.update()
     header.setStretchLastSection(False)
     if debug: print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
-
     if dataDictionaryTable:
         maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
         vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
-
     # Apply pre-computed column widths
     for c in range(numCols):
         table.setColumnWidth(c, columnWidths[c])
         if debug: print(f"[DEBUG] buildTable: Set column {c} width to {columnWidths[c]}")
-
     # Use fixed row height based on font metrics
     rowHeight = metrics.height() + 10
     sampleItem = QTableWidgetItem("189.5140")
     sampleItem.setFont(font)
     sampleCellHeight = sampleItem.sizeHint().height()
-
     if sampleCellHeight <= 0:
         sampleCellHeight = metrics.height()
-
     adjustedRowHeight = max(rowHeight, sampleCellHeight + 2)
     if debug: print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
-
-    for r in range(numRows):
-        table.setRowHeight(r, adjustedRowHeight)
-
+    vHeader.setDefaultSectionSize(adjustedRowHeight)
+    if debug: print(f"[DEBUG] buildTable: Set default row height to {adjustedRowHeight}")
     header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     table.update()
@@ -378,7 +343,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     visibleWidth = table.columnWidth(1) if numCols > 1 else 0
     if debug and numCols > 1: print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
     dataIds = buildHeader
-    
     if qaqcToggle:
         qaqc(table, dataDictionaryTable, dataIds)
     else:
@@ -1135,34 +1099,34 @@ def loadLastQuickLook(cbQuickLook):
 
 def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable):
     if debug: print("[DEBUG] executeQuery: isInternal={}, items={}".format(isInternal, len(queryItems)))
-
     if isInternal:
         queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
     if not queryItems:
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
         return
-
+    # Set up progress dialog
+    progressDialog = QProgressDialog("Loading data...", "Cancel", 0, 100, mainWindow)
+    progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
+    progressDialog.setMinimumDuration(1000)  # Show after 1s
+    progressDialog.setValue(0)
+    if debug: print("[DEBUG] executeQuery: Initialized progress dialog")
     queryItems.sort(key=lambda x: x[4])
     firstInterval = queryItems[0][1]
     firstDb = queryItems[0][2]
-
     if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
         firstInterval = 'INSTANT:60'
     elif firstInterval == 'INSTANT' and firstDb == 'USGS-NWIS':
         firstInterval = 'INSTANT:15'
     elif firstInterval == 'INSTANT' and firstDb == 'AQUARIUS':
         firstInterval = 'INSTANT:1'
-
     timestamps = buildTimestamps(startDate, endDate, firstInterval)
-
     if not timestamps:
+        progressDialog.cancel()
         QMessageBox.warning(mainWindow, "Date Error", "Invalid dates or interval.")
         return
-
     defaultBlanks = [''] * len(timestamps)
     labelsDict = {} if isInternal else None
     groups = defaultdict(list)
-
     for dataID, interval, db, mrid, origIndex in queryItems:
         if interval == 'INSTANT':
             if db.startswith('USBR-'):
@@ -1171,15 +1135,12 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 interval = 'INSTANT:15'
             elif db == 'AQUARIUS':
                 interval = 'INSTANT:1'
-
         groupKey = (db, mrid if db.startswith('USBR-') else None, interval)
         SDID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
         groups[groupKey].append((origIndex, dataID, SDID))
-
     # Threading setup
     maxDbThreads = 3  # One thread per unique database type (AQUARIUS, USBR, USGS)
     resultQueue = queue.Queue()  # Thread-safe queue for results
-
     def queryGroup(groupKey, groupItems, threadId):
         """Process a group of items in a single thread."""
         if debug: print(f"[DEBUG] Thread {threadId} processing group {groupKey} with {len(groupItems)} items")
@@ -1187,7 +1148,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         SDIDs = [item[2] for item in groupItems]
         groupResult = {}
         groupLabels = {} if db == 'AQUARIUS' else None
-
         try:
             if db.startswith('USBR-'):
                 svr = db.split('-')[1].lower()
@@ -1209,47 +1169,44 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         groupLabels[dataID] = result[SDID].get('label', dataID)
                     else:
                         outputData = result[SDID]
-
                     alignedData = gapCheck(timestamps, outputData, dataID)
                     values = [line.split(',')[1] if line else '' for line in alignedData]
                     groupResult[dataID] = values
                 else:
                     groupResult[dataID] = defaultBlanks
-                    
             if debug: print(f"[DEBUG] Thread {threadId} completed group {groupKey} with {len(groupResult)} items")
         except Exception as e:
             QMessageBox.warning(mainWindow, "Query Error", f"Query failed for group {db} in thread {threadId}: {e}")
             if debug: print(f"[DEBUG] Thread {threadId} failed for group {groupKey}: {e}")
-
         resultQueue.put((groupKey, groupResult, groupLabels))
-        
     # Start threads
     threads = []
     numThreads = min(maxDbThreads, len(groups))  # One thread per group, up to maxDbThreads
     if debug: print(f"[DEBUG] Starting {numThreads} threads for {len(groups)} groups")
-
     for i, groupKey in enumerate(groups.keys()):
         t = threading.Thread(target=queryGroup, args=(groupKey, groups[groupKey], i))
         threads.append(t)
         t.start()
         if debug: print(f"[DEBUG] Started thread {i} for group {groupKey}")
-
-    # Wait for threads with timeout
+    # Wait for threads with timeout and update progress
     timeoutSeconds = 300  # 5 minutes
-
+    progressPerThread = 90 // max(1, numThreads)  # Allocate 90% for queries
     for t in threads:
         t.join(timeout=timeoutSeconds)
         threadId = threads.index(t)
-
         if t.is_alive():
             if debug: print(f"[DEBUG] Thread {threadId} timed out after {timeoutSeconds} seconds")
             print(f"[WARN] Query for group timed out after {timeoutSeconds} seconds; some data may be missing")
         else:
             if debug: print(f"[DEBUG] Thread {threadId} joined")
-
+        if not progressDialog.wasCanceled():
+            progressDialog.setValue(progressDialog.value() + progressPerThread)
+    if progressDialog.wasCanceled():
+        if debug: print("[DEBUG] executeQuery: User canceled via progress dialog")
+        progressDialog.cancel()
+        return
     # Combine results
     valueDict = {}
-
     for _ in range(len(groups)):
         try:
             groupKey, groupResult, groupLabels = resultQueue.get_nowait()
@@ -1260,29 +1217,34 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         except queue.Empty:
             if debug: print("[DEBUG] No more results in queue")
             break
-
     # Ensure all dataIDs are in valueDict
     for dataID, _, _, _, _ in queryItems:
         if dataID not in valueDict:
             valueDict[dataID] = defaultBlanks
             if debug: print(f"[DEBUG] Added empty result for dataID {dataID}")
-
     originalDataIds = [item[0] for item in queryItems]
     originalIntervals = [item[1] for item in queryItems]
     databases = [item[2] for item in queryItems]
     lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
     data = []
-
     for r in range(len(timestamps)):
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
-
-    mainWindow.mainTable.clear()
-    buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
-
+    if not progressDialog.wasCanceled():
+        progressDialog.setLabelText("Building table...")
+        if debug: print("[DEBUG] executeQuery: Updating progress dialog for table building")
+        mainWindow.mainTable.clear()
+        buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
+        progressDialog.setValue(100)  # Complete
+        if debug: print("[DEBUG] executeQuery: Table built, progress dialog completed")
+    if progressDialog.wasCanceled():
+        if debug: print("[DEBUG] executeQuery: User canceled during table building")
+        progressDialog.cancel()
+        return
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
     if debug: print("[DEBUG] Query executed and table updated.")
+    progressDialog.cancel()  # Close dialog
 
 def getUtcOffsetInt(utcOffsetStr):
     """Extract UTC offset as float from full string (e.g., 'UTC-09:30 | Marquesas Islands' -> -9.5)."""
