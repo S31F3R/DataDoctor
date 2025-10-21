@@ -4,6 +4,7 @@
 -Save dialog for CSV needs wider columns or auto size needs to be fixed (linux is fine)
 -Break apart Logic.py into more .py files based on type of logic
 -Export to CSV needs work. Remembering path isn't working across platform, possibly Qt issue. Lots of trial and error code left in there, needs to be removed when completed
+-Remove any unused imports and def
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
