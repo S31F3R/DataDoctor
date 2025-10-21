@@ -8,7 +8,7 @@ import threading
 import queue
 
 queryLimit = 500 # Configurable max points per API call
-maxThreads = 10 # Configurable max number of threads
+maxThreads = 15 # Configurable max number of threads
 
 def apiRead(dataIDs, startDate, endDate, interval):
     if Logic.debug: print("[DEBUG] QueryAquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}".format(dataIDs, interval, startDate, endDate))
