@@ -1,0 +1,158 @@
+[DEBUG] Applied retro font at startup
+[DEBUG] Applied retro scroll bar styles to mainTable
+[DEBUG] Applied retro scroll bar styles globally
+[DEBUG] Built DataDictionary with 451 rows, 8 columns
+qt.multimedia.ffmpeg: Using Qt multimedia with FFmpeg version 7.1.1 LGPL version 2.1 or later
+[DEBUG] Internal query window showEvent
+[DEBUG] Loaded config for quick look: FMTC2
+[DEBUG] Set cbQuickLook to index 0: FMTC2
+[DEBUG] loadQuickLook: Added item 93a07e0e8c7e42cfa691fe97eb5de3ea|HOUR|AQUARIUS
+[DEBUG] loadQuickLook: Added item 5013|HOUR|USBR-LCHDB
+[DEBUG] loadQuickLook: Added item c56ebd0f03ca491cb6577167d451c2f6|HOUR|AQUARIUS
+[DEBUG] loadQuickLook: Added item 5014|HOUR|USBR-LCHDB
+[DEBUG] loadQuickLook: Added item b9af5c7f873749c090f164b8d7899733|HOUR|AQUARIUS
+[DEBUG] loadQuickLook: Added item 5012|HOUR|USBR-LCHDB
+[DEBUG] loadQuickLook: Loaded 'FMTC2' with 6 items
+[DEBUG] Loaded quick look: FMTC2
+[DEBUG] btnQueryPressed: Starting query process.
+[DEBUG] Item text: '93a07e0e8c7e42cfa691fe97eb5de3ea|HOUR|AQUARIUS', parts: ['93a07e0e8c7e42cfa691fe97eb5de3ea', 'HOUR', 'AQUARIUS'], len: 3
+[DEBUG] Added queryItem: ('93a07e0e8c7e42cfa691fe97eb5de3ea', 'HOUR', 'AQUARIUS', '0', 0)
+[DEBUG] Item text: '5013|HOUR|USBR-LCHDB', parts: ['5013', 'HOUR', 'USBR-LCHDB'], len: 3
+[DEBUG] Added queryItem: ('5013', 'HOUR', 'USBR-LCHDB', '0', 1)
+[DEBUG] Item text: 'c56ebd0f03ca491cb6577167d451c2f6|HOUR|AQUARIUS', parts: ['c56ebd0f03ca491cb6577167d451c2f6', 'HOUR', 'AQUARIUS'], len: 3
+[DEBUG] Added queryItem: ('c56ebd0f03ca491cb6577167d451c2f6', 'HOUR', 'AQUARIUS', '0', 2)
+[DEBUG] Item text: '5014|HOUR|USBR-LCHDB', parts: ['5014', 'HOUR', 'USBR-LCHDB'], len: 3
+[DEBUG] Added queryItem: ('5014', 'HOUR', 'USBR-LCHDB', '0', 3)
+[DEBUG] Item text: 'b9af5c7f873749c090f164b8d7899733|HOUR|AQUARIUS', parts: ['b9af5c7f873749c090f164b8d7899733', 'HOUR', 'AQUARIUS'], len: 3
+[DEBUG] Added queryItem: ('b9af5c7f873749c090f164b8d7899733', 'HOUR', 'AQUARIUS', '0', 4)
+[DEBUG] Item text: '5012|HOUR|USBR-LCHDB', parts: ['5012', 'HOUR', 'USBR-LCHDB'], len: 3
+[DEBUG] Added queryItem: ('5012', 'HOUR', 'USBR-LCHDB', '0', 5)
+[DEBUG] Stored last query as internal.
+[DEBUG] executeQuery: isInternal=True, items=6
+[DEBUG] executeQuery: Initialized and showed progress dialog
+[DEBUG] buildTimestamps called with start: 2025-10-20 01:00, end: 2025-10-21 10:19, interval: HOUR
+[DEBUG] Generated 34 timestamps, sample first 3: ['10/20/25 01:00:00', '10/20/25 02:00:00', '10/20/25 03:00:00']
+[DEBUG] executeQuery: Starting 2 threads for 2 groups in background
+[DEBUG] executeQuery: Started backgroundworker 0 for group ('AQUARIUS', None, 'HOUR')
+[DEBUG] QueryWorker: Emitting 20% for AQUARIUS start
+[DEBUG] QueryAquarius.apiRead called with dataIDs: ['93a07e0e8c7e42cfa691fe97eb5de3ea', 'c56ebd0f03ca491cb6577167d451c2f6', 'b9af5c7f873749c090f164b8d7899733'], interval: HOUR, start: 2025-10-20 01:00, end: 2025-10-21 10:19
+[DEBUG] getUtcOffsetInt: Parsed 'UTC-07:00 | Mountain Time (US & Canada)/Arizona' to -7.0 hours
+[DEBUG] executeQuery: Started backgroundworker 1 for group ('USBR-LCHDB', '0', 'HOUR')
+[DEBUG] executeQuery: Progress updated to 20%: Starting AQUARIUS query...
+[DEBUG] QueryWorker: Emitting 20% for USBR-LCHDB start
+[DEBUG] QueryUSBR.api called with svr: lchdb, SDIDs: ['5013', '5014', '5012'], interval: HOUR, start: 2025-10-20 01:00, end: 2025-10-21 10:19, mrid: 0, table='R'
+[DEBUG] buildTimestamps called with start: 2025-10-20 01:00, end: 2025-10-21 10:19, interval: HOUR
+[DEBUG] Generated 34 timestamps, sample first 3: ['10/20/25 01:00:00', '10/20/25 02:00:00', '10/20/25 03:00:00']
+[DEBUG] Fetching USBR URL: https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr=lchdb&SDI=5013,5014,5012&tstp=HR&t1=2025-10-20T00:00&t2=2025-10-21T10:19&table=R&mrid=0&format=json
+[DEBUG] SSL error with verify=True: HTTPSConnectionPool(host='ibrmazap013.bor.doi.net', port=443): Max retries exceeded with url: /AQUARIUS/Provisioning/v1/session (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1032)')))
+[DEBUG] No certificate found at 'C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\certs\aquarius.pem', skipping to unverified.
+c:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\env\Lib\site-packages\urllib3\connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ibrmazap013.bor.doi.net'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+[DEBUG] Fetched 3 series entries.
+[DEBUG] Found series for '5013': 35 points.
+[DEBUG] Found series for '5014': 35 points.
+[DEBUG] Found series for '5012': 35 points.
+[DEBUG] gapCheck for dataID '5013': timestamps len=34, data len=35
+[DEBUG] Removed 1 extra/mismatched rows from '5013': ts ['10/21/25 11:00:00']
+[DEBUG] Post-gapCheck len=34, sample first 3: ['10/20/25 01:00:00,0', '10/20/25 02:00:00,0', '10/20/25 03:00:00,0']
+[DEBUG] gapCheck for dataID '5014': timestamps len=34, data len=35
+[DEBUG] Removed 1 extra/mismatched rows from '5014': ts ['10/21/25 11:00:00']
+[DEBUG] Post-gapCheck len=34, sample first 3: ['10/20/25 01:00:00,0', '10/20/25 02:00:00,0', '10/20/25 03:00:00,0']
+[DEBUG] gapCheck for dataID '5012': timestamps len=34, data len=35
+[DEBUG] Removed 1 extra/mismatched rows from '5012': ts ['10/21/25 11:00:00']
+[DEBUG] Post-gapCheck len=34, sample first 3: ['10/20/25 01:00:00,2.5897334426', '10/20/25 02:00:00,2.3265447763', '10/20/25 03:00:00,2.5527825950']
+[DEBUG] QueryWorker: Completed group ('USBR-LCHDB', '0', 'HOUR') with 3 items
+[DEBUG] QueryWorker: Emitting 80% for USBR-LCHDB merged
+[DEBUG] Authentication succeeded with verify=False
+[WARN] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.
+[DEBUG] Estimated 35 points, splitting into 1 chunks of ~500 points each
+[DEBUG] Generated 1 sub-ranges: [('2025-10-20 07:00', '2025-10-21 17:20')]
+[DEBUG] Created 3 tasks for 3 UIDs across 1 sub-ranges, using 3 threads
+[DEBUG] Thread 0 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-10-20 07:00 to 2025-10-21 17:20[DEBUG] Started thread 0 for task processing
+[DEBUG] Thread 1 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-10-20 07:00 to 2025-10-21 17:20[DEBUG] Started thread 1 for task processing
+[DEBUG] Thread 2 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-10-20 07:00 to 2025-10-21 17:20[DEBUG] Started thread 2 for task processing
+[DEBUG] Thread 0 fetched 35 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-10-20 07:00 to 2025-10-21 17:20
+[DEBUG] Thread 0 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 35 points
+[DEBUG] Thread 0 found no more tasks
+[DEBUG] Thread 0 joined
+[DEBUG] Thread 1 fetched 35 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-10-20 07:00 to 2025-10-21 17:20
+[DEBUG] Thread 1 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 35 points
+[DEBUG] Thread 1 found no more tasks
+[DEBUG] Thread 2 fetched 35 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-10-20 07:00 to 2025-10-21 17:20
+[DEBUG] Thread 2 completed task for UID b9af5c7f873749c090f164b8d7899733 with 35 points
+[DEBUG] Thread 1 joined[DEBUG] Thread 2 found no more tasks
+[DEBUG] Thread 2 joined
+[DEBUG] Combined results from 3 tasks with 3 UIDs
+[DEBUG] Returning result dict with 3 UIDs
+[DEBUG] gapCheck for dataID '93a07e0e8c7e42cfa691fe97eb5de3ea': timestamps len=34, data len=35
+[DEBUG] Removed 1 extra/mismatched rows from '93a07e0e8c7e42cfa691fe97eb5de3ea': ts ['10/20/25 00:00:00']
+[DEBUG] Post-gapCheck len=34, sample first 3: ['10/20/25 01:00:00,0', '10/20/25 02:00:00,0', '10/20/25 03:00:00,0']
+[DEBUG] gapCheck for dataID 'c56ebd0f03ca491cb6577167d451c2f6': timestamps len=34, data len=35
+[DEBUG] Removed 1 extra/mismatched rows from 'c56ebd0f03ca491cb6577167d451c2f6': ts ['10/20/25 00:00:00']
+[DEBUG] Post-gapCheck len=34, sample first 3: ['10/20/25 01:00:00,0', '10/20/25 02:00:00,0', '10/20/25 03:00:00,0']
+[DEBUG] gapCheck for dataID 'b9af5c7f873749c090f164b8d7899733': timestamps len=34, data len=35
+[DEBUG] Removed 1 extra/mismatched rows from 'b9af5c7f873749c090f164b8d7899733': ts ['10/20/25 00:00:00']
+[DEBUG] Post-gapCheck len=34, sample first 3: ['10/20/25 01:00:00,2.5897334426', '10/20/25 02:00:00,2.3265447763', '10/20/25 03:00:00,2.552782595']
+[DEBUG] QueryWorker: Completed group ('USBR-LCHDB', '0', 'HOUR') with 3 items
+[DEBUG] QueryWorker: Emitting 80% for AQUARIUS merged
+[DEBUG] executeQuery: Progress updated to 20%: Starting USBR-LCHDB query...
+[DEBUG] executeQuery: Progress updated to 50%: USBR-LCHDB API complete, processing data...
+[DEBUG] executeQuery: Progress updated to 80%: USBR-LCHDB data merged
+[DEBUG] executeQuery: Progress updated to 50%: AQUARIUS API complete, processing data...
+[DEBUG] executeQuery: Progress updated to 80%: AQUARIUS data merged
+[DEBUG] executeQuery: Collected results for group ('USBR-LCHDB', '0', 'HOUR') with 3 items
+[DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, 'HOUR') with 3 items
+[DEBUG] executeQuery: Queue empty, waiting for more results
+[DEBUG] executeQuery: Updating progress dialog for table building
+[DEBUG] buildTable: Starting with 34 rows, 6 headers
+[DEBUG] buildTable: Aquarius not in dict, header 0: Published | Discharge
+FMTC2(North)
+[DEBUG] buildTable: USBR in dict, header 1: FMTC2 - North
+5013
+[DEBUG] buildTable: Aquarius not in dict, header 2: Published | Discharge
+FMTC2(South)
+[DEBUG] buildTable: USBR in dict, header 3: FMTC2 - South
+5014
+[DEBUG] buildTable: Aquarius not in dict, header 4: Published | Discharge
+FMTC2(West)
+[DEBUG] buildTable: USBR in dict, header 5: FMTC2 - West
+5012
+[DEBUG] buildTable: Setting table to 34 rows, 6 columns
+[DEBUG] No config.ini found or user.config exists, skipping conversion
+[DEBUG] Loaded config: {'lastExportPath': 'C:\\Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'FMTC2', 'retroMode': True}
+[DEBUG] utcOffset loaded as: UTC-07:00 | Mountain Time (US & Canada)/Arizona
+[DEBUG] Loaded settings from user.config: {'lastExportPath': 'C:\\Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'FMTC2'}
+[DEBUG] buildTable: Sampling 34 rows for column widths
+[DEBUG] buildTable col 0: maxCellWidth=104, headerWidth=153
+[DEBUG] buildTable col 1: maxCellWidth=104, headerWidth=105
+[DEBUG] buildTable col 2: maxCellWidth=9, headerWidth=153
+[DEBUG] buildTable col 3: maxCellWidth=9, headerWidth=106
+[DEBUG] buildTable col 4: maxCellWidth=158, headerWidth=153
+[DEBUG] buildTable col 5: maxCellWidth=104, headerWidth=99
+[DEBUG] buildTable: Disabled table updates for population
+[DEBUG] buildTable: Re-enabled table updates after population
+[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
+[DEBUG] buildTable: Set column 0 width to 163
+[DEBUG] buildTable: Set column 1 width to 115
+[DEBUG] buildTable: Set column 2 width to 163
+[DEBUG] buildTable: Set column 3 width to 116
+[DEBUG] buildTable: Set column 4 width to 178
+[DEBUG] buildTable: Set column 5 width to 124
+[DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
+[DEBUG] buildTable: Set default row height to 29
+[DEBUG] buildTable: Custom resized 6 columns. Text width for col 1: 146, Visible width: 115, Row height: 29
+[DEBUG] qaqc: Processing column 0 for lookupId 93a07e0e8c7e42cfa691fe97eb5de3ea
+[DEBUG] qaqc: Processed column 0 for lookupId 93a07e0e8c7e42cfa691fe97eb5de3ea
+[DEBUG] qaqc: Processing column 1 for lookupId 5013
+[DEBUG] qaqc: Processed column 1 for lookupId 5013
+[DEBUG] qaqc: Processing column 2 for lookupId c56ebd0f03ca491cb6577167d451c2f6
+[DEBUG] qaqc: Processed column 2 for lookupId c56ebd0f03ca491cb6577167d451c2f6
+[DEBUG] qaqc: Processing column 3 for lookupId 5014
+[DEBUG] qaqc: Processed column 3 for lookupId 5014
+[DEBUG] qaqc: Processing column 4 for lookupId b9af5c7f873749c090f164b8d7899733
+[DEBUG] qaqc: Processed column 4 for lookupId b9af5c7f873749c090f164b8d7899733
+[DEBUG] qaqc: Processing column 5 for lookupId 5012
+[DEBUG] qaqc: Processed column 5 for lookupId 5012
+[DEBUG] executeQuery: Table built, progress dialog completed
+[DEBUG] Query executed and table updated.
+[DEBUG] Internal query window closed after query.
