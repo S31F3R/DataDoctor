@@ -1191,7 +1191,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     # Threading setup
     pool = QThreadPool.globalInstance()
     resultQueue = queue.Queue() # Thread-safe queue for results
-    maxDbThreads = 6 # One thread per unique database type (AQUARIUS, USBR, USGS)
+    maxDbThreads = 3 # One thread per unique database type (AQUARIUS, USBR, USGS)
     numGroups = len(groups)
     numThreads = min(maxDbThreads, len(groups)) # One thread per group, up to maxDbThreads
     if debug: print(f"[DEBUG] executeQuery: Starting {numThreads} threads for {numGroups} groups in background")
@@ -1320,7 +1320,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         if not progressDialog.wasCanceled():
             current = progressDialog.value()
             progressDialog.setValue(min(current + (10 * collected), 90)) # Gradual 70-90%
-            progressDialog.setLabelText(f"Mergings data... ({collected}/{numGroups})")
+            progressDialog.setLabelText(f"Completed {groupkey[0]} query ({collected}/{numGroups})")
+            QGuiApplication.processEvents() # Pump for dialog responsiveness
+            QTimer.singleShot(500, lambda: progressDialog.setLabelText(f"Merging data... ({collected}/{numGroups})"))
 
         QGuiApplication.processEvents() # Pump for dialog responsiveness
 
