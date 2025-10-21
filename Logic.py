@@ -1271,7 +1271,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     progressBase = 10 # Start gradual progress at 10% after workers start
 
     while pool.activeThreadCount() > 0 and (time.time() - startTime) < timeoutSeconds:
-        time.sleep(11) # SLeep is to reduce CPU, pump every second
+        time.sleep(0.1) # Brief sleep to avoid busy wait
         elapsed = time.time() - startTime
 
         if not progressDialog.wasCanceled():
@@ -1291,9 +1291,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         return     
 
     if not progressDialog.wasCanceled():            
-        progressDialog.setValue(90) # Queries complete
-        progressDialog.setLabelText("Queries commplete, merging data...")
-        if debug: print("[DEBUG] executeQUery: Queries complete, progress at 90%")
+        progressDialog.setValue(70) # Queries complete
+        progressDialog.setLabelText("Merging data...")
+        if debug: print("[DEBUG] executeQUery: Queries complete, progress at 70%")
 
     QApplication.processEvents() # Pump for responsiveness
     

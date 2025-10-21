@@ -114,10 +114,9 @@ def apiRead(dataIDs, startDate, endDate, interval):
         chunkEndIdx = min(chunkStartIdx + queryLimit, totalPoints)
         chunkTimestamps = timestamps[chunkStartIdx:chunkEndIdx]
         
-        if chunkTimestamps:
-            # Format for API
-            subStart = Logic.datetime.strptime(chunkTimestamps[0], '%Y-%m-%d %H:%M:00')
-            subEnd = Logic.datetime.strptime(chunkTimestamps[-1], '%Y-%m-%d %H:%M:00') + timedelta(minutes=1) # +1 min for inclusive end
+        if chunkTimestamps:            
+            subStart = Logic.datetime.strptime(chunkTimestamps[0], '%m/%d/%y %H:%M:00')
+            subEnd = Logic.datetime.strptime(chunkTimestamps[-1], '%m/%d/%y %H:%M:00') + timedelta(minutes=1) # +1 min for inclusive end
             subStartStr = subStart.strftime('%Y-%m-%d %H:%M')
             subEndStr = subEnd.strftime('%Y-%m-%d %H:%M')
             subRanges.append((subStartStr, subEndStr))

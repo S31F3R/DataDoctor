@@ -27,52 +27,228 @@ qt.multimedia.ffmpeg: Using Qt multimedia with FFmpeg version 7.1.1 LGPL version
 [DEBUG] Stored last query as internal.
 [DEBUG] executeQuery: isInternal=True, items=3
 [DEBUG] executeQuery: Initialized and showed progress dialog
-[DEBUG] buildTimestamps called with start: 2025-01-21 11:51, end: 2025-10-21 11:51, interval: HOUR
-[DEBUG] Generated 6553 timestamps, sample first 3: ['01/21/25 11:00:00', '01/21/25 12:00:00', '01/21/25 13:00:00']
+[DEBUG] buildTimestamps called with start: 2025-01-18 12:04, end: 2025-10-21 12:04, interval: HOUR
+[DEBUG] Generated 6625 timestamps, sample first 3: ['01/18/25 12:00:00', '01/18/25 13:00:00', '01/18/25 14:00:00']
 [DEBUG] executeQuery: Starting 1 threads for 1 groups in background
 [DEBUG] executeQuery: Started backgroundworker 0 for group ('AQUARIUS', None, 'HOUR')
 [DEBUG] executeQuery: All workers started, progress at 10%
-[DEBUG] QueryAquarius.apiRead called with dataIDs: ['93a07e0e8c7e42cfa691fe97eb5de3ea', 'c56ebd0f03ca491cb6577167d451c2f6', 'b9af5c7f873749c090f164b8d7899733'], interval: HOUR, start: 2025-01-21 11:51, end: 2025-10-21 11:51
+[DEBUG] QueryAquarius.apiRead called with dataIDs: ['93a07e0e8c7e42cfa691fe97eb5de3ea', 'c56ebd0f03ca491cb6577167d451c2f6', 'b9af5c7f873749c090f164b8d7899733'], interval: HOUR, start: 2025-01-18 12:04, end: 2025-10-21 12:04
 [DEBUG] getUtcOffsetInt: Parsed 'UTC-07:00 | Mountain Time (US & Canada)/Arizona' to -7.0 hours
-[DEBUG] buildTimestamps called with start: 2025-01-21 17:51, end: 2025-10-21 18:52, interval: HOUR
-[DEBUG] Generated 6554 timestamps, sample first 3: ['01/21/25 17:00:00', '01/21/25 18:00:00', '01/21/25 19:00:00']
-[DEBUG] Generated 6554 timestamps, splitting into 14 chunks of ~500 points each
-[DEBUG] QueryWorker: Failed for group ('AQUARIUS', None, 'HOUR'): time data '01/21/25 17:00:00' does not match format '%Y-%m-%d %H:%M:00'
-[DEBUG] executeQUery: Queries complete, progress at 90%
-[DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, 'HOUR') with 0 items
+[DEBUG] SSL error with verify=True: HTTPSConnectionPool(host='ibrmazap013.bor.doi.net', port=443): Max retries exceeded with url: /AQUARIUS/Provisioning/v1/session (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1032)')))
+[DEBUG] No certificate found at 'C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\certs\aquarius.pem', skipping to unverified.
+
+[DEBUG] Authentication succeeded with verify=False
+[WARN] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.
+[DEBUG] buildTimestamps called with start: 2025-01-18 18:04, end: 2025-10-21 19:05, interval: HOUR
+[DEBUG] Generated 6626 timestamps, sample first 3: ['01/18/25 18:00:00', '01/18/25 19:00:00', '01/18/25 20:00:00']
+[DEBUG] Generated 6626 timestamps, splitting into 14 chunks of ~500 points each
+[DEBUG] Generated 14 sub-ranges: [('2025-01-18 18:00', '2025-02-08 13:01'), ('2025-02-08 14:00', '2025-03-01 09:01'), ('2025-03-01 10:00', '2025-03-22 05:01')]
+[DEBUG] Created 42 tasks for 3 UIDs across 14 sub-ranges, using 10 threads
+[DEBUG] Thread 0 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-01-18 18:00 to 2025-02-08 13:01[DEBUG] Started thread 0 for task processing
+
+[DEBUG] Thread 1 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-02-08 14:00 to 2025-03-01 09:01[DEBUG] Started thread 1 for task processing
+
+[DEBUG] Thread 2 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-03-01 10:00 to 2025-03-22 05:01[DEBUG] Started thread 2 for task processing
+
+[DEBUG] Thread 3 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-03-22 06:00 to 2025-04-12 01:01[DEBUG] Started thread 3 for task processing
+
+[DEBUG] Thread 4 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-04-12 02:00 to 2025-05-02 21:01[DEBUG] Started thread 4 for task processing
+
+[DEBUG] Thread 5 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-05-02 22:00 to 2025-05-23 17:01[DEBUG] Started thread 5 for task processing
+
+[DEBUG] Thread 6 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-05-23 18:00 to 2025-06-13 13:01[DEBUG] Started thread 6 for task processing
+
+[DEBUG] Thread 7 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-06-13 14:00 to 2025-07-04 09:01[DEBUG] Started thread 7 for task processing
+
+[DEBUG] Thread 8 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-07-04 10:00 to 2025-07-25 05:01[DEBUG] Started thread 8 for task processing
+
+[DEBUG] Thread 9 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-07-25 06:00 to 2025-08-15 01:01[DEBUG] Started thread 9 for task processing
+
+[DEBUG] Thread 4 fetched 500 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-04-12 02:00 to 2025-05-02 21:01[DEBUG] Thread 0 fetched 500 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-01-18 18:00 to 2025-02-08 13:01
+
+[DEBUG] Thread 4 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 500 points[DEBUG] Thread 0 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 500 points
+
+[DEBUG] Thread 4 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-08-15 02:00 to 2025-09-04 21:01[DEBUG] Thread 0 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-09-04 22:00 to 2025-09-25 17:01c:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\env\Lib\site-packages\urllib3\connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ibrmazap013.bor.doi.net'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings   
+  warnings.warn(
+
+
+[DEBUG] Thread 3 fetched 500 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-03-22 06:00 to 2025-04-12 01:01[DEBUG] Thread 7 fetched 500 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-06-13 14:00 to 2025-07-04 09:01
+
+[DEBUG] Thread 3 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 500 points[DEBUG] Thread 7 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 500 points
+
+[DEBUG] Thread 7 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-09-25 18:00 to 2025-10-16 13:01[DEBUG] Thread 3 processing task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea, range 2025-10-16 14:00 to 2025-10-21 19:01
+
+[DEBUG] Thread 1 fetched 500 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-02-08 14:00 to 2025-03-01 09:01[DEBUG] Thread 5 fetched 500 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-05-02 22:00 to 2025-05-23 17:01
+
+[DEBUG] Thread 1 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 500 points[DEBUG] Thread 6 fetched 500 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-05-23 18:00 to 2025-06-13 13:01[DEBUG] Thread 8 fetched 500 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-07-04 10:00 to 2025-07-25 05:01[DEBUG] Thread 5 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 500 points
+
+
+
+[DEBUG] Thread 1 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-01-18 18:00 to 2025-02-08 13:01[DEBUG] Thread 6 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 500 points[DEBUG] Thread 8 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 500 points
+
+[DEBUG] Thread 5 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-02-08 14:00 to 2025-03-01 09:01
+[DEBUG] Thread 6 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-03-01 10:00 to 2025-03-22 05:01
+[DEBUG] Thread 8 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-03-22 06:00 to 2025-04-12 01:01[DEBUG] Thread 2 fetched 500 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-03-01 10:00 to 2025-03-22 05:01
+
+[DEBUG] Thread 9 fetched 471 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-07-25 06:00 to 2025-08-15 01:01
+[DEBUG] Thread 2 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 500 points
+
+[DEBUG] Thread 9 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 471 points[DEBUG] Thread 2 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-04-12 02:00 to 2025-05-02 21:01
+[DEBUG] Thread 9 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-05-02 22:00 to 2025-05-23 17:01
+
+[DEBUG] Thread 3 fetched 125 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-10-16 14:00 to 2025-10-21 19:01
+[DEBUG] Thread 3 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 125 points
+[DEBUG] Thread 3 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-05-23 18:00 to 2025-06-13 13:01
+[DEBUG] Thread 7 fetched 500 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-09-25 18:00 to 2025-10-16 13:01
+[DEBUG] Thread 7 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 500 points
+[DEBUG] Thread 7 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-06-13 14:00 to 2025-07-04 09:01
+
+[DEBUG] Thread 4 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 499 points
+[DEBUG] Thread 4 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-07-04 10:00 to 2025-07-25 05:01
+[DEBUG] Thread 0 fetched 499 points for UID '93a07e0e8c7e42cfa691fe97eb5de3ea', range 2025-09-04 22:00 to 2025-09-25 17:01
+[DEBUG] Thread 0 completed task for UID 93a07e0e8c7e42cfa691fe97eb5de3ea with 499 points
+[DEBUG] Thread 0 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-07-25 06:00 to 2025-08-15 01:01
+[DEBUG] Thread 5 fetched 500 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-02-08 14:00 to 2025-03-01 09:01
+[DEBUG] Thread 8 fetched 500 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-03-22 06:00 to 2025-04-12 01:01[DEBUG] Thread 5 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 500 points[DEBUG] Thread 9 fetched 500 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-05-02 22:00 to 2025-05-23 17:01[DEBUG] Thread 6 fetched 500 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-03-01 10:00 to 2025-03-22 05:01
+
+[DEBUG] Thread 2 fetched 500 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-04-12 02:00 to 2025-05-02 21:01
+
+[DEBUG] Thread 5 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-08-15 02:00 to 2025-09-04 21:01
+
+[DEBUG] Thread 6 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 500 points[DEBUG] Thread 8 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 500 points[DEBUG] Thread 2 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 500 points
+
+[DEBUG] Thread 9 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 500 points
+[DEBUG] Thread 8 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-09-04 22:00 to 2025-09-25 17:01
+[DEBUG] Thread 6 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-09-25 18:00 to 2025-10-16 13:01[DEBUG] Thread 2 processing task for UID c56ebd0f03ca491cb6577167d451c2f6, range 2025-10-16 14:00 to 2025-10-21 19:01
+[DEBUG] Thread 9 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-01-18 18:00 to 2025-02-08 13:01
+
+
+[DEBUG] Thread 1 fetched 500 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-01-18 18:00 to 2025-02-08 13:01
+[DEBUG] Thread 1 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 500 points
+[DEBUG] Thread 1 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-02-08 14:00 to 2025-03-01 09:01
+[DEBUG] Thread 7 fetched 500 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-06-13 14:00 to 2025-07-04 09:01
+[DEBUG] Thread 3 fetched 500 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-05-23 18:00 to 2025-06-13 13:01[DEBUG] Thread 7 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 500 points[DEBUG] Thread 4 fetched 500 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-07-04 10:00 to 2025-07-25 05:01
+
+
+[DEBUG] Thread 3 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 500 points[DEBUG] Thread 7 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-03-01 10:00 to 2025-03-22 05:01[DEBUG] Thread 4 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 500 pointsc:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\env\Lib\site-packages\urllib3\connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ibrmazap013.bor.doi.net'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+
+
+
+[DEBUG] Thread 3 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-03-22 06:00 to 2025-04-12 01:01[DEBUG] Thread 4 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-04-12 02:00 to 2025-05-02 21:01
+[DEBUG] Thread 2 fetched 125 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-10-16 14:00 to 2025-10-21 19:01c:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\env\Lib\site-packages\urllib3\connectionpool.py:1097: InsecureRequestWarning: Unverified HTTPS request is being made to host 'ibrmazap013.bor.doi.net'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+  warnings.warn(
+[DEBUG] Thread 5 fetched 499 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-08-15 02:00 to 2025-09-04 21:01
+[DEBUG] Thread 6 fetched 500 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-09-25 18:00 to 2025-10-16 13:01
+
+[DEBUG] Thread 0 fetched 471 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-07-25 06:00 to 2025-08-15 01:01
+[DEBUG] Thread 2 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 125 points
+[DEBUG] Thread 5 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 499 points[DEBUG] Thread 9 fetched 500 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-01-18 18:00 to 2025-02-08 13:01[DEBUG] Thread 0 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 471 points[DEBUG] Thread 6 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 500 points
+
+
+
+
+[DEBUG] Thread 5 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-05-02 22:00 to 2025-05-23 17:01[DEBUG] Thread 2 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-05-23 18:00 to 2025-06-13 13:01[DEBUG] Thread 6 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-06-13 14:00 to 2025-07-04 09:01[DEBUG] Thread 9 completed task for UID b9af5c7f873749c090f164b8d7899733 with 500 points
+
+
+[DEBUG] Thread 0 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-07-04 10:00 to 2025-07-25 05:01
+
+[DEBUG] Thread 9 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-07-25 06:00 to 2025-08-15 01:01
+
+[DEBUG] Thread 8 fetched 499 points for UID 'c56ebd0f03ca491cb6577167d451c2f6', range 2025-09-04 22:00 to 2025-09-25 17:01
+[DEBUG] Thread 8 completed task for UID c56ebd0f03ca491cb6577167d451c2f6 with 499 points
+[DEBUG] Thread 8 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-08-15 02:00 to 2025-09-04 21:01
+[DEBUG] Thread 1 fetched 500 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-02-08 14:00 to 2025-03-01 09:01
+[DEBUG] Thread 1 completed task for UID b9af5c7f873749c090f164b8d7899733 with 500 points
+[DEBUG] Thread 1 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-09-04 22:00 to 2025-09-25 17:01
+
+[DEBUG] Thread 7 fetched 500 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-03-01 10:00 to 2025-03-22 05:01
+[DEBUG] Thread 3 fetched 500 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-03-22 06:00 to 2025-04-12 01:01[DEBUG] Thread 4 fetched 500 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-04-12 02:00 to 2025-05-02 21:01[DEBUG] Thread 7 completed task for UID b9af5c7f873749c090f164b8d7899733 with 500 points
+
+[DEBUG] Thread 7 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-09-25 18:00 to 2025-10-16 13:01
+[DEBUG] Thread 4 completed task for UID b9af5c7f873749c090f164b8d7899733 with 500 points[DEBUG] Thread 3 completed task for UID b9af5c7f873749c090f164b8d7899733 with 500 points
+
+
+[DEBUG] Thread 4 processing task for UID b9af5c7f873749c090f164b8d7899733, range 2025-10-16 14:00 to 2025-10-21 19:01[DEBUG] Thread 3 found no more tasks
+
+[DEBUG] Thread 1 fetched 499 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-09-04 22:00 to 2025-09-25 17:01
+[DEBUG] Thread 1 completed task for UID b9af5c7f873749c090f164b8d7899733 with 499 points[DEBUG] Thread 6 fetched 500 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-06-13 14:00 to 2025-07-04 09:01[DEBUG] Thread 9 fetched 471 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-07-25 06:00 to 2025-08-15 01:01
+
+[DEBUG] Thread 2 fetched 500 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-05-23 18:00 to 2025-06-13 13:01[DEBUG] Thread 8 fetched 499 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-08-15 02:00 to 2025-09-04 21:01[DEBUG] Thread 6 completed task for UID b9af5c7f873749c090f164b8d7899733 with 500 points
+
+[DEBUG] Thread 1 found no more tasks
+
+[DEBUG] Thread 5 fetched 500 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-05-02 22:00 to 2025-05-23 17:01[DEBUG] Thread 8 completed task for UID b9af5c7f873749c090f164b8d7899733 with 499 points
+[DEBUG] Thread 6 found no more tasks[DEBUG] Thread 2 completed task for UID b9af5c7f873749c090f164b8d7899733 with 500 points[DEBUG] Thread 9 completed task for UID b9af5c7f873749c090f164b8d7899733 with 471 points
+
+
+
+
+[DEBUG] Thread 2 found no more tasks[DEBUG] Thread 8 found no more tasks[DEBUG] Thread 5 completed task for UID b9af5c7f873749c090f164b8d7899733 with 500 points
+
+[DEBUG] Thread 9 found no more tasks
+
+[DEBUG] Thread 5 found no more tasks
+[DEBUG] Thread 0 fetched 500 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-07-04 10:00 to 2025-07-25 05:01
+[DEBUG] Thread 0 completed task for UID b9af5c7f873749c090f164b8d7899733 with 500 points
+[DEBUG] Thread 0 found no more tasks
+[DEBUG] Thread 0 joined
+[DEBUG] Thread 1 joined
+[DEBUG] Thread 2 joined
+[DEBUG] Thread 3 joined
+[DEBUG] Thread 4 fetched 125 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-10-16 14:00 to 2025-10-21 19:01
+[DEBUG] Thread 4 completed task for UID b9af5c7f873749c090f164b8d7899733 with 125 points
+[DEBUG] Thread 4 found no more tasks
+[DEBUG] Thread 4 joined
+[DEBUG] Thread 5 joined
+[DEBUG] Thread 6 joined
+[DEBUG] Thread 7 fetched 500 points for UID 'b9af5c7f873749c090f164b8d7899733', range 2025-09-25 18:00 to 2025-10-16 13:01
+[DEBUG] Thread 7 completed task for UID b9af5c7f873749c090f164b8d7899733 with 500 points
+[DEBUG] Thread 7 found no more tasks
+[DEBUG] Thread 7 joined
+[DEBUG] Thread 8 joined
+[DEBUG] Thread 9 joined
+[DEBUG] Combined results from 42 tasks with 3 UIDs
+[DEBUG] Returning result dict with 3 UIDs
+[DEBUG] gapCheck for dataID '93a07e0e8c7e42cfa691fe97eb5de3ea': timestamps len=6625, data len=6594
+[DEBUG] Removed 1 extra/mismatched rows from '93a07e0e8c7e42cfa691fe97eb5de3ea': ts ['01/18/25 11:00:00']
+[DEBUG] Post-gapCheck len=6625, sample first 3: ['01/18/25 12:00:00,0', '01/18/25 13:00:00,0', '01/18/25 14:00:00,0']
+[DEBUG] gapCheck for dataID 'c56ebd0f03ca491cb6577167d451c2f6': timestamps len=6625, data len=6594
+[DEBUG] Removed 1 extra/mismatched rows from 'c56ebd0f03ca491cb6577167d451c2f6': ts ['01/18/25 11:00:00']
+[DEBUG] Post-gapCheck len=6625, sample first 3: ['01/18/25 12:00:00,0', '01/18/25 13:00:00,0', '01/18/25 14:00:00,0']
+[DEBUG] gapCheck for dataID 'b9af5c7f873749c090f164b8d7899733': timestamps len=6625, data len=6594
+[DEBUG] Removed 1 extra/mismatched rows from 'b9af5c7f873749c090f164b8d7899733': ts ['01/18/25 11:00:00']
+[DEBUG] Post-gapCheck len=6625, sample first 3: ['01/18/25 12:00:00,8.597055532599999', '01/18/25 13:00:00,9.559082768900002', '01/18/25 14:00:00,7.870998764633335']
+[DEBUG] QueryWorker: Completed group ('AQUARIUS', None, 'HOUR') with 3 items
+[DEBUG] executeQUery: Queries complete, progress at 70%
+[DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, 'HOUR') with 3 items
 [DEBUG] executeQuery: Queue empty, waiting for more results
-[DEBUG] Added empty result for dataID 93a07e0e8c7e42cfa691fe97eb5de3ea
-[DEBUG] Added empty result for dataID c56ebd0f03ca491cb6577167d451c2f6
-[DEBUG] Added empty result for dataID b9af5c7f873749c090f164b8d7899733
 [DEBUG] executeQuery: Updating progress dialog for table building
-[DEBUG] buildTable: Starting with 6553 rows, 3 headers
-[DEBUG] buildTable: USBR not in dict, header 0: 93a07e0e8c7e42cfa691fe97eb5de3ea
-HOUR
-[DEBUG] buildTable: USBR not in dict, header 1: c56ebd0f03ca491cb6577167d451c2f6
-HOUR
-[DEBUG] buildTable: USBR not in dict, header 2: b9af5c7f873749c090f164b8d7899733
-HOUR
-[DEBUG] buildTable: Setting table to 6553 rows, 3 columns
+[DEBUG] buildTable: Starting with 6625 rows, 3 headers
+[DEBUG] buildTable: Aquarius not in dict, header 0: Published | Discharge
+FMTC2(North)
+[DEBUG] buildTable: Aquarius not in dict, header 1: Published | Discharge
+FMTC2(South)
+[DEBUG] buildTable: Aquarius not in dict, header 2: Published | Discharge
+FMTC2(West)
+[DEBUG] buildTable: Setting table to 6625 rows, 3 columns
 [DEBUG] No config.ini found or user.config exists, skipping conversion
 [DEBUG] Loaded config: {'lastExportPath': 'C:\\Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'FMTC2', 'retroMode': True}
 [DEBUG] utcOffset loaded as: UTC-07:00 | Mountain Time (US & Canada)/Arizona
 [DEBUG] Loaded settings from user.config: {'lastExportPath': 'C:\\Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'FMTC2'}
 [DEBUG] buildTable: Sampling 1000 rows for column widths
-[DEBUG] buildTable col 0: No non-empty values, using fallback width 32
-[DEBUG] buildTable col 0: maxCellWidth=32, headerWidth=266
-[DEBUG] buildTable col 1: No non-empty values, using fallback width 32
-[DEBUG] buildTable col 1: maxCellWidth=32, headerWidth=270
-[DEBUG] buildTable col 2: No non-empty values, using fallback width 32
-[DEBUG] buildTable col 2: maxCellWidth=32, headerWidth=271
+[DEBUG] buildTable col 0: maxCellWidth=167, headerWidth=153
+[DEBUG] buildTable col 1: maxCellWidth=176, headerWidth=153
+[DEBUG] buildTable col 2: maxCellWidth=167, headerWidth=153
 [DEBUG] buildTable: Disabled table updates for population
 [DEBUG] buildTable: Re-enabled table updates after population
 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
-[DEBUG] buildTable: Set column 0 width to 276
-[DEBUG] buildTable: Set column 1 width to 280
-[DEBUG] buildTable: Set column 2 width to 281
+[DEBUG] buildTable: Set column 0 width to 187
+[DEBUG] buildTable: Set column 1 width to 196
+[DEBUG] buildTable: Set column 2 width to 187
 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
 [DEBUG] buildTable: Set default row height to 29
-[DEBUG] buildTable: Custom resized 3 columns. Text width for col 1: 319, Visible width: 280, Row height: 29
+[DEBUG] buildTable: Custom resized 3 columns. Text width for col 1: 260, Visible width: 196, Row height: 29
 [DEBUG] qaqc: Processing column 0 for lookupId 93a07e0e8c7e42cfa691fe97eb5de3ea
 [DEBUG] qaqc: Processed column 0 for lookupId 93a07e0e8c7e42cfa691fe97eb5de3ea
 [DEBUG] qaqc: Processing column 1 for lookupId c56ebd0f03ca491cb6577167d451c2f6
