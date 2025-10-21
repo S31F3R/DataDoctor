@@ -1266,62 +1266,87 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         
         QApplication.processEvents() # Pump for dialog
 
-    # Wait for pool to finish with timeout, pumping events for dialog
+    # Non-blocking wait with timer for progress
     timeoutSeconds = 300 # 5 minutes
     startTime = time.time()
     progressBase = 10 # Start gradual progress at 10% after workers start
+    timer = QTimer()
+    timer.setSingleShot(False) # Repeat until done
 
-    while pool.activeThreadCount() > 0 and (time.time() - startTime) < timeoutSeconds:
-        time.sleep(0.1) # Brief sleep to avoid busy wait
+    def updateProgress():
+        nonlocal startTime
         elapsed = time.time() - startTime
 
-        if not progressDialog.wasCanceled():
-            progress = progressBase + int((elapsed / timeoutSeconds) * 20) # Gradual 70-9-%
-            progressDialog.setValue(min(progress, 69)) # Cap at 69% until done
-            progressDialog.setLabelText(f"Processing queries... ({int(elapsed)}s)")
+        if pool.activeThreadCount() == 0 or elapsed > timeoutSeconds:
+            timer.stop()
 
-        QApplication.processEvents() # Pump for dialog updates and responsiveness
+            if elapsed > timeoutSeconds:
+                if debug: print(f"[DEBUG] executeQuery: Pool timed out after {timeoutSeconds} seconds")
+                print(f"[WARN] Some queries timed out after {timeoutSeconds} seconds; partial data may be mmissing")
 
-    if (time.time() - startTime) >= timeoutSeconds:
-        if debug: print(f"[DEBUG] executeQuery: Pool timed out after {timeoutSeconds} seconds")
-        print(f"[WARN] Some queries timed out after {timeoutSeconds} seconds; partial data may be mmissing")
-    
-    if progressDialog.wasCanceled():            
-        if debug: print("[DEBUG] executeQUery: User canceled via progress dialog")
-        progressDialog.cancel()
-        return     
+                if not progressDialog.wasCanceled():            
+                    progressDialog.setValue(70) # Queries complete
+                    progressDialog.setLabelText("Merging data...")
+                    if debug: print("[DEBUG] executeQUery: Queries complete, progress at 70%")
 
-    if not progressDialog.wasCanceled():            
-        progressDialog.setValue(70) # Queries complete
-        progressDialog.setLabelText("Merging data...")
-        if debug: print("[DEBUG] executeQUery: Queries complete, progress at 70%")
+                QApplication.processEvents() # Pump for responsivness
+                return
+            if not progressDialog.wasCanceled():
+                progress = progressBase + int((elapsed / timeoutSeconds) * 60) # Gradual 10-70%
+                progressDialog.setValue(min(progress, 69)) # Cap at 69%
+                progressDialog.setLabelText(f"Processing queries... ({int(elapsed)}s)")
 
-    QApplication.processEvents() # Pump for responsiveness
+            QApplication.processEvents() # Pump for responsivness
+
+        timer.timeout.connect(updateProgress)
+        timer.start(500) # Update every 500ms
+        if debug: print("[DEBUG] executeQuery: Started timer for progress updates")
     
     # Combine results
     valueDict = {}
     collected = 0
 
-    while collected < numGroups:
-        try:
-            groupKey, groupResult, groupLabels = resultQueue.get_nowait()
-            valueDict.update(groupResult)
+    def handleResult(result):
+        nonlocal collected
+        groupKey, groupResult, groupLabels = result
+        valueDict.update(groupResult)
 
-            if groupLabels and labelsDict is not None:
-                labelsDict.update(groupLabels)
+        if groupLabels and labelsDict is not None:
+            labelsDict.update(groupLabels)
 
-            collected += 1
-            if debug: print(f"[DEBUG] executeQuery: Collected results for group {groupKey} with {len(groupResult)} items")
+        collected += 1
+        if debug: print(f"[DEBUG] executeQuery: Collected results for group {groupKey} with {len(groupResult)} items")
 
-            if not progressDialog.wasCanceled():
-                progressDialog.setValue(70 + (collected * 10)) # Gradual 70-90% during merging
+        if not progressDialog.wasCanceled():
+            current = progressDialog.value()
+            progressDialog.setValue(min(current + (10 * collected), 90)) # Gradual 70-90%
+            progressDialog.setLabelText(f"Mergings data... ({collected}/{numGroups})")
 
-            QGuiApplication.processEvents() # Pump for dialog responsiveness
-        except queue.Empty:
-            time.sleep(0.1) # Brief sleep to avoid busy-wait
-            QGuiApplication.processEvents()             
+        QGuiApplication.processEvents() # Pump for dialog responsiveness
 
-    if debug: print("[DEBUG] executeQuery: Queue empty, waiting for more results")
+    for i, groupkey in enumerate(groups.keys()):
+        signals = QueryWorkerSignals()
+        worker = QueryWorker(groupkey, groups[groupkey], signals)
+        signals.resultSignal.connect(lambda result: (resultQueue.put(result), handleResult(result))) # Combine put and progress
+        pool.start(worker)
+        threadsStarted += 1
+        if debug: print(f"[DEBUG] executeQuery: Started backgroundworker {i} for group {groupKey}")
+
+    if not progressDialog.wasCanceled():
+        progressDialog.setValue(10) # Fixed base after workers
+        if debug: print("[DEBUG] executeQuery: All workers started, progress at 10%")
+
+    QApplication.processEvents()
+
+    # Wait for results or cancellation
+    while collected < numGroups and not progressDialog.wasCanceled():
+        time.sleep(0.1) # Brief sleep to avoid busy-wait
+        QApplication.processEvents()
+
+    if progressDialog.wasCanceled():
+        if debug: print("[DEBUG] executeQuery: User canceled via progress dialog")
+        progressDialog.cancel()
+        return   
 
     # Ensure all dataIDs are in valueDict
     for dataID, _, _, _, _ in queryItems:
