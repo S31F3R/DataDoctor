@@ -1279,7 +1279,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
     mainWindow.mainTable.clear()
     buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
-    
+
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
     if debug: print("[DEBUG] Query executed and table updated.")
@@ -1297,27 +1297,6 @@ def getUtcOffsetInt(utcOffsetStr):
     except (ValueError, IndexError) as e:
         if debug: print("[ERROR] getUtcOffsetInt: Failed to parse '{}': {}. Returning 0".format(utcOffsetStr, e))
         return 0.0 # Fallback to UTC+00:00
-
-def setRetroCursor(app, enable):
-    """Set or reset custom cursor based on retroMode."""
-    if enable:
-        cursorPath = resourcePath('ui/RetroCursor.png')
-
-        if os.path.exists(cursorPath):
-            try:
-                pixmap = QPixmap(cursorPath).scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                cursor = QCursor(pixmap, 0, 0) # Explicit hotspot at (0,0)
-                app.setOverrideCursor(cursor)
-                if debug: print("[DEBUG] Set retro cursor from {}".format(cursorPath))
-            except Exception as e:
-                if debug: print("[ERROR] Failed to load retro cursor '{}': {}. Using fallback cursor".format(cursorPath, e))
-                app.setOverrideCursor(QCursor(Qt.CursorShape.CrossCursor)) # Fallback
-        else:
-            if debug: print("[ERROR] Retro cursor file '{}' not found. Using fallback cursor".format(cursorPath))
-            app.setOverrideCursor(QCursor(Qt.CursorShape.CrossCursor)) # Fallback
-    else:
-        app.restoreOverrideCursor()
-        if debug: print("[DEBUG] Restored default cursor")
 
 def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQueryList=None):
     """Apply or remove retro mode styles (e.g., scroll bars) dynamically."""
