@@ -1,4 +1,5 @@
 -Progress dialog stays on 10% if only 1 database is queried
+-If an entire query batch comes up all missing, run one more time
 
 
 ####### HOUSE KEEPING #######
