@@ -1,0 +1,5 @@
+svr - either lchdb, uchdb2, yaohdb, ecohdb, lbohdb, kbohdb, pnhyd, or gphyd for the Lower Colorado Regional Office, Upper Colorado Regional Office, Yuma Area Office, Eastern Colorado Area Office, Lahontan Basin Area Office, Klamath Basin Area Office HDBs, or the Pacific Northwest Regional Office or Great Plains Regional Office Hydromets respectively
+sdi - separate multiple Site Datatype IDs (sdi) with a comma
+tstp - IN, HR, DY, MN to query instantaneous, hourly, daily, or monthly data
+t1 & t2 - start and end date in MM-DD-YYYY (01-01-1980) or YYYY-MM-DDTHH:mm (1980-01-01T13:00) format. You may alternatively set these to integers to get data using a timestep offset from today (Ex: If querying daily data and t1=-7 and t2=0, this will query the last 7-day's worth of data)
+format - csv, table, json, or graph
