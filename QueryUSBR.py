@@ -15,6 +15,8 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         tstp = 'IN'
     elif interval == 'DAY':
         tstp = 'DY'
+    elif interval == 'MONTH':
+        tstp = 'MN'
     else:
         print("[ERROR] Unsupported interval: {}".format(interval))
         return {}
