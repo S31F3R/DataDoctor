@@ -240,11 +240,7 @@ class uiWebQuery(QMainWindow):
         self.cbDatabase.addItem('USBR-UCHDB2') # Upper Colorado
         self.cbDatabase.addItem('USGS-NWIS') # USGS
 
-        # Populate interval combobox
-        self.cbDatabase.addItem('AQUARIUS')
-        self.cbDatabase.addItem('USBR-LCHDB')
-        self.cbDatabase.addItem('USBR-YAOHDB')
-        self.cbDatabase.addItem('USBR-UCHDB2')
+        # Populate interval combobox 
         self.cbInterval.addItem('HOUR')
         self.cbInterval.addItem('INSTANT:1')
         self.cbInterval.addItem('INSTANT:15')
@@ -443,12 +439,10 @@ class uiInternalQuery(QMainWindow):
         self.cbDatabase.addItem('USBR-LCHDB') # Lower Colorado
         self.cbDatabase.addItem('USBR-YAOHDB') # Yuma Area
         self.cbDatabase.addItem('USBR-UCHDB2') # Upper Colorado
+        self.cbDatabase.addItem('USGS-NWIS') # USGS (public)
 
-        # Populate interval combobox
-        self.cbDatabase.addItem('AQUARIUS')
-        self.cbDatabase.addItem('USBR-LCHDB')
-        self.cbDatabase.addItem('USBR-YAOHDB')
-        self.cbDatabase.addItem('USBR-UCHDB2')
+
+        # Populate interval combobox  
         self.cbInterval.addItem('HOUR')
         self.cbInterval.addItem('INSTANT:1')
         self.cbInterval.addItem('INSTANT:15')
