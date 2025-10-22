@@ -1152,7 +1152,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     progressDialog.setAutoClose(False)
     progressDialog.setFixedSize(400, 100) # Lock size for messages, prevent resizing
     progressDialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.MSWindowsFixedSizeDialogHint) # Lock position
-    progressDialog.show() # Force immediate display
+    progressDialog.show() # Force initial display
     progressDialog.setValue(10)
     progressDialog.repaint() # Force initial render
     if debug: print("[DEBUG] executeQuery: Initialized and showed progress dialog")
@@ -1174,6 +1174,11 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         progressDialog.cancel()
         QMessageBox.warning(mainWindow, "Date Error", "Invalid dates or interval.")
         return
+
+    progressDialog.setValue(20) # Setup complete
+    progressDialog.repaint()
+    QCoreApplication.processEvents()
+    if debug: print("[DEBUG] executeQuery: Setup complete, progress at 20%")
 
     defaultBlanks = [''] * len(timestamps)
     labelsDict = {} if isInternal else None
@@ -1264,10 +1269,10 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     threadsStarted = 0
     valueDict = {}
     collected = 0
-    eventLoop = QEventLoop() # For processing timer signals
+    eventLoop = QEventLoop() # For processing signals
 
     def handleResult(result):
-        nonlocal collected, valueDict, timer
+        nonlocal collected, valueDict
         groupKey, groupResult, groupLabels = result
         # Check if groupResult is all blanks
         if all(all(v == '' for v in values) for values in groupResult.values()):
@@ -1281,12 +1286,11 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             if debug: print(f"[DEBUG] executeQuery: Collected results for group {groupKey} with {len(groupResult)} items ({collected}/{numGroups})")
             if debug: print(f"[DEBUG] executeQuery: groupResult keys: {list(groupResult.keys())}")
             if not progressDialog.wasCanceled():
-                current = progressDialog.value()
-                progressDialog.setValue(min(70 + int(20 * collected / numGroups), 80)) # Gradual 70-80%
+                progressDialog.setValue(20 + int(50 * collected / numGroups)) # Gradual 20-70%
                 progressDialog.setLabelText(f"Completed {groupKey[0]} query ({collected}/{numGroups})")
                 progressDialog.repaint() # Force redraw
                 progressDialog.updateGeometry() # Stabilize position
-                if debug: print(f"[DEBUG] executeQuery: Progress set to {min(70 + int(20 * collected / numGroups), 80)}%")
+                if debug: print(f"[DEBUG] executeQuery: Progress set to {20 + int(50 * collected / numGroups)}%")
                 QCoreApplication.processEvents()
                 QTimer.singleShot(500, lambda: progressDialog.setLabelText(f"Merging data... ({collected}/{numGroups})") if not progressDialog.wasCanceled() else None)
 
@@ -1299,7 +1303,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         if debug: print(f"[DEBUG] Started backgroundworker {i} for group {groupKey}")
 
     if not progressDialog.wasCanceled():
-        progressDialog.setValue(10) # Fixed base after all workers start
+        progressDialog.setValue(10) # Fixed base after workers start
         progressDialog.setLabelText(f"Querying data... (0/{numGroups} complete)") # Fix initial label
         progressDialog.repaint() # Force initial render
         if debug: print(f"[DEBUG] executeQuery: All workers started, progress at 10%")
@@ -1307,28 +1311,17 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     QCoreApplication.processEvents() # Pump for dialog
 
     # Non-blocking wait with timer for progress and queue check
-    timeoutSeconds = 60 # 1 minute for faster progress
-    startTime = time.time()
-    progressBase = 10 # Start gradual progress at 10% after workers start
     timer = QTimer()
     timer.setSingleShot(False) # Repeat until done
 
-    def updateProgress():
-        nonlocal startTime, collected
-        elapsed = time.time() - startTime
+    def checkQueueAndProgress():
+        nonlocal collected
         if collected >= numGroups:
             timer.stop()
-            if debug: print("[DEBUG] executeQuery: Timer stopped in updateProgress, all groups collected")
-            if not progressDialog.wasCanceled():
-                progressDialog.setValue(70) # Queries complete
-                progressDialog.setLabelText(f"Merging data... ({collected}/{numGroups})")
-                progressDialog.repaint() # Force redraw
-                progressDialog.updateGeometry() # Stabilize position
-                if debug: print("[DEBUG] executeQuery: Queries complete, progress at 70%")
-            QCoreApplication.processEvents()
+            if debug: print("[DEBUG] executeQuery: Timer stopped, all groups collected")
             return
         if not progressDialog.wasCanceled():
-            # Process queue in timer to catch results
+            # Process queue
             while not resultQueue.empty():
                 try:
                     result = resultQueue.get_nowait()
@@ -1336,15 +1329,13 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     if debug: print(f"[DEBUG] executeQuery: Processed queued result in timer, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
                 except queue.Empty:
                     break
-            progress = progressBase + int((elapsed / timeoutSeconds) * 80) # Gradual 10-90%
-            progressDialog.setValue(min(progress, 69)) # Cap at 69%
             progressDialog.setLabelText(f"Querying data... ({collected}/{numGroups} complete)")
             progressDialog.repaint() # Force redraw
             progressDialog.updateGeometry() # Stabilize position
-            if debug: print(f"[DEBUG] executeQuery: Timer update, progress {progress}%, collected {collected}/{numGroups}")
+            if debug: print(f"[DEBUG] executeQuery: Timer update, progress {20 + int(50 * collected / numGroups)}%, collected {collected}/{numGroups}")
         QCoreApplication.processEvents() # Pump for responsiveness
 
-    timer.timeout.connect(updateProgress)
+    timer.timeout.connect(checkQueueAndProgress)
     timer.start(100) # Faster updates, every 100ms
     if debug: print("[DEBUG] executeQuery: Started timer for progress updates")
 
@@ -1352,7 +1343,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     while collected < numGroups and not progressDialog.wasCanceled():
         if pool.activeThreadCount() > 0:
             time.sleep(0.05) # Short sleep to allow timer
-        QCoreApplication.processEvents() # Process timer and signals
+        QCoreApplication.processEvents() # Process signals
 
     timer.stop() # Ensure timer stops
     if debug: print("[DEBUG] executeQuery: Timer stopped, wait loop ended")
@@ -1365,7 +1356,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
     if debug: print(f"[DEBUG] executeQuery: All {collected} groups merged")
     progressDialog.setLabelText("Merging results...")
-    progressDialog.setValue(85) # Update before heavy merge
+    progressDialog.setValue(70) # Update before heavy merge
     progressDialog.repaint()
     QCoreApplication.processEvents()
     if debug: print(f"[DEBUG] executeQuery: Merging valueDict with {len(valueDict)} keys")
@@ -1381,8 +1372,8 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
         if r % 100 == 0: # Update progress every 100 rows
-            progressDialog.setLabelText(f"Building table... ({r}/{len(timestamps)} rows)")
-            progressDialog.setValue(85 + int(15 * r / len(timestamps))) # Gradual 85-100%
+            progressDialog.setLabelText(f"Building rows... ({r}/{len(timestamps)} rows)")
+            progressDialog.setValue(72 + int(28 * r / len(timestamps))) # Gradual 72-100%
             progressDialog.repaint()
             QCoreApplication.processEvents()
             if debug: print(f"[DEBUG] executeQuery: Building row {r}/{len(timestamps)}")
@@ -1390,14 +1381,16 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
     if not progressDialog.wasCanceled():
         progressDialog.setLabelText("Building table...")
+        progressDialog.setValue(70) # Column widths start
+        progressDialog.repaint()
+        QCoreApplication.processEvents()
         if debug: print("[DEBUG] executeQuery: Updating progress dialog for table building")
-        QCoreApplication.processEvents() # Pump event loop before table building
         mainWindow.mainTable.clear()
         buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
-        progressDialog.setValue(100) # Complete
-        progressDialog.repaint() # Force redraw
+        progressDialog.setValue(72) # Column widths complete
+        progressDialog.repaint()
+        QCoreApplication.processEvents()
         if debug: print("[DEBUG] executeQuery: Table built, progress dialog completed")
-        QCoreApplication.processEvents() # Pump event loop after table building
 
     if progressDialog.wasCanceled():
         if debug: print("[DEBUG] executeQuery: User canceled during table building")
