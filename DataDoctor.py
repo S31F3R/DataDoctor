@@ -5,7 +5,7 @@ import os
 import json
 import keyring
 from keyring.backends.null import Keyring as NullKeyring # Safe fallback if needed
-#from datetime import datetime
+from datetime import datetime
 from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap 
 from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
                              QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox, QMenu)
 from PyQt6 import uic
 from PyQt6.QtMultimedia import QSoundEffect
-#from collections import defaultdict
 
 # No backend forcing: Rely on keyring defaults (KWallet on KDE/Linux, Credential Manager on Windows, Keychain on macOS)
 
@@ -171,7 +170,7 @@ class uiMain(QMainWindow):
         if not self.lastQueryType:
             if Logic.debug: print("[DEBUG] No last query to refresh.")
             return
-        from datetime import datetime
+        
         now = datetime.now()
         endDateTime = datetime.strptime(self.lastEndDate, '%Y-%m-%d %H:%M')
         if endDateTime.date() == now.date():
@@ -440,7 +439,6 @@ class uiInternalQuery(QMainWindow):
         self.cbDatabase.addItem('USBR-YAOHDB') # Yuma Area
         self.cbDatabase.addItem('USBR-UCHDB2') # Upper Colorado
         self.cbDatabase.addItem('USGS-NWIS') # USGS (public)
-
 
         # Populate interval combobox  
         self.cbInterval.addItem('HOUR')
