@@ -250,6 +250,9 @@ class uiWebQuery(QMainWindow):
         self.cbInterval.addItem('INSTANT:15')
         self.cbInterval.addItem('INSTANT:60')
         self.cbInterval.addItem('DAY')
+        self.cbInterval.addItem('MONTH')
+        self.cbInterval.addItem('YEAR')
+        self.cbInterval.addItem('WATER YEAR')
 
         # Set initial state
         Logic.initializeQueryWindow(self, self.rbCustomDateTime, self.dteStartDate, self.dteEndDate) # Set custom date, 72h range
@@ -455,6 +458,9 @@ class uiInternalQuery(QMainWindow):
         self.cbInterval.addItem('INSTANT:15')
         self.cbInterval.addItem('INSTANT:60')
         self.cbInterval.addItem('DAY')
+        self.cbInterval.addItem('MONTH')
+        self.cbInterval.addItem('YEAR')
+        self.cbInterval.addItem('WATER YEAR')
 
         # Set initial state
         Logic.initializeQueryWindow(self, self.rbCustomDateTime, self.dteStartDate, self.dteEndDate) # Set custom date, 72h range
