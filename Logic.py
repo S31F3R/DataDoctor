@@ -1344,9 +1344,11 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             return
         if not progressDialog.wasCanceled():
             # Process queue
+            if debug: print(f"[DEBUG] executeQuery: Checking queue, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
             while not resultQueue.empty():
                 try:
                     result = resultQueue.get_nowait()
+                    if debug: print(f"[DEBUG] executeQuery: Retrieved result from queue: {result[0]}")
                     handleResult(result)
                     if debug: print(f"[DEBUG] executeQuery: Processed queued result in timer, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
                 except queue.Empty:
@@ -1370,10 +1372,19 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             while not resultQueue.empty():
                 try:
                     result = resultQueue.get_nowait()
-                    handleResult(result)
                     if debug: print(f"[DEBUG] executeQuery: Processed extra queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
+                    handleResult(result)
                 except queue.Empty:
                     break
+
+    # Final queue flush
+    while not resultQueue.empty():
+        try:
+            result = resultQueue.get_nowait()
+            if debug: print(f"[DEBUG] executeQuery: Processed final queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
+            handleResult(result)
+        except queue.Empty:
+            break
 
     timer.stop() # Ensure timer stops
     if debug: print(f"[DEBUG] executeQuery: Timer stopped, wait loop ended, final collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
