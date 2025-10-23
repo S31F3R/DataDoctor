@@ -2,10 +2,10 @@ import requests
 import json
 import keyring
 import os
-from datetime import datetime, timedelta
 import Logic 
 import threading
 import queue
+from datetime import datetime, timedelta
 
 queryLimit = 500 # Configurable max points per API call
 maxThreads = 15 # Configurable max number of threads
