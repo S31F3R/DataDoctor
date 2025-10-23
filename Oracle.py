@@ -22,7 +22,7 @@ class oracleConnection:
         if platform.architecture()[0] != "64bit": raise RuntimeError("Only 64-bit platforms supported.")
         clientDirPath = "oracle/client"
         clientDir = Path(Logic.resourcePath(clientDirPath))
-        if not clientDir.exists(): raise FileNotFoundError(f"Oracle Instant Client directory not found: {clientDir}. Please download and unzip the Instant Client 21.15 for your platform into oracle/client.")
+        if not clientDir.exists(): raise FileNotFoundError(f"Oracle Instant Client directory not found: {clientDir}. Please download and unzip the Instant Client 23.9 for your platform into oracle/client.")
         
         # Validate platform-specific files
         expectedFiles = {
@@ -35,7 +35,7 @@ class oracleConnection:
         if not requiredFiles: raise RuntimeError(f"Unsupported platform: {system}")
         if Logic.debug: print(f"[DEBUG] oracleConnection._setup: Checking for platform-specific files in {clientDir}: {requiredFiles}")
         filesExist = all((clientDir / f).exists() for f in requiredFiles)
-        if not filesExist: raise FileNotFoundError(f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. Please download and unzip the correct Instant Client 21.15 for your platform into oracle/client.")
+        if not filesExist: raise FileNotFoundError(f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. Please download and unzip the correct Instant Client 23.9 for your platform into oracle/client.")
         if Logic.debug: print(f"[DEBUG] oracleConnection._setup: Validated Instant Client files for {system}")
 
         # Set platform-specific library path
