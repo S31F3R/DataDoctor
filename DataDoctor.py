@@ -7,13 +7,12 @@ from keyring.backends.null import Keyring as NullKeyring
 from datetime import datetime
 from PyQt6.QtGui import QGuiApplication, QIcon, QFont, QFontDatabase, QPixmap
 from PyQt6.QtCore import Qt, QEvent, QTimer, QUrl
-from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
-    QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
-    QMessageBox, QDialog, QSizePolicy, QTabWidget, QRadioButton, QButtonGroup,
-    QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox, QMenu)
 from PyQt6 import uic
 from PyQt6.QtMultimedia import QSoundEffect
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
+                            QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
+                            QMessageBox, QDialog, QSizePolicy, QTabWidget, QRadioButton, QButtonGroup,
+                            QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox, QMenu)
 
 class uiMain(QMainWindow):
     """Main window for DataDoctor: Handles core UI, queries, and exports."""
