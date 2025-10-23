@@ -105,7 +105,7 @@
      <property name="geometry">
       <rect>
        <x>84</x>
-       <y>62</y>
+       <y>60</y>
        <width>21</width>
        <height>22</height>
       </rect>
@@ -131,7 +131,7 @@
      <property name="geometry">
       <rect>
        <x>178</x>
-       <y>92</y>
+       <y>90</y>
        <width>21</width>
        <height>22</height>
       </rect>
@@ -144,7 +144,7 @@
      <property name="geometry">
       <rect>
        <x>110</x>
-       <y>152</y>
+       <y>150</y>
        <width>21</width>
        <height>22</height>
       </rect>
@@ -156,8 +156,8 @@
     <widget class="QCheckBox" name="cbRetroMode">
      <property name="geometry">
       <rect>
-       <x>90</x>
-       <y>122</y>
+       <x>100</x>
+       <y>120</y>
        <width>21</width>
        <height>22</height>
       </rect>
@@ -181,29 +181,19 @@
     </widget>
     <zorder>lbUTCOffset</zorder>
     <zorder>cbUTCOffset</zorder>
-    <zorder>lbRawData</zorder>
-    <zorder>lbQc</zorder>
     <zorder>cbRawData</zorder>
-    <zorder>lbDebug</zorder>
     <zorder>cbQAQC</zorder>
     <zorder>cbDebug</zorder>
-    <zorder>lbRetroMode</zorder>
     <zorder>cbRetroMode</zorder>
+    <zorder>lbQc</zorder>
+    <zorder>lbRetroMode</zorder>
+    <zorder>lbDebug</zorder>
+    <zorder>lbRawData</zorder>
    </widget>
    <widget class="QWidget" name="tabAquarius">
     <attribute name="title">
      <string>Aquarius</string>
     </attribute>
-    <widget class="QTextEdit" name="textAQServer">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>20</y>
-       <width>451</width>
-       <height>31</height>
-      </rect>
-     </property>
-    </widget>
     <widget class="QLabel" name="lbAQServer">
      <property name="geometry">
       <rect>
@@ -228,16 +218,6 @@
      </property>
      <property name="text">
       <string>User Name</string>
-     </property>
-    </widget>
-    <widget class="QTextEdit" name="textAQUser">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>80</y>
-       <width>451</width>
-       <height>31</height>
-      </rect>
      </property>
     </widget>
     <widget class="QLabel" name="lbAQPassword">
@@ -289,13 +269,26 @@
       <bool>true</bool>
      </property>
     </widget>
-    <zorder>lbAQServer</zorder>
-    <zorder>lbAQUserName</zorder>
-    <zorder>lbAQPassword</zorder>
-    <zorder>qleAQPassword</zorder>
-    <zorder>textAQUser</zorder>
-    <zorder>textAQServer</zorder>
-    <zorder>btnShowPassword</zorder>
+    <widget class="QLineEdit" name="qleAQUser">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>80</y>
+       <width>451</width>
+       <height>32</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLineEdit" name="qleAQServer">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>20</y>
+       <width>451</width>
+       <height>32</height>
+      </rect>
+     </property>
+    </widget>
    </widget>
    <widget class="QWidget" name="tabUSGS">
     <attribute name="title">
@@ -368,16 +361,6 @@
       <string>TNS Names Location</string>
      </property>
     </widget>
-    <widget class="QTextEdit" name="textTNSNames">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>50</y>
-       <width>471</width>
-       <height>31</height>
-      </rect>
-     </property>
-    </widget>
     <widget class="QRadioButton" name="rbBOP">
      <property name="geometry">
       <rect>
@@ -404,7 +387,7 @@
       <string>End of Period</string>
      </property>
     </widget>
-    <widget class="QLabel" name="lbTNSNames_4">
+    <widget class="QLabel" name="lbTimeStampMethod">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -415,6 +398,88 @@
      </property>
      <property name="text">
       <string>HOUR Timestamp Method:</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbOraclePassword">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>150</y>
+       <width>81</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Password</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="lbOracleUserName">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>90</y>
+       <width>81</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>User Name</string>
+     </property>
+    </widget>
+    <widget class="QLineEdit" name="qleOraclePassword">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>170</y>
+       <width>451</width>
+       <height>32</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="btnShowOraclePassword">
+     <property name="geometry">
+      <rect>
+       <x>456</x>
+       <y>170</y>
+       <width>41</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+     <property name="icon">
+      <iconset>
+       <normaloff>icons/Visible.png</normaloff>icons/Visible.png</iconset>
+     </property>
+     <property name="iconSize">
+      <size>
+       <width>24</width>
+       <height>24</height>
+      </size>
+     </property>
+     <property name="flat">
+      <bool>true</bool>
+     </property>
+    </widget>
+    <widget class="QLineEdit" name="qleTNSNames">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>50</y>
+       <width>451</width>
+       <height>32</height>
+      </rect>
+     </property>
+    </widget>
+    <widget class="QLineEdit" name="qleOracleUser">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>110</y>
+       <width>451</width>
+       <height>32</height>
+      </rect>
      </property>
     </widget>
    </widget>

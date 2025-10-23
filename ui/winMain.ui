@@ -21,7 +21,7 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>icons/DataDoctor.png</normaloff>icons/DataDoctor.png</iconset>
+    <normaloff>icons/Data Doctor.png</normaloff>icons/Data Doctor.png</iconset>
   </property>
   <property name="autoFillBackground">
    <bool>false</bool>
