@@ -26,7 +26,7 @@ class oracleConnection:
         
         # Validate platform-specific files
         expectedFiles = {
-            "windows": ["oci.dll", "oraociei21.dll"],
+            "windows": ["oci.dll"],
             "linux": ["libociei.so"],
             "darwin": ["libociei.dylib"]
         }
@@ -125,7 +125,7 @@ class oracleConnection:
             password = None
             raise
 
-    def executeSqlQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> List[Any]:
+    def executeQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> List[Any]:
         """Execute a SQL SELECT query and return results in timestamp,value format."""
         if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
         cursor = self.connection.cursor()
@@ -138,13 +138,13 @@ class oracleConnection:
             else:
                 cursor.execute(query)
             if Logic.debug:
-                print(f"[DEBUG] oracleConnection.executeSqlQuery: Executed query: {query[:100]}...")
+                print(f"[DEBUG] oracleConnection.executeQuery: Executed query: {query[:100]}...")
             if fetchAll:
                 results = cursor.fetchall()
-                if Logic.debug: print(f"[DEBUG] oracleConnection.executeSqlQuery: Fetched {len(results)} rows")
+                if Logic.debug: print(f"[DEBUG] oracleConnection.executeQuery: Fetched {len(results)} rows")
             else:
                 results = cursor.fetchone()
-                if Logic.debug: print(f"[DEBUG] oracleConnection.executeSqlQuery: Fetched single row: {results}")
+                if Logic.debug: print(f"[DEBUG] oracleConnection.executeQuery: Fetched single row: {results}")
 
             formattedResults = []
 
@@ -153,15 +153,20 @@ class oracleConnection:
                     timestamp = row[0].strftime('%m/%d/%y %H:%M:00') if isinstance(row[0], datetime) else str(row[0])
                     value = str(row[1]) if row[1] is not None else ''
                     formattedResults.append(f"{timestamp},{value}")
+                else: 
+                    timestamp = row[0].strftime('%m/%d/%y %H:%M:00') if isinstance(row[0], datetime) else str(row[0])
+                    value = ''
 
-            if Logic.debug: print(f"[DEBUG] oracleConnection.executeSqlQuery: Formatted {len(formattedResults)} rows")
+                formattedResults.append(f"{timestamp},{value}")
+
+            if Logic.debug: print(f"[DEBUG] oracleConnection.executeQuery: Formatted {len(formattedResults)} rows")
             return formattedResults
         except oracledb.Error as e:
-            if Logic.debug: print(f"[DEBUG] oracleConnection.executeSqlQuery: Error executing query: {e}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection.executeQuery: Error executing query: {e}")
             raise
         finally:
             cursor.close()
-            if Logic.debug: print("[DEBUG] oracleConnection.executeSqlQuery: Cursor closed")
+            if Logic.debug: print("[DEBUG] oracleConnection.executeQuery: Cursor closed")
 
     def callStoredProcedure(self, procedureName: str, params: Optional[List[Any]] = None) -> List[Any]:
         """Call an Oracle stored procedure and return output values."""
@@ -192,21 +197,19 @@ class oracleConnection:
                 shutil.rmtree(self.tnsDir, ignore_errors=True)
                 if Logic.debug: print("[DEBUG] oracleConnection.close: Cleaned up TNS_ADMIN directory")
 
-    def testConnection(dsn):
-        if Logic.debug: print(f"[DEBUG] oracleConnection.testConnection: Testing connection to {dsn}")
-        oracleConn = None
+    def testConnection(self):
+        if Logic.debug: print(f"[DEBUG] oracleConnection.testConnection: Testing connection to {self.dsn}")       
 
         try:
-            oracleConn = oracleConnection
-            conn = oracleConn
-            result = oracleConn.executeSqlQuery("SELECT SYSDATE FROM DUAL", fetchAll=False)
+            self.connect()
+            result = self.executeQuery("SELECT SYSDATE FROM DUAL", fetchAll=False)
             if Logic.debug: print(f"[DEBUG] oracleConnection.testConnection: Query result: {result}")
-            if result: print(f"[INFO] Successfully connected to {dsn} and fetched SYSDATE: {result[0]}")
-            else: print(f"[WARN] Connected to {dsn} but no result from query")
+            if result: print(f"[INFO] Successfully connected to {self.dsn} and fetched SYSDATE: {result[0]}")
+            else: print(f"[WARN] Connected to {self.dsn} but no result from query")
             return True
         except Exception as e:
-            if Logic.debug: print(f"[DEBUG] oracleConnection.testConnection: Failed to connect to {dsn}: {e}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection.testConnection: Failed to connect to {self.dsn}: {e}")
             print(f"[ERROR] Connected test failed: {e}")
             return False
         finally: 
-            if oracleConn: oracleConn.close()
+            self.close()

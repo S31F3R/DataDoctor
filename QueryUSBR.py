@@ -177,7 +177,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             if Logic.debug: print(f"[DEBUG] sqlRead: Executing query for SDI {sdi}: {query}")
 
             try:
-                data = oracleConn.executeSqlQuery(query, params=params)
+                data = oracleConn.executeQuery(query, params=params)
                 resultDict[sdi] = Logic.gapCheck(
                     Logic.buildTimestamps(startDate, endDate, interval),
                     data,
