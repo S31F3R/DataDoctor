@@ -1299,6 +1299,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             return
         if collected < numGroups: # Prevent double-processing
             if debug: print(f"[DEBUG] executeQuery: valueDict keys before update: {list(valueDict.keys())}")
+            for dataID in groupResult:
+                if dataID in valueDict:
+                    if debug: print(f"[DEBUG] executeQuery: Warning: dataID {dataID} already in valueDict, updating with new data")
             valueDict.update(groupResult)
             if groupLabels and labelsDict is not None:
                 labelsDict.update(groupLabels)
@@ -1333,13 +1336,19 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     QCoreApplication.processEvents() # Pump for dialog
 
     # Non-blocking wait with timer for progress and queue check
+    timeoutSeconds = 600 # 10 minutes to allow slower USBR queries
+    startTime = time.time()
     timer = QTimer()
     timer.setSingleShot(False) # Repeat until done
 
     def checkQueueAndProgress():
         nonlocal collected
-        if collected >= numGroups and resultQueue.empty() and pool.activeThreadCount() == 0:
+        elapsed = time.time() - startTime
+        if (collected >= numGroups and resultQueue.empty() and pool.activeThreadCount() == 0) or elapsed > timeoutSeconds:
             timer.stop()
+            if elapsed > timeoutSeconds:
+                if debug: print(f"[DEBUG] executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")
+                print(f"[WARN] Query timeout after {timeoutSeconds} seconds; some data may be missing")
             if debug: print("[DEBUG] executeQuery: Timer stopped in checkQueueAndProgress, all groups collected")
             return
         if not progressDialog.wasCanceled():
@@ -1377,14 +1386,19 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 except queue.Empty:
                     break
 
-    # Final queue flush
-    while not resultQueue.empty():
+    # Final queue flush with retry
+    maxRetries = 5
+    retryCount = 0
+    while not resultQueue.empty() and retryCount < maxRetries:
         try:
             result = resultQueue.get_nowait()
             if debug: print(f"[DEBUG] executeQuery: Processed final queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
             handleResult(result)
         except queue.Empty:
             break
+        retryCount += 1
+    if retryCount >= maxRetries:
+        if debug: print(f"[DEBUG] executeQuery: Max retries ({maxRetries}) reached for final queue flush, queue size {resultQueue.qsize()}")
 
     timer.stop() # Ensure timer stops
     if debug: print(f"[DEBUG] executeQuery: Timer stopped, wait loop ended, final collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
