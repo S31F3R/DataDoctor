@@ -11,8 +11,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QTableWidget, QVBoxLayout,
     QComboBox, QDateTimeEdit, QListWidget, QWidget, QGridLayout,
     QMessageBox, QDialog, QSizePolicy, QTabWidget, QRadioButton, QButtonGroup,
-    QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox, QMenu
-)
+    QDialogButtonBox, QLineEdit, QLabel, QTextBrowser, QCheckBox, QMenu)
 from PyQt6 import uic
 from PyQt6.QtMultimedia import QSoundEffect
 
