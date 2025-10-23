@@ -1,7 +1,3 @@
--Progress dialog stays on 10% if only 1 database is queried
--If an entire query batch comes up all missing, run one more time
-
-
 ####### HOUSE KEEPING #######
 -Logging and debugging, best practices
     -Any current [DEBUG] after an exception should be a ERROR and logged, no matter if DEBUG = true
@@ -16,12 +12,6 @@
 
 ####### MAIN INTERFACE MODIFICATIONS #######
 -Stress relief button that makes screaming goat sounds
-
-####### OPTIONS INTERFACE MODIFICATIONS #######
--Check boxes need to be adjusted
-    -Retro Mode and Quality Control Checks : is cut off
-    -All check boxes are too low
-    -Raw data spacing from : to the check box is ideal, make others fit this
 
 ####### QUERY WINDOW MODIFICATIONS #######
 -Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
@@ -48,9 +38,6 @@
 -Update readme
 -Need documentation on different installers and pre req, maybe add in wiki or readme
 -Provide links to stuff like requesting USGS API key, Reclamation website, USGS data browser, and documention on how to find USGS information to create dataID
-
-
-
 
 ####### AQUARIUS QUERY MODIFICATIONS #######
 -Meta data on right click per cell to show details
