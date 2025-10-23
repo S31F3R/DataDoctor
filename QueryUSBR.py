@@ -119,7 +119,94 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         
     return resultDict
 
-# QueryUSBR.py - Updated (add new def sqlRead at bottom)
 def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
-    # TODO: Implement SQL read over internal network using same inputs
-    return {}  # Placeholder empty dict
+    if Logic.debug:
+        print(f"[DEBUG] QueryUSBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
+
+    # Map interval to Oracle table suffix
+    intervalMap = {
+        'HOUR': 'H',
+        'INSTANT:1': 'M',
+        'INSTANT:15': 'M',
+        'INSTANT:60': 'M',
+        'DAY': 'D',
+        'MONTH': 'M',
+        'YEAR': 'Y',
+        'WATER YEAR': 'WY'
+    }
+
+    tableSuffix = intervalMap.get(interval, 'H')
+
+    # Adjust table name for MRID
+    tableName = f"HDB_{table}_{tableSuffix}" if table == 'R' else f"HDB_M_{tableSuffix}"
+
+    # Parse dates
+    try:
+        startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
+        endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
+
+        if periodOffset and interval == 'HOUR':
+            startDateTime = startDateTime - timedelta(hours=1)
+    except ValueError as e:
+        print(f"[ERROR] sqlRead: Date parse failed: {e}")
+        return {}
+
+    # Build query
+    resultDict = {}
+    oracleConn = None
+
+    try:
+        # Map server to TNS alias
+        tnsMap = {
+            'lchdb': 'USBR-LCHDB',
+            'yaohdb': 'USBR-YAOHDB',
+            'uchdb2': 'USBR-UCHDB2',
+            'ecohdb': 'USBR-ECOHDB',
+            'lbohdb': 'USBR-LBOHDB',
+            'kbohdb': 'USBR-KBOHDB',
+            'pnhyd': 'USBR-PNHYD',
+            'gphyd': 'USBR-GPHYD'
+        }
+
+        dsn = tnsMap.get(svr.lower(), svr)
+        oracleConn = Oracle.OracleConnection(dsn)
+        conn = oracleConn.connect()
+
+        for sdi in SDIDs:
+            query = f"""
+                SELECT TO_CHAR(hdb_date, 'MM/DD/YY HH24:MI:00') AS timestamp, value
+                FROM {tableName}
+                WHERE sdi = :1
+                AND hdb_date BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI')
+                AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI')
+                {'AND mrid = :4' if mrid != '0' else ''}
+                ORDER BY hdb_date
+            """
+
+            params = [sdi, startDate, endDate]
+
+            if mrid != '0':
+                params.append(mrid)
+            if Logic.debug:
+                print(f"[DEBUG] sqlRead: Executing query for SDI {sdi}: {query}")
+            try:
+                data = oracleConn.executeSqlQuery(query, params=params)
+                resultDict[sdi] = Logic.gapCheck(
+                    Logic.buildTimestamps(startDate, endDate, interval),
+                    data,
+                    sdi
+                )
+
+                if Logic.debug:
+                    print(f"[DEBUG] sqlRead: Fetched {len(resultDict[sdi])} rows for SDI {sdi}")
+            except Exception as e:
+                print(f"[ERROR] sqlRead: Query failed for SDI {sdi}: {e}")
+                resultDict[sdi] = []
+    except Exception as e:
+        print(f"[ERROR] sqlRead: Connection failed: {e}")
+        return {}
+    finally:
+        if oracleConn:
+            oracleConn.close()
+            
+    return resultDict
