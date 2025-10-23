@@ -158,7 +158,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         }
 
         dsn = tnsMap.get(svr.lower(), svr)
-        oracleConn = Oracle.OracleConnection(dsn)
+        oracleConn = Oracle.oracleConnection(dsn)
         conn = oracleConn.connect()
 
         for sdi in SDIDs:

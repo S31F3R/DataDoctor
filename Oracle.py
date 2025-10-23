@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Any, Optional
 from datetime import datetime
 
-class OracleConnection:
+class oracleConnection:
     def __init__(self, dsn: str):
         self.dsn = dsn
         self.connection = None
@@ -33,10 +33,10 @@ class OracleConnection:
 
         requiredFiles = expectedFiles.get(system)
         if not requiredFiles: raise RuntimeError(f"Unsupported platform: {system}")
-        if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Checking for platform-specific files in {clientDir}: {requiredFiles}")
+        if Logic.debug: print(f"[DEBUG] oracleConnection._setup: Checking for platform-specific files in {clientDir}: {requiredFiles}")
         filesExist = all((clientDir / f).exists() for f in requiredFiles)
         if not filesExist: raise FileNotFoundError(f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. Please download and unzip the correct Instant Client 21.15 for your platform into oracle/client.")
-        if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Validated Instant Client files for {system}")
+        if Logic.debug: print(f"[DEBUG] oracleConnection._setup: Validated Instant Client files for {system}")
 
         # Set platform-specific library path
         if system == "windows":
@@ -47,7 +47,7 @@ class OracleConnection:
             os.environ['DYLD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
 
         oracledb.init_oracle_client(lib_dir=str(clientDir))
-        if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
+        if Logic.debug: print(f"[DEBUG] oracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
 
         # Setup TNS_ADMIN 
         config = Logic.loadConfig()
@@ -58,7 +58,7 @@ class OracleConnection:
 
         if not srcAdminDir.exists():
             srcAdminDir = Path(Logic.resourcePath('oracle/network/admin'))
-            if Logic.debug: print(f"[DEBUG] OracleConnection._setup: tnsNamesLocation {tnsAdmin} not found, falling back to {srcAdminDir}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection._setup: tnsNamesLocation {tnsAdmin} not found, falling back to {srcAdminDir}")
 
         self.tnsDir = Path(tempfile.mkdtemp())
         tnsPath = self.tnsDir / "tnsnames.ora"
@@ -66,10 +66,10 @@ class OracleConnection:
 
         if (srcAdminDir / "tnsnames.ora").exists():
             shutil.copy(srcAdminDir / "tnsnames.ora", tnsPath)
-            if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Copied tnsnames.ora to {tnsPath}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection._setup: Copied tnsnames.ora to {tnsPath}")
         else:
             tnsPath.write_text("")
-            if Logic.debug: print("[DEBUG] OracleConnection._setup: Created empty tnsnames.ora")
+            if Logic.debug: print("[DEBUG] oracleConnection._setup: Created empty tnsnames.ora")
         if (srcAdminDir / "sqlnet.ora").exists():
             sqlnetContent = (srcAdminDir / "sqlnet.ora").read_text()
             srcWalletDir = srcAdminDir / "wallet"
@@ -89,15 +89,15 @@ class OracleConnection:
                         f"(METHOD_DATA = (DIRECTORY = {walletDir}))"
                     )
 
-                if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Updated sqlnet.ora WALLET_LOCATION to {walletDir}")
+                if Logic.debug: print(f"[DEBUG] oracleConnection._setup: Updated sqlnet.ora WALLET_LOCATION to {walletDir}")
 
             sqlnetPath.write_text(sqlnetContent)
-            if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Copied/updated sqlnet.ora to {sqlnetPath}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection._setup: Copied/updated sqlnet.ora to {sqlnetPath}")
         else:
             raise FileNotFoundError("sqlnet.ora not found for PIV/MCS configuration.")
         
         os.environ['TNS_ADMIN'] = str(self.tnsDir)
-        if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Set TNS_ADMIN to {self.tnsDir}")
+        if Logic.debug: print(f"[DEBUG] oracleConnection._setup: Set TNS_ADMIN to {self.tnsDir}")
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""
@@ -106,21 +106,21 @@ class OracleConnection:
             password = keyring.get_password("DataDoctor", "oraclePassword") or ''
 
             if not user or not password:
-                if Logic.debug: print("[DEBUG] OracleConnection.connect: Missing Oracle credentials")
+                if Logic.debug: print("[DEBUG] oracleConnection.connect: Missing Oracle credentials")
                 raise ValueError("Oracle username or password not set in keyring")
             
             self.connection = oracledb.connect(user=user, password=password, dsn=self.dsn)
-            if Logic.debug: print(f"[DEBUG] OracleConnection.connect: Connection established to {self.dsn}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection.connect: Connection established to {self.dsn}")
             user = None
             password = None
             return self.connection
         except oracledb.Error as e:
-            if Logic.debug: print(f"[DEBUG] OracleConnection.connect: Error connecting to Oracle: {e}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection.connect: Error connecting to Oracle: {e}")
             user = None
             password = None
             raise
         except Exception as e:
-            if Logic.debug: print(f"[DEBUG] OracleConnection.connect: Unexpected error: {e}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection.connect: Unexpected error: {e}")
             user = None
             password = None
             raise
@@ -138,13 +138,13 @@ class OracleConnection:
             else:
                 cursor.execute(query)
             if Logic.debug:
-                print(f"[DEBUG] OracleConnection.executeSqlQuery: Executed query: {query[:100]}...")
+                print(f"[DEBUG] oracleConnection.executeSqlQuery: Executed query: {query[:100]}...")
             if fetchAll:
                 results = cursor.fetchall()
-                if Logic.debug: print(f"[DEBUG] OracleConnection.executeSqlQuery: Fetched {len(results)} rows")
+                if Logic.debug: print(f"[DEBUG] oracleConnection.executeSqlQuery: Fetched {len(results)} rows")
             else:
                 results = cursor.fetchone()
-                if Logic.debug: print(f"[DEBUG] OracleConnection.executeSqlQuery: Fetched single row: {results}")
+                if Logic.debug: print(f"[DEBUG] oracleConnection.executeSqlQuery: Fetched single row: {results}")
 
             formattedResults = []
 
@@ -154,14 +154,14 @@ class OracleConnection:
                     value = str(row[1]) if row[1] is not None else ''
                     formattedResults.append(f"{timestamp},{value}")
 
-            if Logic.debug: print(f"[DEBUG] OracleConnection.executeSqlQuery: Formatted {len(formattedResults)} rows")
+            if Logic.debug: print(f"[DEBUG] oracleConnection.executeSqlQuery: Formatted {len(formattedResults)} rows")
             return formattedResults
         except oracledb.Error as e:
-            if Logic.debug: print(f"[DEBUG] OracleConnection.executeSqlQuery: Error executing query: {e}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection.executeSqlQuery: Error executing query: {e}")
             raise
         finally:
             cursor.close()
-            if Logic.debug: print("[DEBUG] OracleConnection.executeSqlQuery: Cursor closed")
+            if Logic.debug: print("[DEBUG] oracleConnection.executeSqlQuery: Cursor closed")
 
     def callStoredProcedure(self, procedureName: str, params: Optional[List[Any]] = None) -> List[Any]:
         """Call an Oracle stored procedure and return output values."""
@@ -170,24 +170,24 @@ class OracleConnection:
 
         try:
             output = cursor.callproc(procedureName, params or [])
-            if Logic.debug: print(f"[DEBUG] OracleConnection.callStoredProcedure: Called {procedureName} with params: {params}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection.callStoredProcedure: Called {procedureName} with params: {params}")
             return output
         except oracledb.Error as e:
-            if Logic.debug: print(f"[DEBUG] OracleConnection.callStoredProcedure: Error calling procedure: {e}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection.callStoredProcedure: Error calling procedure: {e}")
             raise
         finally:
             cursor.close()
-            if Logic.debug: print("[DEBUG] OracleConnection.callStoredProcedure: Cursor closed")
+            if Logic.debug: print("[DEBUG] oracleConnection.callStoredProcedure: Cursor closed")
 
     def close(self):
         """Close connection and clean up TNS_ADMIN directory."""
         try:
             if self.connection:
                 self.connection.close()
-                if Logic.debug: print("[DEBUG] OracleConnection.close: Connection closed.")
+                if Logic.debug: print("[DEBUG] oracleConnection.close: Connection closed.")
         except oracledb.Error as e:
-            if Logic.debug: print(f"[DEBUG] OracleConnection.close: Error closing connection: {e}")
+            if Logic.debug: print(f"[DEBUG] oracleConnection.close: Error closing connection: {e}")
         finally:
             if self.tnsDir:
                 shutil.rmtree(self.tnsDir, ignore_errors=True)
-                if Logic.debug: print("[DEBUG] OracleConnection.close: Cleaned up TNS_ADMIN directory")
+                if Logic.debug: print("[DEBUG] oracleConnection.close: Cleaned up TNS_ADMIN directory")
