@@ -5,6 +5,7 @@ import tempfile
 import shutil
 import keyring
 import Logic
+import time
 from pathlib import Path
 from typing import List, Any, Optional
 from datetime import datetime
@@ -167,6 +168,54 @@ class oracleConnection:
         finally:
             cursor.close()
             if Logic.debug: print("[DEBUG] oracleConnection.executeQuery: Cursor closed")
+
+    def executeCustomQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> Any:
+        """Execute a SQL SELECT query and return results in timestamp,value format."""
+        if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
+
+        if not params or not isinstance(params, (list, tuple)):
+            if Logic.debug: print("[DEBUG] oracleConnection.executeCustomQuery: No or invalid params provided, risking SQL injection")
+            raise ValueError("Params must be a non-empty list or tuple to prevent SQL injection")
+        
+        cursor = self.connection.cursor()
+        cursor.arraysize = 1000
+        cursor.prefetchrows = 2000     
+        startTime = time.time()        
+
+        try:
+            cursor.execute(query, params)
+            if Logic.debug: print(f"[DEBUG] oracleConnection.executeCustomQuery: Executed query: {query[:100]} with params {params}")
+            isSelect = cursor.description is not None
+            executionTime = time.time() - startTime
+            if Logic.debug: print(f"[DEBUG] oracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds")
+                
+            if isSelect:
+                if fetchAll:
+                    results = cursor.fetchall()
+                    if Logic.debug: print(f"[DEBUG] oracleConnection.executeCustomQuery: Fetched {len(results)} rows")
+                else: 
+                    results = cursor.fetchone()
+                    if Logic.debug: print(f"[DEBUG] oracleConnection.executeCustomQuery: Fetched single row: {results}")
+
+                if cursor.description: 
+                    columns = [desc[0] for desc in cursor.description]
+                    if Logic.debug: print(f"[DEBUG] oracleConnection.executeCustomQuery: Found columns: {columns}")
+                    formattedResults = [dict(zip(columns, row)) for row in (results if isinstance(results, list) else [results] if results else [])]
+                    return formattedResults
+                
+                return results if isinstance(results, list) else [results] if results else []
+            else:
+                rowCount = cursor.rowcount  
+                if Logic.debug: print(f"[DEBUG] oracleConnection.executeCustomQuery: Affected {rowCount} rows")  
+                return rowCount
+        except oracledb.Error as e:
+            if Logic.debug: print(f"[DEBUG] oracleConnection.executeCustomQuery: Oracle error: {e}")
+            raise
+        finally:
+            cursor.close()
+            if Logic.debug: print(f"[DEBUG] oracleConnection.executeCustomQuery: Cursor closed")
+
+            
 
     def callStoredProcedure(self, procedureName: str, params: Optional[List[Any]] = None) -> List[Any]:
         """Call an Oracle stored procedure and return output values."""
