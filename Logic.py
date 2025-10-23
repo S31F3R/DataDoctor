@@ -1145,6 +1145,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
         return
 
+    # Set up progress dialog   
     progressDialog = QProgressDialog(f"Querying data... (0/{len(set(item[2] for item in queryItems))} complete)", "Cancel", 0, 100, mainWindow)
     progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
     progressDialog.setAutoReset(False)
@@ -1299,9 +1300,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             return
         if collected < numGroups: # Prevent double-processing
             if debug: print(f"[DEBUG] executeQuery: valueDict keys before update: {list(valueDict.keys())}")
-            for dataID in groupResult:
-                if dataID in valueDict:
-                    if debug: print(f"[DEBUG] executeQuery: Warning: dataID {dataID} already in valueDict, updating with new data")
             valueDict.update(groupResult)
             if groupLabels and labelsDict is not None:
                 labelsDict.update(groupLabels)
@@ -1336,15 +1334,16 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     QCoreApplication.processEvents() # Pump for dialog
 
     # Non-blocking wait with timer for progress and queue check
-    timeoutSeconds = 600 # 10 minutes to allow slower USBR queries
+    timeoutSeconds = 300 # 5 minutes
     startTime = time.time()
+    progressBase = 20 # Start gradual progress at 20% after workers start
     timer = QTimer()
     timer.setSingleShot(False) # Repeat until done
 
     def checkQueueAndProgress():
         nonlocal collected
         elapsed = time.time() - startTime
-        if (collected >= numGroups and resultQueue.empty() and pool.activeThreadCount() == 0) or elapsed > timeoutSeconds:
+        if collected >= numGroups and resultQueue.empty() and pool.activeThreadCount() == 0 or elapsed > timeoutSeconds:
             timer.stop()
             if elapsed > timeoutSeconds:
                 if debug: print(f"[DEBUG] executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")
@@ -1353,7 +1352,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             return
         if not progressDialog.wasCanceled():
             # Process queue
-            if debug: print(f"[DEBUG] executeQuery: Checking queue, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
             while not resultQueue.empty():
                 try:
                     result = resultQueue.get_nowait()
@@ -1385,20 +1383,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     handleResult(result)
                 except queue.Empty:
                     break
-
-    # Final queue flush with retry
-    maxRetries = 5
-    retryCount = 0
-    while not resultQueue.empty() and retryCount < maxRetries:
-        try:
-            result = resultQueue.get_nowait()
-            if debug: print(f"[DEBUG] executeQuery: Processed final queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
-            handleResult(result)
-        except queue.Empty:
-            break
-        retryCount += 1
-    if retryCount >= maxRetries:
-        if debug: print(f"[DEBUG] executeQuery: Max retries ({maxRetries}) reached for final queue flush, queue size {resultQueue.qsize()}")
 
     timer.stop() # Ensure timer stops
     if debug: print(f"[DEBUG] executeQuery: Timer stopped, wait loop ended, final collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
