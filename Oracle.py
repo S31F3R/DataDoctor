@@ -18,19 +18,28 @@ class OracleConnection:
     def _setup(self):
         """Set up bundled Instant Client and TNS_ADMIN."""
         system = platform.system().lower()
-        if platform.architecture()[0] != "64bit": raise RuntimeError("Only 64-bit platforms supported.")
-        clientPaths = {
-            "windows": "oracle/windows",
-            "linux": "oracle/linux",
-            "darwin": "oracle/macos"
+        if platform.architecture()[0] != "64bit":
+            raise RuntimeError("Only 64-bit platforms supported.")
+        clientDirPath = "oracle/client"
+        clientDir = Path(Logic.resourcePath(clientDirPath))
+        if not clientDir.exists():
+            raise FileNotFoundError(f"Oracle Instant Client directory not found: {clientDir}. Please download and unzip the Instant Client 21.15 for your platform into oracle/client.")
+        # Validate platform-specific files
+        expectedFiles = {
+            "windows": ["oci.dll", "oraociei21.dll"],
+            "linux": ["libociei.so"],
+            "darwin": ["libociei.dylib"]
         }
-
-        clientPath = clientPaths.get(system)
-        if not clientPath: raise RuntimeError(f"Unsupported platform: {system}")
-        clientDir = Path(Logic.resourcePath(clientPath))
-        if not clientDir.exists(): raise FileNotFoundError(f"Instant Client directory not found: {clientDir}")
-        if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Using bundled Instant Client from {clientDir}")
-        
+        requiredFiles = expectedFiles.get(system)
+        if not requiredFiles:
+            raise RuntimeError(f"Unsupported platform: {system}")
+        if Logic.debug:
+            print(f"[DEBUG] OracleConnection._setup: Checking for platform-specific files in {clientDir}: {requiredFiles}")
+        filesExist = all((clientDir / f).exists() for f in requiredFiles)
+        if not filesExist:
+            raise FileNotFoundError(f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. Please download and unzip the correct Instant Client 21.15 for your platform into oracle/client.")
+        if Logic.debug:
+            print(f"[DEBUG] OracleConnection._setup: Validated Instant Client files for {system}")
         # Set platform-specific library path
         if system == "windows":
             os.environ['PATH'] = f"{clientDir};{os.environ.get('PATH', '')}"
@@ -38,57 +47,58 @@ class OracleConnection:
             os.environ['LD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('LD_LIBRARY_PATH', '')}"
         elif system == "darwin":
             os.environ['DYLD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
-
         oracledb.init_oracle_client(lib_dir=str(clientDir))
-        if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
-
-        # Setup TNS_ADMIN
+        if Logic.debug:
+            print(f"[DEBUG] OracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
+        # Setup TNS_ADMIN (unchanged from previous)
         config = Logic.loadConfig()
         tnsAdmin = config.get('tnsNamesLocation')
-
-        if not tnsAdmin: tnsAdmin = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin'))
-        if tnsAdmin.startswith('%AppRoot%'): tnsAdmin = tnsAdmin.replace('%AppRoot%', Logic.appRoot)
+        if not tnsAdmin:
+            tnsAdmin = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin'))
+        if tnsAdmin.startswith('%AppRoot%'):
+            tnsAdmin = tnsAdmin.replace('%AppRoot%', Logic.appRoot)
         srcAdminDir = Path(tnsAdmin)
-
         if not srcAdminDir.exists():
-            srcAdminDir = Path(Logic.resourcePath('oracle/network/admin'))            
-            if Logic.debug: print(f"[DEBUG] OracleConnection._setup: tnsNamesLocation {tnsAdmin} not found, falling back to {srcAdminDir}")
-
+            srcAdminDir = Path(Logic.resourcePath('oracle/network/admin'))
+            if Logic.debug:
+                print(f"[DEBUG] OracleConnection._setup: tnsNamesLocation {tnsAdmin} not found, falling back to {srcAdminDir}")
         self.tnsDir = Path(tempfile.mkdtemp())
         tnsPath = self.tnsDir / "tnsnames.ora"
         sqlnetPath = self.tnsDir / "sqlnet.ora"
-
         if (srcAdminDir / "tnsnames.ora").exists():
             shutil.copy(srcAdminDir / "tnsnames.ora", tnsPath)
-            if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Copied tnsnames.ora to {tnsPath}")
+            if Logic.debug:
+                print(f"[DEBUG] OracleConnection._setup: Copied tnsnames.ora to {tnsPath}")
         else:
             tnsPath.write_text("")
-            if Logic.debug: print("[DEBUG] OracleConnection._setup: Created empty tnsnames.ora")
-
+            if Logic.debug:
+                print("[DEBUG] OracleConnection._setup: Created empty tnsnames.ora")
         if (srcAdminDir / "sqlnet.ora").exists():
             sqlnetContent = (srcAdminDir / "sqlnet.ora").read_text()
-
-            # Check for user-provided wallet (fallback for non-PIV mTLS)
             srcWalletDir = srcAdminDir / "wallet"
-
             if srcWalletDir.exists():
                 walletDir = self.tnsDir / "wallet"
                 shutil.copytree(srcWalletDir, walletDir)
-
                 if "(METHOD_DATA = (DIRECTORY = " not in sqlnetContent:
-                    sqlnetContent = sqlnetContent.replace("(METHOD = MCS)", f"(METHOD = MCS)(METHOD_DATA = (DIRECTORY = {walletDir}))")
+                    sqlnetContent = sqlnetContent.replace(
+                        "(METHOD = MCS)",
+                        f"(METHOD = MCS)(METHOD_DATA = (DIRECTORY = {walletDir}))"
+                    )
                 else:
-                    sqlnetContent = sqlnetContent.replace(r"(METHOD_DATA = \(DIRECTORY = [^)]+\))", f"(METHOD_DATA = (DIRECTORY = {walletDir}))")
-
-                if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Updated sqlnet.ora WALLET_LOCATION to {walletDir}")
-
-            sqlnetPath.write_text(sqlnetContent)            
-            if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Copied/updated sqlnet.ora to {sqlnetPath}")
+                    sqlnetContent = sqlnetContent.replace(
+                        r"(METHOD_DATA = \(DIRECTORY = [^)]+\))",
+                        f"(METHOD_DATA = (DIRECTORY = {walletDir}))"
+                    )
+                if Logic.debug:
+                    print(f"[DEBUG] OracleConnection._setup: Updated sqlnet.ora WALLET_LOCATION to {walletDir}")
+            sqlnetPath.write_text(sqlnetContent)
+            if Logic.debug:
+                print(f"[DEBUG] OracleConnection._setup: Copied/updated sqlnet.ora to {sqlnetPath}")
         else:
             raise FileNotFoundError("sqlnet.ora not found for PIV/MCS configuration.")
-
         os.environ['TNS_ADMIN'] = str(self.tnsDir)
-        if Logic.debug: print(f"[DEBUG] OracleConnection._setup: Set TNS_ADMIN to {self.tnsDir}")
+        if Logic.debug:
+            print(f"[DEBUG] OracleConnection._setup: Set TNS_ADMIN to {self.tnsDir}")
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""
