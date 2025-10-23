@@ -1145,8 +1145,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
         return
 
-    # Set up progress dialog   
-    progressDialog = QProgressDialog(f"Querying data... (0/0 complete)", "Cancel", 0, 100, mainWindow)
+    progressDialog = QProgressDialog(f"Querying data... (0/{len(set(item[2] for item in queryItems))} complete)", "Cancel", 0, 100, mainWindow)
     progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
     progressDialog.setAutoReset(False)
     progressDialog.setAutoClose(False)
@@ -1209,7 +1208,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         progressSignal = pyqtSignal(int, str) # For dialog updates
         resultSignal = pyqtSignal(tuple) # (groupKey, groupResult, groupLabels)        
 
-    # Define local QRunnable subclass for query groups
     class QueryWorker(QRunnable):
         def __init__(self, groupKey, groupItems, signals):
             super().__init__()
@@ -1230,38 +1228,51 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             try:
                 for (itemDb, interval, mrid), items in usbrGroups.items():
                     SDIDs = [item[2] for item in items]
+                    result = {}
                     if db.startswith('USBR'):
                         svr = itemDb.split('-')[1].lower() if '-' in itemDb else 'lchdb'
                         table = 'M' if mrid != '0' else 'R'
                         apiInterval = interval
                         result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, apiInterval, mrid, table)
+                        if debug: print(f"[DEBUG] QueryWorker: USBR result for SDIDs {SDIDs}: {len(result)} items")
                     elif db == 'AQUARIUS' and isInternal:
-                        result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
+                        try:
+                            result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
+                            if debug: print(f"[DEBUG] QueryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
+                        except Exception as e:
+                            if debug: print(f"[DEBUG] QueryWorker: Aquarius apiRead failed for SDIDs {SDIDs}: {e}")
+                            result = {}
                     elif db == 'USGS-NWIS' and not isInternal:
                         result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
+                        if debug: print(f"[DEBUG] QueryWorker: USGS result for SDIDs {SDIDs}: {len(result)} items")
                     else:
                         if debug: print(f"[DEBUG] QueryWorker: Unknown db skipped: {db}")     
                         continue
 
                     for idx, (origIndex, dataID, SDID) in enumerate(items):
-                        if SDID in result:
+                        if SDID in result and result[SDID]:
                             if db == 'AQUARIUS':
-                                outputData = result[SDID]['data']
-                                groupLabels[dataID] = result[SDID].get('label', dataID)
+                                outputData = result.get(SDID, {}).get('data', [])
+                                groupLabels[dataID] = result.get(SDID, {}).get('label', dataID)
+                                if debug: print(f"[DEBUG] QueryWorker: Aquarius label for {dataID}: {groupLabels[dataID]}")
                             else:
-                                outputData = result[SDID]
-
+                                outputData = result.get(SDID, [])
                             alignedData = gapCheck(timestamps, outputData, dataID)
                             values = [line.split(',')[1] if line else '' for line in alignedData]
                             groupResult[dataID] = values
                         else:
                             groupResult[dataID] = defaultBlanks                
+                            if db == 'AQUARIUS':
+                                groupLabels[dataID] = dataID # Fallback label
+                            if debug: print(f"[DEBUG] QueryWorker: No data for SDID {SDID} in {db}")
 
                 if debug: print(f"[DEBUG] QueryWorker: Completed group {self.groupKey} with {len(groupResult)} items")          
             except Exception as e:
                 if debug: print(f"[DEBUG] QueryWorker: Failed for group {self.groupKey}: {e}")          
                 for _, dataID, _ in items:
                     groupResult[dataID] = defaultBlanks # Fallback blanks on error
+                    if db == 'AQUARIUS':
+                        groupLabels[dataID] = dataID # Fallback label on error
 
             self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels)) 
 
@@ -1279,12 +1290,15 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             if debug: print(f"[DEBUG] executeQuery: Skipping empty group {groupKey}, no data")
             return
         if collected < numGroups: # Prevent double-processing
+            if debug: print(f"[DEBUG] executeQuery: valueDict keys before update: {list(valueDict.keys())}")
             valueDict.update(groupResult)
             if groupLabels and labelsDict is not None:
                 labelsDict.update(groupLabels)
+                if debug: print(f"[DEBUG] executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
             collected += 1
             if debug: print(f"[DEBUG] executeQuery: Collected results for group {groupKey} with {len(groupResult)} items ({collected}/{numGroups})")
             if debug: print(f"[DEBUG] executeQuery: groupResult keys: {list(groupResult.keys())}")
+            if debug: print(f"[DEBUG] executeQuery: valueDict keys after update: {list(valueDict.keys())}")
             if not progressDialog.wasCanceled():
                 progressDialog.setValue(20 + int(50 * collected / numGroups)) # Gradual 20-70%
                 progressDialog.setLabelText(f"Completed {groupKey[0]} query ({collected}/{numGroups})")
@@ -1303,10 +1317,10 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         if debug: print(f"[DEBUG] Started backgroundworker {i} for group {groupKey}")
 
     if not progressDialog.wasCanceled():
-        progressDialog.setValue(10) # Fixed base after workers start
+        progressDialog.setValue(20) # Setup complete
         progressDialog.setLabelText(f"Querying data... (0/{numGroups} complete)") # Fix initial label
         progressDialog.repaint() # Force initial render
-        if debug: print(f"[DEBUG] executeQuery: All workers started, progress at 10%")
+        if debug: print(f"[DEBUG] executeQuery: All workers started, progress at 20%")
 
     QCoreApplication.processEvents() # Pump for dialog
 
@@ -1316,9 +1330,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
     def checkQueueAndProgress():
         nonlocal collected
-        if collected >= numGroups:
+        if collected >= numGroups and resultQueue.empty() and pool.activeThreadCount() == 0:
             timer.stop()
-            if debug: print("[DEBUG] executeQuery: Timer stopped, all groups collected")
+            if debug: print("[DEBUG] executeQuery: Timer stopped in checkQueueAndProgress, all groups collected")
             return
         if not progressDialog.wasCanceled():
             # Process queue
@@ -1332,17 +1346,16 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             progressDialog.setLabelText(f"Querying data... ({collected}/{numGroups} complete)")
             progressDialog.repaint() # Force redraw
             progressDialog.updateGeometry() # Stabilize position
-            if debug: print(f"[DEBUG] executeQuery: Timer update, progress {20 + int(50 * collected / numGroups)}%, collected {collected}/{numGroups}")
+            if debug: print(f"[DEBUG] executeQuery: Timer update, progress {20 + int(50 * collected / numGroups)}%, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
         QCoreApplication.processEvents() # Pump for responsiveness
 
     timer.timeout.connect(checkQueueAndProgress)
-    timer.start(100) # Faster updates, every 100ms
+    timer.start(100) # Update every 100ms
     if debug: print("[DEBUG] executeQuery: Started timer for progress updates")
 
     # Wait for all results or cancellation
-    while collected < numGroups and not progressDialog.wasCanceled():
-        if pool.activeThreadCount() > 0:
-            time.sleep(0.05) # Short sleep to allow timer
+    while (collected < numGroups or not resultQueue.empty() or pool.activeThreadCount() > 0) and not progressDialog.wasCanceled():
+        time.sleep(0.05) # Short sleep to allow timer
         QCoreApplication.processEvents() # Process signals
 
     timer.stop() # Ensure timer stops
@@ -1350,7 +1363,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     QCoreApplication.processEvents()
 
     if progressDialog.wasCanceled():
-        if debug: print("[DEBUG] executeQuery: User canceled via progress dialog")
+        if debug: print(f"[DEBUG] executeQuery: User canceled via progress dialog")
         progressDialog.cancel()
         return
 
@@ -1361,7 +1374,11 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     QCoreApplication.processEvents()
     if debug: print(f"[DEBUG] executeQuery: Merging valueDict with {len(valueDict)} keys")
 
-    # Ensure all dataIDs are in valueDict
+    for dataID, _, _, _, _ in queryItems:
+        if dataID not in valueDict:
+            valueDict[dataID] = defaultBlanks
+            if debug: print(f"[DEBUG] Added empty result for dataID {dataID}")
+
     originalDataIds = [item[0] for item in queryItems]
     originalIntervals = [item[1] for item in queryItems]
     databases = [item[2] for item in queryItems]
@@ -1384,16 +1401,16 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         progressDialog.setValue(70) # Column widths start
         progressDialog.repaint()
         QCoreApplication.processEvents()
-        if debug: print("[DEBUG] executeQuery: Updating progress dialog for table building")
+        if debug: print(f"[DEBUG] executeQuery: Updating progress dialog for table building")
         mainWindow.mainTable.clear()
         buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
         progressDialog.setValue(72) # Column widths complete
         progressDialog.repaint()
         QCoreApplication.processEvents()
-        if debug: print("[DEBUG] executeQuery: Table built, progress dialog completed")
+        if debug: print(f"[DEBUG] executeQuery: Table built, progress dialog completed")
 
     if progressDialog.wasCanceled():
-        if debug: print("[DEBUG] executeQuery: User canceled during table building")
+        if debug: print(f"[DEBUG] executeQuery: User canceled during table building")
         progressDialog.cancel()
         return
 
