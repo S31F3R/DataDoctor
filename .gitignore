@@ -53,3 +53,6 @@ Thumbs.db
 *.log
 temp/
 tmp/
+
+# Oracle client
+oracle/client
