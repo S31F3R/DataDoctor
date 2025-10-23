@@ -1145,7 +1145,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
         return
 
-    # Set up progress dialog   
     progressDialog = QProgressDialog(f"Querying data... (0/{len(set(item[2] for item in queryItems))} complete)", "Cancel", 0, 100, mainWindow)
     progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
     progressDialog.setAutoReset(False)
@@ -1289,11 +1288,15 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     threadsStarted = 0
     valueDict = {}
     collected = 0
-    eventLoop = QEventLoop() # For processing signals
+    processedGroups = set() # Track processed groups
 
     def handleResult(result):
         nonlocal collected, valueDict
         groupKey, groupResult, groupLabels = result
+        if groupKey in processedGroups:
+            if debug: print(f"[DEBUG] executeQuery: Duplicate group {groupKey}, skipping")
+            return
+        processedGroups.add(groupKey)
         # Check if groupResult is all blanks
         if all(all(v == '' for v in values) for values in groupResult.values()):
             if debug: print(f"[DEBUG] executeQuery: Skipping empty group {groupKey}, no data")
@@ -1320,7 +1323,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     for i, groupKey in enumerate(groups.keys()):
         signals = QueryWorkerSignals()
         worker = QueryWorker(groupKey, groups[groupKey], signals)
-        signals.resultSignal.connect(lambda result, i=i: (resultQueue.put(result), handleResult(result))) # Per-worker connect
+        signals.resultSignal.connect(lambda result, i=i: [print(f"[DEBUG] executeQuery: Signal received for group {result[0]}") if debug else None, resultQueue.put(result), handleResult(result)][-1]) # Debug signal
         pool.start(worker)
         threadsStarted += 1
         if debug: print(f"[DEBUG] Started backgroundworker {i} for group {groupKey}")
@@ -1334,9 +1337,8 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     QCoreApplication.processEvents() # Pump for dialog
 
     # Non-blocking wait with timer for progress and queue check
-    timeoutSeconds = 300 # 5 minutes
+    timeoutSeconds = 600 # 10 minutes to allow slower queries
     startTime = time.time()
-    progressBase = 20 # Start gradual progress at 20% after workers start
     timer = QTimer()
     timer.setSingleShot(False) # Repeat until done
 
@@ -1352,6 +1354,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             return
         if not progressDialog.wasCanceled():
             # Process queue
+            if debug: print(f"[DEBUG] executeQuery: Checking queue, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
             while not resultQueue.empty():
                 try:
                     result = resultQueue.get_nowait()
@@ -1383,6 +1386,20 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     handleResult(result)
                 except queue.Empty:
                     break
+
+    # Final queue flush
+    maxRetries = 5
+    retryCount = 0
+    while not resultQueue.empty() and retryCount < maxRetries:
+        try:
+            result = resultQueue.get_nowait()
+            if debug: print(f"[DEBUG] executeQuery: Processed final queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
+            handleResult(result)
+        except queue.Empty:
+            break
+        retryCount += 1
+    if retryCount >= maxRetries:
+        if debug: print(f"[DEBUG] executeQuery: Max retries ({maxRetries}) reached for final queue flush, queue size {resultQueue.qsize()}")
 
     timer.stop() # Ensure timer stops
     if debug: print(f"[DEBUG] executeQuery: Timer stopped, wait loop ended, final collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
