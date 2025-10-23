@@ -1,7 +1,8 @@
 import requests
 import json
+import Oracle
+import Logic
 from datetime import datetime, timedelta
-import Logic # For buildTimestamps, gapCheck, combineParameters
 
 periodOffset = True # Global for end of period shift/pad (USBR HOUR only; toggle via config later)
 
@@ -30,10 +31,7 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     # Parse start (with pad if periodOffset and HOUR)
     startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
-
-    if periodOffset and interval == 'HOUR':
-        startDateTime = startDateTime - timedelta(hours=1) # Pad fetch start by -1h
-
+    if periodOffset and interval == 'HOUR': startDateTime = startDateTime - timedelta(hours=1) # Pad fetch start by -1h
     startYear = startDateTime.year
     startMonth = f'{startDateTime.month:02d}'
     startDay = f'{startDateTime.day:02d}'
@@ -70,9 +68,8 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
             for series in seriesList:
                 jsonSDID = series['SDI']
+                if isinstance(jsonSDID, list): jsonSDID = jsonSDID[0] if jsonSDID else '' # Handle list
 
-                if isinstance(jsonSDID, list):
-                    jsonSDID = jsonSDID[0] if jsonSDID else '' # Handle list
                 if str(jsonSDID) == SDID: # Str comparison
                     matchingSeries = series
                     break
@@ -100,28 +97,22 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                 minute = int(hourMinuteSecond[1])
                 second = int(hourMinuteSecond[2]) if len(hourMinuteSecond) > 2 else 0
                 dateTime = datetime(year, month, day, hour, minute, second)
-
-                if periodOffset and interval == 'HOUR':
-                    dateTime = dateTime + timedelta(hours=1)
+                if periodOffset and interval == 'HOUR': dateTime = dateTime + timedelta(hours=1)
 
                 # Change time from 12 hour clock to 24
-                if amPm == 'AM' and hour == 12:
-                    dateTime = dateTime - timedelta(hours=12)
-                elif amPm == 'PM' and hour < 12:
-                    dateTime = dateTime + timedelta(hours=12)
-
+                if amPm == 'AM' and hour == 12: dateTime = dateTime - timedelta(hours=12)
+                elif amPm == 'PM' and hour < 12: dateTime = dateTime + timedelta(hours=12)
                 formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00') # Standard, zero sec
                 outputData.append(f'{formattedTs},{value}')
 
             resultDict[SDID] = outputData
-    if not resultDict:
-        print("[WARN] No data after processing all batches.")
-        
+
+    if not resultDict: print("[WARN] No data after processing all batches.")
+
     return resultDict
 
 def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
-    if Logic.debug:
-        print(f"[DEBUG] QueryUSBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
+    if Logic.debug: print(f"[DEBUG] QueryUSBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
 
     # Map interval to Oracle table suffix
     intervalMap = {
@@ -144,9 +135,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     try:
         startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
         endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
-
-        if periodOffset and interval == 'HOUR':
-            startDateTime = startDateTime - timedelta(hours=1)
+        if periodOffset and interval == 'HOUR': startDateTime = startDateTime - timedelta(hours=1)
     except ValueError as e:
         print(f"[ERROR] sqlRead: Date parse failed: {e}")
         return {}
@@ -184,11 +173,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             """
 
             params = [sdi, startDate, endDate]
+            if mrid != '0': params.append(mrid)
+            if Logic.debug: print(f"[DEBUG] sqlRead: Executing query for SDI {sdi}: {query}")
 
-            if mrid != '0':
-                params.append(mrid)
-            if Logic.debug:
-                print(f"[DEBUG] sqlRead: Executing query for SDI {sdi}: {query}")
             try:
                 data = oracleConn.executeSqlQuery(query, params=params)
                 resultDict[sdi] = Logic.gapCheck(
@@ -197,8 +184,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                     sdi
                 )
 
-                if Logic.debug:
-                    print(f"[DEBUG] sqlRead: Fetched {len(resultDict[sdi])} rows for SDI {sdi}")
+                if Logic.debug: print(f"[DEBUG] sqlRead: Fetched {len(resultDict[sdi])} rows for SDI {sdi}")
             except Exception as e:
                 print(f"[ERROR] sqlRead: Query failed for SDI {sdi}: {e}")
                 resultDict[sdi] = []
@@ -206,7 +192,6 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         print(f"[ERROR] sqlRead: Connection failed: {e}")
         return {}
     finally:
-        if oracleConn:
-            oracleConn.close()
+        if oracleConn: oracleConn.close()
             
     return resultDict
