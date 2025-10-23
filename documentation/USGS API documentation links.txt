@@ -2,3 +2,5 @@ https://api.waterdata.usgs.gov/docs/ogcapi/keys/
 https://doi-usgs.github.io/dataRetrieval/
 https://waterdata.usgs.gov/blog/intro-data-collection-categories/
 https://api.waterdata.usgs.gov/ogcapi/v0/openapi?f=html#/daily/describeDailyCollection
+
+https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&monitoring_location_id=USGS-09428500

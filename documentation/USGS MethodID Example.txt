@@ -1,0 +1,1 @@
+https://waterservices.usgs.gov/nwis/iv/?format=rdb&sites=09428500&startDT=2025-10-23T09:00&endDT=2025-10-23T10:46&parameterCd=00065&siteStatus=all
