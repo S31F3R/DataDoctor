@@ -191,3 +191,22 @@ class oracleConnection:
             if self.tnsDir:
                 shutil.rmtree(self.tnsDir, ignore_errors=True)
                 if Logic.debug: print("[DEBUG] oracleConnection.close: Cleaned up TNS_ADMIN directory")
+
+    def testConnection(dsn):
+        if Logic.debug: print(f"[DEBUG] oracleConnection.testConnection: Testing connection to {dsn}")
+        oracleConn = None
+
+        try:
+            oracleConn = oracleConnection
+            conn = oracleConn
+            result = oracleConn.executeSqlQuery("SELECT SYSDATE FROM DUAL", fetchAll=False)
+            if Logic.debug: print(f"[DEBUG] oracleConnection.testConnection: Query result: {result}")
+            if result: print(f"[INFO] Successfully connected to {dsn} and fetched SYSDATE: {result[0]}")
+            else: print(f"[WARN] Connected to {dsn} but no result from query")
+            return True
+        except Exception as e:
+            if Logic.debug: print(f"[DEBUG] oracleConnection.testConnection: Failed to connect to {dsn}: {e}")
+            print(f"[ERROR] Connected test failed: {e}")
+            return False
+        finally: 
+            if oracleConn: oracleConn.close()
