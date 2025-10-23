@@ -1230,11 +1230,15 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     SDIDs = [item[2] for item in items]
                     result = {}
                     if db.startswith('USBR'):
-                        svr = itemDb.split('-')[1].lower() if '-' in itemDb else 'lchdb'
-                        table = 'M' if mrid != '0' else 'R'
-                        apiInterval = interval
-                        result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, apiInterval, mrid, table)
-                        if debug: print(f"[DEBUG] QueryWorker: USBR result for SDIDs {SDIDs}: {len(result)} items")
+                        try:
+                            svr = itemDb.split('-')[1].lower() if '-' in itemDb else 'lchdb'
+                            table = 'M' if mrid != '0' else 'R'
+                            apiInterval = interval
+                            result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, apiInterval, mrid, table)
+                            if debug: print(f"[DEBUG] QueryWorker: USBR result for SDIDs {SDIDs}: {result}")
+                        except Exception as e:
+                            if debug: print(f"[DEBUG] QueryWorker: USBR apiRead failed for SDIDs {SDIDs}: {e}")
+                            result = {}
                     elif db == 'AQUARIUS' and isInternal:
                         try:
                             result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
@@ -1243,8 +1247,12 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                             if debug: print(f"[DEBUG] QueryWorker: Aquarius apiRead failed for SDIDs {SDIDs}: {e}")
                             result = {}
                     elif db == 'USGS-NWIS' and not isInternal:
-                        result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
-                        if debug: print(f"[DEBUG] QueryWorker: USGS result for SDIDs {SDIDs}: {len(result)} items")
+                        try:
+                            result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
+                            if debug: print(f"[DEBUG] QueryWorker: USGS result for SDIDs {SDIDs}: {result}")
+                        except Exception as e:
+                            if debug: print(f"[DEBUG] QueryWorker: USGS apiRead failed for SDIDs {SDIDs}: {e}")
+                            result = {}
                     else:
                         if debug: print(f"[DEBUG] QueryWorker: Unknown db skipped: {db}")     
                         continue
@@ -1357,9 +1365,18 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     while (collected < numGroups or not resultQueue.empty() or pool.activeThreadCount() > 0) and not progressDialog.wasCanceled():
         time.sleep(0.05) # Short sleep to allow timer
         QCoreApplication.processEvents() # Process signals
+        # Double-check queue after all groups collected
+        if collected >= numGroups:
+            while not resultQueue.empty():
+                try:
+                    result = resultQueue.get_nowait()
+                    handleResult(result)
+                    if debug: print(f"[DEBUG] executeQuery: Processed extra queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
+                except queue.Empty:
+                    break
 
     timer.stop() # Ensure timer stops
-    if debug: print("[DEBUG] executeQuery: Timer stopped, wait loop ended")
+    if debug: print(f"[DEBUG] executeQuery: Timer stopped, wait loop ended, final collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
     QCoreApplication.processEvents()
 
     if progressDialog.wasCanceled():
