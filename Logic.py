@@ -10,13 +10,31 @@ import json
 import queue
 from datetime import datetime, timedelta
 from PyQt6.QtCore import (Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QStandardPaths, QDir, QTimer, 
-                         QEventLoop, QCoreApplication)
+                         QCoreApplication)
 from PyQt6.QtGui import QGuiApplication, QColor, QBrush, QFontDatabase, QFont, QFontMetrics
 from PyQt6.QtWidgets import (QTableWidgetItem, QHeaderView, QAbstractItemView, QFileDialog, QWidget,
-                            QTreeView, QSplitter, QMessageBox, QSizePolicy, QHeaderView, QProgressDialog,
-                            QApplication)
+                            QTreeView, QSplitter, QMessageBox, QSizePolicy, QHeaderView, QProgressDialog)
                             
 from collections import defaultdict
+
+class sortWorkerSignals(QObject):
+    sortDone = pyqtSignal(list, bool)
+
+class sortWorker(QRunnable):
+    def __init__(self, rows, col, ascending):
+        super(sortWorker, self).__init__()
+        self.signals = sortWorkerSignals()
+        self.rows = rows
+        self.col = col
+        self.ascending = ascending
+
+    def run(self):
+        def sortKey(row):            
+            try: return float(row[self.col + 1])
+            except ValueError: return 0
+
+        self.rows.sort(key=sortKey, reverse=not self.ascending)
+        self.signals.sortDone.emit(self.rows, self.ascending)
 
 def resourcePath(relativePath):
     """Get absolute path to resource, works for dev and PyInstaller"""
@@ -87,9 +105,7 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
 
 def gapCheck(timestamps, data, dataID=''):
     if debug == True: print("[DEBUG] gapCheck for dataID '{}': timestamps len={}, data len={}".format(dataID, len(timestamps), len(data)))
-
-    if not timestamps:
-        return data
+    if not timestamps: return data
 
     # Parse expected ts
     try:
@@ -126,7 +142,6 @@ def gapCheck(timestamps, data, dataID=''):
             except ValueError:
                 print("[WARN] Invalid ts skipped: '{}' in '{}' for '{}'".format(actualTimestampStr, line, dataID))
                 i += 1
-
                 continue
             if actualDateTime == expectedDateTime:
                 # Match, add (ensure :00 seconds if not)
@@ -137,15 +152,13 @@ def gapCheck(timestamps, data, dataID=''):
                 newData.append(line)
                 found = True
                 i += 1
-
                 break
             elif actualDateTime < expectedDateTime:
                 # Extra/early, remove
                 removed.append(actualTimestampStr)
                 i += 1
-            else:
-                # Future/mismatch, insert gap and break to next exp
-                break
+            else:                
+                break # Future/mismatch, insert gap and break to next exp
         if not found:
             # Gap, insert blank
             tsStr = expectedDateTime.strftime('%m/%d/%y %H:%M:00')
@@ -155,9 +168,7 @@ def gapCheck(timestamps, data, dataID=''):
     while i < len(data):
         line = data[i]
         parts = line.split(',')
-
-        if len(parts) > 0:
-            removed.append(parts[0].strip())
+        if len(parts) > 0: removed.append(parts[0].strip())
         i += 1
 
     if removed:
@@ -193,9 +204,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         dataId = h.strip()
         intervalStr = intervals[i].upper()
 
-        if intervalStr.startswith('INSTANT:'):
-            intervalStr = 'INSTANT'
-
+        if intervalStr.startswith('INSTANT:'): intervalStr = 'INSTANT'
         database = databases[i] if databases and i < len(databases) else None
         dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataId)
         mrid = None
@@ -222,8 +231,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
-                label = parts[0].strip() if len(parts) >= 1 else dataId  # Label is first line
-                location = parts[1].strip() if len(parts) >= 2 else dataId  # Location is second line
+                label = parts[0].strip() if len(parts) >= 1 else dataId # Label is first line
+                location = parts[1].strip() if len(parts) >= 2 else dataId # Location is second line
                 fullLabel = f"{label} \n{location}"
                 if debug: print(f"[DEBUG] buildTable: Aquarius in dict, header {i}: {fullLabel}")
             else:
@@ -246,8 +255,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
-                label = parts[0].strip() if len(parts) >= 1 else dataId  # Label is first line
-                location = parts[1].strip() if len(parts) >= 2 else dataId  # Location is second line
+                label = parts[0].strip() if len(parts) >= 1 else dataId # Label is first line
+                location = parts[1].strip() if len(parts) >= 2 else dataId # Location is second line
                 fullLabel = f"{label} \n{location}"
                 if debug: print(f"[DEBUG] buildTable: Aquarius not in dict, header {i}: {fullLabel}")
             else:
@@ -270,6 +279,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         reply = QMessageBox.warning(None, "Large Dataset Warning",
                                    f"Query returned {numRows} rows, which may slow down the UI. Consider a smaller date range or coarser interval (e.g., HOUR instead of INSTANT:1). Continue?",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
         if reply == QMessageBox.StandardButton.No:
             if debug: print(f"[DEBUG] buildTable: User canceled due to large dataset ({numRows} rows)")
             return
@@ -366,11 +376,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     sampleItem.setFont(font)
     sampleCellHeight = sampleItem.sizeHint().height()
 
-    if sampleCellHeight <= 0:
-        sampleCellHeight = metrics.height()
-
+    if sampleCellHeight <= 0: sampleCellHeight = metrics.height()
     adjustedRowHeight = max(rowHeight, sampleCellHeight + 2)
-
     if debug: print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
     vHeader.setDefaultSectionSize(adjustedRowHeight)
     if debug: print(f"[DEBUG] buildTable: Set default row height to {adjustedRowHeight}")
@@ -429,10 +436,12 @@ def getDataDictionaryItem(table, dataId):
 def qaqc(table, dataDictionaryTable, lookupIds):
     if not qaqcEnabled:
         if debug: print("[DEBUG] qaqc: Skipped, QAQC disabled in config")
+
         for r in range(table.rowCount()):
             for c in range(table.columnCount()):
                 item = table.item(r, c)
                 if item: item.setBackground(QColor(0, 0, 0, 0))
+
         return
 
     now = datetime.now()
@@ -448,29 +457,21 @@ def qaqc(table, dataDictionaryTable, lookupIds):
 
         if rowIndex != -1:
             expectedMinItem = dataDictionaryTable.item(rowIndex, 3)
-            if expectedMinItem and expectedMinItem.text().strip():
-                expectedMin = float(expectedMinItem.text().strip())
+            if expectedMinItem and expectedMinItem.text().strip(): expectedMin = float(expectedMinItem.text().strip())
             expectedMaxItem = dataDictionaryTable.item(rowIndex, 4)
-            if expectedMaxItem and expectedMaxItem.text().strip():
-                expectedMax = float(expectedMaxItem.text().strip())
+            if expectedMaxItem and expectedMaxItem.text().strip(): expectedMax = float(expectedMaxItem.text().strip())
             cutoffMinItem = dataDictionaryTable.item(rowIndex, 5)
-            if cutoffMinItem and cutoffMinItem.text().strip():
-                cutoffMin = float(cutoffMinItem.text().strip())
+            if cutoffMinItem and cutoffMinItem.text().strip(): cutoffMin = float(cutoffMinItem.text().strip())
             cutoffMaxItem = dataDictionaryTable.item(rowIndex, 6)
-            if cutoffMaxItem and cutoffMaxItem.text().strip():
-                cutoffMax = float(cutoffMaxItem.text().strip())
+            if cutoffMaxItem and cutoffMaxItem.text().strip(): cutoffMax = float(cutoffMaxItem.text().strip())
             rateOfChangeItem = dataDictionaryTable.item(rowIndex, 7)
-            if rateOfChangeItem and rateOfChangeItem.text().strip():
-                rateOfChange = float(rateOfChangeItem.text().strip())
+            if rateOfChangeItem and rateOfChangeItem.text().strip(): rateOfChange = float(rateOfChangeItem.text().strip())
 
         prevVal = None
 
         for r in range(table.rowCount()):
             item = table.item(r, col)
-
-            if not item:
-                continue
-
+            if not item: continue
             item.setData(Qt.ItemDataRole.ForegroundRole, None)
             cellText = item.text().strip()
 
@@ -482,9 +483,7 @@ def qaqc(table, dataDictionaryTable, lookupIds):
 
                     try:
                         tsDt = datetime.strptime(tsStr, '%m/%d/%y %H:%M:00')
-
-                        if tsDt <= now:
-                            item.setBackground(QColor(100, 195, 247))
+                        if tsDt <= now: item.setBackground(QColor(100, 195, 247))
                     except ValueError:
                         pass
                 continue
@@ -514,6 +513,7 @@ def qaqc(table, dataDictionaryTable, lookupIds):
             if prevVal is not None and val == prevVal:
                 item.setBackground(QColor(87, 227, 137))
                 item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))
+
             prevVal = val
 
         if debug: print("[DEBUG] qaqc: Processed column {} for lookupId {}".format(col, lookupId))          
@@ -526,8 +526,7 @@ def loadAllQuickLooks(cbQuickLook):
     userDir = getQuickLookDir()
 
     for file in os.listdir(userDir):
-        if file.endswith(".txt"):
-            quickLookPaths.append(os.path.join(userDir, file))
+        if file.endswith(".txt"): quickLookPaths.append(os.path.join(userDir, file))
 
     # Then append examples (no duplicates – check names)
     exampleDir = getExampleQuickLookDir()
@@ -548,15 +547,13 @@ def saveQuickLook(textQuickLookName, listQueryList):
     name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
 
     if not name:
-        print("Warning: Empty quick look name—skipped.")
+        print("[WARN]: Empty quick look name—skipped.")
         return
 
     data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
     quicklookPath = os.path.join(getQuickLookDir(), f'{name}.txt')
     os.makedirs(os.path.dirname(quicklookPath), exist_ok=True) # Ensure dir
-
-    with open(quicklookPath, 'w', encoding='utf-8-sig') as f:
-        f.write(','.join(data))
+    with open(quicklookPath, 'w', encoding='utf-8-sig') as f: f.write(','.join(data))
 
 def loadQuickLook(cbQuickLook, listQueryList):
     quickLookName = cbQuickLook.currentText()
@@ -571,8 +568,8 @@ def loadQuickLook(cbQuickLook, listQueryList):
     quickLookPath = userQuickLookPath if os.path.exists(userQuickLookPath) else exampleQuickLookPath
 
     try:
-        with open(quickLookPath, 'r', encoding='utf-8-sig') as f:
-            content = f.read().strip()
+        with open(quickLookPath, 'r', encoding='utf-8-sig') as f: content = f.read().strip()
+
         if content:
             data = content.split(',')
 
@@ -581,13 +578,12 @@ def loadQuickLook(cbQuickLook, listQueryList):
 
                 if len(parts) == 3:
                     dataID, interval, database = parts
+
+                    # Convert historical INSTANT queries to new format
                     if interval == 'INSTANT':
-                        if database.startswith('USBR-'):
-                            interval = 'INSTANT:60'
-                        elif database == 'USGS-NWIS':
-                            interval = 'INSTANT:15'
-                        elif database == 'AQUARIUS':
-                            interval = 'INSTANT:1'
+                        if database.startswith('USBR-'): interval = 'INSTANT:60'
+                        elif database == 'USGS-NWIS': interval = 'INSTANT:15'
+                        elif database == 'AQUARIUS': interval = 'INSTANT:1'
 
                     listQueryList.addItem('{}|{}|{}'.format(dataID, interval, database))
                     if debug: print("[DEBUG] loadQuickLook: Added item {}".format('{}|{}|{}'.format(dataID, interval, database)))
@@ -609,11 +605,10 @@ def loadConfig():
         'rawData': False,
         'lastQuickLook': ''
     }
+
     if os.path.exists(configPath):
         try:
-            with open(configPath, 'r', encoding='utf-8') as configFile:
-                config = json.load(configFile) # Read JSON
-
+            with open(configPath, 'r', encoding='utf-8') as configFile: config = json.load(configFile) # Read JSON
             if debug: print("[DEBUG] Loaded config: {}".format(config))
 
             # Migrate integer utcOffset and retroFont
@@ -661,6 +656,7 @@ def loadConfig():
                     13: "UTC+13:00 | Samoa",
                     14: "UTC+14:00 | Kiritimati"
                 }
+
                 utcOffset = offsetMap.get(utcOffset, settings['utcOffset']) # Map to string or default
                 config['utcOffset'] = utcOffset # Update config
                 if debug: print("[DEBUG] Migrated utcOffset to: {}".format(utcOffset))
@@ -675,9 +671,9 @@ def loadConfig():
                 config.pop('colorMode') # Remove key
 
             # Write updated config back to file
-            with open(configPath, 'w', encoding='utf-8') as configFile:
-                json.dump(config, configFile, indent=2)
+            with open(configPath, 'w', encoding='utf-8') as configFile: json.dump(config, configFile, indent=2)
 
+            # Update settings in program
             settings['lastExportPath'] = config.get('lastExportPath', settings['lastExportPath']) # Load export path
             settings['debugMode'] = config.get('debugMode', settings['debugMode']) # Load debug
             settings['utcOffset'] = utcOffset # Load full UTC string
@@ -691,8 +687,7 @@ def loadConfig():
         except Exception as e:
             if debug: print("[ERROR] Failed to load user.config: {}".format(e))
     else:
-        with open(configPath, 'w', encoding='utf-8') as configFile:
-            json.dump(settings, configFile, indent=2) # Write default JSON
+        with open(configPath, 'w', encoding='utf-8') as configFile: json.dump(settings, configFile, indent=2) # Write default JSON
         if debug: print("[DEBUG] Created default user.config with settings: {}".format(settings))
 
     return settings
@@ -712,10 +707,8 @@ def exportTableToCSV(table, fileLocation, fileName):
     if debug: print("[DEBUG] exportTableToCSV: Normalized lastPath: {}".format(lastPath))
 
     # Force Documents if lastPath empty/invalid
-    if not lastPath or not os.path.exists(lastPath):
-        lastPath = os.path.normpath(os.path.expanduser("~/Documents"))
+    if not lastPath or not os.path.exists(lastPath): lastPath = os.path.normpath(os.path.expanduser("~/Documents"))
     if debug: print("[DEBUG] exportTableToCSV: Used fallback Documents path")
-
     defaultDir = lastPath
 
     # Timestamped default name (yyyy-mm-dd HH:mm:ss Export.csv)
@@ -738,19 +731,15 @@ def exportTableToCSV(table, fileLocation, fileName):
         dlg.resize(1200, 600) # Set custom size only for retro
         dlg.setViewMode(QFileDialog.ViewMode.Detail) # Ensure details view for columns
 
-    # Force sidebar width via splitter (adjust 150 as needed for your font/setup)
+    # Force sidebar width via splitter 
     splitter = dlg.findChild(QSplitter)
-
-    if splitter:
-        splitter.setSizes([150, dlg.width() - 150]) # Sidebar 150px, main the rest
-
+    if splitter: splitter.setSizes([150, dlg.width() - 150]) # Sidebar 150px, main the rest
     if debug: print("[DEBUG] exportTableToCSV: Adjusted splitter sizes")
 
     # Optional: Auto-resize main view columns (sidebar fixed, so skipped for it)
     mainView = dlg.findChild(QTreeView, "fileview") # Main view (may vary; fallback to first)
-
-    if not mainView:
-        mainView = dlg.findChild(QTreeView) # Fallback if named differently
+    if not mainView: mainView = dlg.findChild(QTreeView) # Fallback if named differently
+    
     if mainView:
         header = mainView.header()
 
@@ -758,6 +747,7 @@ def exportTableToCSV(table, fileLocation, fileName):
             mainView.resizeColumnToContents(i) # Auto-size main columns
 
     if debug: print("[DEBUG] exportTableToCSV: Resized main view columns")
+
     if dlg.exec():
         filePath = dlg.selectedFiles()[0]
     else:
@@ -778,8 +768,7 @@ def exportTableToCSV(table, fileLocation, fileName):
 
     # Write
     try:
-        with open(filePath, 'w', encoding='utf-8-sig', newline='') as f:
-            f.write('\n'.join(csvLines))
+        with open(filePath, 'w', encoding='utf-8-sig', newline='') as f: f.write('\n'.join(csvLines))
         if debug: print("[DEBUG] exportTableToCSV: Successfully wrote CSV to {}".format(filePath))
     except Exception as e:
         if debug: print("[DEBUG] exportTableToCSV: Failed to write CSV: {}".format(e))
@@ -793,18 +782,15 @@ def exportTableToCSV(table, fileLocation, fileName):
     configPath = getConfigPath()
 
     try:
-        with open(configPath, 'w', encoding='utf-8') as configFile:
-            json.dump(settings, configFile, indent=2)
+        with open(configPath, 'w', encoding='utf-8') as configFile: json.dump(settings, configFile, indent=2)
         if debug: print("[DEBUG] exportTableToCSV: Updated user.config with new lastExportPath-full file preserved")
     except Exception as e:
         if debug: print("[DEBUG] exportTableToCSV: Failed to update user.config: {}".format(e))  
 
 def customSortTable(table, col, dataDictionaryTable):
-    # Prevent overlap (ignore if sorting already)
+    # Prevent overlap
     pool = QThreadPool.globalInstance()
-
-    if pool.activeThreadCount() > 0:
-        return # Skip during sort
+    if pool.activeThreadCount() > 0: return # Skip during sort
 
     # Disable selection highlight during sort
     table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
@@ -813,14 +799,12 @@ def customSortTable(table, col, dataDictionaryTable):
     header = table.horizontalHeader()
     header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder) # Clear (safe enum)
 
-    # Toggle sort order (per-col state)
-    if col not in sortState:
-        sortState[col] = True # Default ASC for new col
-    else:
-        sortState[col] = not sortState[col] # Flip on every click
+    # Toggle sort order 
+    if col not in sortState: sortState[col] = True # Default ASC for new col
+    else: sortState[col] = not sortState[col] # Flip on every click
     ascending = sortState[col]
 
-    # Extract rows in main thread (fast, just text)
+    # Extract rows in main thread
     numRows = table.rowCount()
     rows = []
 
@@ -829,25 +813,27 @@ def customSortTable(table, col, dataDictionaryTable):
         rowData = [table.item(rowIDx, c).text() if table.item(rowIDx, c) else '' for c in range(table.columnCount())]
         rows.append([timestamp] + rowData) # Timestamp first
 
-    # Start pooled worker (auto-managed, no destroy warning)
+    # Start pooled worker 
     pool = QThreadPool.globalInstance()
     worker = sortWorker(rows, col, ascending)
     worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, col))
     pool.start(worker)
 
-    # Set sort indicator immediately (UI feedback)
+    # Set sort indicator immediately 
     header.setSortIndicator(col, Qt.SortOrder.AscendingOrder if ascending else Qt.SortOrder.DescendingOrder)
 
 def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col):
     table.setSortingEnabled(False)
-    numRows = len(sortedRows)
+    
     for rowIdx, row in enumerate(sortedRows):
         table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row[0]))
+
         for c in range(table.columnCount()):
             cellText = row[c + 1] if c + 1 < len(row) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
             table.setItem(rowIdx, c, item)
+
     if debug: print("[DEBUG] Updated table after sort; widths not locked.")
     headerLabels = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
     dataIds = [label.split('\n')[-1].strip() for label in headerLabels]
@@ -858,42 +844,21 @@ def timestampSortTable(table, dataDictionaryTable):
     if debug: print("[DEBUG] timestampSortTable: Starting sort by timestamps.")
     numRows = table.rowCount()
     rows = []
+
     for rowIdx in range(numRows):
         timestamp = table.verticalHeaderItem(rowIdx).text() if table.verticalHeaderItem(rowIdx) else ''
         rowData = [table.item(rowIdx, c).text() if table.item(rowIdx, c) else '' for c in range(table.columnCount())]
         rows.append([timestamp] + rowData)
     def sortKey(row):
-        try:
-            return datetime.strptime(row[0], '%m/%d/%y %H:%M:00')
-        except ValueError:
-            return datetime.min
+        try: return datetime.strptime(row[0], '%m/%d/%y %H:%M:00')
+        except ValueError: return datetime.min
+
     rows.sort(key=sortKey)
     pool = QThreadPool.globalInstance()
     worker = sortWorker(rows, -1, True)
     worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, -1))
     pool.start(worker)
     if debug: print("[DEBUG] Timestamp sort worker started.")
-
-class sortWorkerSignals(QObject):
-    sortDone = pyqtSignal(list, bool)
-
-class sortWorker(QRunnable):
-    def __init__(self, rows, col, ascending):
-        super(sortWorker, self).__init__()
-        self.signals = sortWorkerSignals()
-        self.rows = rows
-        self.col = col
-        self.ascending = ascending
-
-    def run(self):
-        def sortKey(row):
-            try:
-                return float(row[self.col + 1])
-            except ValueError:
-                return 0
-
-        self.rows.sort(key=sortKey, reverse=not self.ascending)
-        self.signals.sortDone.emit(self.rows, self.ascending)
 
 def centerWindowToParent(ui):
     """Center a window relative to its parent (main window), robust for multi-monitor."""
@@ -909,10 +874,8 @@ def centerWindowToParent(ui):
 
         # Fallback if null (invalid)
         if parentCenter.isNull():
-            if parentScreen:
-                parentCenter = parentScreen.availableGeometry().center()
-            else:
-                parentCenter = QGuiApplication.primaryScreen().availableGeometry().center()
+            if parentScreen: parentCenter = parentScreen.availableGeometry().center()
+            else: parentCenter = QGuiApplication.primaryScreen().availableGeometry().center()
     else:
         # No parent: Center on primary
         parentCenter = QGuiApplication.primaryScreen().availableGeometry().center()
@@ -946,25 +909,18 @@ def getExampleQuickLookDir():
 
 def getConfigDir():
     configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
-
-    if not os.path.exists(configDir):
-        os.makedirs(configDir)
+    if not os.path.exists(configDir): os.makedirs(configDir)
 
     return configDir
 
 def getConfigPath():
     configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation) # Get config dir
-
-    if not os.path.exists(configDir):
-        os.makedirs(configDir) # Create if missing
+    if not os.path.exists(configDir): os.makedirs(configDir) # Create if missing
     return os.path.join(configDir, "user.config") # Return JSON config path
 
 def getQuickLookDir():
     quickLookDir = os.path.join(getConfigDir(), "quickLook")
-
-    if not os.path.exists(quickLookDir):
-        os.makedirs(quickLookDir)
-
+    if not os.path.exists(quickLookDir): os.makedirs(quickLookDir)
     return quickLookDir
 
 def reloadGlobals():
@@ -988,19 +944,13 @@ def applyRetroFont(widget, pointSize=10):
             retroFontObj = QFont(fontFamily, pointSize)
             retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias) # Disable anti-aliasing for crisp retro
             widget.setFont(retroFontObj)
-
-            for child in widget.findChildren(QWidget): # Recursive to all children
-                child.setFont(retroFontObj)
-                
+            for child in widget.findChildren(QWidget): child.setFont(retroFontObj) # Recursive to all children                
             if debug: print("[DEBUG] Applied retro font to widget: {}".format(widget.objectName()))
         else:
             if debug: print("[ERROR] Failed to load retro font from {}".format(fontPath))
     else:
         widget.setFont(QFont()) # System default font
-
-        for child in widget.findChildren(QWidget): # Recursive to all children
-            child.setFont(QFont())
-
+        for child in widget.findChildren(QWidget): child.setFont(QFont()) # Recursive to all children
         if debug: print("[DEBUG] Reverted widget {} to system font".format(widget.objectName()))
 
 def valuePrecision(value):
@@ -1027,6 +977,7 @@ def setQueryDateRange(window, radioButton, dteStartDate, dteEndDate):
     if radioButton == window.rbCustomDateTime: # Custom: Enable edits, use existing or 72h default
         dteStartDate.setEnabled(True)
         dteEndDate.setEnabled(True)
+
         if dteStartDate.dateTime() >= dteEndDate.dateTime(): # Ensure valid range
             dteStartDate.setDateTime(now - timedelta(hours=72))
             dteEndDate.setDateTime(now)
@@ -1075,6 +1026,7 @@ def convertConfigToJson():
             'colorMode': 'light',
             'lastExportPath': ''
         }
+
         if 'Settings' in config:
             settings['utcOffset'] = config['Settings'].get('utcOffset', settings['utcOffset']) # Preserve UTC
             if debug: print(f"[DEBUG] Converted utcOffset: {settings['utcOffset']}")
@@ -1117,8 +1069,7 @@ def loadLastQuickLook(cbQuickLook):
 
     if os.path.exists(configPath):
         try:
-            with open(configPath, 'r', encoding='utf-8') as configFile:
-                config = json.load(configFile) # Read JSON
+            with open(configPath, 'r', encoding='utf-8') as configFile: config = json.load(configFile) # Read JSON
             if debug: print(f"[DEBUG] Loaded config for quick look: {config.get('lastQuickLook', 'none')}")
         except Exception as e:
             if debug: print(f"[DEBUG] Failed to load user.config for quick look: {e}")
@@ -1138,9 +1089,8 @@ def loadLastQuickLook(cbQuickLook):
 
 def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable):
     if debug: print("[DEBUG] executeQuery: isInternal={}, items={}".format(isInternal, len(queryItems)))
+    if isInternal: queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
 
-    if isInternal:
-        queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
     if not queryItems:
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid internal query items (USGS skipped).")
         return
@@ -1155,18 +1105,13 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     progressDialog.setValue(10)
     progressDialog.repaint() # Force initial render
     if debug: print("[DEBUG] executeQuery: Initialized and showed progress dialog")
-
     queryItems.sort(key=lambda x: x[4])
     firstInterval = queryItems[0][1]
     firstDb = queryItems[0][2]    
 
-    if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'):
-        firstInterval = 'INSTANT:60'
-    elif firstInterval == 'INSTANT' and firstDb == 'USGS-NWIS':
-        firstInterval = 'INSTANT:15'
-    elif firstInterval == 'INSTANT' and firstDb == 'AQUARIUS':
-        firstInterval = 'INSTANT:1'
-
+    if firstInterval == 'INSTANT' and firstDb.startswith('USBR-'): firstInterval = 'INSTANT:60'
+    elif firstInterval == 'INSTANT' and firstDb == 'USGS-NWIS': firstInterval = 'INSTANT:15'
+    elif firstInterval == 'INSTANT' and firstDb == 'AQUARIUS': firstInterval = 'INSTANT:1'
     timestamps = buildTimestamps(startDate, endDate, firstInterval)
 
     if not timestamps:
@@ -1178,19 +1123,15 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     progressDialog.repaint()
     QCoreApplication.processEvents()
     if debug: print("[DEBUG] executeQuery: Setup complete, progress at 20%")
-
     defaultBlanks = [''] * len(timestamps)
     labelsDict = {} if isInternal else None
     groups = defaultdict(list)
 
     for dataID, interval, db, mrid, origIndex in queryItems:
         if interval == 'INSTANT':
-            if db.startswith('USBR-'):
-                interval = 'INSTANT:60'
-            elif db == 'USGS-NWIS':
-                interval = 'INSTANT:15'
-            elif db == 'AQUARIUS':
-                interval = 'INSTANT:1'
+            if db.startswith('USBR-'): interval = 'INSTANT:60'
+            elif db == 'USGS-NWIS': interval = 'INSTANT:15'
+            elif db == 'AQUARIUS': interval = 'INSTANT:1'
 
         groupKey = (db.split('-')[0] if db.startswith('USBR-') else db, None, None) # Group all USBR into one thread
         SDID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
@@ -1204,11 +1145,11 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     numThreads = min(maxDbThreads, numGroups) # One thread per group, up to maxDbThreads
     if debug: print(f"[DEBUG] Starting {numThreads} threads for {numGroups} groups in background")
 
-    class QueryWorkerSignals(QObject):
+    class queryWorkerSignals(QObject):
         progressSignal = pyqtSignal(int, str) # For dialog updates
         resultSignal = pyqtSignal(tuple) # (groupKey, groupResult, groupLabels)        
 
-    class QueryWorker(QRunnable):
+    class queryWorker(QRunnable):
         def __init__(self, groupKey, groupItems, signals):
             super().__init__()
             self.groupKey = groupKey
@@ -1229,32 +1170,33 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 for (itemDb, interval, mrid), items in usbrGroups.items():
                     SDIDs = [item[2] for item in items]
                     result = {}
+                    
                     if db.startswith('USBR'):
                         try:
                             svr = itemDb.split('-')[1].lower() if '-' in itemDb else 'lchdb'
                             table = 'M' if mrid != '0' else 'R'
                             apiInterval = interval
                             result = QueryUSBR.apiRead(svr, SDIDs, startDate, endDate, apiInterval, mrid, table)
-                            if debug: print(f"[DEBUG] QueryWorker: USBR result for SDIDs {SDIDs}: {result}")
+                            if debug: print(f"[DEBUG] queryWorker: USBR result for SDIDs {SDIDs}: {result}")
                         except Exception as e:
-                            if debug: print(f"[DEBUG] QueryWorker: USBR apiRead failed for SDIDs {SDIDs}: {e}")
+                            if debug: print(f"[DEBUG] queryWorker: USBR apiRead failed for SDIDs {SDIDs}: {e}")
                             result = {}
                     elif db == 'AQUARIUS' and isInternal:
                         try:
                             result = QueryAquarius.apiRead(SDIDs, startDate, endDate, interval)
-                            if debug: print(f"[DEBUG] QueryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
+                            if debug: print(f"[DEBUG] queryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
                         except Exception as e:
-                            if debug: print(f"[DEBUG] QueryWorker: Aquarius apiRead failed for SDIDs {SDIDs}: {e}")
+                            if debug: print(f"[DEBUG] queryWorker: Aquarius apiRead failed for SDIDs {SDIDs}: {e}")
                             result = {}
                     elif db == 'USGS-NWIS' and not isInternal:
                         try:
                             result = QueryUSGS.apiRead(SDIDs, interval, startDate, endDate)
-                            if debug: print(f"[DEBUG] QueryWorker: USGS result for SDIDs {SDIDs}: {result}")
+                            if debug: print(f"[DEBUG] queryWorker: USGS result for SDIDs {SDIDs}: {result}")
                         except Exception as e:
-                            if debug: print(f"[DEBUG] QueryWorker: USGS apiRead failed for SDIDs {SDIDs}: {e}")
+                            if debug: print(f"[DEBUG] queryWorker: USGS apiRead failed for SDIDs {SDIDs}: {e}")
                             result = {}
                     else:
-                        if debug: print(f"[DEBUG] QueryWorker: Unknown db skipped: {db}")     
+                        if debug: print(f"[DEBUG] queryWorker: Unknown db skipped: {db}")     
                         continue
 
                     for idx, (origIndex, dataID, SDID) in enumerate(items):
@@ -1262,25 +1204,25 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                             if db == 'AQUARIUS':
                                 outputData = result.get(SDID, {}).get('data', [])
                                 groupLabels[dataID] = result.get(SDID, {}).get('label', dataID)
-                                if debug: print(f"[DEBUG] QueryWorker: Aquarius label for {dataID}: {groupLabels[dataID]}")
+                                if debug: print(f"[DEBUG] queryWorker: Aquarius label for {dataID}: {groupLabels[dataID]}")
                             else:
                                 outputData = result.get(SDID, [])
+
                             alignedData = gapCheck(timestamps, outputData, dataID)
                             values = [line.split(',')[1] if line else '' for line in alignedData]
                             groupResult[dataID] = values
                         else:
                             groupResult[dataID] = defaultBlanks                
-                            if db == 'AQUARIUS':
-                                groupLabels[dataID] = dataID # Fallback label
-                            if debug: print(f"[DEBUG] QueryWorker: No data for SDID {SDID} in {db}")
+                            if db == 'AQUARIUS': groupLabels[dataID] = dataID # Fallback label
+                            if debug: print(f"[DEBUG] queryWorker: No data for SDID {SDID} in {db}")
 
-                if debug: print(f"[DEBUG] QueryWorker: Completed group {self.groupKey} with {len(groupResult)} items")          
+                if debug: print(f"[DEBUG] queryWorker: Completed group {self.groupKey} with {len(groupResult)} items")          
             except Exception as e:
-                if debug: print(f"[DEBUG] QueryWorker: Failed for group {self.groupKey}: {e}")          
+                if debug: print(f"[DEBUG] queryWorker: Failed for group {self.groupKey}: {e}")   
+
                 for _, dataID, _ in items:
                     groupResult[dataID] = defaultBlanks # Fallback blanks on error
-                    if db == 'AQUARIUS':
-                        groupLabels[dataID] = dataID # Fallback label on error
+                    if db == 'AQUARIUS': groupLabels[dataID] = dataID # Fallback label on error
 
             self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels)) 
 
@@ -1293,24 +1235,30 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     def handleResult(result):
         nonlocal collected, valueDict
         groupKey, groupResult, groupLabels = result
+
         if groupKey in processedGroups:
             if debug: print(f"[DEBUG] executeQuery: Duplicate group {groupKey}, skipping")
             return
+        
         processedGroups.add(groupKey)
+
         # Check if groupResult is all blanks
         if all(all(v == '' for v in values) for values in groupResult.values()):
             if debug: print(f"[DEBUG] executeQuery: Skipping empty group {groupKey}, no data")
             return
+        
         if collected < numGroups: # Prevent double-processing
             if debug: print(f"[DEBUG] executeQuery: valueDict keys before update: {list(valueDict.keys())}")
             valueDict.update(groupResult)
             if groupLabels and labelsDict is not None:
                 labelsDict.update(groupLabels)
                 if debug: print(f"[DEBUG] executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
+
             collected += 1
             if debug: print(f"[DEBUG] executeQuery: Collected results for group {groupKey} with {len(groupResult)} items ({collected}/{numGroups})")
             if debug: print(f"[DEBUG] executeQuery: groupResult keys: {list(groupResult.keys())}")
             if debug: print(f"[DEBUG] executeQuery: valueDict keys after update: {list(valueDict.keys())}")
+
             if not progressDialog.wasCanceled():
                 progressDialog.setValue(20 + int(50 * collected / numGroups)) # Gradual 20-70%
                 progressDialog.setLabelText(f"Completed {groupKey[0]} query ({collected}/{numGroups})")
@@ -1321,8 +1269,8 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 QTimer.singleShot(500, lambda: progressDialog.setLabelText(f"Merging data... ({collected}/{numGroups})") if not progressDialog.wasCanceled() else None)
 
     for i, groupKey in enumerate(groups.keys()):
-        signals = QueryWorkerSignals()
-        worker = QueryWorker(groupKey, groups[groupKey], signals)
+        signals = queryWorkerSignals()
+        worker = queryWorker(groupKey, groups[groupKey], signals)
         signals.resultSignal.connect(lambda result, i=i: [print(f"[DEBUG] executeQuery: Signal received for group {result[0]}") if debug else None, resultQueue.put(result), handleResult(result)][-1]) # Debug signal
         pool.start(worker)
         threadsStarted += 1
@@ -1345,16 +1293,20 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     def checkQueueAndProgress():
         nonlocal collected
         elapsed = time.time() - startTime
+
         if collected >= numGroups and resultQueue.empty() and pool.activeThreadCount() == 0 or elapsed > timeoutSeconds:
             timer.stop()
+
             if elapsed > timeoutSeconds:
                 if debug: print(f"[DEBUG] executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")
                 print(f"[WARN] Query timeout after {timeoutSeconds} seconds; some data may be missing")
+
             if debug: print("[DEBUG] executeQuery: Timer stopped in checkQueueAndProgress, all groups collected")
             return
         if not progressDialog.wasCanceled():
             # Process queue
             if debug: print(f"[DEBUG] executeQuery: Checking queue, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
+            
             while not resultQueue.empty():
                 try:
                     result = resultQueue.get_nowait()
@@ -1363,10 +1315,12 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     if debug: print(f"[DEBUG] executeQuery: Processed queued result in timer, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
                 except queue.Empty:
                     break
+
             progressDialog.setLabelText(f"Querying data... ({collected}/{numGroups} complete)")
             progressDialog.repaint() # Force redraw
             progressDialog.updateGeometry() # Stabilize position
             if debug: print(f"[DEBUG] executeQuery: Timer update, progress {20 + int(50 * collected / numGroups)}%, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
+        
         QCoreApplication.processEvents() # Pump for responsiveness
 
     timer.timeout.connect(checkQueueAndProgress)
@@ -1377,6 +1331,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     while (collected < numGroups or not resultQueue.empty() or pool.activeThreadCount() > 0) and not progressDialog.wasCanceled():
         time.sleep(0.05) # Short sleep to allow timer
         QCoreApplication.processEvents() # Process signals
+
         # Double-check queue after all groups collected
         if collected >= numGroups:
             while not resultQueue.empty():
@@ -1390,6 +1345,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     # Final queue flush
     maxRetries = 5
     retryCount = 0
+
     while not resultQueue.empty() and retryCount < maxRetries:
         try:
             result = resultQueue.get_nowait()
@@ -1397,7 +1353,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             handleResult(result)
         except queue.Empty:
             break
+
         retryCount += 1
+
     if retryCount >= maxRetries:
         if debug: print(f"[DEBUG] executeQuery: Max retries ({maxRetries}) reached for final queue flush, queue size {resultQueue.qsize()}")
 
@@ -1431,12 +1389,14 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     for r in range(len(timestamps)):
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
+
         if r % 100 == 0: # Update progress every 100 rows
             progressDialog.setLabelText(f"Building rows... ({r}/{len(timestamps)} rows)")
             progressDialog.setValue(72 + int(28 * r / len(timestamps))) # Gradual 72-100%
             progressDialog.repaint()
             QCoreApplication.processEvents()
             if debug: print(f"[DEBUG] executeQuery: Building row {r}/{len(timestamps)}")
+
     if debug: print(f"[DEBUG] executeQuery: Built {len(data)} rows for table")
 
     if not progressDialog.wasCanceled():
@@ -1457,9 +1417,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         progressDialog.cancel()
         return
 
-    if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
-        mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
-
+    if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1: mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
     if debug: print("[DEBUG] Query executed and table updated.")
     progressDialog.cancel() # Close dialog
     QCoreApplication.processEvents() # Ensure cleanup renders
@@ -1496,20 +1454,17 @@ def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQuery
         for widget in [mainTable, webQueryList, internalQueryList]:
             if widget:
                 widget.setStyleSheet(retroStyles)
-
                 if debug: print("[DEBUG] Applied retro scroll bar styles to {}".format(widget.objectName()))
 
         app.setStyleSheet(app.styleSheet() + retroStyles)
-
         if debug: print("[DEBUG] Applied retro scroll bar styles globally")
     else:
         # Reset to base stylesheet
-        with open(resourcePath('ui/stylesheet.qss'), 'r') as f:
-            app.setStyleSheet(f.read())
+        with open(resourcePath('ui/stylesheet.qss'), 'r') as f: app.setStyleSheet(f.read())
+
         for widget in [mainTable, webQueryList, internalQueryList]:
             if widget:
                 widget.setStyleSheet("")
-
                 if debug: print("[DEBUG] Cleared retro scroll bar styles from {}".format(widget.objectName()))
 
         if debug: print("[DEBUG] Reverted to base stylesheet")

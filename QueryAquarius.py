@@ -3,7 +3,7 @@ import json
 import keyring
 import os
 from datetime import datetime, timedelta
-import Logic  # For globals like debug and utcOffset
+import Logic 
 import threading
 import queue
 
@@ -79,8 +79,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
             authResponse.raise_for_status()
 
             if Logic.debug: print(f"[DEBUG] Authentication succeeded with verify={verifyMode}")
-            if attempt == 'unverified' and Logic.debug:
-                print("[WARN] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.")
+            if attempt == 'unverified' and Logic.debug: print("[WARN] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.")
             break
 
         except requests.exceptions.SSLError as e:
@@ -100,7 +99,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
     user = None
     password = None
 
-    # Calculate total points (approximate to avoid full list for large ranges)
+    # Calculate total points 
     totalDuration = endDateTime - startDateTime
 
     if interval == 'HOUR':
@@ -113,9 +112,9 @@ def apiRead(dataIDs, startDate, endDate, interval):
     else:
         print(f"[ERROR] Unsupported interval: {interval}")
         return {uid: {'data': [], 'label': uid} for uid in dataIDs}
+    
     totalPoints = int(totalDuration.total_seconds() / delta.total_seconds()) + 1
-
-    numChunks = (totalPoints + queryLimit - 1) // queryLimit  # Ceiling division
+    numChunks = (totalPoints + queryLimit - 1) // queryLimit # Ceiling division
     if Logic.debug: print(f"[DEBUG] Estimated {totalPoints} points, splitting into {numChunks} chunks of ~{queryLimit} points each")
 
     # Generate sub-ranges
@@ -139,7 +138,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
     # Create tasks: (uid, subStart, subEnd) for each UID and sub-range
     tasks = [(uid, subStart, subEnd) for uid in dataIDs for subStart, subEnd in subRanges]
     numTasks = len(tasks)
-    numThreads = min(maxThreads, numTasks)  # Use fewer threads if fewer tasks
+    numThreads = min(maxThreads, numTasks) # Use fewer threads if fewer tasks
     if Logic.debug: print(f"[DEBUG] Created {numTasks} tasks for {len(dataIDs)} UIDs across {len(subRanges)} sub-ranges, using {numThreads} threads")
 
     def queryTask(uid, subStart, subEnd, threadId):
@@ -167,6 +166,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
             f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={subStartStr}&QueryTo={subEndStr}&utcOffset={offsetHours}&GetParts=PointsOnly&format=json',
             headers=headers, verify=verifyMode
         )
+
         try:
             readFile = json.loads(response.content)
         except Exception as e:
@@ -192,16 +192,14 @@ def apiRead(dataIDs, startDate, endDate, interval):
             dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}')
             formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
             value = point['Value'].get('Numeric', None)
-            if value is not None:
-                outputData.append(f'{formattedTs},{value}')
+            if value is not None: outputData.append(f'{formattedTs},{value}')
+
         resultQueue.put((uid, {'data': outputData, 'label': fullLabel}))
         if Logic.debug: print(f"[DEBUG] Thread {threadId} completed task for UID {uid} with {len(outputData)} points")
 
     # Start threads
     taskQueue = queue.Queue()
-    for task in tasks:
-        taskQueue.put(task)
-
+    for task in tasks: taskQueue.put(task)
     threads = []
 
     def worker(threadId):
@@ -238,8 +236,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
             result[uid] = data
 
     # Sort data by timestamp for each UID
-    for uid in result:
-        result[uid]['data'].sort(key=lambda x: datetime.strptime(x.split(',')[0], '%m/%d/%y %H:%M:00'))
+    for uid in result: result[uid]['data'].sort(key=lambda x: datetime.strptime(x.split(',')[0], '%m/%d/%y %H:%M:00'))
     if Logic.debug: print(f"[DEBUG] Combined results from {numTasks} tasks with {len(result)} UIDs")
 
     # Ensure all UIDs are in result (add empty for any missed)
