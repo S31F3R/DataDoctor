@@ -127,48 +127,68 @@ class oracleConnection:
             password = None
             raise
 
-    def executeQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> List[Any]:
-        """Execute a SQL SELECT query and return results in timestamp,value format."""
+    def executeCustomQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> Any:
         if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
+
+        # Detect bind variables (e.g., :1, :name) more precisely
+        hasBindVars = bool(re.search(r'(?<!\w):(\d+|[a-zA-Z]\w*)', query))
+        if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Query '{query[:100]}' has bind vars: {hasBindVars}")
+
+        if not params and hasBindVars:
+            if Logic.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
+            raise ValueError("Bind variables found in query but params not provided. Use parameterized input to prevent SQL injection.")
+
+        if params and not isinstance(params, (list, tuple)):
+            if Logic.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Invalid params type, risking SQL injection")
+            raise ValueError("Params must be a list or tuple to prevent SQL injection")
+
+        if params and not hasBindVars:
+            if Logic.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Params provided but no bind variables in query")
+            raise ValueError("Query has no bind variables but params were provided")
+
         cursor = self.connection.cursor()
         cursor.arraysize = 1000
         cursor.prefetchrows = 2000
-        
+        startTime = time.time()
+
         try:
+            exactQuery = query 
+            if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Validating query: {exactQuery}")
+
             if params:
-                cursor.execute(query, params)
+                cursor.execute(exactQuery, params)
             else:
-                cursor.execute(query)
-            if Logic.debug:
-                print(f"[DEBUG] oracleConnection.executeQuery: Executed query: {query[:100]}...")
-            if fetchAll:
-                results = cursor.fetchall()
-                if Logic.debug: print(f"[DEBUG] oracleConnection.executeQuery: Fetched {len(results)} rows")
+                cursor.execute(exactQuery)
+
+            if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Executed query: {exactQuery[:100]} with params {params}")
+            isSelect = cursor.description is not None
+            executionTime = time.time() - startTime
+            if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds")
+
+            if isSelect:
+                if fetchAll:
+                    results = cursor.fetchall()
+                    if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Fetched {len(results)} rows")
+                else:
+                    results = cursor.fetchone()
+                    if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Fetched single row: {results}")
+                if cursor.description:
+                    columns = [desc[0] for desc in cursor.description]
+                    if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Found columns: {columns}")
+                    formattedResults = [dict(zip(columns, row)) for row in (results if isinstance(results, list) else [results] if results else [])]
+                    return formattedResults
+
+                return results if isinstance(results, list) else [results] if results else []
             else:
-                results = cursor.fetchone()
-                if Logic.debug: print(f"[DEBUG] oracleConnection.executeQuery: Fetched single row: {results}")
-
-            formattedResults = []
-
-            for row in (results if isinstance(results, list) else [results]):
-                if len(row) >= 2:
-                    timestamp = row[0].strftime('%m/%d/%y %H:%M:00') if isinstance(row[0], datetime) else str(row[0])
-                    value = str(row[1]) if row[1] is not None else ''
-                    formattedResults.append(f"{timestamp},{value}")
-                else: 
-                    timestamp = row[0].strftime('%m/%d/%y %H:%M:00') if isinstance(row[0], datetime) else str(row[0])
-                    value = ''
-
-                formattedResults.append(f"{timestamp},{value}")
-
-            if Logic.debug: print(f"[DEBUG] oracleConnection.executeQuery: Formatted {len(formattedResults)} rows")
-            return formattedResults
+                rowCount = cursor.rowcount
+                if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Affected {rowCount} rows")
+                return rowCount
         except oracledb.Error as e:
-            if Logic.debug: print(f"[DEBUG] oracleConnection.executeQuery: Error executing query: {e}")
+            if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Oracle error: {e}")
             raise
         finally:
             cursor.close()
-            if Logic.debug: print("[DEBUG] oracleConnection.executeQuery: Cursor closed")
+            if Logic.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Cursor closed")
 
     def executeCustomQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> Any:
         if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
