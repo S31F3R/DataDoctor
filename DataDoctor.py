@@ -140,12 +140,12 @@ class uiMain(QMainWindow):
         if self.tabWidget: self.tabWidget.removeTab(index)
 
     def btnPublicQueryPressed(self):
-        winQuery.queryType = 'public'
+        winQuery.queryType = 'public'       
         winQuery.show()
         if Logic.debug: print("[DEBUG] btnPublicQueryPressed: Opened uiQuery as public")
 
     def btnInternalQueryPressed(self):
-        winQuery.queryType = 'internal'
+        winQuery.queryType = 'internal'   
         winQuery.show()
         if Logic.debug: print("[DEBUG] btnInternalQueryPressed: Opened uiQuery as internal")
 
@@ -313,11 +313,11 @@ class uiQuery(QMainWindow):
 
         # Set window icon based on queryType
         if self.queryType == 'public':
-            self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/PublicQuery.png')))
-            if Logic.debug: print("[DEBUG] uiQuery showEvent: Set window icon to PublicQuery.png")
+            self.setWindowTitle("Public Query")
+            if Logic.debug: print("[DEBUG] uiQuery showEvent: Set window icon to PublicQuery.png and title to Public Query")
         elif self.queryType == 'internal':
-            self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/InternalQuery.png')))
-            if Logic.debug: print("[DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png")
+            self.setWindowTitle("Internal Query")
+            if Logic.debug: print("[DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png and title to Internal Query")
 
         super().showEvent(event)
 
@@ -403,12 +403,19 @@ class uiQuery(QMainWindow):
             if Logic.debug: print("[DEBUG] No query item selected for removal")
 
     def btnSaveQuickLookPressed(self):
+        if Logic.debug: print("[DEBUG] btnSaveQuickLookPressed: Attempting to open Save Quick Look dialog")
+
+        if self.listQueryList.count() == 0:
+            if Logic.debug: print("[DEBUG] btnSaveQuickLookPressed: Empty query list, showing warning")
+            QMessageBox.warning(self, "Empty Query List", "Cannot save Quick Look: No items in the query list.")
+            return
+
         winQuickLook.currentListQueryList = self.listQueryList
         winQuickLook.CurrentCbQuickLook = self.cbQuickLook
         winQuickLook.exec()
         self.raise_()
         self.activateWindow()
-        if Logic.debug: print("[DEBUG] Save Quick Look dialog opened")
+        if Logic.debug: print("[DEBUG] btnSaveQuickLookPressed: Save Quick Look dialog opened and closed")
 
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
@@ -592,7 +599,7 @@ class uiQuery(QMainWindow):
         if currentRow == lastRow:
             if Logic.debug: print("[DEBUG] btnDown1Pressed: Already at bottom")
             return
-            
+
         newRow = currentRow + 1
         item = self.listQueryList.takeItem(currentRow)
         self.listQueryList.insertItem(newRow, item)
