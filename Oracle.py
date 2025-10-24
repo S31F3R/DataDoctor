@@ -6,6 +6,7 @@ import shutil
 import keyring
 import Logic
 import time
+import re
 from pathlib import Path
 from typing import List, Any, Optional
 from datetime import datetime
@@ -171,7 +172,13 @@ class oracleConnection:
 
     def executeCustomQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> Any:
         if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
-        hasBindVars = any(f":{i+1}" in query for i in range(10)) or ":name" in query.lower()
+
+        # Detect bind variables (e.g., :1, :name)
+        hasBindVars = bool(re.search(r':\d+|:[\w]+', query))
+
+        if not params and hasBindVars:
+            if Logic.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
+            raise ValueError("Bind variables found in query but params not provided. Use parameterized input to prevent SQL injection.")
 
         if params and not isinstance(params, (list, tuple)):
             if Logic.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Invalid params type, risking SQL injection")
@@ -187,13 +194,16 @@ class oracleConnection:
         startTime = time.time()
 
         try:
-            if params: cursor.execute(query, params)
-            else: cursor.execute(query)
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+
             if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Executed query: {query[:100]} with params {params}")
             isSelect = cursor.description is not None
             executionTime = time.time() - startTime
             if Logic.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds")
-            
+
             if isSelect:
                 if fetchAll:
                     results = cursor.fetchall()
