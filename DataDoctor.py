@@ -451,9 +451,11 @@ class uiQuery(QMainWindow):
     def btnUpMaxPressed(self):
         if Logic.debug: print("[DEBUG] btnUpMaxPressed: Attempting to move item to top")
         currentRow = self.listQueryList.currentRow()
+
         if currentRow <= 0 or currentRow >= self.listQueryList.count():
             if Logic.debug: print("[DEBUG] btnUpMaxPressed: No valid item selected or already at top")
             return
+
         item = self.listQueryList.takeItem(currentRow)
         self.listQueryList.insertItem(0, item)
         self.listQueryList.setCurrentRow(0)
@@ -463,13 +465,17 @@ class uiQuery(QMainWindow):
     def btnUp15Pressed(self):
         if Logic.debug: print("[DEBUG] btnUp15Pressed: Attempting to move item up 15 rows")
         currentRow = self.listQueryList.currentRow()
+
         if currentRow < 0 or currentRow >= self.listQueryList.count():
             if Logic.debug: print("[DEBUG] btnUp15Pressed: No valid item selected")
             return
+
         newRow = max(0, currentRow - 15)
+
         if newRow == currentRow:
             if Logic.debug: print("[DEBUG] btnUp15Pressed: Already at top")
             return
+
         item = self.listQueryList.takeItem(currentRow)
         self.listQueryList.insertItem(newRow, item)
         self.listQueryList.setCurrentRow(newRow)
@@ -479,13 +485,17 @@ class uiQuery(QMainWindow):
     def btnUp5Pressed(self):
         if Logic.debug: print("[DEBUG] btnUp5Pressed: Attempting to move item up 5 rows")
         currentRow = self.listQueryList.currentRow()
+
         if currentRow < 0 or currentRow >= self.listQueryList.count():
             if Logic.debug: print("[DEBUG] btnUp5Pressed: No valid item selected")
             return
+
         newRow = max(0, currentRow - 5)
+
         if newRow == currentRow:
             if Logic.debug: print("[DEBUG] btnUp5Pressed: Already at top")
             return
+
         item = self.listQueryList.takeItem(currentRow)
         self.listQueryList.insertItem(newRow, item)
         self.listQueryList.setCurrentRow(newRow)
@@ -495,9 +505,11 @@ class uiQuery(QMainWindow):
     def btnUp1Pressed(self):
         if Logic.debug: print("[DEBUG] btnUp1Pressed: Attempting to move item up 1 row")
         currentRow = self.listQueryList.currentRow()
+
         if currentRow <= 0 or currentRow >= self.listQueryList.count():
             if Logic.debug: print("[DEBUG] btnUp1Pressed: No valid item selected or already at top")
             return
+
         newRow = currentRow - 1
         item = self.listQueryList.takeItem(currentRow)
         self.listQueryList.insertItem(newRow, item)
@@ -508,13 +520,17 @@ class uiQuery(QMainWindow):
     def btnDownMaxPressed(self):
         if Logic.debug: print("[DEBUG] btnDownMaxPressed: Attempting to move item to bottom")
         currentRow = self.listQueryList.currentRow()
+
         if currentRow < 0 or currentRow >= self.listQueryList.count():
             if Logic.debug: print("[DEBUG] btnDownMaxPressed: No valid item selected")
             return
+
         lastRow = self.listQueryList.count() - 1
+
         if currentRow == lastRow:
             if Logic.debug: print("[DEBUG] btnDownMaxPressed: Already at bottom")
             return
+
         item = self.listQueryList.takeItem(currentRow)
         self.listQueryList.insertItem(lastRow, item)
         self.listQueryList.setCurrentRow(lastRow)
@@ -524,14 +540,18 @@ class uiQuery(QMainWindow):
     def btnDown15Pressed(self):
         if Logic.debug: print("[DEBUG] btnDown15Pressed: Attempting to move item down 15 rows")
         currentRow = self.listQueryList.currentRow()
+
         if currentRow < 0 or currentRow >= self.listQueryList.count():
             if Logic.debug: print("[DEBUG] btnDown15Pressed: No valid item selected")
             return
+
         lastRow = self.listQueryList.count() - 1
         newRow = min(lastRow, currentRow + 15)
+
         if newRow == currentRow:
             if Logic.debug: print("[DEBUG] btnDown15Pressed: Already at bottom")
             return
+
         item = self.listQueryList.takeItem(currentRow)
         self.listQueryList.insertItem(newRow, item)
         self.listQueryList.setCurrentRow(newRow)
@@ -541,14 +561,18 @@ class uiQuery(QMainWindow):
     def btnDown5Pressed(self):
         if Logic.debug: print("[DEBUG] btnDown5Pressed: Attempting to move item down 5 rows")
         currentRow = self.listQueryList.currentRow()
+
         if currentRow < 0 or currentRow >= self.listQueryList.count():
             if Logic.debug: print("[DEBUG] btnDown5Pressed: No valid item selected")
             return
+
         lastRow = self.listQueryList.count() - 1
         newRow = min(lastRow, currentRow + 5)
+
         if newRow == currentRow:
             if Logic.debug: print("[DEBUG] btnDown5Pressed: Already at bottom")
             return
+
         item = self.listQueryList.takeItem(currentRow)
         self.listQueryList.insertItem(newRow, item)
         self.listQueryList.setCurrentRow(newRow)
@@ -558,13 +582,17 @@ class uiQuery(QMainWindow):
     def btnDown1Pressed(self):
         if Logic.debug: print("[DEBUG] btnDown1Pressed: Attempting to move item down 1 row")
         currentRow = self.listQueryList.currentRow()
+
         if currentRow < 0 or currentRow >= self.listQueryList.count():
             if Logic.debug: print("[DEBUG] btnDown1Pressed: No valid item selected")
             return
+
         lastRow = self.listQueryList.count() - 1
+
         if currentRow == lastRow:
             if Logic.debug: print("[DEBUG] btnDown1Pressed: Already at bottom")
             return
+            
         newRow = currentRow + 1
         item = self.listQueryList.takeItem(currentRow)
         self.listQueryList.insertItem(newRow, item)
