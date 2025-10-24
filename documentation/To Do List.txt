@@ -3,8 +3,19 @@
     -Any current [DEBUG] after an exception should be a ERROR and logged, no matter if DEBUG = true
 -Save dialog for CSV needs wider columns or auto size needs to be fixed (linux is fine)
 -Break apart Logic.py into more .py files based on type of logic
+    -QueryBuilder    
+    -Remove Query label from .py file in QueryUSBR, QueryUSGS, QueryAquarius
+    -Should all but DataDoctor.py go into a folder?
 -Export to CSV needs work. Remembering path isn't working across platform, possibly Qt issue. Lots of trial and error code left in there, needs to be removed when completed
 -Remove any unused imports and def
+-Any new successful dataID in a query should automatically be appeneded to data dictionary
+    -If Aquarius, add label to common name
+-Make public query smarter, don't let it run Aquarius queries when it pops up in a quicklook. Query only public approved stuff in quick look
+-Add sub directories in quick look folder
+    -queries, plots, etc
+    -oracleSnippets
+-Allow USGS on the internal query side
+    -Internal query will bring back meta data for USGS to display in context menu
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
@@ -16,7 +27,6 @@
 ####### QUERY WINDOW MODIFICATIONS #######
 -Create a search icon next to dataID, this will need to bring up a window with a search. Allow user to search data dictionary, then hit add to query
     -Search will need a combobox to allow the user to search by dataID, label, or database
--Add up and down arrows to reorganize items in the query list. Can add a move 1, move 5, move Max
 -Add a checkbox to do a delta check between pairs of data
     -Make it simple and require the user to put data in order in the query list. Difference will be between 1 & 2, 3 & 4
     -Difference will show up in column to the right of the pair, with special QAQC checks and will not go through normal QAQC
