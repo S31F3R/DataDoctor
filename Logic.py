@@ -518,30 +518,35 @@ def qaqc(table, dataDictionaryTable, lookupIds):
 
         if debug: print("[DEBUG] qaqc: Processed column {} for lookupId {}".format(col, lookupId))          
            
-def loadAllQuickLooks(cbQuickLook):     
+def loadAllQuickLooks(cbQuickLook):
     cbQuickLook.clear()
     quickLookPaths = []
 
-    # User-specific first
+    # User-specific Quick Looks from query subfolder
     userDir = getQuickLookDir()
 
     for file in os.listdir(userDir):
-        if file.endswith(".txt"): quickLookPaths.append(os.path.join(userDir, file))
+        if file.endswith(".txt"):
+            quickLookPaths.append(os.path.join(userDir, file))
+            if debug: print("[DEBUG] loadAllQuickLooks: Found user Quick Look: {}".format(file))
 
-    # Then append examples (no duplicates – check names)
+    # Append example Quick Looks (no duplicates – check names)
     exampleDir = getExampleQuickLookDir()
 
     for file in os.listdir(exampleDir):
         if file.endswith(".txt"):
             examplePath = os.path.join(exampleDir, file)
+            userPath = os.path.join(userDir, file)
 
-            if not os.path.exists(os.path.join(userDir, file)): # Avoid dupes
+            if not os.path.exists(userPath): # Avoid dupes
                 quickLookPaths.append(examplePath)
-    
+                if debug: print("[DEBUG] loadAllQuickLooks: Added example Quick Look: {}".format(file))
+
     # Add to combo (use basename without .txt)
     for path in quickLookPaths:
         name = os.path.basename(path).replace('.txt', '')
         cbQuickLook.addItem(name)
+        if debug: print("[DEBUG] loadAllQuickLooks: Added {} to cbQuickLook".format(name))
                   
 def saveQuickLook(textQuickLookName, listQueryList):
     name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
@@ -553,7 +558,12 @@ def saveQuickLook(textQuickLookName, listQueryList):
     data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
     quicklookPath = os.path.join(getQuickLookDir(), f'{name}.txt')
     os.makedirs(os.path.dirname(quicklookPath), exist_ok=True) # Ensure dir
-    with open(quicklookPath, 'w', encoding='utf-8-sig') as f: f.write(','.join(data))
+    
+    try:
+        with open(quicklookPath, 'w', encoding='utf-8-sig') as f: f.write(','.join(data))
+        if debug: print("[DEBUG] saveQuickLook: Saved Quick Look to {}".format(quicklookPath))
+    except Exception as e:
+        if debug: print("[ERROR] saveQuickLook: Failed to save Quick Look to {}: {}".format(quicklookPath, e))
 
 def loadQuickLook(cbQuickLook, listQueryList):
     quickLookName = cbQuickLook.currentText()
@@ -926,8 +936,32 @@ def getConfigPath():
 
 def getQuickLookDir():
     quickLookDir = os.path.join(getConfigDir(), "quickLook")
-    if not os.path.exists(quickLookDir): os.makedirs(quickLookDir)
-    return quickLookDir
+    queryDir = os.path.join(quickLookDir, "query")
+
+    if not os.path.exists(quickLookDir):
+        os.makedirs(quickLookDir)
+        if debug: print("[DEBUG] getQuickLookDir: Created quickLook directory: {}".format(quickLookDir))
+
+    if not os.path.exists(queryDir):
+        os.makedirs(queryDir)
+        if debug: print("[DEBUG] getQuickLookDir: Created query subfolder: {}".format(queryDir))
+
+    # Migrate existing .txt files from quickLook root to query subfolder
+    for file in os.listdir(quickLookDir):
+        if file.endswith(".txt"):
+            srcPath = os.path.join(quickLookDir, file)
+            dstPath = os.path.join(queryDir, file)
+
+            if os.path.isfile(srcPath) and not os.path.exists(dstPath):
+                try:
+                    os.rename(srcPath, dstPath)
+                    if debug: print("[DEBUG] getQuickLookDir: Moved {} to {}".format(srcPath, dstPath))
+                except Exception as e:
+                    if debug: print("[ERROR] getQuickLookDir: Failed to move {} to {}: {}".format(srcPath, dstPath, e))
+            elif os.path.exists(dstPath):
+                if debug: print("[DEBUG] getQuickLookDir: Skipped moving {} as it already exists in {}".format(srcPath, queryDir))
+
+    return queryDir
 
 def reloadGlobals():
     settings = loadConfig() # Load JSON settings
@@ -1425,7 +1459,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         if debug: print(f"[DEBUG] executeQuery: User canceled during table building")
         progressDialog.cancel()
         return
-        
+
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1: mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
     if debug: print("[DEBUG] Query executed and table updated.")
     progressDialog.cancel() # Close dialog
