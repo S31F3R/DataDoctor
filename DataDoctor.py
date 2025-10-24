@@ -188,53 +188,6 @@ class uiMain(QMainWindow):
         Logic.timestampSortTable(self.mainTable, winDataDictionary.mainTable)
 
 class uiQuery(QMainWindow):
-    """Internal query window: Builds and executes internal queries."""
-    def __init__(self, parent=None):
-        super(uiInternalQuery, self).__init__(parent)
-        uic.loadUi(Logic.resourcePath('ui/winInternalQuery.ui'), self)
-
-        # Define controls
-        self.btnQuery = self.findChild(QPushButton, 'btnQuery')
-        self.qleDataID = self.findChild(QLineEdit, 'qleDataID')
-        self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
-        self.cbInterval = self.findChild(QComboBox, 'cbInterval')
-        self.dteStartDate = self.findChild(QDateTimeEdit, 'dteStartDate')
-        self.dteEndDate = self.findChild(QDateTimeEdit, 'dteEndDate')
-        self.listQueryList = self.findChild(QListWidget, 'listQueryList')
-        self.btnAddQuery = self.findChild(QPushButton, 'btnAddQuery')
-        self.btnRemoveQuery = self.findChild(QPushButton, 'btnRemoveQuery')
-        self.btnSaveQuickLook = self.findChild(QPushButton, 'btnSaveQuickLook')
-        self.cbQuickLook = self.findChild(QComboBox, 'cbQuickLook')
-        self.btnLoadQuickLook = self.findChild(QPushButton, 'btnLoadQuickLook')
-        self.btnClearQuery = self.findChild(QPushButton, 'btnClearQuery')
-        self.btnDataIdInfo = self.findChild(QPushButton, 'btnDataIdInfo')
-        self.btnIntervalInfo = self.findChild(QPushButton, 'btnIntervalInfo')
-        self.rbCustomDateTime = self.findChild(QRadioButton, 'rbCustomDateTime')
-        self.rbPrevDayToCurrent = self.findChild(QRadioButton, 'rbPrevDayToCurrent')
-        self.rbPrevWeekToCurrent = self.findChild(QRadioButton, 'rbPrevWeekToCurrent')
-
-        # Group radio buttons
-        self.radioGroup = QButtonGroup(self)
-        self.radioGroup.addButton(self.rbCustomDateTime)
-        self.radioGroup.addButton(self.rbPrevDayToCurrent)
-        self.radioGroup.addButton(self.rbPrevWeekToCurrent)
-
-        # Set button style
-        Logic.buttonStyle(self.btnDataIdInfo)
-        Logic.buttonStyle(self.btnIntervalInfo)
-
-        # Create events
-        self.btnQuery.clicked.connect(self.btnQueryPressed)
-        self.btnAddQuery.clicked.connect(self.btnAddQueryPressed)
-        self.btnRemoveQuery.clicked.connect(self.btnRemoveQueryPressed)
-        self.btnSaveQuickLook.clicked.connect(self.btnSaveQuickLookPressed)
-        self.btnLoadQuickLook.clicked.connect(self.btnLoadQuickLookPressed)
-        self.btnClearQuery.clicked.connect(self.btnClearQueryPressed)
-        self.btnDataIdInfo.clicked.connect(self.btnDataIdInfoPressed)
-        self.btnIntervalInfo.clicked.connect(self.btnIntervalInfoPressed)
-        self.radioGroup.buttonClicked.connect(lambda btn: Logic.setQueryDateRange(self, btn, self.dteStartDate, self.dteEndDate))
-
-class uiQuery(QMainWindow):
     """Query window: Builds and executes database calls for public or internal queries."""
     def __init__(self, parent=None):
         super(uiQuery, self).__init__(parent)
@@ -357,6 +310,15 @@ class uiQuery(QMainWindow):
         if self.queryType == 'internal': databases.insert(0, 'AQUARIUS')
         for db in databases: self.cbDatabase.addItem(db)
         if Logic.debug: print("[DEBUG] uiQuery showEvent: Populated cbDatabase with {} items".format(self.cbDatabase.count()))
+
+        # Set window icon based on queryType
+        if self.queryType == 'public':
+            self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/PublicQuery.png')))
+            if Logic.debug: print("[DEBUG] uiQuery showEvent: Set window icon to PublicQuery.png")
+        elif self.queryType == 'internal':
+            self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/InternalQuery.png')))
+            if Logic.debug: print("[DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png")
+
         super().showEvent(event)
 
     def eventFilter(self, obj, event):
@@ -480,43 +442,135 @@ class uiQuery(QMainWindow):
 
     def btnQueryOptionsInfoPressed(self):
         QMessageBox.information(self, "Query Options Info",
-            "Deltas and overlay only work on data paris, ex: first and second item in query list = pair 1, second and third item in query list = pair 2.\n\n",
-            "Deltas: uses pair groups and adds a column next to them, showing 1st minus 2nd.\n\n",
-            "Overlay: uses pair groups and shows them in a single column, 1st being primary, 2nd being secondary./n",
+            "Deltas and overlay only work on data paris, ex: first and second item in query list = pair 1, second and third item in query list = pair 2.\n\n"
+            "Deltas: uses pair groups and adds a column next to them, showing 1st minus 2nd.\n\n"
+            "Overlay: uses pair groups and shows them in a single column, 1st being primary, 2nd being secondary.\n"
             "QAQC formatting will be applied, regardless of QAQC setting in options. Cells turn colors based on primary missing but secondary available and differences in 1st and 2nd.")
         if Logic.debug: print("[DEBUG] Query options info displayed")         
 
     def btnUpMaxPressed(self):
-        if Logic.debug: print("[DEBUG] btnUpMaxPressed: Not implemented")
-        pass
+        if Logic.debug: print("[DEBUG] btnUpMaxPressed: Attempting to move item to top")
+        currentRow = self.listQueryList.currentRow()
+        if currentRow <= 0 or currentRow >= self.listQueryList.count():
+            if Logic.debug: print("[DEBUG] btnUpMaxPressed: No valid item selected or already at top")
+            return
+        item = self.listQueryList.takeItem(currentRow)
+        self.listQueryList.insertItem(0, item)
+        self.listQueryList.setCurrentRow(0)
+        self.listQueryList.scrollToItem(item)
+        if Logic.debug: print("[DEBUG] btnUpMaxPressed: Moved item to index 0")
 
     def btnUp15Pressed(self):
-        if Logic.debug: print("[DEBUG] btnUp15Pressed: Not implemented")
-        pass
+        if Logic.debug: print("[DEBUG] btnUp15Pressed: Attempting to move item up 15 rows")
+        currentRow = self.listQueryList.currentRow()
+        if currentRow < 0 or currentRow >= self.listQueryList.count():
+            if Logic.debug: print("[DEBUG] btnUp15Pressed: No valid item selected")
+            return
+        newRow = max(0, currentRow - 15)
+        if newRow == currentRow:
+            if Logic.debug: print("[DEBUG] btnUp15Pressed: Already at top")
+            return
+        item = self.listQueryList.takeItem(currentRow)
+        self.listQueryList.insertItem(newRow, item)
+        self.listQueryList.setCurrentRow(newRow)
+        self.listQueryList.scrollToItem(item)
+        if Logic.debug: print(f"[DEBUG] btnUp15Pressed: Moved item from {currentRow} to {newRow}")
 
     def btnUp5Pressed(self):
-        if Logic.debug: print("[DEBUG] btnUp5Pressed: Not implemented")
-        pass
+        if Logic.debug: print("[DEBUG] btnUp5Pressed: Attempting to move item up 5 rows")
+        currentRow = self.listQueryList.currentRow()
+        if currentRow < 0 or currentRow >= self.listQueryList.count():
+            if Logic.debug: print("[DEBUG] btnUp5Pressed: No valid item selected")
+            return
+        newRow = max(0, currentRow - 5)
+        if newRow == currentRow:
+            if Logic.debug: print("[DEBUG] btnUp5Pressed: Already at top")
+            return
+        item = self.listQueryList.takeItem(currentRow)
+        self.listQueryList.insertItem(newRow, item)
+        self.listQueryList.setCurrentRow(newRow)
+        self.listQueryList.scrollToItem(item)
+        if Logic.debug: print(f"[DEBUG] btnUp5Pressed: Moved item from {currentRow} to {newRow}")
 
     def btnUp1Pressed(self):
-        if Logic.debug: print("[DEBUG] btnUp1Pressed: Not implemented")
-        pass
+        if Logic.debug: print("[DEBUG] btnUp1Pressed: Attempting to move item up 1 row")
+        currentRow = self.listQueryList.currentRow()
+        if currentRow <= 0 or currentRow >= self.listQueryList.count():
+            if Logic.debug: print("[DEBUG] btnUp1Pressed: No valid item selected or already at top")
+            return
+        newRow = currentRow - 1
+        item = self.listQueryList.takeItem(currentRow)
+        self.listQueryList.insertItem(newRow, item)
+        self.listQueryList.setCurrentRow(newRow)
+        self.listQueryList.scrollToItem(item)
+        if Logic.debug: print(f"[DEBUG] btnUp1Pressed: Moved item from {currentRow} to {newRow}")
 
     def btnDownMaxPressed(self):
-        if Logic.debug: print("[DEBUG] btnDownMaxPressed: Not implemented")
-        pass
+        if Logic.debug: print("[DEBUG] btnDownMaxPressed: Attempting to move item to bottom")
+        currentRow = self.listQueryList.currentRow()
+        if currentRow < 0 or currentRow >= self.listQueryList.count():
+            if Logic.debug: print("[DEBUG] btnDownMaxPressed: No valid item selected")
+            return
+        lastRow = self.listQueryList.count() - 1
+        if currentRow == lastRow:
+            if Logic.debug: print("[DEBUG] btnDownMaxPressed: Already at bottom")
+            return
+        item = self.listQueryList.takeItem(currentRow)
+        self.listQueryList.insertItem(lastRow, item)
+        self.listQueryList.setCurrentRow(lastRow)
+        self.listQueryList.scrollToItem(item)
+        if Logic.debug: print(f"[DEBUG] btnDownMaxPressed: Moved item from {currentRow} to {lastRow}")
 
     def btnDown15Pressed(self):
-        if Logic.debug: print("[DEBUG] btnDown15Pressed: Not implemented")
-        pass
+        if Logic.debug: print("[DEBUG] btnDown15Pressed: Attempting to move item down 15 rows")
+        currentRow = self.listQueryList.currentRow()
+        if currentRow < 0 or currentRow >= self.listQueryList.count():
+            if Logic.debug: print("[DEBUG] btnDown15Pressed: No valid item selected")
+            return
+        lastRow = self.listQueryList.count() - 1
+        newRow = min(lastRow, currentRow + 15)
+        if newRow == currentRow:
+            if Logic.debug: print("[DEBUG] btnDown15Pressed: Already at bottom")
+            return
+        item = self.listQueryList.takeItem(currentRow)
+        self.listQueryList.insertItem(newRow, item)
+        self.listQueryList.setCurrentRow(newRow)
+        self.listQueryList.scrollToItem(item)
+        if Logic.debug: print(f"[DEBUG] btnDown15Pressed: Moved item from {currentRow} to {newRow}")
 
     def btnDown5Pressed(self):
-        if Logic.debug: print("[DEBUG] btnDown5Pressed: Not implemented")
-        pass
+        if Logic.debug: print("[DEBUG] btnDown5Pressed: Attempting to move item down 5 rows")
+        currentRow = self.listQueryList.currentRow()
+        if currentRow < 0 or currentRow >= self.listQueryList.count():
+            if Logic.debug: print("[DEBUG] btnDown5Pressed: No valid item selected")
+            return
+        lastRow = self.listQueryList.count() - 1
+        newRow = min(lastRow, currentRow + 5)
+        if newRow == currentRow:
+            if Logic.debug: print("[DEBUG] btnDown5Pressed: Already at bottom")
+            return
+        item = self.listQueryList.takeItem(currentRow)
+        self.listQueryList.insertItem(newRow, item)
+        self.listQueryList.setCurrentRow(newRow)
+        self.listQueryList.scrollToItem(item)
+        if Logic.debug: print(f"[DEBUG] btnDown5Pressed: Moved item from {currentRow} to {newRow}")
 
     def btnDown1Pressed(self):
-        if Logic.debug: print("[DEBUG] btnDown1Pressed: Not implemented")
-        pass
+        if Logic.debug: print("[DEBUG] btnDown1Pressed: Attempting to move item down 1 row")
+        currentRow = self.listQueryList.currentRow()
+        if currentRow < 0 or currentRow >= self.listQueryList.count():
+            if Logic.debug: print("[DEBUG] btnDown1Pressed: No valid item selected")
+            return
+        lastRow = self.listQueryList.count() - 1
+        if currentRow == lastRow:
+            if Logic.debug: print("[DEBUG] btnDown1Pressed: Already at bottom")
+            return
+        newRow = currentRow + 1
+        item = self.listQueryList.takeItem(currentRow)
+        self.listQueryList.insertItem(newRow, item)
+        self.listQueryList.setCurrentRow(newRow)
+        self.listQueryList.scrollToItem(item)
+        if Logic.debug: print(f"[DEBUG] btnDown1Pressed: Moved item from {currentRow} to {newRow}")
 
     def btnSearchPressed(self):
         if Logic.debug: print("[DEBUG] btnSearchPressed: Not implemented")
@@ -607,8 +661,8 @@ class uiQuickLook(QDialog):
         if self.currentListQueryList and self.CurrentCbQuickLook:
             if Logic.debug: print("[DEBUG] Saving quick look using currentListQueryList with count:", self.currentListQueryList.count())
             Logic.saveQuickLook(self.qleQuickLookName.text().strip(), self.currentListQueryList)
-            Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
-            Logic.loadAllQuickLooks(winInternalQuery.cbQuickLook)
+            Logic.loadAllQuickLooks(winQuery.cbQuickLook)
+           
             self.clear()
             winQuickLook.close()
             if Logic.debug: print("[DEBUG] Quick look saved and window closed")
