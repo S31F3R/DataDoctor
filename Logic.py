@@ -670,6 +670,10 @@ def loadConfig():
                 if debug: print("[DEBUG] Removing obsolete colorMode")
                 config.pop('colorMode') # Remove key
 
+            if 'tnsNamesLocation' not in config or not config['tnsNamesLocation']:
+                envTns = os.environ.get('TNS_ADMIN')
+                if envTns: config['tnsNamesLocation'] = envTns 
+
             # Write updated config back to file
             with open(configPath, 'w', encoding='utf-8') as configFile: json.dump(config, configFile, indent=2)
 
