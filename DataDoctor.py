@@ -140,10 +140,14 @@ class uiMain(QMainWindow):
         if self.tabWidget: self.tabWidget.removeTab(index)
 
     def btnPublicQueryPressed(self):
-        winWebQuery.show()
+        winQuery.queryType = 'public'
+        winQuery.show()
+        if Logic.debug: print("[DEBUG] btnPublicQueryPressed: Opened uiQuery as public")
 
     def btnInternalQueryPressed(self):
-        winInternalQuery.show()
+        winQuery.queryType = 'internal'
+        winQuery.show()
+        if Logic.debug: print("[DEBUG] btnInternalQueryPressed: Opened uiQuery as internal")
 
     def btnOptionsPressed(self):
         winOptions.exec()
@@ -183,221 +187,7 @@ class uiMain(QMainWindow):
         if Logic.debug: print("[DEBUG] btnUndoPressed: Resetting to timestamp sort.")
         Logic.timestampSortTable(self.mainTable, winDataDictionary.mainTable)
 
-class uiWebQuery(QMainWindow):
-    """Public query window: Builds and executes public API calls."""
-    def __init__(self, parent=None):
-        super(uiWebQuery, self).__init__(parent)
-        uic.loadUi(Logic.resourcePath('ui/winWebQuery.ui'), self)
-
-        # Define controls
-        self.btnQuery = self.findChild(QPushButton, 'btnQuery')
-        self.qleDataID = self.findChild(QLineEdit, 'qleDataID')
-        self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
-        self.cbInterval = self.findChild(QComboBox, 'cbInterval')
-        self.dteStartDate = self.findChild(QDateTimeEdit, 'dteStartDate')
-        self.dteEndDate = self.findChild(QDateTimeEdit, 'dteEndDate')
-        self.listQueryList = self.findChild(QListWidget, 'listQueryList')
-        self.btnAddQuery = self.findChild(QPushButton, 'btnAddQuery')
-        self.btnRemoveQuery = self.findChild(QPushButton, 'btnRemoveQuery')
-        self.btnSaveQuickLook = self.findChild(QPushButton, 'btnSaveQuickLook')
-        self.cbQuickLook = self.findChild(QComboBox, 'cbQuickLook')
-        self.btnLoadQuickLook = self.findChild(QPushButton, 'btnLoadQuickLook')
-        self.btnClearQuery = self.findChild(QPushButton, 'btnClearQuery')
-        self.btnDataIdInfo = self.findChild(QPushButton, 'btnDataIdInfo')
-        self.btnIntervalInfo = self.findChild(QPushButton, 'btnIntervalInfo')
-        self.rbCustomDateTime = self.findChild(QRadioButton, 'rbCustomDateTime')
-        self.rbPrevDayToCurrent = self.findChild(QRadioButton, 'rbPrevDayToCurrent')
-        self.rbPrevWeekToCurrent = self.findChild(QRadioButton, 'rbPrevWeekToCurrent')
-
-        # Group radio buttons
-        self.radioGroup = QButtonGroup(self)
-        self.radioGroup.addButton(self.rbCustomDateTime)
-        self.radioGroup.addButton(self.rbPrevDayToCurrent)
-        self.radioGroup.addButton(self.rbPrevWeekToCurrent)
-
-        # Set button style
-        Logic.buttonStyle(self.btnDataIdInfo)
-        Logic.buttonStyle(self.btnIntervalInfo)
-
-        # Create events
-        self.btnQuery.clicked.connect(self.btnQueryPressed)
-        self.btnAddQuery.clicked.connect(self.btnAddQueryPressed)
-        self.btnRemoveQuery.clicked.connect(self.btnRemoveQueryPressed)
-        self.btnSaveQuickLook.clicked.connect(self.btnSaveQuickLookPressed)
-        self.btnLoadQuickLook.clicked.connect(self.btnLoadQuickLookPressed)
-        self.btnClearQuery.clicked.connect(self.btnClearQueryPressed)
-        self.btnDataIdInfo.clicked.connect(self.btnDataIdInfoPressed)
-        self.btnIntervalInfo.clicked.connect(self.btnIntervalInfoPressed)
-        self.radioGroup.buttonClicked.connect(lambda btn: Logic.setQueryDateRange(self, btn, self.dteStartDate, self.dteEndDate))
-
-        # Install event filters
-        self.qleDataID.installEventFilter(self)
-        self.installEventFilter(self)
-
-        # Populate database combobox
-        self.cbDatabase.addItem('USBR-LCHDB')
-        self.cbDatabase.addItem('USBR-YAOHDB')
-        self.cbDatabase.addItem('USBR-UCHDB2')
-        self.cbDatabase.addItem('USBR-ECOHDB')
-        self.cbDatabase.addItem('USBR-LBOHDB')
-        self.cbDatabase.addItem('USBR-KBOHDB')
-        self.cbDatabase.addItem('USBR-PNHYD')
-        self.cbDatabase.addItem('USBR-GPHYD')
-        self.cbDatabase.addItem('USGS-NWIS')
-
-        # Populate interval combobox
-        self.cbInterval.addItem('HOUR')
-        self.cbInterval.addItem('INSTANT:1')
-        self.cbInterval.addItem('INSTANT:15')
-        self.cbInterval.addItem('INSTANT:60')
-        self.cbInterval.addItem('DAY')
-        self.cbInterval.addItem('MONTH')
-        self.cbInterval.addItem('YEAR')
-        self.cbInterval.addItem('WATER YEAR')
-
-        # Set initial state
-        Logic.initializeQueryWindow(self, self.rbCustomDateTime, self.dteStartDate, self.dteEndDate)
-        Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowMaximizeButtonHint)
-
-    def showEvent(self, event):
-        if Logic.debug: print("[DEBUG] Web query window showEvent")
-        Logic.centerWindowToParent(self)
-        Logic.loadLastQuickLook(self.cbQuickLook)
-        Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
-        super().showEvent(event)
-
-    def eventFilter(self, obj, event):
-        if obj == self.qleDataID and event.type() == QEvent.Type.FocusIn:
-            if Logic.debug: print("[DEBUG] qleDataID focus in, setting Add Query default")
-            Logic.setDefaultButton(self, self.qleDataID, self.btnAddQuery, self.btnQuery)
-        elif obj == self.qleDataID and event.type() == QEvent.Type.FocusOut:
-            if Logic.debug: print("[DEBUG] qleDataID focus out, setting Query Data default")
-            Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
-        elif event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            if Logic.debug: print("[DEBUG] Enter key pressed")
-
-            if self.qleDataID.hasFocus():
-                if Logic.debug: print("[DEBUG] qleDataID focused, triggering btnAddQueryPressed")
-                self.btnAddQueryPressed()
-            elif self.btnQuery.isDefault():
-                if Logic.debug: print("[DEBUG] btnQuery is default, triggering btnQueryPressed")
-                self.btnQueryPressed()
-            return True
-
-        return super().eventFilter(obj, event)
-
-    def btnQueryPressed(self):
-        if Logic.debug: print("[DEBUG] btnQueryPressed: Starting query process.")
-        startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
-        endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
-        queryItems = []
-
-        for i in range(self.listQueryList.count()):
-            itemText = self.listQueryList.item(i).text().strip()
-            parts = itemText.split('|')
-
-            if Logic.debug: print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
-            if len(parts) != 3:
-                print(f"[WARN] Invalid item skipped: {itemText}")
-                continue
-
-            dataID, interval, database = parts
-            mrid = '0'
-            SDID = dataID
-
-            if database.startswith('USBR-') and '-' in dataID:
-                SDID, mrid = dataID.rsplit('-', 1)
-
-            queryItems.append((dataID, interval, database, mrid, i))
-            if Logic.debug: print(f"[DEBUG] Added queryItem: {(dataID, interval, database, mrid, i)}")
-
-        if not queryItems and self.qleDataID.text().strip():
-            dataID = self.qleDataID.text().strip()
-            interval = self.cbInterval.currentText()
-            database = self.cbDatabase.currentText()
-            mrid = '0'
-            SDID = dataID
-
-            if database.startswith('USBR-') and '-' in dataID: SDID, mrid = dataID.rsplit('-', 1)
-            queryItems.append((dataID, interval, database, mrid, 0))
-            if Logic.debug: print(f"[DEBUG] Added single query: {(dataID, interval, database, mrid, 0)}")            
-        elif not queryItems:
-            print("[WARN] No valid query items.")
-            return
-
-        winMain.lastQueryType = 'web'
-        winMain.lastQueryItems = queryItems
-        winMain.lastStartDate = startDate
-        winMain.lastEndDate = endDate
-        winMain.lastDatabase = self.cbDatabase.currentText() if not queryItems else None
-        winMain.lastInterval = self.cbInterval.currentText() if not queryItems else None
-        if Logic.debug: print("[DEBUG] Stored last query as web.")
-        Logic.executeQuery(winMain, queryItems, startDate, endDate, False, winDataDictionary.mainTable)
-        self.close()
-        if Logic.debug: print("[DEBUG] Web query window closed after query.")
-
-    def btnAddQueryPressed(self):
-        item = f'{self.qleDataID.text().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}'
-        self.listQueryList.addItem(item)
-        self.qleDataID.clear()
-        self.qleDataID.setFocus()
-        self.listQueryList.scrollToBottom()
-        if Logic.debug: print(f"[DEBUG] Added query item: {item}, scrolled to bottom")
-
-    def btnRemoveQueryPressed(self):
-        item = self.listQueryList.currentItem()
-
-        if item:
-            self.listQueryList.takeItem(self.listQueryList.row(item))
-            if Logic.debug: print(f"[DEBUG] Removed query item: {item.text()}")
-        else:
-            if Logic.debug: print("[DEBUG] No query item selected for removal")
-
-    def btnSaveQuickLookPressed(self):
-        winQuickLook.currentListQueryList = self.listQueryList
-        winQuickLook.CurrentCbQuickLook = self.cbQuickLook
-        winQuickLook.exec()
-        self.raise_()
-        self.activateWindow()
-        if Logic.debug: print("[DEBUG] Save Quick Look dialog opened")
-
-    def btnLoadQuickLookPressed(self):
-        Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
-        configPath = Logic.getConfigPath()
-        config = {}
-
-        if os.path.exists(configPath):
-            try:
-                with open(configPath, 'r', encoding='utf-8') as configFile:
-                    config = json.load(configFile)
-            except Exception as e:
-                if Logic.debug: print(f"[ERROR] Failed to load user.config: {e}")
-
-        config['lastQuickLook'] = self.cbQuickLook.currentText()
-
-        with open(configPath, 'w', encoding='utf-8') as configFile:
-            json.dump(config, configFile, indent=2)
-
-        if Logic.debug: print(f"[DEBUG] Loaded quick look: {self.cbQuickLook.currentText()}")
-
-    def btnClearQueryPressed(self):
-        self.listQueryList.clear()
-        if Logic.debug: print("[DEBUG] Query list cleared")
-
-    def btnDataIdInfoPressed(self):
-        QMessageBox.information(self, "DataID Formats",
-                                "AQUARIUS Format: \nUID \n\nUSBR Format: \nSDID \nSDID-MRID \n\nUSGS Format: \nSite-Method-Parameter")
-
-        if Logic.debug: print("[DEBUG] Data ID info displayed")
-
-    def btnIntervalInfoPressed(self):
-        QMessageBox.information(self, "Interval Info",
-                                "Interval determines what timestamps are displayed and what table the data is queried from (USBR).\n\nIn a query list, timestamp interval is determined by first dataID in the list.")
-                                
-        if Logic.debug: print("[DEBUG] Interval info displayed")
-
-class uiInternalQuery(QMainWindow):
+class uiQuery(QMainWindow):
     """Internal query window: Builds and executes internal queries."""
     def __init__(self, parent=None):
         super(uiInternalQuery, self).__init__(parent)
@@ -444,20 +234,89 @@ class uiInternalQuery(QMainWindow):
         self.btnIntervalInfo.clicked.connect(self.btnIntervalInfoPressed)
         self.radioGroup.buttonClicked.connect(lambda btn: Logic.setQueryDateRange(self, btn, self.dteStartDate, self.dteEndDate))
 
+class uiQuery(QMainWindow):
+    """Query window: Builds and executes database calls for public or internal queries."""
+    def __init__(self, parent=None):
+        super(uiQuery, self).__init__(parent)
+        uic.loadUi(Logic.resourcePath('ui/winQuery.ui'), self)
+        self.queryType = None # 'public' or 'internal'
+
+        # Define controls
+        self.btnQuery = self.findChild(QPushButton, 'btnQuery')
+        self.qleDataID = self.findChild(QLineEdit, 'qleDataID')
+        self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
+        self.cbInterval = self.findChild(QComboBox, 'cbInterval')
+        self.dteStartDate = self.findChild(QDateTimeEdit, 'dteStartDate')
+        self.dteEndDate = self.findChild(QDateTimeEdit, 'dteEndDate')
+        self.listQueryList = self.findChild(QListWidget, 'listQueryList')
+        self.btnAddQuery = self.findChild(QPushButton, 'btnAddQuery')
+        self.btnRemoveQuery = self.findChild(QPushButton, 'btnRemoveQuery')
+        self.btnSaveQuickLook = self.findChild(QPushButton, 'btnSaveQuickLook')
+        self.cbQuickLook = self.findChild(QComboBox, 'cbQuickLook')
+        self.btnLoadQuickLook = self.findChild(QPushButton, 'btnLoadQuickLook')
+        self.btnClearQuery = self.findChild(QPushButton, 'btnClearQuery')
+        self.btnDataIdInfo = self.findChild(QPushButton, 'btnDataIdInfo')
+        self.btnIntervalInfo = self.findChild(QPushButton, 'btnIntervalInfo')
+        self.rbCustomDateTime = self.findChild(QRadioButton, 'rbCustomDateTime')
+        self.rbPrevDayToCurrent = self.findChild(QRadioButton, 'rbPrevDayToCurrent')
+        self.rbPrevWeekToCurrent = self.findChild(QRadioButton, 'rbPrevWeekToCurrent')
+        self.cbDelta = self.findChild(QCheckBox, 'cbDelta')
+        self.cbOverlay = self.findChild(QCheckBox, 'cbOverlay')
+        self.btnUpMax = self.findChild(QPushButton, 'btnUpMax')
+        self.btnUp15 = self.findChild(QPushButton, 'btnUp15')
+        self.btnUp5 = self.findChild(QPushButton, 'btnUp5')
+        self.btnUp1 = self.findChild(QPushButton, 'btnUp1')
+        self.btnDownMax = self.findChild(QPushButton, 'btnDownMax')
+        self.btnDown15 = self.findChild(QPushButton, 'btnDown15')
+        self.btnDown5 = self.findChild(QPushButton, 'btnDown5')
+        self.btnDown1 = self.findChild(QPushButton, 'btnDown1')
+        self.btnSearch = self.findChild(QPushButton, 'btnSearch')
+        self.btnQueryOptionsInfo = self.findChild(QPushButton, 'btnQueryOptionsInfo')
+
+        # Group radio buttons
+        self.radioGroup = QButtonGroup(self)
+        self.radioGroup.addButton(self.rbCustomDateTime)
+        self.radioGroup.addButton(self.rbPrevDayToCurrent)
+        self.radioGroup.addButton(self.rbPrevWeekToCurrent)
+
+        # Set button style
+        Logic.buttonStyle(self.btnDataIdInfo)
+        Logic.buttonStyle(self.btnIntervalInfo)
+        Logic.buttonStyle(self.btnUpMax)
+        Logic.buttonStyle(self.btnUp15)
+        Logic.buttonStyle(self.btnUp5)
+        Logic.buttonStyle(self.btnUp1)
+        Logic.buttonStyle(self.btnDownMax)
+        Logic.buttonStyle(self.btnDown15)
+        Logic.buttonStyle(self.btnDown5)
+        Logic.buttonStyle(self.btnDown1)
+        Logic.buttonStyle(self.btnSearch)
+        Logic.buttonStyle(self.btnQueryOptionsInfo)
+
+        # Create events
+        self.btnQuery.clicked.connect(self.btnQueryPressed)
+        self.btnAddQuery.clicked.connect(self.btnAddQueryPressed)
+        self.btnRemoveQuery.clicked.connect(self.btnRemoveQueryPressed)
+        self.btnSaveQuickLook.clicked.connect(self.btnSaveQuickLookPressed)
+        self.btnLoadQuickLook.clicked.connect(self.btnLoadQuickLookPressed)
+        self.btnClearQuery.clicked.connect(self.btnClearQueryPressed)
+        self.btnDataIdInfo.clicked.connect(self.btnDataIdInfoPressed)
+        self.btnIntervalInfo.clicked.connect(self.btnIntervalInfoPressed)
+        self.radioGroup.buttonClicked.connect(lambda btn: Logic.setQueryDateRange(self, btn, self.dteStartDate, self.dteEndDate))
+        self.btnUpMax.clicked.connect(self.btnUpMaxPressed)
+        self.btnUp15.clicked.connect(self.btnUp15Pressed)
+        self.btnUp5.clicked.connect(self.btnUp5Pressed)
+        self.btnUp1.clicked.connect(self.btnUp1Pressed)
+        self.btnDownMax.clicked.connect(self.btnDownMaxPressed)
+        self.btnDown15.clicked.connect(self.btnDown15Pressed)
+        self.btnDown5.clicked.connect(self.btnDown5Pressed)
+        self.btnDown1.clicked.connect(self.btnDown1Pressed)
+        self.btnSearch.clicked.connect(self.btnSearchPressed)
+        self.btnQueryOptionsInfo.clicked.connect(self.btnQueryOptionsInfoPressed)
+
         # Install event filters
         self.qleDataID.installEventFilter(self)
         self.installEventFilter(self)
-
-        # Populate database combobox
-        self.cbDatabase.addItem('AQUARIUS')
-        self.cbDatabase.addItem('USBR-LCHDB')
-        self.cbDatabase.addItem('USBR-YAOHDB')
-        self.cbDatabase.addItem('USBR-UCHDB2')
-        self.cbDatabase.addItem('USBR-ECOHDB')
-        self.cbDatabase.addItem('USBR-LBOHDB')
-        self.cbDatabase.addItem('USBR-KBOHDB')
-        self.cbDatabase.addItem('USBR-PNHYD')
-        self.cbDatabase.addItem('USBR-GPHYD')
 
         # Populate interval combobox
         self.cbInterval.addItem('HOUR')
@@ -473,12 +332,31 @@ class uiInternalQuery(QMainWindow):
         Logic.initializeQueryWindow(self, self.rbCustomDateTime, self.dteStartDate, self.dteEndDate)
         Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowMaximizeButtonHint)
+        if Logic.debug: print("[DEBUG] uiQuery initialized")
 
     def showEvent(self, event):
-        if Logic.debug: print("[DEBUG] Internal query window showEvent")
+        if Logic.debug: print("[DEBUG] uiQuery showEvent: queryType={}".format(self.queryType))
         Logic.centerWindowToParent(self)
         Logic.loadLastQuickLook(self.cbQuickLook)
         Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
+
+        # Populate database combobox based on queryType
+        self.cbDatabase.clear()
+        databases = [
+            'USBR-LCHDB',
+            'USBR-YAOHDB',
+            'USBR-UCHDB2',
+            'USBR-ECOHDB',
+            'USBR-LBOHDB',
+            'USBR-KBOHDB',
+            'USBR-PNHYD',
+            'USBR-GPHYD',
+            'USGS-NWIS'
+        ]
+
+        if self.queryType == 'internal': databases.insert(0, 'AQUARIUS')
+        for db in databases: self.cbDatabase.addItem(db)
+        if Logic.debug: print("[DEBUG] uiQuery showEvent: Populated cbDatabase with {} items".format(self.cbDatabase.count()))
         super().showEvent(event)
 
     def eventFilter(self, obj, event):
@@ -490,7 +368,6 @@ class uiInternalQuery(QMainWindow):
             Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
         elif event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if Logic.debug: print("[DEBUG] Enter key pressed")
-
             if self.qleDataID.hasFocus():
                 if Logic.debug: print("[DEBUG] qleDataID focused, triggering btnAddQueryPressed")
                 self.btnAddQueryPressed()
@@ -498,19 +375,20 @@ class uiInternalQuery(QMainWindow):
                 if Logic.debug: print("[DEBUG] btnQuery is default, triggering btnQueryPressed")
                 self.btnQueryPressed()
             return True
+
         return super().eventFilter(obj, event)
 
     def btnQueryPressed(self):
-        if Logic.debug: print("[DEBUG] btnQueryPressed: Starting query process.")
+        if Logic.debug: print("[DEBUG] btnQueryPressed: Starting query process, queryType={}".format(self.queryType))
         startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
         endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
         queryItems = []
 
         for i in range(self.listQueryList.count()):
             itemText = self.listQueryList.item(i).text().strip()
-            parts = itemText.split('|')            
-            if Logic.debug: print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
+            parts = itemText.split('|')
 
+            if Logic.debug: print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
             if len(parts) != 3:
                 print(f"[WARN] Invalid item skipped: {itemText}")
                 continue
@@ -518,10 +396,9 @@ class uiInternalQuery(QMainWindow):
             dataID, interval, database = parts
             mrid = '0'
             SDID = dataID
-            if database.startswith('USBR-') and '-' in dataID: SDID, mrid = dataID.rsplit('-', 1)            
+            if database.startswith('USBR-') and '-' in dataID: SDID, mrid = dataID.rsplit('-', 1)
             queryItems.append((dataID, interval, database, mrid, i))
             if Logic.debug: print(f"[DEBUG] Added queryItem: {(dataID, interval, database, mrid, i)}")
-
         if not queryItems and self.qleDataID.text().strip():
             dataID = self.qleDataID.text().strip()
             interval = self.cbInterval.currentText()
@@ -535,22 +412,16 @@ class uiInternalQuery(QMainWindow):
             print("[WARN] No valid query items.")
             return
 
-        queryItems = [item for item in queryItems if item[2] != 'USGS-NWIS']
-
-        if not queryItems:
-            QMessageBox.warning(self, "No Valid Items", "No valid internal query items (USGS skipped).")
-            return
-
-        winMain.lastQueryType = 'internal'
+        winMain.lastQueryType = self.queryType
         winMain.lastQueryItems = queryItems
         winMain.lastStartDate = startDate
         winMain.lastEndDate = endDate
         winMain.lastDatabase = self.cbDatabase.currentText() if not queryItems else None
         winMain.lastInterval = self.cbInterval.currentText() if not queryItems else None
-        if Logic.debug: print("[DEBUG] Stored last query as internal.")
-        Logic.executeQuery(winMain, queryItems, startDate, endDate, True, winDataDictionary.mainTable)
+        if Logic.debug: print("[DEBUG] Stored last query as {}".format(self.queryType))
+        Logic.executeQuery(winMain, queryItems, startDate, endDate, self.queryType == 'internal', winDataDictionary.mainTable)
         self.close()
-        if Logic.debug: print("[DEBUG] Internal query window closed after query.")
+        if Logic.debug: print("[DEBUG] Query window closed after query.")
 
     def btnAddQueryPressed(self):
         item = f'{self.qleDataID.text().strip()}|{self.cbInterval.currentText()}|{self.cbDatabase.currentText()}'
@@ -584,12 +455,12 @@ class uiInternalQuery(QMainWindow):
 
         if os.path.exists(configPath):
             try:
-                with open(configPath, 'r', encoding='utf-8') as configFile: config = json.load(configFile)
+                with open(configPath, 'r', encoding='utf-8') as configFile:
+                    config = json.load(configFile)
             except Exception as e:
                 if Logic.debug: print(f"[ERROR] Failed to load user.config: {e}")
 
         config['lastQuickLook'] = self.cbQuickLook.currentText()
-
         with open(configPath, 'w', encoding='utf-8') as configFile: json.dump(config, configFile, indent=2)
         if Logic.debug: print(f"[DEBUG] Loaded quick look: {self.cbQuickLook.currentText()}")
 
@@ -599,15 +470,57 @@ class uiInternalQuery(QMainWindow):
 
     def btnDataIdInfoPressed(self):
         QMessageBox.information(self, "DataID Formats",
-                                "AQUARIUS Format: \nUID \n\nUSBR Format: \nSDID \nSDID-MRID \n\nUSGS Format: \nSite-Method-Parameter")
-
+            "AQUARIUS Format: \nUID \n\nUSBR Format: \nSDID \nSDID-MRID \n\nUSGS Format: \nSite-Method-Parameter")
         if Logic.debug: print("[DEBUG] Data ID info displayed")
 
     def btnIntervalInfoPressed(self):
         QMessageBox.information(self, "Interval Info",
-                                "Interval determines what timestamps are displayed and what table the data is queried from (USBR).\n\nIn a query list, timestamp interval is determined by first dataID in the list.")
-
+            "Interval determines what timestamps are displayed and what table the data is queried from (USBR).\n\nIn a query list, timestamp interval is determined by first dataID in the list.")
         if Logic.debug: print("[DEBUG] Interval info displayed")
+
+    def btnQueryOptionsInfoPressed(self):
+        QMessageBox.information(self, "Query Options Info",
+            "Deltas and overlay only work on data paris, ex: first and second item in query list = pair 1, second and third item in query list = pair 2.\n\n",
+            "Deltas: uses pair groups and adds a column next to them, showing 1st minus 2nd.\n\n",
+            "Overlay: uses pair groups and shows them in a single column, 1st being primary, 2nd being secondary./n",
+            "QAQC formatting will be applied, regardless of QAQC setting in options. Cells turn colors based on primary missing but secondary available and differences in 1st and 2nd.")
+        if Logic.debug: print("[DEBUG] Query options info displayed")         
+
+    def btnUpMaxPressed(self):
+        if Logic.debug: print("[DEBUG] btnUpMaxPressed: Not implemented")
+        pass
+
+    def btnUp15Pressed(self):
+        if Logic.debug: print("[DEBUG] btnUp15Pressed: Not implemented")
+        pass
+
+    def btnUp5Pressed(self):
+        if Logic.debug: print("[DEBUG] btnUp5Pressed: Not implemented")
+        pass
+
+    def btnUp1Pressed(self):
+        if Logic.debug: print("[DEBUG] btnUp1Pressed: Not implemented")
+        pass
+
+    def btnDownMaxPressed(self):
+        if Logic.debug: print("[DEBUG] btnDownMaxPressed: Not implemented")
+        pass
+
+    def btnDown15Pressed(self):
+        if Logic.debug: print("[DEBUG] btnDown15Pressed: Not implemented")
+        pass
+
+    def btnDown5Pressed(self):
+        if Logic.debug: print("[DEBUG] btnDown5Pressed: Not implemented")
+        pass
+
+    def btnDown1Pressed(self):
+        if Logic.debug: print("[DEBUG] btnDown1Pressed: Not implemented")
+        pass
+
+    def btnSearchPressed(self):
+        if Logic.debug: print("[DEBUG] btnSearchPressed: Not implemented")
+        pass
 
 class uiDataDictionary(QMainWindow):
     """Data dictionary editor: Manages labels for time-series IDs."""
@@ -1106,8 +1019,7 @@ app.setApplicationName("Data Doctor")
 
 # Create instances
 winMain = uiMain()
-winWebQuery = uiWebQuery(winMain)
-winInternalQuery = uiInternalQuery(winMain)
+winQuery = uiQuery(winMain)
 winDataDictionary = uiDataDictionary(winMain)
 winQuickLook = uiQuickLook(winMain)
 winOptions = uiOptions(winMain)
@@ -1131,9 +1043,9 @@ if Logic.retroMode:
         retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
         app.setFont(retroFontObj)
         if Logic.debug: print("[DEBUG] Applied retro font at startup")
-    Logic.setRetroStyles(app, True, winMain.mainTable, winWebQuery.listQueryList, winInternalQuery.listQueryList)
+    Logic.setRetroStyles(app, True, winMain.mainTable, winQuery.listQueryList)
 else:
-    Logic.setRetroStyles(app, False, winMain.mainTable, winWebQuery.listQueryList, winInternalQuery.listQueryList)
+    Logic.setRetroStyles(app, False, winMain.mainTable, winQuery.listQueryList)
 
 # Load stylesheet
 with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f: app.setStyleSheet(f.read())
@@ -1142,8 +1054,7 @@ with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f: app.setStyleSheet(
 Logic.buildDataDictionary(winDataDictionary.mainTable)
 
 # Load quick looks
-Logic.loadAllQuickLooks(winWebQuery.cbQuickLook)
-Logic.loadAllQuickLooks(winInternalQuery.cbQuickLook)
+Logic.loadAllQuickLooks(winQuery.cbQuickLook)
 
 # Start application
 app.exec()
