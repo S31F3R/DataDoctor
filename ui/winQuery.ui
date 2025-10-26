@@ -27,7 +27,7 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>icons/InternalQuery.png</normaloff>icons/InternalQuery.png</iconset>
+    <normaloff>../../../../.designer/backup/icons/InternalQuery.png</normaloff>../../../../.designer/backup/icons/InternalQuery.png</iconset>
   </property>
   <property name="autoFillBackground">
    <bool>false</bool>
@@ -690,7 +690,7 @@
     </property>
     <property name="icon">
      <iconset>
-      <normaloff>icons/Search.png</normaloff>icons/Search.png</iconset>
+      <normaloff>../../../../.designer/backup/icons/Search.png</normaloff>../../../../.designer/backup/icons/Search.png</iconset>
     </property>
     <property name="iconSize">
      <size>

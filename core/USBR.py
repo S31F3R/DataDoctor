@@ -1,12 +1,11 @@
 import requests
 import json
-from core import Oracle, Logic 
+from core import Oracle, Logic, Query, Config
 from datetime import datetime, timedelta
 
-periodOffset = True  # Global for end of period shift/pad (USBR HOUR only; toggle via config later)
-
 def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
-    if Logic.debug: print(f"[DEBUG] USBR.apiRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table='R'")
+    if Config.debug:
+        print(f"[DEBUG] USBR.apiRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table='R'")
 
     # Map for URL only
     if interval == 'HOUR':
@@ -22,7 +21,7 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         return {}
 
     # Use original interval for timestamps
-    timestamps = Logic.buildTimestamps(startDate, endDate, interval)
+    timestamps = Query.buildTimestamps(startDate, endDate, interval)
 
     if not timestamps:
         print("[ERROR] No timestamps generated - invalid dates or interval.")
@@ -30,7 +29,10 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     # Parse start (with pad if periodOffset and HOUR)
     startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
-    if periodOffset and interval == 'HOUR': startDateTime = startDateTime - timedelta(hours=1) # Pad fetch start by -1h
+
+    if Config.periodOffset and interval == 'HOUR':
+        startDateTime = startDateTime - timedelta(hours=1)
+
     startYear = startDateTime.year
     startMonth = f'{startDateTime.month:02d}'
     startDay = f'{startDateTime.day:02d}'
@@ -51,14 +53,17 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         groupSDIDs = SDIDs[groupStart:groupStart + queryLimit]
         groupSDIDStr = ','.join(groupSDIDs)
         url = f'https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr={svr}&SDI={groupSDIDStr}&tstp={tstp}&t1={startYear}-{startMonth}-{startDay}T{startHour}:{startMinute}&t2={endYear}-{endMonth}-{endDay}T{endHour}:{endMinute}&table={table}&mrid={mrid}&format=json'
-        if Logic.debug == True: print("[DEBUG] Fetching USBR URL: {}".format(url))
         
+        if Config.debug:
+            print("[DEBUG] Fetching USBR URL: {}".format(url))
         try:
             response = requests.get(url)
             response.raise_for_status()
             readFile = json.loads(response.content)
             seriesList = readFile['Series']
-            if Logic.debug == True: print("[DEBUG] Fetched {} series entries.".format(len(seriesList)))
+
+            if Config.debug:
+                print("[DEBUG] Fetched {} series entries.".format(len(seriesList)))
         except Exception as e:
             print("[ERROR] USBR fetch failed: {}".format(e))
             continue
@@ -67,24 +72,25 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
             for series in seriesList:
                 jsonSDID = series['SDI']
-                if isinstance(jsonSDID, list): jsonSDID = jsonSDID[0] if jsonSDID else '' # Handle list
 
-                if str(jsonSDID) == SDID: # Str comparison
+                if isinstance(jsonSDID, list):
+                    jsonSDID = jsonSDID[0] if jsonSDID else ''
+                if str(jsonSDID) == SDID:
                     matchingSeries = series
                     break
-
             if not matchingSeries:
                 print(f"[WARN] No matching series for SDID '{SDID}'.")
-                resultDict[SDID] = [] # Blanks
+                resultDict[SDID] = []
                 continue
-
             dataPoints = matchingSeries['Data']
-            if Logic.debug == True: print(f"[DEBUG] Found series for '{SDID}': {len(dataPoints)} points.")
+
+            if Config.debug:
+                print(f"[DEBUG] Found series for '{SDID}': {len(dataPoints)} points.")
             outputData = []
 
             for point in dataPoints:
                 value = point['v']
-                dateTime = point['t'] # MM/DD/YY HH:MM:SS AM/PM
+                dateTime = point['t']
                 dateTimeParts = dateTime.split(' ')
                 dateParts = dateTimeParts[0].split('/')
                 hourMinuteSecond = dateTimeParts[1].split(':')
@@ -96,22 +102,22 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                 minute = int(hourMinuteSecond[1])
                 second = int(hourMinuteSecond[2]) if len(hourMinuteSecond) > 2 else 0
                 dateTime = datetime(year, month, day, hour, minute, second)
-                if periodOffset and interval == 'HOUR': dateTime = dateTime + timedelta(hours=1)
-
-                # Change time from 12 hour clock to 24
-                if amPm == 'AM' and hour == 12: dateTime = dateTime - timedelta(hours=12)
-                elif amPm == 'PM' and hour < 12: dateTime = dateTime + timedelta(hours=12)
-                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00') # Standard, zero sec
+                
+                if Config.periodOffset and interval == 'HOUR':
+                    dateTime = dateTime + timedelta(hours=1)
+                if amPm == 'AM' and hour == 12:
+                    dateTime = dateTime - timedelta(hours=12)
+                elif amPm == 'PM' and hour < 12:
+                    dateTime = dateTime + timedelta(hours=12)
+                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
                 outputData.append(f'{formattedTs},{value}')
-
             resultDict[SDID] = outputData
-
-    if not resultDict: print("[WARN] No data after processing all batches.")
-
+    if not resultDict:
+        print("[WARN] No data after processing all batches.")
     return resultDict
 
 def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
-    if Logic.debug: print(f"[DEBUG] USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
+    if Config.debug: print(f"[DEBUG] USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
 
     # Map interval to Oracle table suffix
     intervalMap = {
@@ -173,17 +179,17 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
             params = [sdi, startDate, endDate]
             if mrid != '0': params.append(mrid)
-            if Logic.debug: print(f"[DEBUG] sqlRead: Executing query for SDI {sdi}: {query}")
+            if Config.debug: print(f"[DEBUG] sqlRead: Executing query for SDI {sdi}: {query}")
 
             try:
                 data = oracleConn.executeQuery(query, params=params)
-                resultDict[sdi] = Logic.gapCheck(
-                    Logic.buildTimestamps(startDate, endDate, interval),
+                resultDict[sdi] = Query.gapCheck(
+                    Query.buildTimestamps(startDate, endDate, interval),
                     data,
                     sdi
                 )
 
-                if Logic.debug: print(f"[DEBUG] sqlRead: Fetched {len(resultDict[sdi])} rows for SDI {sdi}")
+                if Config.debug: print(f"[DEBUG] sqlRead: Fetched {len(resultDict[sdi])} rows for SDI {sdi}")
             except Exception as e:
                 print(f"[ERROR] sqlRead: Query failed for SDI {sdi}: {e}")
                 resultDict[sdi] = []

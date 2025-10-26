@@ -5,13 +5,13 @@ import re
 import time
 import ssl
 from datetime import datetime, timedelta
-from core import Logic
+from core import Logic, Query, Config
 
 def apiReadOldMethod(dataID, interval, startDate, endDate):
-    if Logic.debug: print("[DEBUG] USGS.apiReadOldMethod called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
+    if Config.debug: print("[DEBUG] USGS.apiReadOldMethod called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
 
     # Standardize timestamps
-    timestamps = Logic.buildTimestamps(startDate, endDate, interval)
+    timestamps = Query.buildTimestamps(startDate, endDate, interval)
 
     if not timestamps:
         print("[ERROR] No timestamps generated - invalid dates or interval.")
@@ -42,7 +42,7 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
     # Batch uids into groups of queryLimit
     for groupStart in range(0, len(dataID), queryLimit):
         groupUids = dataID[groupStart:groupStart + queryLimit]
-        if Logic.debug: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))
+        if Config.debug: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))
 
         # Parse group: collect unique sites, params (methods filter post-fetch)
         sites = []
@@ -82,7 +82,7 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
             usgsInterval, sites, startFormatted, endFormatted, joinedParams
         )
 
-        if Logic.debug: print("[DEBUG] Fetching USGS URL: {}".format(url))
+        if Config.debug: print("[DEBUG] Fetching USGS URL: {}".format(url))
         maxRetries = 3
         timeout = 10 # Increased timeout in seconds
 
@@ -92,8 +92,8 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                 response.raise_for_status()
                 readFile = json.loads(response.content)
                 timeSeriesList = readFile['value']['timeSeries']
-                if Logic.debug: print("[DEBUG] Fetched timeSeries data: {}".format(timeSeriesList))
-                if Logic.debug: print("[DEBUG] Fetched {} timeSeries entries.".format(len(timeSeriesList)))
+                if Config.debug: print("[DEBUG] Fetched timeSeries data: {}".format(timeSeriesList))
+                if Config.debug: print("[DEBUG] Fetched {} timeSeries entries.".format(len(timeSeriesList)))
                 break
             except requests.exceptions.SSLError as e:
                 if attempt < maxRetries - 1:
@@ -105,8 +105,8 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                     readFile = json.loads(response.content)
                     timeSeriesList = readFile['value']['timeSeries']
                     print("[WARN] SSL verification disabled for this request. Update OpenSSL (e.g., 'sudo pacman -Syu openssl' on Manjaro) or check network.")
-                    if Logic.debug: print("[DEBUG] Fetched timeSeries data with disabled SSL: {}".format(timeSeriesList))
-                    if Logic.debug: print("[DEBUG] Fetched {} timeSeries entries with disabled SSL.".format(len(timeSeriesList)))
+                    if Config.debug: print("[DEBUG] Fetched timeSeries data with disabled SSL: {}".format(timeSeriesList))
+                    if Config.debug: print("[DEBUG] Fetched {} timeSeries entries with disabled SSL.".format(len(timeSeriesList)))
                     break
                 else:
                     print("[ERROR] Max retries exceeded: {} for URL: {}. Update OpenSSL or use a different network.".format(e, url))
@@ -152,7 +152,7 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
 
             # Extract points
             dataPoints = matchingSeries['values'][0]['value']
-            if Logic.debug: print("[DEBUG] Found series for '{}': {} points, siteName={}".format(uid, len(dataPoints), matchingSeries['sourceInfo']['siteName']))
+            if Config.debug: print("[DEBUG] Found series for '{}': {} points, siteName={}".format(uid, len(dataPoints), matchingSeries['sourceInfo']['siteName']))
             outputData = []
 
             for point in dataPoints:
@@ -167,16 +167,16 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                     print("[WARN] Invalid point ts skipped for '{}': {} - {}".format(uid, dateTimeStr, e))
 
             # Gap check
-            outputData = Logic.gapCheck(timestamps, outputData, uid)
+            outputData = Query.gapCheck(timestamps, outputData, uid)
             resultDict[uid] = outputData
             
     return resultDict
 
 def apiRead(dataID, interval, startDate, endDate):
-    if Logic.debug: print("[DEBUG] USGS.apiRead called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
+    if Config.debug: print("[DEBUG] USGS.apiRead called with dataID: {}, interval: {}, start: {}, end: {}".format(dataID, interval, startDate, endDate))
 
     # Standardize timestamps
-    timestamps = Logic.buildTimestamps(startDate, endDate, interval)
+    timestamps = Query.buildTimestamps(startDate, endDate, interval)
 
     if not timestamps:
         print("[ERROR] No timestamps generated - invalid dates or interval.")
@@ -193,7 +193,7 @@ def apiRead(dataID, interval, startDate, endDate):
 
             if len(parts) != 3 or not re.match(r'^[0-9a-fA-F]{32}$', parts[1]): # Match 32-char hex without hyphens
                 hasNonUid = True
-                if Logic.debug: print("[DEBUG] Non-UID method {} detected in uid {}".format(parts[1], uid))
+                if Config.debug: print("[DEBUG] Non-UID method {} detected in uid {}".format(parts[1], uid))
                 break
 
         if hasNonUid:
@@ -223,7 +223,7 @@ def apiRead(dataID, interval, startDate, endDate):
         # Batch uids into groups of queryLimit
         for groupStart in range(0, len(dataID), queryLimit):
             groupUids = dataID[groupStart:groupStart + queryLimit]
-            if Logic.debug: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))
+            if Config.debug: print("[DEBUG] Processing batch of {} uids: {}".format(len(groupUids), groupUids[:3] if groupUids else []))
 
             # Parse group: collect unique sites, params, and check method
             sites = []
@@ -238,7 +238,7 @@ def apiRead(dataID, interval, startDate, endDate):
                     continue
 
                 site, method, param = parts
-                if Logic.debug: print("[DEBUG] UID parts: site={}, method={}, param={}".format(site, method, param))
+                if Config.debug: print("[DEBUG] UID parts: site={}, method={}, param={}".format(site, method, param))
 
                 # Prepend USGS- for new API
                 sites.append('USGS-' + site)
@@ -262,7 +262,7 @@ def apiRead(dataID, interval, startDate, endDate):
                 sites, startFormatted, endFormatted, joinedParams
             )
 
-            if Logic.debug: print("[DEBUG] Fetching USGS new API URL: {}".format(url))
+            if Config.debug: print("[DEBUG] Fetching USGS new API URL: {}".format(url))
             maxRetries = 3
 
             for attempt in range(maxRetries):
@@ -270,9 +270,9 @@ def apiRead(dataID, interval, startDate, endDate):
                     response = requests.get(url, headers=headers)
                     response.raise_for_status()
                     readFile = json.loads(response.content)
-                    if Logic.debug: print("[DEBUG] API response: {}".format(readFile)) # Debug full response
+                    if Config.debug: print("[DEBUG] API response: {}".format(readFile)) # Debug full response
                     features = readFile.get('features', [])
-                    if Logic.debug: print("[DEBUG] Fetched {} feature entries.".format(len(features)))
+                    if Config.debug: print("[DEBUG] Fetched {} feature entries.".format(len(features)))
                     break
                 except Exception as e:
                     if attempt < maxRetries - 1:
@@ -307,7 +307,7 @@ def apiRead(dataID, interval, startDate, endDate):
                     continue
 
                 # Extract points
-                if Logic.debug: print("[DEBUG] Found feature for '{}': properties={}".format(uid, matchingFeature['properties']))
+                if Config.debug: print("[DEBUG] Found feature for '{}': properties={}".format(uid, matchingFeature['properties']))
                 outputData = []
 
                 # Collect all matching features for the UID
@@ -328,10 +328,10 @@ def apiRead(dataID, interval, startDate, endDate):
                     except ValueError as e:
                         print("[WARN] Invalid point ts skipped for '{}': {} - {}".format(uid, dateTimeStr, e))
 
-                if Logic.debug: print("[DEBUG] Extracted {} points for '{}': {}".format(len(outputData), uid, outputData))
+                if Config.debug: print("[DEBUG] Extracted {} points for '{}': {}".format(len(outputData), uid, outputData))
 
                 # Gap check
-                outputData = Logic.gapCheck(timestamps, outputData, uid)
+                outputData = Query.gapCheck(timestamps, outputData, uid)
                 resultDict[uid] = outputData
 
         return resultDict
