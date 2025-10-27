@@ -1,12 +1,12 @@
-import os
-import sys
-import json
-import keyring
 from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox, QPushButton, QTabWidget, QMessageBox
 from PyQt6.QtCore import QTimer, QEvent
 from PyQt6.QtGui import QIcon
 from PyQt6 import uic
 from core import Logic, Utils, Config
+import os
+import sys
+import json
+import keyring
 
 class uiOptions(QDialog):
     """Options editor: Stores database connection information and application settings."""
@@ -183,16 +183,19 @@ class uiOptions(QDialog):
 
     def maskLastChar(self):
         self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)
+
         if Config.debug:
             print("[DEBUG] AQ password re-masked")
 
     def maskLastCharUSGS(self):
         self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Password)
+
         if Config.debug:
             print("[DEBUG] USGS API key re-masked")
 
     def maskLastCharOracle(self):
         self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Password)
+
         if Config.debug:
             print("[DEBUG] Oracle password re-masked")
 
@@ -216,7 +219,7 @@ class uiOptions(QDialog):
     def toggleUSGSKeyVisibility(self):
         if self.lastCharTimerUSGS.isActive():
             self.lastCharTimerUSGS.stop()
-            
+
         if self.qleUSGSAPIKey.echoMode() == QLineEdit.EchoMode.Password:
             self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Normal)
             self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
@@ -260,21 +263,25 @@ class uiOptions(QDialog):
             except Exception as e:
                 if Config.debug:
                     print("[ERROR] Failed to load user.config: {}".format(e))
+
         utcOffset = config.get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London")
         index = self.cbUTCOffset.findText(utcOffset)
 
         if index != -1:
             self.cbUTCOffset.setCurrentIndex(index)
+
             if Config.debug:
                 print("[DEBUG] Set cbUTCOffset to: {}".format(utcOffset))
         else:
             self.cbUTCOffset.setCurrentIndex(14)
+
             if Config.debug:
-                print("[DEBUG] utcOffset '{}' not found, set to default UTC+00:00".format(utcOffset))                
-        self.cbRetroMode.setChecked(bool(config.get('retroMode', True)))        
+                print("[DEBUG] utcOffset '{}' not found, set to default UTC+00:00".format(utcOffset))
+
+        self.cbRetroMode.setChecked(bool(config.get('retroMode', True)))
         if Config.debug:
             print("[DEBUG] Set cbRetroMode to: {}".format(self.cbRetroMode.isChecked()))
-
+            
         self.cbQAQC.setChecked(bool(config.get('qaqc', True)))
         if Config.debug:
             print("[DEBUG] Set cbQAQC to: {}".format(self.cbQAQC.isChecked()))
@@ -299,6 +306,7 @@ class uiOptions(QDialog):
             if envTns.startswith(Config.appRoot):
                 envTns = envTns.replace(Config.appRoot, '%AppRoot%')
             self.qleTNSNames.setText(envTns)
+
         if Config.debug:
             print("[DEBUG] Set qleTNSNames to: {}".format(tnsPath))
         hourMethod = config.get('hourTimestampMethod', 'EOP')
@@ -322,6 +330,7 @@ class uiOptions(QDialog):
         except Exception as e:
             if Config.debug:
                 print("[ERROR] Failed to load keyring credentials: {}. Using empty strings".format(e))
+
             self.qleAQServer.setText("")
             self.qleAQUser.setText("")
             self.qleAQPassword.setText("")
@@ -344,6 +353,7 @@ class uiOptions(QDialog):
             except Exception as e:
                 if Config.debug:
                     print("[ERROR] Failed to load user.config for save: {}".format(e))
+
         previousRetro = config.get('retroMode', True)
         newRetro = self.cbRetroMode.isChecked()
         tnsPath = self.qleTNSNames.text()
@@ -364,7 +374,7 @@ class uiOptions(QDialog):
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(config, configFile, indent=2)
         if Config.debug:
-            print("[DEBUG] Saved user.config with retroMode: {}".format(newRetro))
+            print("[DEBUG] Saved user.config with retroMode: {}, qaqc: {}, rawData: {}".format(newRetro, self.cbQAQC.isChecked(), self.cbRawData.isChecked()))
         Utils.reloadGlobals()
 
         if newRetro != previousRetro:
@@ -373,6 +383,7 @@ class uiOptions(QDialog):
                 "Restart DataDoctor for the retro mode change to take effect?\nOK to restart now, Cancel to revert to previous setting.",
                 QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
             )
+
             if reply == QMessageBox.StandardButton.Ok:
                 python = sys.executable
                 os.execl(python, python, *sys.argv)
@@ -406,5 +417,6 @@ class uiOptions(QDialog):
                     if Config.debug:
                         print("[ERROR] Failed to save {} to keyring: {}".format(key, e))
                     QMessageBox.warning(self, "Credential Save Error", "Failed to save {}: {}".format(key, e))
+                    
             elif Config.debug:
                 print("[DEBUG] Skipped saving {} to keyring: empty or invalid".format(key))

@@ -34,13 +34,16 @@ def buildDataDictionary(table):
     for c, header in enumerate(data[0]):
         item = QTableWidgetItem(header.strip())
         table.setHorizontalHeaderItem(c, item)
+
     for r in range(1, len(data)):
         for c in range(len(data[r])):
             value = data[r][c].strip()
             item = QTableWidgetItem(value)
             table.setItem(r-1, c, item)
+
     for c in range(table.columnCount()):
         table.resizeColumnToContents(c)
+        
     if Config.debug:
         print(f"[DEBUG] Built DataDictionary with {table.rowCount()} rows, {table.columnCount()} columns")
 
@@ -54,7 +57,6 @@ def loadAllQuickLooks(cbQuickLook):
     for file in os.listdir(userDir):
         if file.endswith(".txt"):
             quickLookPaths.append(os.path.join(userDir, file))
-
             if Config.debug:
                 print("[DEBUG] loadAllQuickLooks: Found user Quick Look: {}".format(file))
 
@@ -65,10 +67,8 @@ def loadAllQuickLooks(cbQuickLook):
         if file.endswith(".txt"):
             examplePath = os.path.join(exampleDir, file)
             userPath = os.path.join(userDir, file)
-
             if not os.path.exists(userPath):
                 quickLookPaths.append(examplePath)
-
                 if Config.debug:
                     print("[DEBUG] loadAllQuickLooks: Added example Quick Look: {}".format(file))
 
@@ -76,7 +76,6 @@ def loadAllQuickLooks(cbQuickLook):
     for path in quickLookPaths:
         name = os.path.basename(path).replace('.txt', '')
         cbQuickLook.addItem(name)
-
         if Config.debug:
             print("[DEBUG] loadAllQuickLooks: Added {} to cbQuickLook".format(name))
 
@@ -84,7 +83,8 @@ def saveQuickLook(textQuickLookName, listQueryList):
     name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
 
     if not name:
-        print("[WARN] Empty quick look name—skipped.")
+        if Config.debug:
+            print("[WARN] Empty quick look name—skipped.")
         return
 
     data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
@@ -93,7 +93,8 @@ def saveQuickLook(textQuickLookName, listQueryList):
 
     try:
         with open(quicklookPath, 'w', encoding='utf-8-sig') as f:
-            f.write(','.join(data))
+            for item in data:
+                f.write(item + '\n') # Write each item on a new line
         if Config.debug:
             print("[DEBUG] saveQuickLook: Saved Quick Look to {}".format(quicklookPath))
     except Exception as e:
@@ -117,9 +118,18 @@ def loadQuickLook(cbQuickLook, listQueryList):
         with open(quickLookPath, 'r', encoding='utf-8-sig') as f:
             content = f.read().strip()
         if content:
-            data = content.split(',')
+            if ',' in content:
+                # Legacy comma-separated format
+                data = content.split(',')
+            else:
+                # New line-separated format
+                data = content.splitlines()
             for itemText in data:
-                parts = itemText.strip().split('|')
+                itemText = itemText.strip()
+
+                if not itemText:
+                    continue
+                parts = itemText.split('|')
 
                 if len(parts) == 3:
                     dataID, interval, database = parts
@@ -137,7 +147,8 @@ def loadQuickLook(cbQuickLook, listQueryList):
                     if Config.debug:
                         print("[DEBUG] loadQuickLook: Added item {}".format('{}|{}|{}'.format(dataID, interval, database)))
     except FileNotFoundError:
-        print("[WARN] Quick look '{}' not found.".format(quickLookName))
+        if Config.debug:
+            print("[WARN] Quick look '{}' not found.".format(quickLookName))
     if Config.debug:
         print("[DEBUG] loadQuickLook: Loaded '{}' with {} items".format(quickLookName, listQueryList.count()))
 
@@ -165,7 +176,7 @@ def exportTableToCSV(table, fileLocation, fileName):
     timestamp = datetime.now().strftime('%Y-%m-%d %H%M%S')
     defaultName = f"{timestamp} Export.csv"
     suggestedPath = os.path.normpath(os.path.join(defaultDir, defaultName))
-    
+
     if Config.debug:
         print("[DEBUG] exportTableToCSV: Suggested path: {}".format(suggestedPath))
 
@@ -211,7 +222,7 @@ def exportTableToCSV(table, fileLocation, fileName):
     if Config.debug:
         print("[DEBUG] exportTableToCSV: Built headers: {}".format(csvLines[0]))
     timestamps = [table.verticalHeaderItem(r).text() if table.verticalHeaderItem(r) else '' for r in range(table.rowCount())]
-    
+
     for r in range(table.rowCount()):
         rowData = [table.item(r, c).text() if table.item(r, c) else '' for c in range(table.columnCount())]
         csvLines.append(timestamps[r] + ',' + ','.join(rowData))
@@ -245,6 +256,8 @@ def exportTableToCSV(table, fileLocation, fileName):
 
 def valuePrecision(value):
     """Format value to 2 decimals if <10, 1 if 10-99, 0 if >=100."""
+    if Config.rawData:
+        return str(value)
     try:
         v = float(value)
         if v < 1000:
@@ -325,6 +338,7 @@ def loadLastQuickLook(cbQuickLook):
 
         if index != -1:
             cbQuickLook.setCurrentIndex(index)
+
             if Config.debug:
                 print(f"[DEBUG] Set cbQuickLook to index {index}: {lastQuickLook}")
         else:
@@ -342,7 +356,7 @@ def getUtcOffsetInt(utcOffsetStr):
         hours = int(offsetParts[0])
         minutes = int(offsetParts[1]) if len(offsetParts) > 1 and offsetParts[1] else 0
         offset = hours + (minutes / 60.0) * (-1 if hours < 0 else 1)
-
+        
         if Config.debug:
             print("[DEBUG] getUtcOffsetInt: Parsed '{}' to {} hours".format(utcOffsetStr, offset))
         return offset

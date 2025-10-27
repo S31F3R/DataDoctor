@@ -1,6 +1,8 @@
 import os
-from PyQt6.QtCore import QStandardPaths
-from PyQt6.QtWidgets import QApplication, QTableWidget, QListWidget
+import json
+import configparser
+from PyQt6.QtCore import QStandardPaths, QDir
+from PyQt6.QtWidgets import QApplication, QTableWidget, QListWidget, QSplitter, QTreeView, QFileDialog, QWidget
 from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication
 from core import Logic, Config
 
@@ -8,23 +10,19 @@ def applyStylesAndFonts(app, mainTable, queryList):
     """Apply stylesheet and retro font if enabled."""
     with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
         app.setStyleSheet(f.read())
-
     config = loadConfig()
     Config.debug = config['debugMode']
     Config.utcOffset = config['utcOffset']
     Config.periodOffset = config['periodOffset']
     Config.retroMode = config.get('retroMode', True)
-    
     if Config.retroMode:
         fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
         fontId = QFontDatabase.addApplicationFont(fontPath)
-
         if fontId != -1:
             fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
             retroFontObj = QFont(fontFamily, 10)
             retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
             app.setFont(retroFontObj)
-
             if Config.debug:
                 print("[DEBUG] Applied retro font at startup")
         setRetroStyles(app, True, mainTable, queryList)
@@ -38,6 +36,31 @@ def loadDataDictionary(table):
 def loadQuickLooks(cbQuickLook):
     """Load all Quick Looks into the provided combobox."""
     Logic.loadAllQuickLooks(cbQuickLook)
+
+def loadDatabase(comboBox, queryType=None):
+    """Populate the database combo box with static databases."""
+    if comboBox:
+        if Config.debug:
+            print("[DEBUG] Populating cbDatabase")
+        comboBox.clear()
+
+        # Populate database combobox
+        if queryType == 'internal': comboBox.addItem('AQUARIUS')
+        comboBox.addItem('USBR-LCHDB')
+        comboBox.addItem('USBR-YAOHDB')
+        comboBox.addItem('USBR-UCHDB2')
+        comboBox.addItem('USBR-ECOHDB')
+        comboBox.addItem('USBR-LBOHDB')
+        comboBox.addItem('USBR-KBOHDB')
+        comboBox.addItem('USBR-PNHYD')
+        comboBox.addItem('USBR-GPHYD')
+        comboBox.addItem('USGS-NWIS')
+
+        if Config.debug:
+            print(f"[DEBUG] Populated cbDatabase with {comboBox.count()} items")
+    else:
+        if Config.debug:
+            print("[ERROR] cbDatabase is None, cannot populate")
 
 def buttonStyle(button):
     """Apply flat, borderless style to a QPushButton with no hover/press effects."""
@@ -58,35 +81,9 @@ def buttonStyle(button):
         }
     """)
 
-def loadDatabase(comboBox, queryType=None):
-    """Populate the database combo box with static databases."""
-    if comboBox:
-        if Config.debug:
-            print("[DEBUG] Populating cbDatabase")
-        comboBox.clear()
-
-        # Populate database combobox
-        if queryType == 'internal': comboBox.addItem('AQUARIUS')
-        comboBox.addItem('USBR-LCHDB')
-        comboBox.addItem('USBR-YAOHDB')
-        comboBox.addItem('USBR-UCHDB2')
-        comboBox.addItem('USBR-ECOHDB')
-        comboBox.addItem('USBR-LBOHDB')
-        comboBox.addItem('USBR-KBOHDB')
-        comboBox.addItem('USBR-PNHYD')
-        comboBox.addItem('USBR-GPHYD')
-        comboBox.addItem('USGS-NWIS')
-          
-        if Config.debug:
-            print(f"[DEBUG] Populated cbDatabase with {comboBox.count()} items")
-    else:
-        if Config.debug:
-            print("[ERROR] cbDatabase is None, cannot populate")
-
 def centerWindowToParent(ui):
-    """Center a window relative to its parent (main window), robust for multi-monitor."""   
+    """Center a window relative to its parent (main window), robust for multi-monitor."""
     parent = ui.parent()
-
     if parent is None and hasattr(ui, 'winMain'):
         parent = ui.winMain
     if parent:
@@ -111,6 +108,9 @@ def centerWindowToParent(ui):
     rect = ui.frameGeometry()
     rect.moveCenter(parentCenter)
     ui.move(rect.topLeft())
+
+    if Config.debug:
+        print(f"[DEBUG] centerWindowToParent: Centered {ui.objectName()} at {rect.topLeft().x()},{rect.topLeft().y()}")
 
 def applyRetroFont(widget, pointSize=10):
     if Config.retroMode:
@@ -151,7 +151,6 @@ def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQuery
             height: 12px;
         }
     """
-
     if enable:
         # Apply to specific widgets
         for widget in [mainTable, webQueryList, internalQueryList]:
@@ -200,7 +199,6 @@ def loadConfig():
 
             # Migrate integer utcOffset and retroFont
             utcOffset = config.get('utcOffset', settings['utcOffset'])
-
             if isinstance(utcOffset, (int, float)):
                 if Config.debug:
                     print("[DEBUG] Migrating integer utcOffset {} to full string".format(utcOffset))
@@ -244,17 +242,14 @@ def loadConfig():
                     13: "UTC+13:00 | Samoa",
                     14: "UTC+14:00 | Kiritimati"
                 }
-
                 utcOffset = offsetMap.get(utcOffset, settings['utcOffset'])
                 config['utcOffset'] = utcOffset
-
                 if Config.debug:
                     print("[DEBUG] Migrated utcOffset to: {}".format(utcOffset))
             if 'retroFont' in config:
                 if Config.debug:
                     print("[DEBUG] Migrating retroFont to retroMode")
                 config['retroMode'] = config.pop('retroFont')
-
                 if Config.debug:
                     print("[DEBUG] Migrated retroMode to: {}".format(config['retroMode']))
             if 'colorMode' in config:
@@ -268,8 +263,8 @@ def loadConfig():
             # If existing TNS_ADMIN, overwrite config TNS_ADMIN location
             if envTns:
                 config['tnsNamesLocation'] = envTns
-            # Write updated config back to file
 
+            # Write updated config back to file
             with open(configPath, 'w', encoding='utf-8') as configFile:
                 json.dump(config, configFile, indent=2)
 
@@ -314,7 +309,7 @@ def getQuickLookDir():
 
         if Config.debug:
             print("[DEBUG] getQuickLookDir: Created quickLook directory: {}".format(quickLookDir))
-    if not os.path.exists(queryDir):
+    if not os.path.exists(queryDir):        
         os.makedirs(queryDir)
 
         if Config.debug:
@@ -367,45 +362,45 @@ def convertConfigToJson():
 
         if 'Settings' in config:
             settings['utcOffset'] = config['Settings'].get('utcOffset', settings['utcOffset'])
-
             if Config.debug:
                 print(f"[DEBUG] Converted utcOffset: {settings['utcOffset']}")
-            settings['retroFont'] = config['Settings'].getboolean('retroFont', settings['retroFont'])
 
+            settings['retroFont'] = config['Settings'].getboolean('retroFont', settings['retroFont'])
             if Config.debug:
                 print(f"[DEBUG] Converted retroFont: {settings['retroFont']}")
-            settings['qaqc'] = config['Settings'].getboolean('qaqc', settings['qaqc'])
 
+            settings['qaqc'] = config['Settings'].getboolean('qaqc', settings['qaqc'])
             if Config.debug:
                 print(f"[DEBUG] Converted qaqc: {settings['qaqc']}")
-            settings['rawData'] = config['Settings'].getboolean('rawData', settings['rawData'])
 
+            settings['rawData'] = config['Settings'].getboolean('rawData', settings['rawData'])
             if Config.debug:
                 print(f"[DEBUG] Converted rawData: {settings['rawData']}")
-            settings['debugMode'] = config['Settings'].getboolean('debugMode', settings['debugMode'])
 
+            settings['debugMode'] = config['Settings'].getboolean('debugMode', settings['debugMode'])
             if Config.debug:
                 print(f"[DEBUG] Converted debugMode: {settings['debugMode']}")
-            settings['tnsNamesLocation'] = config['Settings'].get('tnsNamesLocation', settings['tnsNamesLocation'])
 
+            settings['tnsNamesLocation'] = config['Settings'].get('tnsNamesLocation', settings['tnsNamesLocation'])
             if Config.debug:
                 print(f"[DEBUG] Converted tnsNamesLocation: {settings['tnsNamesLocation']}")
-            settings['hourTimestampMethod'] = config['Settings'].get('hourTimestampMethod', settings['hourTimestampMethod'])
 
+            settings['hourTimestampMethod'] = config['Settings'].get('hourTimestampMethod', settings['hourTimestampMethod'])
             if Config.debug:
                 print(f"[DEBUG] Converted hourTimestampMethod: {settings['hourTimestampMethod']}")
-            settings['lastQuickLook'] = config['Settings'].get('lastQuickLook', settings['lastQuickLook'])
 
+            settings['lastQuickLook'] = config['Settings'].get('lastQuickLook', settings['lastQuickLook'])
             if Config.debug:
                 print(f"[DEBUG] Converted lastQuickLook: {settings['lastQuickLook']}")
-            settings['colorMode'] = config['Settings'].get('colorMode', settings['colorMode'])
 
+            settings['colorMode'] = config['Settings'].get('colorMode', settings['colorMode'])
             if Config.debug:
                 print(f"[DEBUG] Converted colorMode: {settings['colorMode']}")
-            settings['lastExportPath'] = config['Settings'].get('lastExportPath', settings['lastExportPath'])
 
+            settings['lastExportPath'] = config['Settings'].get('lastExportPath', settings['lastExportPath'])
             if Config.debug:
                 print(f"[DEBUG] Converted lastExportPath: {settings['lastExportPath']}")
+
         with open(newConfigPath, 'w', encoding='utf-8') as configFile:
             json.dump(settings, configFile, indent=2)
         if Config.debug:

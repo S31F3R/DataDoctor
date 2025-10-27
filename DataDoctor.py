@@ -1,9 +1,11 @@
 import sys
 import os
 import csv
+import json
+from datetime import datetime
 from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QSizePolicy, QMessageBox, QFileDialog, QMenu
 from PyQt6.QtGui import QGuiApplication, QAction
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QDir
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
 from ui.uiAbout import uiAbout
@@ -95,8 +97,12 @@ class uiMain(QMainWindow):
 
         # Center window
         Utils.centerWindowToParent(self)
+
+        # Initialize globals
+        Utils.reloadGlobals()
+
         if Config.debug:
-            print("[DEBUG] uiMain initialized with header context menu")
+            print("[DEBUG] uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
 
     def btnPublicQueryPressed(self):
         if self.winQuery:
@@ -124,21 +130,25 @@ class uiMain(QMainWindow):
     def btnExportCSVPressed(self):
         if self.mainTable.rowCount() == 0:
             QMessageBox.warning(self, "Export CSV", "No data to export.")
-
             if Config.debug:
                 print("[DEBUG] btnExportCSVPressed: No data to export")
             return
 
         config = Utils.loadConfig()
-        lastExportPath = config.get('lastExportPath', '')
-        fileName, _ = QFileDialog.getSaveFileName(self, "Export to CSV", lastExportPath, "CSV Files (*.csv)")
+        lastExportPath = config.get('lastExportPath', os.path.expanduser("~/Documents"))
+        lastExportPath = os.path.normpath(os.path.abspath(lastExportPath)) if lastExportPath else os.path.expanduser("~/Documents")
+        timestamp = datetime.now().strftime('%Y-%m-%d %H%M%S')
+        defaultName = f"{timestamp} Export.csv"
+        fileName, _ = QFileDialog.getSaveFileName(
+            self, "Export to CSV", os.path.join(lastExportPath, defaultName), "CSV Files (*.csv)"
+        )
 
         if not fileName:
             if Config.debug:
                 print("[DEBUG] btnExportCSVPressed: Export canceled by user")
             return
         try:
-            with open(fileName, 'w', newline='', encoding='utf-8') as csvFile:
+            with open(fileName, 'w', newline='', encoding='utf-8-sig') as csvFile:
                 writer = csv.writer(csvFile)
 
                 # Write headers
@@ -189,9 +199,15 @@ class uiMain(QMainWindow):
                 print("[DEBUG] btnRefreshPressed: No previous query to refresh")
 
     def btnUndoPressed(self):
+        if self.mainTable.rowCount() == 0:
+            if Config.debug:
+                print("[DEBUG] btnUndoPressed: No data to sort")
+            QMessageBox.information(self, "Undo", "No data to sort.")
+            return
+        Query.timestampSortTable(self.mainTable, self.winDataDictionary.mainTable)
+
         if Config.debug:
-            print("[DEBUG] btnUndoPressed: Undo not implemented")
-        QMessageBox.information(self, "Undo", "Undo functionality not implemented yet.")
+            print("[DEBUG] btnUndoPressed: Called timestampSortTable")
 
     def showHeaderContextMenu(self, pos):
         """Show context menu for header right-click to display full query info."""
@@ -221,7 +237,7 @@ class uiMain(QMainWindow):
 
     def onTabCloseRequested(self, index):
         self.tabWidget.removeTab(index)
-        
+
         if Config.debug:
             print(f"[DEBUG] onTabCloseRequested: Closed tab at index {index}")
 
@@ -238,7 +254,7 @@ if __name__ == '__main__':
     winAbout = uiAbout(winMain)
     winMain.winQuery = winQuery
     winMain.winDataDictionary = winDataDictionary
-    winMain.winQuickLook = winQuickLook
+    winMain.winQuickLook = winQuery
     winMain.winOptions = winOptions
     winMain.winAbout = winAbout
 
@@ -251,6 +267,6 @@ if __name__ == '__main__':
 
     # Show main window
     winMain.show()
-
+    
     # Start application
     sys.exit(app.exec())

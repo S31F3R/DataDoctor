@@ -46,7 +46,7 @@
     </rect>
    </property>
    <property name="currentIndex">
-    <number>3</number>
+    <number>0</number>
    </property>
    <widget class="QWidget" name="tabGeneral">
     <attribute name="title">
@@ -179,6 +179,7 @@
       <string>Retro Mode:</string>
      </property>
     </widget>
+    <zorder>lbRawData</zorder>
     <zorder>lbUTCOffset</zorder>
     <zorder>cbUTCOffset</zorder>
     <zorder>cbRawData</zorder>
@@ -188,7 +189,6 @@
     <zorder>lbQc</zorder>
     <zorder>lbRetroMode</zorder>
     <zorder>lbDebug</zorder>
-    <zorder>lbRawData</zorder>
    </widget>
    <widget class="QWidget" name="tabAquarius">
     <attribute name="title">

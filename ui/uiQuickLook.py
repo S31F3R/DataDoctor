@@ -1,4 +1,5 @@
 import os
+import json
 from PyQt6.QtWidgets import QDialog, QLineEdit, QPushButton, QMessageBox
 from PyQt6.QtCore import Qt
 from PyQt6 import uic
@@ -44,14 +45,26 @@ class uiQuickLook(QDialog):
         quickLookPath = os.path.join(Utils.getQuickLookDir(), f"{quickLookName}.txt")
 
         try:
-            with open(quickLookPath, 'w', encoding='utf-8') as f:
-                for i in range(self.currentListQueryList.count()):
-                    f.write(self.currentListQueryList.item(i).text() + '\n')
+            items = [self.currentListQueryList.item(i).text() for i in range(self.currentListQueryList.count()) if self.currentListQueryList.item(i)]
+            if not items:
+                if Config.debug:
+                    print("[DEBUG] btnSavePressed: No items in query list, showing warning")
+                QMessageBox.warning(self, "Empty Query List", "Cannot save Quick Look: No items in the query list.")
+                return
+            with open(quickLookPath, 'w', encoding='utf-8-sig') as f:
+                for item in items:
+                    f.write(item + '\n')
 
             # Update combo box
-            self.CurrentCbQuickLook.addItem(quickLookName)
-            self.CurrentCbQuickLook.setCurrentText(quickLookName)
+            if quickLookName not in [self.CurrentCbQuickLook.itemText(i) for i in range(self.CurrentCbQuickLook.count())]:
+                self.CurrentCbQuickLook.addItem(quickLookName)
 
+            self.CurrentCbQuickLook.setCurrentText(quickLookName)
+            config = Utils.loadConfig()
+            config['lastQuickLook'] = quickLookName
+            
+            with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
+                json.dump(config, configFile, indent=2)
             if Config.debug:
                 print(f"[DEBUG] btnSavePressed: Saved Quick Look to {quickLookPath}, set cbQuickLook to {quickLookName}")
         except Exception as e:
@@ -64,12 +77,10 @@ class uiQuickLook(QDialog):
     def btnCancelPressed(self):
         self.clear()
         self.reject()
-
         if Config.debug:
             print("[DEBUG] btnCancelPressed: Cleared qleQuickLookName and closed dialog")
 
     def clear(self):
         self.qleQuickLookName.clear()
-
         if Config.debug:
             print("[DEBUG] Cleared qleQuickLookName")
