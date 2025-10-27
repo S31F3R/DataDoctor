@@ -1,4 +1,3 @@
-csv export is not passing default name
 Add a pop up after data dictionary save so user knows it actually worked
 
 ####### HOUSE KEEPING #######
@@ -6,12 +5,8 @@ Add a pop up after data dictionary save so user knows it actually worked
     -Any current [DEBUG] after an exception should be a ERROR and logged, no matter if DEBUG = true
 -Save dialog for CSV needs wider columns or auto size needs to be fixed (linux is fine)
 -Export to CSV needs work. Remembering path isn't working across platform, possibly Qt issue. Lots of trial and error code left in there, needs to be removed when completed
--Remove any unused imports and def
 -Any new successful dataID in a query should automatically be appeneded to data dictionary
     -If Aquarius, add label to common name
--Add sub directories in quick look folder
-    -queries, plots, etc
-    -oracleSnippets
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
