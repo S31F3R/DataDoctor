@@ -1,0 +1,716 @@
+# QueryUtils.py
+
+from core import Logic, Config
+from PyQt6.QtGui import QColor
+import numpy as np  # For delta computation
+
+def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryItems, deltaChecked, overlayChecked):
+    """
+    Post-process query data for delta and overlay features.
+    Parses values, processes pairs, applies logic, and reconstructs data with metadata.
+    """
+    if Config.debug:
+        print("[DEBUG] processDeltaOverlay: Starting with {} rows, {} columns, delta={}, overlay={}".format(len(data), len(dataIds), deltaChecked, overlayChecked))
+
+    # Parse data to timestamps and 2D list of floats/None
+    timestamps = []
+    values = []
+    for rowStr in data:
+        parts = rowStr.split(',')
+        timestamps.append(parts[0].strip())
+        rowValues = []
+        for valStr in parts[1:]:
+            valStr = valStr.strip()
+            try:
+                rowValues.append(float(valStr) if valStr else np.nan)
+            except ValueError:
+                rowValues.append(np.nan)
+        values.append(rowValues)
+
+    values = np.array(values)  # For easier computation
+
+    numRows, numCols = values.shape
+
+    # Query infos
+    queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
+
+    # Determine pairs
+    pairs = [(i, i+1) for i in range(0, numCols, 2)]
+
+    if numCols % 2 == 1 and (deltaChecked or overlayChecked):
+        print("[WARN] Odd number of query items; last item omitted from delta/overlay processing.")
+
+    # Build new structures
+    newValues = [[] for _ in range(numRows)]  # Will hold floats/None
+    newDataIds = []
+    newDatabases = []
+    newLookupIds = []
+    newIntervals = []
+    columnMetadata = []
+    overlayInfo = []
+
+    col = 0
+    pairIndex = 0
+    while col < numCols:
+        if col < numCols - 1 and (deltaChecked or overlayChecked):
+            pIdx = col
+            sIdx = col + 1
+            primaryVals = values[:, pIdx]
+            secondaryVals = values[:, sIdx]
+            deltas = np.subtract(primaryVals, secondaryVals)
+            deltas = np.where(np.logical_and(np.isfinite(primaryVals), np.isfinite(secondaryVals)), deltas, np.nan)
+
+            if overlayChecked:
+                # Compute display floats
+                displays = np.where(np.isfinite(primaryVals), primaryVals, secondaryVals)
+                displays = np.where(np.logical_and(np.isnan(primaryVals), np.isnan(secondaryVals)), np.nan, displays)
+
+                # Add overlay column
+                for r in range(numRows):
+                    newValues[r].append(displays[r])
+
+                newDataIds.append(dataIds[pIdx])
+                newDatabases.append(databases[pIdx])
+                newLookupIds.append(lookupIds[pIdx])
+                newIntervals.append(intervals[pIdx])
+
+                columnMetadata.append({
+                    'type': 'overlay',
+                    'dataIds': [dataIds[pIdx], dataIds[sIdx]],
+                    'dbs': [databases[pIdx], databases[sIdx]],
+                    'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
+                    'pairIndex': pairIndex
+                })
+
+                overlayInfo.append({
+                    'pVals': primaryVals,
+                    'sVals': secondaryVals,
+                    'deltas': deltas,
+                    'dataId1': dataIds[pIdx],
+                    'dataId2': dataIds[sIdx],
+                    'db1': databases[pIdx],
+                    'db2': databases[sIdx]
+                })
+
+                # Add delta column if checked
+                if deltaChecked:
+                    for r in range(numRows):
+                        newValues[r].append(deltas[r])
+
+                    newDataIds.append('Delta')
+                    newDatabases.append(None)
+                    newLookupIds.append(None)
+                    newIntervals.append('')
+
+                    columnMetadata.append({
+                        'type': 'delta',
+                        'dataIds': [dataIds[pIdx], dataIds[sIdx]],
+                        'dbs': [databases[pIdx], databases[sIdx]],
+                        'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
+                        'pairIndex': pairIndex
+                    })
+
+                    overlayInfo.append(None)
+
+                pairIndex += 1
+                col += 2
+                continue
+
+            else:
+                # No overlay, add primary and secondary as normal
+                for idx in [pIdx, sIdx]:
+                    for r in range(numRows):
+                        newValues[r].append(values[r, idx])
+
+                    newDataIds.append(dataIds[idx])
+                    newDatabases.append(databases[idx])
+                    newLookupIds.append(lookupIds[idx])
+                    newIntervals.append(intervals[idx])
+
+                    columnMetadata.append({
+                        'type': 'normal',
+                        'dataIds': [dataIds[idx]],
+                        'dbs': [databases[idx]],
+                        'queryInfos': [queryInfos[idx]]
+                    })
+
+                    overlayInfo.append(None)
+
+                # Add delta if checked
+                if deltaChecked:
+                    for r in range(numRows):
+                        newValues[r].append(deltas[r])
+
+                    newDataIds.append('Delta')
+                    newDatabases.append(None)
+                    newLookupIds.append(None)
+                    newIntervals.append('')
+
+                    columnMetadata.append({
+                        'type': 'delta',
+                        'dataIds': [dataIds[pIdx], dataIds[sIdx]],
+                        'dbs': [databases[pIdx], databases[sIdx]],
+                        'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
+                        'pairIndex': pairIndex
+                    })
+
+                    overlayInfo.append(None)
+
+                pairIndex += 1
+                col += 2
+                continue
+
+        # Odd last or non-pair
+        for r in range(numRows):
+            newValues[r].append(values[r, col])
+
+        newDataIds.append(dataIds[col])
+        newDatabases.append(databases[col])
+        newLookupIds.append(lookupIds[col])
+        newIntervals.append(intervals[col])
+
+        columnMetadata.append({
+            'type': 'normal',
+            'dataIds': [dataIds[col]],
+            'dbs': [databases[col]],
+            'queryInfos': [queryInfos[col]]
+        })
+
+        overlayInfo.append(None)
+
+        col += 1
+
+    # Reconstruct data as list of strings
+    newData = []
+    for r in range(numRows):
+        rowStrs = []
+        for c in range(len(newDataIds)):
+            val = newValues[r][c]
+            valStr = '' if np.isnan(val) else str(val)
+            rowStrs.append(valStr)
+        newData.append(f"{timestamps[r]},{','.join(rowStrs)}")
+
+    if Config.debug:
+        print("[DEBUG] processDeltaOverlay: Completed with {} new columns".format(len(newDataIds)))
+
+    return newData, newDataIds, newDatabases, newLookupIds, newIntervals, columnMetadata, overlayInfo
+
+
+
+
+
+# DataDoctor.py updates (only modified parts)
+
+class uiMain(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self)
+
+        # Define controls
+        self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
+        self.mainTable = self.findChild(QTableWidget, 'mainTable')
+        self.btnDataDictionary = self.findChild(QPushButton, 'btnDataDictionary')
+        self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')
+        self.btnOptions = self.findChild(QPushButton, 'btnOptions')
+        self.btnInfo = self.findChild(QPushButton, 'btnInfo')
+        self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
+        self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
+        self.btnUndo = self.findChild(QPushButton, 'btnUndo')
+        self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
+        self.tabMain = self.findChild(QWidget, 'tabMain')
+        self.lastQueryType = None
+        self.lastQueryItems = []
+        self.lastStartDate = None
+        self.lastEndDate = None
+        self.columnMetadata = []
+
+        # Set button style
+        for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
+                    self.btnOptions, self.btnInfo, self.btnInternalQuery,
+                    self.btnUndo, self.btnRefresh]:
+            if btn:
+                Utils.buttonStyle(btn)
+
+        # Set up layout
+        centralLayout = self.centralWidget().layout()
+        if isinstance(centralLayout, QGridLayout):
+            centralLayout.setContentsMargins(0, 0, 0, 0)
+            centralLayout.setRowStretch(0, 0)
+            centralLayout.setRowStretch(1, 1)
+            centralLayout.setColumnStretch(0, 1)
+
+        # Create events
+        self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)
+        self.btnDataDictionary.clicked.connect(self.showDataDictionary)
+        self.btnExportCSV.clicked.connect(self.btnExportCSVPressed)
+        self.btnOptions.clicked.connect(self.btnOptionsPressed)
+        self.btnInfo.clicked.connect(self.btnInfoPressed)
+        self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
+        self.btnRefresh.clicked.connect(self.btnRefreshPressed)
+        self.btnUndo.clicked.connect(self.btnUndoPressed)
+        self.mainTable.horizontalHeader().sectionClicked.connect(lambda col: Query.customSortTable(self.mainTable, col, self.winDataDictionary.mainTable))
+        self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)
+        self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
+        self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
+
+        # Ensure tab widget expands
+        self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        # Set up Data Query tab
+        if self.tabMain:
+            self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+            if not self.tabMain.layout():
+                layout = QGridLayout(self.tabMain)
+                layout.addWidget(self.mainTable)
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setSpacing(0)
+
+        if self.mainTable:
+            self.mainTable.setGeometry(0, 0, 0, 0)
+            self.mainTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        # Hide tabs on startup
+        if self.tabWidget:
+            dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
+
+            if dataQueryIndex != -1:
+                self.tabWidget.removeTab(dataQueryIndex)
+
+            sqlTab = self.findChild(QWidget, 'tabSQL')
+            sqlIndex = self.tabWidget.indexOf(sqlTab)
+
+            if sqlIndex != -1:
+                self.tabWidget.removeTab(sqlIndex)
+
+        # Center window
+        Utils.centerWindowToParent(self)
+
+        # Initialize globals
+        Utils.reloadGlobals()
+
+        if Config.debug:
+            print("[DEBUG] uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
+
+    def showHeaderContextMenu(self, pos):
+        """Show context menu for header right-click to display full query info."""
+        header = self.mainTable.horizontalHeader()
+        col = header.logicalIndexAt(pos)
+
+        if col < 0 or col >= len(self.columnMetadata):
+            if Config.debug:
+                print("[DEBUG] showHeaderContextMenu: Invalid column {} clicked".format(col))
+            return
+
+        meta = self.columnMetadata[col]
+        menu = QMenu(self)
+
+        if meta['type'] == 'normal':
+            content = meta['queryInfos'][0]
+            action = menu.addAction("Show Query Info")
+            action.triggered.connect(lambda: self.showMessage("Full Query Info", content))
+        elif meta['type'] == 'delta':
+            content = f"{meta['dataIds'][0]} - {meta['dataIds'][1]}"
+            action = menu.addAction("Show details")
+            action.triggered.connect(lambda: self.showMessage("Details", content))
+        elif meta['type'] == 'overlay':
+            content = f"{meta['queryInfos'][0]}\n{meta['queryInfos'][1]}"
+            action = menu.addAction("Show details")
+            action.triggered.connect(lambda: self.showMessage("Details", content))
+
+        menu.exec(header.mapToGlobal(pos))
+
+        if Config.debug:
+            print("[DEBUG] showHeaderContextMenu: Displayed menu for column {}, type {}".format(col, meta['type']))
+
+    def showMessage(self, title, content):
+        """Display QMessageBox with given title and content."""
+        QMessageBox.information(self, title, content)
+
+        if Config.debug:
+            print("[DEBUG] showMessage: Showed {}: {}".format(title, content))
+
+    def showCellContextMenu(self, pos):
+        """Show context menu for cell right-click in overlay columns."""
+        row = self.mainTable.rowAt(pos.y())
+        col = self.mainTable.columnAt(pos.x())
+
+        if row < 0 or col < 0:
+            return
+
+        if col >= len(self.columnMetadata) or self.columnMetadata[col].get('type') != 'overlay':
+            return
+
+        menu = QMenu(self)
+        action = menu.addAction("Show details")
+        action.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
+        menu.exec(self.mainTable.viewport().mapToGlobal(pos))
+
+        if Config.debug:
+            print("[DEBUG] showCellContextMenu: Displayed menu for cell ({}, {})".format(row, col))
+
+    def showOverlayCellDetails(self, row, col):
+        """Display details for overlay cell."""
+        item = self.mainTable.item(row, col)
+        if not item:
+            return
+
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+
+        from core import Logic
+        pStr = Logic.valuePrecision(str(data['primaryVal'])) if data['primaryVal'] is not None and not Config.rawData else str(data['primaryVal']) if data['primaryVal'] is not None else ''
+        sStr = Logic.valuePrecision(str(data['secondaryVal'])) if data['secondaryVal'] is not None and not Config.rawData else str(data['secondaryVal']) if data['secondaryVal'] is not None else ''
+        dStr = Logic.valuePrecision(str(data['delta'])) if data['delta'] is not None and not Config.rawData else str(data['delta']) if data['delta'] is not None else ''
+
+        msg = f"{data['dataId1']} value: {pStr}\n"
+        msg += f"{data['dataId2']} value: {sStr}\n"
+        msg += f"{data['dataId1']} database: {data['db1']}\n"
+        msg += f"{data['dataId2']} database: {data['db2']}\n"
+        msg += f"Delta: {dStr}"
+
+        self.showMessage("Cell Details", msg)
+
+        if Config.debug:
+            print("[DEBUG] showOverlayCellDetails: Showed details for cell ({}, {})".format(row, col))
+
+
+
+
+
+# uiQuery.py updates (only modified part)
+
+    def btnQueryPressed(self):
+        if Config.debug:
+            print("[DEBUG] btnQueryPressed: Starting query process, queryType={}".format(self.queryType))
+        startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
+        endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
+        queryItems = []
+
+        for i in range(self.listQueryList.count()):
+            itemText = self.listQueryList.item(i).text().strip()
+            parts = itemText.split('|')
+
+            if Config.debug:
+                print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
+            if len(parts) != 3:
+                print(f"[WARN] Invalid item skipped: {itemText}")
+                continue
+
+            dataId, interval, database = parts
+            mrid = '0'
+            sdid = dataId
+
+            if database.startswith('USBR-') and '-' in dataId:
+                sdid, mrid = dataId.rsplit('-', 1)
+            queryItems.append((dataId, interval, database, mrid, i))
+
+            if Config.debug:
+                print(f"[DEBUG] Added queryItem: {(dataId, interval, database, mrid, i)}")
+        if not queryItems and self.qleDataID.text().strip():
+            dataId = self.qleDataID.text().strip()
+            interval = self.cbInterval.currentText()
+            database = self.cbDatabase.currentText()
+            mrid = '0'
+            sdid = dataId
+
+            if database.startswith('USBR-') and '-' in dataId:
+                sdid, mrid = dataId.rsplit('-', 1)
+            queryItems.append((dataId, interval, database, mrid, 0))
+
+            if Config.debug:
+                print(f"[DEBUG] Added single query: {(dataId, interval, database, mrid, 0)}")
+        elif not queryItems:
+            print("[WARN] No valid query items.")
+            return
+        deltaChecked = self.chkbDelta.isChecked()
+        overlayChecked = self.chkbOverlay.isChecked()
+        if self.winMain:
+            self.winMain.lastQueryType = self.queryType
+            self.winMain.lastQueryItems = queryItems
+            self.winMain.lastStartDate = startDate
+            self.winMain.lastEndDate = endDate
+            self.winMain.lastDatabase = self.cbDatabase.currentText() if not queryItems else None
+            self.winMain.lastInterval = self.cbInterval.currentText() if not queryItems else None
+
+            if Config.debug:
+                print("[DEBUG] Stored last query as {}".format(self.queryType))
+            Query.executeQuery(self.winMain, queryItems, startDate, endDate,
+                              self.queryType == 'internal', self.winMain.winDataDictionary.mainTable, deltaChecked, overlayChecked)
+            self.close()
+
+            if Config.debug:
+                print("[DEBUG] Query window closed after query.")
+
+
+
+
+
+# Query.py updates (modified executeQuery and buildTable)
+
+def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable, deltaChecked=False, overlayChecked=False):
+    if Config.debug:
+        print("[DEBUG] executeQuery: isInternal={}, items={}, delta={}, overlay={}".format(isInternal, len(queryItems), deltaChecked, overlayChecked))
+    # ... (rest of the function remains the same, but replace delta_checked with deltaChecked, overlay_checked with overlayChecked)
+    # In the buildTable call: buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems, deltaChecked, overlayChecked)
+
+def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None, deltaChecked=False, overlayChecked=False, overlayInfo=None):
+    if overlayInfo is None:
+        overlayInfo = []
+    if Config.debug:
+        print("[DEBUG] buildTable: Starting with {} rows, {} headers, delta={}, overlay={}".format(len(data), len(buildHeader), deltaChecked, overlayChecked))
+    table.clear()
+    if not data:
+        if Config.debug:
+            print("[DEBUG] buildTable: No data to display.")
+        return
+    if isinstance(buildHeader, str):
+        buildHeader = [h.strip() for h in buildHeader.split(',')]
+    if queryItems is None:
+        queryItems = []
+
+    # Process for delta/overlay if enabled
+    columnMetadata = []
+    if deltaChecked or overlayChecked:
+        from core.QueryUtils import processDeltaOverlay
+        data, buildHeader, databases, lookupIds, intervals, columnMetadata, overlayInfo = processDeltaOverlay(data, buildHeader, databases, lookupIds, intervals, queryItems, deltaChecked, overlayChecked)
+
+        # Set columnMetadata on main_window
+        widget = table
+        mainWindow = None
+        while widget is not None:
+            if isinstance(widget, uiMain):
+                mainWindow = widget
+                break
+            widget = widget.parent()
+        if mainWindow:
+            mainWindow.columnMetadata = columnMetadata
+            if Config.debug:
+                print("[DEBUG] buildTable: Set columnMetadata with {} entries".format(len(columnMetadata)))
+        else:
+            if Config.debug:
+                print("[WARN] buildTable: Could not find uiMain for columnMetadata")
+
+    processedHeaders = []
+    for i, h in enumerate(buildHeader):
+        dataId = h.strip()
+        intervalStr = intervals[i].upper() if i < len(intervals) else ''
+        if intervalStr.startswith('INSTANT:'):
+            intervalStr = 'INSTANT'
+        database = databases[i] if databases and i < len(databases) else None
+        dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds and i < len(lookupIds) else dataId)
+        mrid = None
+        if database and database.startswith('USBR-') and '-' in dataId:
+            parts = dataId.rsplit('-', 1)
+            dataId = parts[0]
+            mrid = parts[1] if len(parts) > 1 else '0'
+        if dictRow != -1:
+            siteItem = dataDictionaryTable.item(dictRow, 1)
+            baseLabel = siteItem.text().strip() if siteItem else dataId
+            if database == 'USGS-NWIS':
+                parts = dataId.split('-')
+                if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
+                    fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USGS in dict, header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{baseLabel} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
+            elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
+                apiFull = labelsDict[dataId]
+                parts = apiFull.split('\n')
+                label = parts[0].strip() if len(parts) >= 1 else dataId
+                location = parts[1].strip() if len(parts) >= 2 else dataId
+                fullLabel = f"{label} \n{location}"
+                if Config.debug:
+                    print(f"[DEBUG] buildTable: Aquarius in dict, header {i}: {fullLabel}")
+            else:
+                if mrid and mrid != '0':
+                    fullLabel = f"{baseLabel} \n{dataId}-{mrid}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USBR in dict with MRID, header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{baseLabel} \n{dataId}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USBR in dict, header {i}: {fullLabel}")
+        else:
+            if h == 'Delta':
+                fullLabel = "Delta"
+                if Config.debug:
+                    print(f"[DEBUG] buildTable: Delta header {i}: {fullLabel}")
+            elif database == 'USGS-NWIS':
+                parts = dataId.split('-')
+                if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
+                    fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: Parsed USGS header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{dataId} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USGS not in dict, header {i}: {fullLabel}")
+            elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
+                apiFull = labelsDict[dataId]
+                parts = apiFull.split('\n')
+                label = parts[0].strip() if len(parts) >= 1 else dataId
+                location = parts[1].strip() if len(parts) >= 2 else dataId
+                fullLabel = f"{label} \n{location}"
+                if Config.debug:
+                    print(f"[DEBUG] buildTable: Aquarius not in dict, header {i}: {fullLabel}")
+            else:
+                if mrid and mrid != '0':
+                    fullLabel = f"{dataId}-{mrid} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USBR not in dict with MRID, header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{dataId} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USBR not in dict, header {i}: {fullLabel}")
+            processedHeaders.append(fullLabel)
+    headers = processedHeaders
+    skipDateCol = dataDictionaryTable is not None
+    numCols = len(headers)
+    numRows = len(data)
+    if numRows > 10000:
+        reply = QMessageBox.warning(None, "Large Dataset Warning",
+                                   f"Query returned {numRows} rows, which may slow down the UI. Consider a smaller date range or coarser interval (e.g., HOUR instead of INSTANT:1). Continue?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.No:
+            if Config.debug:
+                print(f"[DEBUG] buildTable: User canceled due to large dataset ({numRows} rows)")
+            return
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Setting table to {numRows} rows, {numCols} columns")
+    table.setRowCount(numRows)
+    table.setColumnCount(numCols)
+    table.setHorizontalHeaderLabels(headers)
+    table.show()
+    if dataDictionaryTable:
+        timestamps = [row.split(',')[0].strip() for row in data]
+        table.setVerticalHeaderLabels(timestamps)
+        vHeader = table.verticalHeader()
+        vHeader.setMinimumWidth(120)
+        vHeader.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        vHeader.setVisible(True)
+    else:
+        table.verticalHeader().setVisible(False)
+    font = table.font()
+    metrics = QFontMetrics(font)
+    columnWidths = []
+    sampleRows = min(1000, numRows)
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Sampling {sampleRows} rows for column widths")
+    for c in range(numCols):
+        cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data[:sampleRows]]
+        nonEmptyValues = [val for val in cellValues if val]
+        if nonEmptyValues:
+            maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
+        else:
+            maxCellWidth = metrics.horizontalAdvance("0.00")
+            if Config.debug:
+                print(f"[DEBUG] buildTable col {c}: No non-empty values, using fallback width {maxCellWidth}")
+        headerLines = headers[c].split('\n')
+        headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
+        if Config.debug:
+            print(f"[DEBUG] buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
+        finalWidth = max(maxCellWidth, headerWidth)
+        if headerWidth > maxCellWidth:
+            paddingIncrease = headerWidth - maxCellWidth
+            finalWidth = maxCellWidth + paddingIncrease + 10
+        else:
+            finalWidth += 20
+        columnWidths.append(finalWidth)
+    table.setUpdatesEnabled(False)
+    if Config.debug:
+        print("[DEBUG] buildTable: Disabled table updates for population")
+    for rowIdx, rowStr in enumerate(data):
+        rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
+        for colIdx in range(min(numCols, len(rowData))):
+            cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
+            item = QTableWidgetItem(cellText)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            if columnMetadata and colIdx < len(columnMetadata):
+                meta = columnMetadata[colIdx]
+                if meta['type'] == 'delta' and cellText:
+                    try:
+                        val = float(cellText)
+                        if val > 0:
+                            item.setForeground(QColor(255, 165, 0))  # Orange
+                        elif val < 0:
+                            item.setForeground(QColor(0, 0, 255))  # Blue
+                    except ValueError:
+                        pass
+                elif meta['type'] == 'overlay':
+                    if overlayInfo and colIdx < len(overlayInfo) and overlayInfo[colIdx] is not None:
+                        info = overlayInfo[colIdx]
+                        p = info['pVals'][rowIdx]
+                        s = info['sVals'][rowIdx]
+                        d = info['deltas'][rowIdx]
+                        hasP = np.isfinite(p)
+                        hasS = np.isfinite(s)
+                        if hasP and hasS:
+                            if d != 0:
+                                item.setForeground(QColor(255, 0, 0)) # Red
+                        elif not hasP and hasS:
+                            item.setBackground(QColor(221, 160, 221)) # Light purple
+                            item.setForeground(QColor(0, 0, 0))
+                        elif hasP and not hasS:
+                            item.setBackground(QColor(255, 182, 193)) # Light pink
+                            item.setForeground(QColor(0, 0, 0))
+                        pStr = Logic.valuePrecision(str(p)) if hasP and not Config.rawData else str(p) if hasP else ''
+                        sStr = Logic.valuePrecision(str(s)) if hasS and not Config.rawData else str(s) if hasS else ''
+                        dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
+                        item.setData(Qt.UserRole, {'primaryVal': p, 'secondaryVal': s, 'delta': d, 'dataId1': info['dataId1'], 'dataId2': info['dataId2'], 'db1': info['db1'], 'db2': info['db2']})
+            table.setItem(rowIdx, colIdx, item)
+    table.setUpdatesEnabled(True)
+    if Config.debug:
+        print("[DEBUG] buildTable: Re-enabled table updates after population")
+    table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
+    header = table.horizontalHeader()
+    vHeader = table.verticalHeader()
+    table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+    table.setMinimumSize(0, 0)
+    table.update()
+    header.setStretchLastSection(False)
+    if Config.debug:
+        print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
+    if dataDictionaryTable:
+        maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
+        vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
+    for c in range(numCols):
+        table.setColumnWidth(c, columnWidths[c])
+        if Config.debug:
+            print(f"[DEBUG] buildTable: Set column {c} width to {columnWidths[c]}")
+    rowHeight = metrics.height() + 10
+    sampleItem = QTableWidgetItem("189.5140")
+    sampleItem.setFont(font)
+    sampleCellHeight = sampleItem.sizeHint().height()
+    if sampleCellHeight <= 0:
+        sampleCellHeight = metrics.height()
+    adjustedRowHeight = max(rowHeight, sampleCellHeight + 2)
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
+    vHeader.setDefaultSectionSize(adjustedRowHeight)
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Set default row height to {adjustedRowHeight}")
+    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.update()
+    table.horizontalScrollBar().setValue(0)
+    visibleWidth = table.columnWidth(1) if numCols > 1 else 0
+    if Config.debug and numCols > 1:
+        print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
+    dataIds = buildHeader
+    if Config.qaqcEnabled:
+        qaqc(table, dataDictionaryTable, dataIds)
+    else:
+        for r in range(table.rowCount()):
+            for c in range(table.columnCount()):
+                item = table.item(r, c)
+                if item:
+                    item.setBackground(QColor(0, 0, 0, 0))
+        if Config.debug:
+            print("[DEBUG] buildTable: QAQC skipped, cleared cell backgrounds")
