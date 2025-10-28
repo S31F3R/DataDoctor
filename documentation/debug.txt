@@ -1,0 +1,463 @@
+# QueryUtils.py
+
+from core import Logic, Config
+from PyQt6.QtGui import QColor
+import numpy as np  # For delta computation
+
+def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryItems, deltaChecked, overlayChecked):
+    """
+    Post-process query data for delta and overlay features.
+    Parses values, processes pairs, applies logic, and reconstructs data with metadata.
+    """
+    if Config.debug:
+        print("[DEBUG] processDeltaOverlay: Starting with {} rows, {} columns, delta={}, overlay={}".format(len(data), len(dataIds), deltaChecked, overlayChecked))
+
+    # Parse data to timestamps and 2D list of floats/None
+    timestamps = []
+    values = []
+    for rowStr in data:
+        parts = rowStr.split(',')
+        timestamps.append(parts[0].strip())
+        rowValues = []
+        for valStr in parts[1:]:
+            valStr = valStr.strip()
+            try:
+                rowValues.append(float(valStr) if valStr else np.nan)
+            except ValueError:
+                rowValues.append(np.nan)
+        values.append(rowValues)
+
+    values = np.array(values)  # For easier computation
+
+    numRows, numCols = values.shape
+
+    # Query infos
+    queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
+
+    # Determine pairs
+    pairs = [(i, i+1) for i in range(0, numCols, 2)]
+
+    if numCols % 2 == 1 and (deltaChecked or overlayChecked):
+        print("[WARN] Odd number of query items; last item omitted from delta/overlay processing.")
+
+    # Build new structures
+    newValues = [[] for _ in range(numRows)]  # Will hold floats/None
+    newDataIds = []
+    newDatabases = []
+    newLookupIds = []
+    newIntervals = []
+    columnMetadata = []
+    overlayInfo = []
+
+    col = 0
+    pairIndex = 0
+    while col < numCols:
+        if col < numCols - 1 and (deltaChecked or overlayChecked):
+            pIdx = col
+            sIdx = col + 1
+            primaryVals = values[:, pIdx]
+            secondaryVals = values[:, sIdx]
+            deltas = np.subtract(primaryVals, secondaryVals)
+            deltas[~ (np.isfinite(primaryVals) & np.isfinite(secondaryVals))] = np.nan
+
+            if overlayChecked:
+                # Compute display floats
+                displays = np.copy(primaryVals)
+                displays[np.isnan(primaryVals)] = secondaryVals[np.isnan(primaryVals)]
+
+                # Add overlay column
+                for r in range(numRows):
+                    newValues[r].append(displays[r] if np.isfinite(displays[r]) else None)
+
+                newDataIds.append(dataIds[pIdx])
+                newDatabases.append(databases[pIdx])
+                newLookupIds.append(lookupIds[pIdx])
+                newIntervals.append(intervals[pIdx])
+
+                columnMetadata.append({
+                    'type': 'overlay',
+                    'dataIds': [dataIds[pIdx], dataIds[sIdx]],
+                    'dbs': [databases[pIdx], databases[sIdx]],
+                    'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
+                    'pairIndex': pairIndex
+                })
+
+                overlayInfo.append({
+                    'primaryVal': primaryVals,
+                    'secondaryVal': secondaryVals,
+                    'delta': deltas,
+                    'dataId1': dataIds[pIdx],
+                    'dataId2': dataIds[sIdx],
+                    'db1': databases[pIdx],
+                    'db2': databases[sIdx]
+                })
+
+                # Add delta column if checked
+                if deltaChecked:
+                    for r in range(numRows):
+                        newValues[r].append(deltas[r] if np.isfinite(deltas[r]) else None)
+
+                    newDataIds.append('Delta')
+                    newDatabases.append(None)
+                    newLookupIds.append(None)
+                    newIntervals.append('')
+
+                    columnMetadata.append({
+                        'type': 'delta',
+                        'dataIds': [dataIds[pIdx], dataIds[sIdx]],
+                        'dbs': [databases[pIdx], databases[sIdx]],
+                        'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
+                        'pairIndex': pairIndex
+                    })
+
+                    overlayInfo.append(None)
+
+                pairIndex += 1
+                col += 2
+                continue
+
+            else:
+                # No overlay, add primary and secondary as normal
+                for idx in [pIdx, sIdx]:
+                    for r in range(numRows):
+                        newValues[r].append(values[r, idx] if np.isfinite(values[r, idx]) else None)
+
+                    newDataIds.append(dataIds[idx])
+                    newDatabases.append(databases[idx])
+                    newLookupIds.append(lookupIds[idx])
+                    newIntervals.append(intervals[idx])
+
+                    columnMetadata.append({
+                        'type': 'normal',
+                        'dataIds': [dataIds[idx]],
+                        'dbs': [databases[idx]],
+                        'queryInfos': [queryInfos[idx]]
+                    })
+
+                    overlayInfo.append(None)
+
+                # Add delta if checked
+                if deltaChecked:
+                    for r in range(numRows):
+                        newValues[r].append(deltas[r] if np.isfinite(deltas[r]) else None)
+
+                    newDataIds.append('Delta')
+                    newDatabases.append(None)
+                    newLookupIds.append(None)
+                    newIntervals.append('')
+
+                    columnMetadata.append({
+                        'type': 'delta',
+                        'dataIds': [dataIds[pIdx], dataIds[sIdx]],
+                        'dbs': [databases[pIdx], databases[sIdx]],
+                        'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
+                        'pairIndex': pairIndex
+                    })
+
+                    overlayInfo.append(None)
+
+                pairIndex += 1
+                col += 2
+                continue
+
+        # Odd last or non-pair
+        for r in range(numRows):
+            newValues[r].append(values[r, col] if np.isfinite(values[r, col]) else None)
+
+        newDataIds.append(dataIds[col])
+        newDatabases.append(databases[col])
+        newLookupIds.append(lookupIds[col])
+        newIntervals.append(intervals[col])
+
+        columnMetadata.append({
+            'type': 'normal',
+            'dataIds': [dataIds[col]],
+            'dbs': [databases[col]],
+            'queryInfos': [queryInfos[col]]
+        })
+
+        overlayInfo.append(None)
+
+        col += 1
+
+    # Reconstruct data as list of strings, apply precision only when displaying in table
+    newData = []
+    for r in range(numRows):
+        rowStrs = [str(newValues[r][c]) if newValues[r][c] is not None else '' for c in range(len(newDataIds))]
+        newData.append(f"{timestamps[r]},{','.join(rowStrs)}")
+
+    if Config.debug:
+        print("[DEBUG] processDeltaOverlay: Completed with {} new columns".format(len(newDataIds)))
+
+    return newData, newDataIds, newDatabases, newLookupIds, newIntervals, columnMetadata, overlayInfo
+
+
+
+
+
+# In Query.py - Adjust buildTable to call processDeltaOverlay after QAQC logic, but to avoid breaking current, call it before populating cells, but after headers
+def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None, deltaChecked=False, overlayChecked=False, overlayInfo=None):
+    if overlayInfo is None:
+        overlayInfo = []
+    if Config.debug:
+        print("[DEBUG] buildTable: Starting with {} rows, {} headers, delta={}, overlay={}".format(len(data), len(buildHeader), deltaChecked, overlayChecked))
+    table.clear()
+    if not data:
+        if Config.debug:
+            print("[DEBUG] buildTable: No data to display.")
+        return
+    if isinstance(buildHeader, str):
+        buildHeader = [h.strip() for h in buildHeader.split(',')]
+
+    # First, build headers as normal
+    processedHeaders = []
+    for i, h in enumerate(buildHeader):
+        dataId = h.strip()
+        intervalStr = intervals[i].upper()
+        if intervalStr.startswith('INSTANT:'):
+            intervalStr = 'INSTANT'
+        database = databases[i] if databases and i < len(databases) else None
+        dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataId)
+        mrid = None
+        if database and database.startswith('USBR-') and '-' in dataId:
+            parts = dataId.rsplit('-', 1)
+            dataId = parts[0]
+            mrid = parts[1] if len(parts) > 1 else '0'
+        if dictRow != -1:
+            siteItem = dataDictionaryTable.item(dictRow, 1)
+            baseLabel = siteItem.text().strip() if siteItem else dataId
+            if database == 'USGS-NWIS':
+                parts = dataId.split('-')
+                if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
+                    fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USGS in dict, header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{baseLabel} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
+            elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
+                apiFull = labelsDict[dataId]
+                parts = apiFull.split('\n')
+                label = parts[0].strip() if len(parts) >= 1 else dataId
+                location = parts[1].strip() if len(parts) >= 2 else dataId
+                fullLabel = f"{label} \n{location}"
+                if Config.debug:
+                    print(f"[DEBUG] buildTable: Aquarius in dict, header {i}: {fullLabel}")
+            else:
+                if mrid and mrid != '0':
+                    fullLabel = f"{baseLabel} \n{dataId}-{mrid}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USBR in dict with MRID, header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{baseLabel} \n{dataId}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USBR in dict, header {i}: {fullLabel}")
+        else:
+            if database == 'USGS-NWIS':
+                parts = dataId.split('-')
+                if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
+                    fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: Parsed USGS header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{dataId} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USGS not in dict, header {i}: {fullLabel}")
+            elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
+                apiFull = labelsDict[dataId]
+                parts = apiFull.split('\n')
+                label = parts[0].strip() if len(parts) >= 1 else dataId
+                location = parts[1].strip() if len(parts) >= 2 else dataId
+                fullLabel = f"{label} \n{location}"
+                if Config.debug:
+                    print(f"[DEBUG] buildTable: Aquarius not in dict, header {i}: {fullLabel}")
+            else:
+                if mrid and mrid != '0':
+                    fullLabel = f"{dataId}-{mrid} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USBR not in dict with MRID, header {i}: {fullLabel}")
+                else:
+                    fullLabel = f"{dataId} \n{intervalStr}"
+                    if Config.debug:
+                        print(f"[DEBUG] buildTable: USBR not in dict, header {i}: {fullLabel}")
+            processedHeaders.append(fullLabel)
+    headers = processedHeaders
+    skipDateCol = dataDictionaryTable is not None
+    numCols = len(headers)
+    numRows = len(data)
+    if numRows > 10000:
+        reply = QMessageBox.warning(None, "Large Dataset Warning",
+                                   f"Query returned {numRows} rows, which may slow down the UI. Consider a smaller date range or coarser interval (e.g., HOUR instead of INSTANT:1). Continue?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply = = QMessageBox.StandardButton.No:
+            if Config.debug:
+                print(f"[DEBUG] buildTable: User canceled due to large dataset ({numRows} rows)")
+            return
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Setting table to {numRows} rows, {numCols} columns")
+    table.setRowCount(numRows)
+    table.setColumnCount(numCols)
+    table.setHorizontalHeaderLabels(headers)
+    table.show()
+    if dataDictionaryTable:
+        timestamps = [row.split(',')[0].strip() for row in data]
+        table.setVerticalHeaderLabels(timestamps)
+        vHeader = table.verticalHeader()
+        vHeader.setMinimumWidth(120)
+        vHeader.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        vHeader.setVisible(True)
+    else:
+        table.verticalHeader().setVisible(False)
+    font = table.font()
+    metrics = QFontMetrics(font)
+    columnWidths = []
+    sampleRows = min(1000, numRows)
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Sampling {sampleRows} rows for column widths")
+    for c in range(numCols):
+        cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data[:sampleRows]]
+        nonEmptyValues = [val for val in cellValues if val]
+        if nonEmptyValues:
+            maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
+        else:
+            maxCellWidth = metrics.horizontalAdvance("0.00")
+            if Config.debug:
+                print(f"[DEBUG] buildTable col {c}: No non-empty values, using fallback width {maxCellWidth}")
+        headerLines = headers[c].split('\n')
+        headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
+        if Config.debug:
+            print(f"[DEBUG] buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
+        finalWidth = max(maxCellWidth, headerWidth)
+        if headerWidth > maxCellWidth:
+            paddingIncrease = headerWidth - maxCellWidth
+            finalWidth = maxCellWidth + paddingIncrease + 10
+        else:
+            finalWidth += 20
+        columnWidths.append(finalWidth)
+    table.setUpdatesEnabled(False)
+    if Config.debug:
+        print("[DEBUG] buildTable: Disabled table updates for population")
+    for rowIdx, rowStr in enumerate(data):
+        rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
+        for colIdx in range(min(numCols, len(rowData))):
+            cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
+            item = QTableWidgetItem(cellText)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            if not Config.rawData and cellText.strip():
+                item.setText(Logic.valuePrecision(cellText))
+            table.setItem(rowIdx, colIdx, item)
+    table.setUpdatesEnabled(True)
+    if Config.debug:
+        print("[DEBUG] buildTable: Re-enabled table updates after population")
+    table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
+    header = table.horizontalHeader()
+    vHeader = table.verticalHeader()
+    table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+    table.setMinimumSize(0, 0)
+    table.update()
+    header.setStretchLastSection(False)
+    if Config.debug:
+        print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
+    if dataDictionaryTable:
+        maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
+        vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
+    for c in range(numCols):
+        table.setColumnWidth(c, columnWidths[c])
+        if Config.debug:
+            print(f"[DEBUG] buildTable: Set column {c} width to {columnWidths[c]}")
+    rowHeight = metrics.height() + 10
+    sampleItem = QTableWidgetItem("189.5140")
+    sampleItem.setFont(font)
+    sampleCellHeight = sampleItem.sizeHint().height()
+    if sampleCellHeight <= 0:
+        sampleCellHeight = metrics.height()
+    adjustedRowHeight = max(rowHeight, sampleCellHeight + 2)
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
+    vHeader.setDefaultSectionSize(adjustedRowHeight)
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Set default row height to {adjustedRowHeight}")
+    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.update()
+    table.horizontalScrollBar().setValue(0)
+    visibleWidth = table.columnWidth(1) if numCols > 1 else 0
+    if Config.debug and numCols > 1:
+        print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
+    dataIds = buildHeader
+    if Config.qaqcEnabled:
+        qaqc(table, dataDictionaryTable, dataIds)
+    else:
+        for r in range(table.rowCount()):
+            for c in range(table.columnCount()):
+                item = table.item(r, c)
+                if item:
+                    item.setBackground(QColor(0, 0, 0, 0))
+        if Config.debug:
+            print("[DEBUG] buildTable: QAQC skipped, cleared cell backgrounds")
+
+    # Call processDeltaOverlay after QAQC
+    if deltaChecked or overlayChecked:
+        from core.QueryUtils import processDeltaOverlay
+        data, buildHeader, databases, lookupIds, intervals, columnMetadata, overlayInfo = processDeltaOverlay(data, buildHeader, databases, lookupIds, intervals, queryItems, deltaChecked, overlayChecked)
+        # Update table with new data, headers, etc.
+        table.setColumnCount(len(buildHeader))
+        table.setHorizontalHeaderLabels(processedHeaders)  # Recompute processedHeaders if needed, but since changed, recalculate
+        table.setRowCount(len(data))
+        for rowIdx, rowStr in enumerate(data):
+            rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
+            for colIdx in range(min(len(buildHeader), len(rowData))):
+                cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
+                item = QTableWidgetItem(cellText)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+                if not Config.rawData and cellText.strip():
+                    item.setText(Logic.valuePrecision(cellText))
+                # Apply formatting for delta and overlay
+                if columnMetadata and colIdx < len(columnMetadata):
+                    meta = columnMetadata[colIdx]
+                    if meta['type'] == 'delta' and cellText:
+                        try:
+                            val = float(cellText)
+                            if val > 0:
+                                item.setForeground(QColor(255, 165, 0))  # Orange
+                            elif val < 0:
+                                item.setForeground(QColor(0, 0, 255))  # Blue
+                        except ValueError:
+                            pass
+                    elif meta['type'] == 'overlay':
+                        if overlayInfo and colIdx < len(overlayInfo) and overlayInfo[colIdx] is not None:
+                            info = overlayInfo[colIdx]
+                            p = info['primaryVal'][rowIdx]
+                            s = info['secondaryVal'][rowIdx]
+                            d = info['delta'][rowIdx]
+                            hasP = np.isfinite(p)
+                            hasS = np.isfinite(s)
+                            if hasP and hasS:
+                                if d != 0:
+                                    item.setForeground(QColor(255, 0, 0)) # Red
+                            elif not hasP and hasS:
+                                item.setBackground(QColor(221, 160, 221)) # Light purple
+                                item.setForeground(QColor(0, 0, 0))
+                            elif hasP and not hasS:
+                                item.setBackground(QColor(255, 182, 193)) # Light pink
+                                item.setForeground(QColor(0, 0, 0))
+                            # Store for details
+                            item.setData(Qt.UserRole, {
+                                'primaryVal': p,
+                                'secondaryVal': s,
+                                'delta': d,
+                                'dataId1': info['dataId1'],
+                                'dataId2': info['dataId2'],
+                                'db1': info['db1'],
+                                'db2': info['db2']
+                            })
+                table.setItem(rowIdx, colIdx, item)
+        # Update headers if changed
+        table.setHorizontalHeaderLabels(headers)  # Recompute headers if necessary
+        # Adjust widths, etc., as needed
+        # Since QAQC was applied before, but if new columns added, reapply QAQC only if needed, but per spec, delta never QAQC, overlay overrides
+        if Config.qaqcEnabled:
+            # Reapply QAQC, but skip delta columns
+            qaqc(table, dataDictionaryTable, dataIds)  # dataIds now newDataIds
+        # For overlay, the formatting is applied above, overriding QAQC
