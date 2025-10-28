@@ -1,6 +1,8 @@
-from core import Config
+# QueryUtils.py
+
+from core import Logic, Config
 from PyQt6.QtGui import QColor
-import numpy as np # For delta computation
+import numpy as np  # For delta computation
 
 def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryItems, deltaChecked, overlayChecked):
     """
@@ -58,18 +60,14 @@ def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryIte
             deltas = np.subtract(primaryVals, secondaryVals)
             deltas[~ (np.isfinite(primaryVals) & np.isfinite(secondaryVals))] = np.nan
 
-            # In displays
-            displays = np.copy(primaryVals)
-            displays[np.isnan(primaryVals)] = secondaryVals[np.isnan(primaryVals)]
-
             if overlayChecked:
                 # Compute display floats
-                displays = np.where(np.isfinite(primaryVals), primaryVals, secondaryVals)
-                displays = np.where(np.logical_and(np.isnan(primaryVals), np.isnan(secondaryVals)), np.nan, displays)
+                displays = np.copy(primaryVals)
+                displays[np.isnan(primaryVals)] = secondaryVals[np.isnan(primaryVals)]
 
                 # Add overlay column
                 for r in range(numRows):
-                    newValues[r].append(displays[r])
+                    newValues[r].append(displays[r] if np.isfinite(displays[r]) else None)
 
                 newDataIds.append(dataIds[pIdx])
                 newDatabases.append(databases[pIdx])
@@ -97,7 +95,7 @@ def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryIte
                 # Add delta column if checked
                 if deltaChecked:
                     for r in range(numRows):
-                        newValues[r].append(deltas[r])
+                        newValues[r].append(deltas[r] if np.isfinite(deltas[r]) else None)
 
                     newDataIds.append('Delta')
                     newDatabases.append(None)
@@ -122,7 +120,7 @@ def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryIte
                 # No overlay, add primary and secondary as normal
                 for idx in [pIdx, sIdx]:
                     for r in range(numRows):
-                        newValues[r].append(values[r, idx])
+                        newValues[r].append(values[r, idx] if np.isfinite(values[r, idx]) else None)
 
                     newDataIds.append(dataIds[idx])
                     newDatabases.append(databases[idx])
@@ -141,7 +139,7 @@ def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryIte
                 # Add delta if checked
                 if deltaChecked:
                     for r in range(numRows):
-                        newValues[r].append(deltas[r])
+                        newValues[r].append(deltas[r] if np.isfinite(deltas[r]) else None)
 
                     newDataIds.append('Delta')
                     newDatabases.append(None)
@@ -164,7 +162,7 @@ def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryIte
 
         # Odd last or non-pair
         for r in range(numRows):
-            newValues[r].append(values[r, col])
+            newValues[r].append(values[r, col] if np.isfinite(values[r, col]) else None)
 
         newDataIds.append(dataIds[col])
         newDatabases.append(databases[col])
@@ -182,14 +180,10 @@ def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryIte
 
         col += 1
 
-    # Reconstruct data as list of strings
+    # Reconstruct data as list of strings, apply precision only when displaying in table
     newData = []
     for r in range(numRows):
-        rowStrs = []
-        for c in range(len(newDataIds)):
-            val = newValues[r][c]
-            valStr = '' if np.isnan(val) else str(val)
-            rowStrs.append(valStr)
+        rowStrs = [str(newValues[r][c]) if newValues[r][c] is not None else '' for c in range(len(newDataIds))]
         newData.append(f"{timestamps[r]},{','.join(rowStrs)}")
 
     if Config.debug:
