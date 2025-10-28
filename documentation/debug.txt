@@ -1,5 +1,3 @@
-# Query.py - Corrected buildTable to call process after initial population and QAQC, then repopulate if checked
-
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None, deltaChecked=False, overlayChecked=False):
     if Config.debug:
         print("[DEBUG] buildTable: Starting with {} rows, {} headers, delta={}, overlay={}".format(len(data), len(buildHeader), deltaChecked, overlayChecked))
@@ -10,6 +8,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         return
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
+
     # Initial header calculation
     processedHeaders = []
     for i, h in enumerate(buildHeader):
@@ -151,8 +150,42 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.setUpdatesEnabled(True)
     if Config.debug:
         print("[DEBUG] buildTable: Re-enabled table updates after population")
-    # Apply QAQC on initial population
-    dataIds = buildHeader  # Original
+    table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
+    header = table.horizontalHeader()
+    vHeader = table.verticalHeader()
+    table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+    table.setMinimumSize(0, 0)
+    table.update()
+    header.setStretchLastSection(False)
+    if Config.debug:
+        print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
+    if dataDictionaryTable:
+        maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
+        vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
+    for c in range(numCols):
+        table.setColumnWidth(c, columnWidths[c])
+        if Config.debug:
+            print(f"[DEBUG] buildTable: Set column {c} width to {columnWidths[c]}")
+    rowHeight = metrics.height() + 10
+    sampleItem = QTableWidgetItem("189.5140")
+    sampleItem.setFont(font)
+    sampleCellHeight = sampleItem.sizeHint().height()
+    if sampleCellHeight <= 0:
+        sampleCellHeight = metrics.height()
+    adjustedRowHeight = max(rowHeight, sampleCellHeight + 2)
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
+    vHeader.setDefaultSectionSize(adjustedRowHeight)
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Set default row height to {adjustedRowHeight}")
+    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.update()
+    table.horizontalScrollBar().setValue(0)
+    visibleWidth = table.columnWidth(1) if numCols > 1 else 0
+    if Config.debug and numCols > 1:
+        print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
+    dataIds = buildHeader
     if Config.qaqcEnabled:
         qaqc(table, dataDictionaryTable, dataIds)
     else:
@@ -164,14 +197,17 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if Config.debug:
             print("[DEBUG] buildTable: QAQC skipped, cleared cell backgrounds")
 
-    # Now, if checked, process and repopulate
+    # Apply delta/overlay post-QAQC
     columnMetadata = []
     overlayInfo = []
     if deltaChecked or overlayChecked:
         from core.QueryUtils import processDeltaOverlay
         data, buildHeader, databases, lookupIds, intervals, columnMetadata, overlayInfo = processDeltaOverlay(data, buildHeader, databases, lookupIds, intervals, queryItems, deltaChecked, overlayChecked)
 
-        # Recalculate headers for new structure
+        # Update table with new structure
+        numCols = len(buildHeader)
+        table.setColumnCount(numCols)
+        # Recalculate processedHeaders for new columns
         processedHeaders = []
         for i, h in enumerate(buildHeader):
             dataId = h.strip()
@@ -192,71 +228,48 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                     parts = dataId.split('-')
                     if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                         fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
-                        if Config.debug:
-                            print(f"[DEBUG] buildTable: USGS in dict, header {i}: {fullLabel}")
                     else:
                         fullLabel = f"{baseLabel} \n{intervalStr}"
-                        if Config.debug:
-                            print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
                 elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                     apiFull = labelsDict[dataId]
                     parts = apiFull.split('\n')
                     label = parts[0].strip() if len(parts) >= 1 else dataId
                     location = parts[1].strip() if len(parts) >= 2 else dataId
                     fullLabel = f"{label} \n{location}"
-                    if Config.debug:
-                        print(f"[DEBUG] buildTable: Aquarius in dict, header {i}: {fullLabel}")
                 else:
                     if mrid and mrid != '0':
                         fullLabel = f"{baseLabel} \n{dataId}-{mrid}"
-                        if Config.debug:
-                            print(f"[DEBUG] buildTable: USBR in dict with MRID, header {i}: {fullLabel}")
                     else:
                         fullLabel = f"{baseLabel} \n{dataId}"
-                        if Config.debug:
-                            print(f"[DEBUG] buildTable: USBR in dict, header {i}: {fullLabel}")
             else:
                 if h == 'Delta':
                     fullLabel = "Delta"
-                    if Config.debug:
-                        print(f"[DEBUG] buildTable: Delta header {i}: {fullLabel}")
                 elif database == 'USGS-NWIS':
                     parts = dataId.split('-')
                     if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                         fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
-                        if Config.debug:
-                            print(f"[DEBUG] buildTable: Parsed USGS header {i}: {fullLabel}")
                     else:
                         fullLabel = f"{dataId} \n{intervalStr}"
-                        if Config.debug:
-                            print(f"[DEBUG] buildTable: USGS not in dict, header {i}: {fullLabel}")
                 elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                     apiFull = labelsDict[dataId]
                     parts = apiFull.split('\n')
                     label = parts[0].strip() if len(parts) >= 1 else dataId
                     location = parts[1].strip() if len(parts) >= 2 else dataId
                     fullLabel = f"{label} \n{location}"
-                    if Config.debug:
-                        print(f"[DEBUG] buildTable: Aquarius not in dict, header {i}: {fullLabel}")
                 else:
                     if mrid and mrid != '0':
                         fullLabel = f"{dataId}-{mrid} \n{intervalStr}"
-                        if Config.debug:
-                            print(f"[DEBUG] buildTable: USBR not in dict with MRID, header {i}: {fullLabel}")
                     else:
                         fullLabel = f"{dataId} \n{intervalStr}"
-                        if Config.debug:
-                            print(f"[DEBUG] buildTable: USBR not in dict, header {i}: {fullLabel}")
                 processedHeaders.append(fullLabel)
         headers = processedHeaders
-        table.setColumnCount(len(headers))
         table.setHorizontalHeaderLabels(headers)
 
-        # Repopulate cells with new data and apply formatting
-        table.setRowCount(len(data))
+        # Repopulate cells with new data and apply formatting (overlay overrides QAQC)
+        table.setUpdatesEnabled(False)
         for rowIdx, rowStr in enumerate(data):
             rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
-            for colIdx in range(len(headers)):
+            for colIdx in range(numCols):
                 cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
                 item = QTableWidgetItem(cellText)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
@@ -301,8 +314,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                                 'db2': info['db2']
                             })
                 table.setItem(rowIdx, colIdx, item)
+        table.setUpdatesEnabled(True)
         # Recalculate column widths for new columns
-        numCols = len(headers)
         columnWidths = []
         for c in range(numCols):
             cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data[:sampleRows]]
@@ -339,7 +352,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         else:
             if Config.debug:
                 print("[WARN] buildTable: Could not find uiMain for columnMetadata")
-        # No re-QAQC, as overlay overrides, delta no need
 
     # Rest of the setup (sort connect, size policy, etc.)
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
