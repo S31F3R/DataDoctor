@@ -442,7 +442,7 @@
      <bool>true</bool>
     </property>
    </widget>
-   <widget class="QCheckBox" name="cbDelta">
+   <widget class="QCheckBox" name="chkbDelta">
     <property name="geometry">
      <rect>
       <x>20</x>
@@ -455,7 +455,7 @@
      <string>Display Deltas</string>
     </property>
    </widget>
-   <widget class="QCheckBox" name="cbOverlay">
+   <widget class="QCheckBox" name="chkbOverlay">
     <property name="geometry">
      <rect>
       <x>150</x>
