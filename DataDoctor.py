@@ -2,10 +2,10 @@ import sys
 import os
 import csv
 import json
+import numpy as np
 from datetime import datetime
 from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QSizePolicy, QMessageBox, QFileDialog, QMenu
-from PyQt6.QtGui import QGuiApplication, QAction
-from PyQt6.QtCore import Qt, QDir
+from PyQt6.QtCore import Qt
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
 from ui.uiAbout import uiAbout
@@ -35,6 +35,7 @@ class uiMain(QMainWindow):
         self.lastQueryItems = []
         self.lastStartDate = None
         self.lastEndDate = None
+        self.columnMetadata = []
 
         # Set button style
         for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
@@ -63,6 +64,8 @@ class uiMain(QMainWindow):
         self.mainTable.horizontalHeader().sectionClicked.connect(lambda col: Query.customSortTable(self.mainTable, col, self.winDataDictionary.mainTable))
         self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)
+        self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
 
         # Ensure tab widget expands
@@ -214,19 +217,50 @@ class uiMain(QMainWindow):
         header = self.mainTable.horizontalHeader()
         col = header.logicalIndexAt(pos)
 
-        if col < 0 or col >= len(self.lastQueryItems):
+        if col < 0 or col >= len(self.columnMetadata):
             if Config.debug:
                 print("[DEBUG] showHeaderContextMenu: Invalid column {} clicked".format(col))
             return
 
-        queryInfo = f"{self.lastQueryItems[col][0]}|{self.lastQueryItems[col][1]}|{self.lastQueryItems[col][2]}"
+        meta = self.columnMetadata[col]
         menu = QMenu(self)
-        action = menu.addAction("Show Query Info")
-        action.triggered.connect(lambda: self.showDataIdMessage(queryInfo))
+
+        if meta['type'] == 'normal':
+            content = meta['queryInfos'][0]
+            action = menu.addAction("Show Query Info")
+            action.triggered.connect(lambda: self.showMessage("Full Query Info", content))
+        elif meta['type'] == 'delta':
+            content = f"{meta['dataIds'][0]} - {meta['dataIds'][1]}"
+            action = menu.addAction("Show details")
+            action.triggered.connect(lambda: self.showMessage("Details", content))
+        elif meta['type'] == 'overlay':
+            content = f"{meta['queryInfos'][0]}\n{meta['queryInfos'][1]}"
+            action = menu.addAction("Show details")
+            action.triggered.connect(lambda: self.showMessage("Details", content))
+
         menu.exec(header.mapToGlobal(pos))
 
         if Config.debug:
-            print("[DEBUG] showHeaderContextMenu: Displayed menu for column {}, queryInfo {}".format(col, queryInfo))
+            print("[DEBUG] showHeaderContextMenu: Displayed menu for column {}, type {}".format(col, meta['type']))
+
+    def showCellContextMenu(self, pos):
+        """Show context menu for cell right-click in overlay columns."""
+        row = self.mainTable.rowAt(pos.y())
+        col = self.mainTable.columnAt(pos.x())
+
+        if row < 0 or col < 0:
+            return
+
+        if col >= len(self.columnMetadata) or self.columnMetadata[col].get('type') != 'overlay':
+            return
+
+        menu = QMenu(self)
+        action = menu.addAction("Show details")
+        action.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
+        menu.exec(self.mainTable.viewport().mapToGlobal(pos))
+
+        if Config.debug:
+            print("[DEBUG] showCellContextMenu: Displayed menu for cell ({}, {})".format(row, col))
 
     def showDataIdMessage(self, queryInfo):
         """Display QMessageBox with full query info."""
@@ -240,6 +274,42 @@ class uiMain(QMainWindow):
 
         if Config.debug:
             print(f"[DEBUG] onTabCloseRequested: Closed tab at index {index}")
+
+    def showMessage(self, title, content):
+        """Display QMessageBox with given title and content."""
+        QMessageBox.information(self, title, content)
+
+        if Config.debug:
+            print("[DEBUG] showMessage: Showed {}: {}".format(title, content))
+
+    def showOverlayCellDetails(self, row, col):
+        """Display details for overlay cell."""
+        item = self.mainTable.item(row, col)
+        if not item:
+            return
+
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+        
+        p = data['primaryVal']
+        s = data['secondaryVal']
+        d = data['delta']
+    
+        pStr = Logic.valuePrecision(str(p)) if np.isfinite(p) and not Config.rawData else str(p) if np.isfinite(p) else ''
+        sStr = Logic.valuePrecision(str(p)) if np.isfinite(s) and not Config.rawData else str(s) if np.isfinite(s) else ''
+        dStr = Logic.valuePrecision(str(p)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
+
+        msg = f"{data['dataId1']} value: {pStr}\n"
+        msg += f"{data['dataId2']} value: {sStr}\n"
+        msg += f"{data['dataId1']} database: {data['db1']}\n"
+        msg += f"{data['dataId2']} database: {data['db2']}\n"
+        msg += f"Delta: {dStr}"
+
+        self.showMessage("Cell Details", msg)
+
+        if Config.debug:
+            print("[DEBUG] showOverlayCellDetails: Showed details for cell ({}, {})".format(row, col))
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

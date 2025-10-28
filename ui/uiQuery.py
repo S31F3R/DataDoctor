@@ -5,7 +5,6 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
-from datetime import datetime
 
 class uiQuery(QMainWindow):
     """Query window: Builds and executes public/internal API calls."""
@@ -189,32 +188,34 @@ class uiQuery(QMainWindow):
                 print(f"[WARN] Invalid item skipped: {itemText}")
                 continue
 
-            dataID, interval, database = parts
+            dataId, interval, database = parts
             mrid = '0'
-            SDID = dataID
+            sdid = dataId
 
-            if database.startswith('USBR-') and '-' in dataID:
-                SDID, mrid = dataID.rsplit('-', 1)
-            queryItems.append((dataID, interval, database, mrid, i))
+            if database.startswith('USBR-') and '-' in dataId:
+                sdid, mrid = dataId.rsplit('-', 1)
+            queryItems.append((dataId, interval, database, mrid, i))
 
             if Config.debug:
-                print(f"[DEBUG] Added queryItem: {(dataID, interval, database, mrid, i)}")
+                print(f"[DEBUG] Added queryItem: {(dataId, interval, database, mrid, i)}")
         if not queryItems and self.qleDataID.text().strip():
-            dataID = self.qleDataID.text().strip()
+            dataId = self.qleDataID.text().strip()
             interval = self.cbInterval.currentText()
             database = self.cbDatabase.currentText()
             mrid = '0'
-            SDID = dataID
+            sdid = dataId
 
-            if database.startswith('USBR-') and '-' in dataID:
-                SDID, mrid = dataID.rsplit('-', 1)
-            queryItems.append((dataID, interval, database, mrid, 0))
+            if database.startswith('USBR-') and '-' in dataId:
+                sdid, mrid = dataId.rsplit('-', 1)
+            queryItems.append((dataId, interval, database, mrid, 0))
 
             if Config.debug:
-                print(f"[DEBUG] Added single query: {(dataID, interval, database, mrid, 0)}")
+                print(f"[DEBUG] Added single query: {(dataId, interval, database, mrid, 0)}")
         elif not queryItems:
             print("[WARN] No valid query items.")
             return
+        deltaChecked = self.chkbDelta.isChecked()
+        overlayChecked = self.chkbOverlay.isChecked()
         if self.winMain:
             self.winMain.lastQueryType = self.queryType
             self.winMain.lastQueryItems = queryItems
@@ -226,7 +227,7 @@ class uiQuery(QMainWindow):
             if Config.debug:
                 print("[DEBUG] Stored last query as {}".format(self.queryType))
             Query.executeQuery(self.winMain, queryItems, startDate, endDate,
-                              self.queryType == 'internal', self.winMain.winDataDictionary.mainTable)
+                              self.queryType == 'internal', self.winMain.winDataDictionary.mainTable, deltaChecked, overlayChecked)
             self.close()
 
             if Config.debug:
