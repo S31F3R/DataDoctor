@@ -364,3 +364,12 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     if Config.debug:
         print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
     vHeader.setDefaultSectionSize(adjustedRowHeight)
+    if Config.debug:
+        print(f"[DEBUG] buildTable: Set default row height to {adjustedRowHeight}")
+    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    table.update()
+    table.horizontalScrollBar().setValue(0)
+    visibleWidth = table.columnWidth(1) if numCols > 1 else 0
+    if Config.debug and numCols > 1:
+        print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
