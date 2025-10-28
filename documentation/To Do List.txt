@@ -1,4 +1,6 @@
 Add a pop up after data dictionary save so user knows it actually worked
+Rename check boxes to chkb instead of cb. cb is used for combo box
+    -Need to look at them ALL. Currently only Overlay and Deltas is fixed
 
 ####### HOUSE KEEPING #######
 -Logging and debugging, best practices
