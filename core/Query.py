@@ -7,7 +7,6 @@ from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QCoreA
 from PyQt6.QtGui import QColor, QBrush, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
 from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils
-from DataDoctor import uiMain
 
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)
@@ -234,11 +233,9 @@ def combineParameters(data, newData):
         data[d] = f'{data[d]},{parseLine[1]}'
     return data
 
-def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None, deltaChecked=False, overlayChecked=False, overlayInfo=None):
-    if overlayInfo is None:
-        overlayInfo = []
+def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None, deltaChecked=False, overlayChecked=False):
     if Config.debug:
-        print("[DEBUG] buildTable: Starting with {} rows, {} headers, delta={}, overlay={}".format(len(data), len(buildHeader), deltaChecked, overlayChecked))
+        print("[DEBUG] buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
     table.clear()
     if not data:
         if Config.debug:
@@ -246,7 +243,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         return
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
-
     processedHeaders = []
     for i, h in enumerate(buildHeader):
         dataId = h.strip()
@@ -434,70 +430,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if Config.debug:
             print("[DEBUG] buildTable: QAQC skipped, cleared cell backgrounds")
 
-    # Call processDeltaOverlay after QAQC
-    if deltaChecked or overlayChecked:
-        from core.QueryUtils import processDeltaOverlay
-        data, buildHeader, databases, lookupIds, intervals, columnMetadata, overlayInfo = processDeltaOverlay(data, buildHeader, databases, lookupIds, intervals, queryItems, deltaChecked, overlayChecked)
-        # Update table with new data, headers, etc.
-        table.setColumnCount(len(buildHeader))
-        table.setHorizontalHeaderLabels(processedHeaders)  # Recompute processedHeaders if needed, but since changed, recalculate
-        table.setRowCount(len(data))
-        for rowIdx, rowStr in enumerate(data):
-            rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
-            for colIdx in range(min(len(buildHeader), len(rowData))):
-                cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
-                item = QTableWidgetItem(cellText)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-                if not Config.rawData and cellText.strip():
-                    item.setText(Logic.valuePrecision(cellText))
-                # Apply formatting for delta and overlay
-                if columnMetadata and colIdx < len(columnMetadata):
-                    meta = columnMetadata[colIdx]
-                    if meta['type'] == 'delta' and cellText:
-                        try:
-                            val = float(cellText)
-                            if val > 0:
-                                item.setForeground(QColor(255, 165, 0))  # Orange
-                            elif val < 0:
-                                item.setForeground(QColor(0, 0, 255))  # Blue
-                        except ValueError:
-                            pass
-                    elif meta['type'] == 'overlay':
-                        if overlayInfo and colIdx < len(overlayInfo) and overlayInfo[colIdx] is not None:
-                            info = overlayInfo[colIdx]
-                            p = info['primaryVal'][rowIdx]
-                            s = info['secondaryVal'][rowIdx]
-                            d = info['delta'][rowIdx]
-                            hasP = np.isfinite(p)
-                            hasS = np.isfinite(s)
-                            if hasP and hasS:
-                                if d != 0:
-                                    item.setForeground(QColor(255, 0, 0)) # Red
-                            elif not hasP and hasS:
-                                item.setBackground(QColor(221, 160, 221)) # Light purple
-                                item.setForeground(QColor(0, 0, 0))
-                            elif hasP and not hasS:
-                                item.setBackground(QColor(255, 182, 193)) # Light pink
-                                item.setForeground(QColor(0, 0, 0))
-                            # Store for details
-                            item.setData(Qt.UserRole, {
-                                'primaryVal': p,
-                                'secondaryVal': s,
-                                'delta': d,
-                                'dataId1': info['dataId1'],
-                                'dataId2': info['dataId2'],
-                                'db1': info['db1'],
-                                'db2': info['db2']
-                            })
-                table.setItem(rowIdx, colIdx, item)
-        # Update headers if changed
-        table.setHorizontalHeaderLabels(headers)  # Recompute headers if necessary
-        # Adjust widths, etc., as needed
-        # Since QAQC was applied before, but if new columns added, reapply QAQC only if needed, but per spec, delta never QAQC, overlay overrides
-        if Config.qaqcEnabled:
-            # Reapply QAQC, but skip delta columns
-            qaqc(table, dataDictionaryTable, dataIds)  # dataIds now newDataIds
-        # For overlay, the formatting is applied above, overriding QAQC
+    # Post-QAQC delta/overlay if checked
+    if deltaChecked or overlayChecked:        
+        QueryUtils.processDeltaOverlay(table, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds)
 
 def getDataDictionaryItem(table, dataId):
     for r in range(table.rowCount()):
