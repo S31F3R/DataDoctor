@@ -1,0 +1,64 @@
+I have two new check boxes in my query window that I want to add code for. These check boxes are chkbDelta and chkbOverlay. I need these check boxes to do the following:
+    -chkbDelta:
+        -Create an extra column after a "pair" of dataID that takes the first dataID and subtracts the second dataID, then displays the result in the extra column
+        -The header will be "Delta"
+        -Delta will NEVER run though QAQC logic
+        -Delta will run through value precision logic unless cbRawData is checked in winOptions
+        -Delta needs a header context menu (Show details) that shows the dataID in this format "dataID - dataID"
+        -Delta > 0: set font to orange
+    -chkbOverlay:
+        -Combine pairs of columns with special conditional formatting logic. first dataID will be primary, second dataID will be secondary
+        -Header will always have primary dataID label, using existing header logic, in the column header
+        -Context menu will need to be a combination of first and second column using current context menu format. it would be primary \n secondary (need to validate codes current header format and utilize it)
+        -Each cell will need a context menu (Show details) that displays the following:
+            -dataID 1 value: value
+            -dataID 2 value: value
+            -dataID 1 database:
+            -dataID 2 database:
+            -Delta:
+        -Cell context menu dataID and the number after needs to be actual dataID from the query. If dataID = 8023 for 1 and dataID = 20189 for 2, then we'd see:
+            -8023 value: 1234
+            -20189 value: 1234
+            -8023 database: USBR-LCHDB
+            -20189 database: AQUARIUS
+            -Delta: 0
+        -Conditional formatting rules:
+            -Primary and secondary both have values with delta 0: no formatting change, display primary
+            -Primary missing but secondary hash value: light purple background, black font, display secondary
+            -Primary has value but secondary doesn't: light pink background, black font, display primary
+            -Primary has a value and so does secondary, but delta <> 0: set font to red
+    -Combination of chkbDelta & chkbOverlay:
+        -Run through delta code first, apply 3rd column with delta rules
+        -Run through overlay next, combine columns pairs while knowing to skip the 3rd
+        
+I have thought of a way to implement this easier. Since overlay NEEDS delta logic, regardless on if it's displaying it or not, maybe run through the delta code all the time. At the end of the logic, just add or remove the delta column before populating the table. The add or remove the delta column could be based off of the check box setting. I also think the best way to insert this into already working code is at the end of the buildTable logic after it already ran though QAQC checks. We can put this new code into QueryTools.py and call it there. After running through the code, we output to table. The reason this works so well is if QAQC code is enabled, we want to run through it first (except for delta column), then have overlay formatting override it if one of rules are hit. This will also help by not breaking working code since this will be a module that's called on.
+
+DataDoctor File Structure:
+DataDoctor.py
+ui/
+    winAbout.ui
+    winDataDictionary.ui
+    winMain.ui
+    winOptions.ui
+    winQuery.ui
+    winQuickLook.ui
+    uiAbout.py
+    uiDataDictionary.py
+    uiOptions.py
+    uiQuery.py
+    uiQuickLook.py
+    /fonts
+    /icons
+    /sounds
+quickLook/
+core/
+    Aquarius.py
+    Config.py
+    Logic.py
+    Oracle.py
+    Query.py
+    USBR.py
+    USGS.py
+    Utils.py
+    
+To get started, I'm assuming DataDoctor.py, Config.py, Logic.py, Utils.py, Query.py, and uiQuery.py are needed. If there are any others, let me know and give me the order you want the .py files in. I'll will send one at a time, so confirm receipt until last one is hit. After that we can procede with code or you can ask questions
