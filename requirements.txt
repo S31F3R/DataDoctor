@@ -5,3 +5,4 @@ keyring>=24.3.0
 pygame>=2.6.1
 secretstorage>=3.3.3
 oracledb>=2.3.0
+numpy>=2.3.4
