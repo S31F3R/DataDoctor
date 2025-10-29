@@ -4,8 +4,11 @@ import keyring
 import os
 import threading
 import queue
-from core import Logic, Query, Config
+from core import Logic, Config
 from datetime import datetime, timedelta
+
+queryLimit = 500 # Configurable max points per API call
+maxThreads = 15 # Configurable max number of threads
 
 def apiRead(dataIDs, startDate, endDate, interval):
     if Config.debug:
@@ -192,6 +195,10 @@ def apiRead(dataIDs, startDate, endDate, interval):
 
         if Config.debug:
             print(f"[DEBUG] Thread {threadId} completed task for UID {uid} with {len(outputData)} points")
+            
+    # Start threads
+    taskQueue = queue.Queue()
+    for task in tasks: taskQueue.put(task)
     threads = []
 
     def worker(threadId):
