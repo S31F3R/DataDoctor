@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime
 from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QSizePolicy, QMessageBox, QFileDialog, QMenu
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPalette
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
 from ui.uiAbout import uiAbout
@@ -306,6 +307,9 @@ class uiMain(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setApplicationName("Data Doctor")
+
+    # Grab system font color and save as global
+    Config.systemTextColor = app.palette().color(QPalette.ColorRole.Text)
 
     # Create instances
     winMain = uiMain()
