@@ -7,32 +7,25 @@ from PyQt6.QtWidgets import QTableWidgetItem
 from core import Logic, Config
 from DataDoctor import uiMain
 
-def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds):
+def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds, mainWindow=None):
     if Config.debug:
         print("[DEBUG] modifyTable: Starting with delta={}, overlay={}".format(deltaChecked, overlayChecked))
-
     numRows = table.rowCount()
     numCols = table.columnCount()
-
     # Original dataIds from lookupIds
     dataIds = lookupIds
-
     # Query infos
     queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
-
     # Iterate col by col, processing pairs dynamically
     col = 0
     pairIndex = 0
     columnMetadata = []
-
     while col < table.columnCount() - 1:
         pIdx = col
         sIdx = col + 1
-
         # Dynamically extract vals for current pair
         primaryVals = np.full(numRows, np.nan)
         secondaryVals = np.full(numRows, np.nan)
-
         for r in range(numRows):
             pItem = table.item(r, pIdx)
             sItem = table.item(r, sIdx)
@@ -46,25 +39,15 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
                     secondaryVals[r] = float(sItem.text())
                 except ValueError:
                     pass
-
         deltas = computeDeltas(primaryVals, secondaryVals)
-
-        # Always add delta column first if deltaChecked (at end of pair)
-        deltaIdx = None
+        # Perform modifications
         if deltaChecked:
             insertIdx = sIdx + 1
             addDeltaColumn(table, insertIdx, deltas)
-            deltaIdx = insertIdx # Set deltaIdx
-            columnMetadata.append({
-                'type': 'delta',
-                'dataIds': [dataIds[pairIndex*2], dataIds[pairIndex*2+1]],
-                'dbs': [databases[pairIndex*2], databases[pairIndex*2+1]],
-                'queryInfos': [queryInfos[pairIndex*2], queryInfos[pairIndex*2+1]],
-                'pairIndex': pairIndex
-            })
-
         if overlayChecked:
             processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, queryInfos, pairIndex)
+        # Append metadata in final order
+        if overlayChecked:
             columnMetadata.append({
                 'type': 'overlay',
                 'dataIds': [dataIds[pairIndex*2], dataIds[pairIndex*2+1]],
@@ -72,12 +55,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
                 'queryInfos': [queryInfos[pairIndex*2], queryInfos[pairIndex*2+1]],
                 'pairIndex': pairIndex
             })
-
-            # If deltaChecked, update deltaIdx after shift
-            if deltaChecked:
-                deltaIdx -= 1 # Adjust for removal
-
-        if not overlayChecked and not deltaChecked:
+        else:
             columnMetadata.append({
                 'type': 'normal',
                 'dataIds': [dataIds[pairIndex*2]],
@@ -90,12 +68,17 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
                 'dbs': [databases[pairIndex*2+1]],
                 'queryInfos': [queryInfos[pairIndex*2+1]]
             })
-
+        if deltaChecked:
+            columnMetadata.append({
+                'type': 'delta',
+                'dataIds': [dataIds[pairIndex*2], dataIds[pairIndex*2+1]],
+                'dbs': [databases[pairIndex*2], databases[pairIndex*2+1]],
+                'queryInfos': [queryInfos[pairIndex*2], queryInfos[pairIndex*2+1]],
+                'pairIndex': pairIndex
+            })
         # Advance col
         col += 2 + (1 if deltaChecked else 0) - (1 if overlayChecked else 0)
-
         pairIndex += 1
-
     # For odd last column if any
     if col < table.columnCount():
         columnMetadata.append({
@@ -104,30 +87,31 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
             'dbs': [databases[-1]],
             'queryInfos': [queryInfos[-1]]
         })
-
     # Set columnMetadata on mainWindow
-    widget = table
-    mainWindow = None
-
-    while widget is not None:
-        if isinstance(widget, uiMain):
-            mainWindow = widget
-            break
-        widget = widget.parent()
     if mainWindow:
         mainWindow.columnMetadata = columnMetadata
         if Config.debug:
-            print("[DEBUG] modifyTable: Set columnMetadata with {} entries".format(len(columnMetadata)))
+            print("[DEBUG] modifyTable: Set columnMetadata via passed mainWindow with {} entries".format(len(columnMetadata)))
     else:
-        if Config.debug:
-            print("[WARN] modifyTable: Could not find uiMain for columnMetadata")
-
+        widget = table
+        mainWindowFound = None
+        while widget is not None:
+            if isinstance(widget, uiMain):
+                mainWindowFound = widget
+                break
+            widget = widget.parent()
+        if mainWindowFound:
+            mainWindowFound.columnMetadata = columnMetadata
+            if Config.debug:
+                print("[DEBUG] modifyTable: Set columnMetadata with {} entries".format(len(columnMetadata)))
+        else:
+            if Config.debug:
+                print("[WARN] modifyTable: Could not find uiMain for columnMetadata")
     # Recalculate widths for updated table
     font = table.font()
     metrics = QFontMetrics(font)
     sampleRows = min(1000, numRows)
     columnWidths = []
-
     for c in range(table.columnCount()):
         cellValues = [table.item(r, c).text() if table.item(r, c) else "0.00" for r in range(sampleRows)]
         nonEmptyValues = [val for val in cellValues if val]
@@ -140,7 +124,6 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
         headerLines = headerText.split('\n')
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
         finalWidth = max(maxCellWidth, headerWidth)
-
         if headerWidth > maxCellWidth:
             paddingIncrease = headerWidth - maxCellWidth
             finalWidth = maxCellWidth + paddingIncrease + 10
@@ -160,8 +143,7 @@ def processDelta(primaryVals, secondaryVals):
 def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, queryInfos, pairIndex):
     for r in range(numRows):
         item = table.item(r, pIdx)
-        
-        if item:            
+        if item:
             # Dynamically get vals for hasP/hasS/d
             primaryVal = float(item.text()) if item.text() else np.nan
             sItem = table.item(r, sIdx)
@@ -169,13 +151,12 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
             hasP = np.isfinite(primaryVal)
             hasS = np.isfinite(secondaryVal)
             d = deltas[r]
-
             if hasP and hasS:
                 if d != 0:
                     item.setForeground(QColor(255, 0, 0)) # Red
                     item.setBackground(QColor(0, 0, 0, 0)) # System default
                 else:
-                    item.setForeground(QColor(0, 0, 0, 0)) # System default
+                    item.setForeground(QColor(0, 0, 0)) # Black
                     item.setBackground(QColor(0, 0, 0, 0)) # System default
             elif not hasP and hasS:
                 item.setBackground(QColor(221, 160, 221)) # Light purple
@@ -183,7 +164,6 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
             elif hasP and not hasS:
                 item.setBackground(QColor(255, 182, 193)) # Light pink
                 item.setForeground(QColor(0, 0, 0)) # Black
-
             # Set data for details
             pStr = Logic.valuePrecision(str(primaryVal)) if hasP and not Config.rawData else str(primaryVal) if hasP else ''
             sStr = Logic.valuePrecision(str(secondaryVal)) if hasS and not Config.rawData else str(secondaryVal) if hasS else ''
@@ -197,11 +177,9 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
                 'db1': databases[pairIndex*2],
                 'db2': databases[pairIndex*2+1]
             })
-
             # Update text to display (use p if available, else s)
             newText = pStr if hasP else sStr if hasS else ''
             item.setText(newText)
-
     # Remove sIdx column
     table.removeColumn(sIdx)
 
@@ -248,6 +226,9 @@ def combineOverlay(table, pIdx, sIdx, deltas):
             if hasP and hasS:
                 if d != 0:
                     item.setForeground(QColor(255, 0, 0)) # Red
+                    item.setBackground(QColor(0, 0, 0, 0)) # System default
+                else: 
+                    item.setBackground(QColor(0, 0, 0, 0)) # System default
             elif not hasP and hasS:
                 item.setBackground(QColor(221, 160, 221)) # Light purple
                 item.setForeground(QColor(0, 0, 0))

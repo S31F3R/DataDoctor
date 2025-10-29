@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QCoreA
 from PyQt6.QtGui import QColor, QBrush, QFont, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
 from core import Logic, USBR, USGS, Aquarius, Config, Utils, QueryUtils
+from DataDoctor import uiMain
 
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)
@@ -429,9 +430,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if Config.debug:
             print("[DEBUG] buildTable: QAQC skipped, cleared cell backgrounds")
 
-    if Config.deltaChecked or Config.overlayChecked:
-        QueryUtils.modifyTable(table, Config.deltaChecked, Config.overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds)
-
 def getDataDictionaryItem(table, dataId):
     for r in range(table.rowCount()):
         item = table.item(r, 0)
@@ -813,7 +811,30 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         progressDialog.repaint()
         QCoreApplication.processEvents()
         mainWindow.mainTable.clear()
+
+        # Add tab before building table
+        if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
+            mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
+
+        # Build the table
         buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
+
+        # Modify table if query tools are checked
+        if deltaChecked or overlayChecked:
+            QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, originalIntervals, lookupIds, mainWindow=mainWindow)
+        else:
+            mainWindow.columnMetadata = []
+            
+            for i in range(mainWindow.mainTable.columnCount()):
+                mainWindow.columnMetadata.append({
+                    'type': 'normal',
+                    'dataIds': [lookupIds[i]],
+                    'dbs': [databases[i]],
+                    'queryInfos': [f"{queryItems[i][0]}|{queryItems[i][1]}|{queryItems[i][2]}"]
+                })
+            if Config.debug:
+                print("[DEBUG] executeQuery: Set normal columnMetadata with {} entries".format(len(mainWindow.columnMetadata)))
+
         progressDialog.setValue(72)
         progressDialog.repaint()
         QCoreApplication.processEvents()
