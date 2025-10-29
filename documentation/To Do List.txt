@@ -2,6 +2,8 @@
 -Rename check boxes to chkb instead of cb. cb is used for combo box
     -Need to look at them ALL. Currently only Overlay and Deltas is fixed
 -Create json or database for data dictionary
+-Round query start times down to nearest interval based on timestamp interval
+    -HOUR: 1606 = 1600, 1645 = 1600
 
 ####### HOUSE KEEPING #######
 -Logging and debugging, best practices
