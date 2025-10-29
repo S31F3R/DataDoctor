@@ -194,9 +194,9 @@ def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryIte
 
     return newData, newDataIds, newDatabases, newLookupIds, newIntervals, columnMetadata, overlayInfo
 
-def modifyTableForDeltaOverlay(table, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds):
+def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds):
     if Config.debug:
-        print("[DEBUG] modifyTableForDeltaOverlay: Starting with delta={}, overlay={}".format(deltaChecked, overlayChecked))
+        print("[DEBUG] modifyTable: Starting with delta={}, overlay={}".format(deltaChecked, overlayChecked))
 
     numRows = table.rowCount()
     numCols = table.columnCount()
@@ -214,24 +214,21 @@ def modifyTableForDeltaOverlay(table, deltaChecked, overlayChecked, databases, q
                 except ValueError:
                     values[r, c] = np.nan
 
-    # Original dataIds from lookupIds (or adjust if buildHeader available)
-    dataIds = lookupIds if lookupIds else [table.horizontalHeaderItem(c).text().split('\n')[-1].strip() for c in range(numCols)]
+    # Original dataIds from lookupIds
+    dataIds = lookupIds
 
     # Query infos
     queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
 
-    # Determine pairs based on original numCols
-    pairs = [(i, i+1) for i in range(0, numCols, 2)]
+    # Determine pairs based on original numCols, process in reverse to avoid shift issues
+    pairs = [(i, i+1) for i in range(0, numCols, 2)][::-1]  # Reverse order
 
     if numCols % 2 == 1 and (deltaChecked or overlayChecked):
         print("[WARN] Odd number of query items; last item omitted from delta/overlay processing.")
 
-    # Process pairs, add/remove columns in place
-    addedCols = 0
+    # Process pairs from end to start (no addedCols adjustment needed for reverse)
     columnMetadata = []
-    for pairIndex, (pIdx, sIdx) in enumerate(pairs):
-        pIdx += addedCols  # Adjust for inserted/removed
-        sIdx += addedCols
+    for relPairIndex, (pIdx, sIdx) in enumerate(pairs):
         primaryVals = values[:, pIdx]
         secondaryVals = values[:, sIdx]
         deltas = np.subtract(primaryVals, secondaryVals)
@@ -274,36 +271,21 @@ def modifyTableForDeltaOverlay(table, deltaChecked, overlayChecked, databases, q
                     item.setText(newText)
             # Remove sIdx column
             table.removeColumn(sIdx)
-            addedCols -= 1
-            # Update header for overlay (primary's, already set)
 
+            # Add metadata for overlay at pIdx
+            absPairIndex = len(pairs) - 1 - relPairIndex  # Absolute from left
             columnMetadata.append({
                 'type': 'overlay',
                 'dataIds': [dataIds[pIdx], dataIds[sIdx]],
                 'dbs': [databases[pIdx], databases[sIdx]],
                 'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
-                'pairIndex': pairIndex
-            })
-
-        else:
-            columnMetadata.append({
-                'type': 'normal',
-                'dataIds': [dataIds[pIdx]],
-                'dbs': [databases[pIdx]],
-                'queryInfos': [queryInfos[pIdx]]
-            })
-            columnMetadata.append({
-                'type': 'normal',
-                'dataIds': [dataIds[sIdx]],
-                'dbs': [databases[sIdx]],
-                'queryInfos': [queryInfos[sIdx]]
+                'pairIndex': absPairIndex
             })
 
         if deltaChecked:
-            # Add delta column after current pIdx (or original sIdx if no overlay)
-            insertIdx = pIdx + 1
+            # Insert delta after sIdx (or pIdx if overlay removed sIdx)
+            insertIdx = sIdx + 1 if not overlayChecked else pIdx + 1
             table.insertColumn(insertIdx)
-            addedCols += 1
             # Set header
             fullLabel = "Delta"
             table.setHorizontalHeaderItem(insertIdx, QTableWidgetItem(fullLabel))
@@ -324,12 +306,30 @@ def modifyTableForDeltaOverlay(table, deltaChecked, overlayChecked, databases, q
                         pass
                 table.setItem(r, insertIdx, item)
 
+            # Add metadata for delta at insertIdx
+            absPairIndex = len(pairs) - 1 - relPairIndex
             columnMetadata.append({
                 'type': 'delta',
                 'dataIds': [dataIds[pIdx], dataIds[sIdx]],
                 'dbs': [databases[pIdx], databases[sIdx]],
                 'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
-                'pairIndex': pairIndex
+                'pairIndex': absPairIndex
+            })
+
+        if not overlayChecked:
+            # Add metadata for normal pIdx and sIdx
+            absPairIndex = len(pairs) - 1 - relPairIndex
+            columnMetadata.append({
+                'type': 'normal',
+                'dataIds': [dataIds[pIdx]],
+                'dbs': [databases[pIdx]],
+                'queryInfos': [queryInfos[pIdx]]
+            })
+            columnMetadata.append({
+                'type': 'normal',
+                'dataIds': [dataIds[sIdx]],
+                'dbs': [databases[sIdx]],
+                'queryInfos': [queryInfos[sIdx]]
             })
 
     # For odd last column if any
@@ -340,6 +340,9 @@ def modifyTableForDeltaOverlay(table, deltaChecked, overlayChecked, databases, q
             'dbs': [databases[-1]],
             'queryInfos': [queryInfos[-1]]
         })
+
+    # Sort and clean columnMetadata (since append in reverse, reverse it)
+    columnMetadata = columnMetadata[::-1]  # Reverse to original order
 
     # Set columnMetadata on mainWindow
     widget = table
@@ -352,10 +355,10 @@ def modifyTableForDeltaOverlay(table, deltaChecked, overlayChecked, databases, q
     if mainWindow:
         mainWindow.columnMetadata = columnMetadata
         if Config.debug:
-            print("[DEBUG] modifyTableForDeltaOverlay: Set columnMetadata with {} entries".format(len(columnMetadata)))
+            print("[DEBUG] modifyTable: Set columnMetadata with {} entries".format(len(columnMetadata)))
     else:
         if Config.debug:
-            print("[WARN] modifyTableForDeltaOverlay: Could not find uiMain for columnMetadata")
+            print("[WARN] modifyTable: Could not find uiMain for columnMetadata")
 
     # Recalculate widths for updated table
     font = table.font()
@@ -383,4 +386,4 @@ def modifyTableForDeltaOverlay(table, deltaChecked, overlayChecked, databases, q
     for c in range(table.columnCount()):
         table.setColumnWidth(c, columnWidths[c])
         if Config.debug:
-            print(f"[DEBUG] modifyTableForDeltaOverlay: Set column {c} width to {columnWidths[c]}")
+            print(f"[DEBUG] modifyTable: Set column {c} width to {columnWidths[c]}")

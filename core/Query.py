@@ -232,7 +232,7 @@ def combineParameters(data, newData):
         data[d] = f'{data[d]},{parseLine[1]}'
     return data
 
-def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None):
+def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None):
     if Config.debug:
         print("[DEBUG] buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
     table.clear()
@@ -430,7 +430,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             print("[DEBUG] buildTable: QAQC skipped, cleared cell backgrounds")
 
     if Config.deltaChecked or Config.overlayChecked:
-        QueryUtils.modifyTableForDeltaOverlay(table, Config.deltaChecked, Config.overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds)
+        QueryUtils.modifyTable(table, Config.deltaChecked, Config.overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds)
 
 def getDataDictionaryItem(table, dataId):
     for r in range(table.rowCount()):
@@ -813,7 +813,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         progressDialog.repaint()
         QCoreApplication.processEvents()
         mainWindow.mainTable.clear()
-        buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
+        buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
         progressDialog.setValue(72)
         progressDialog.repaint()
         QCoreApplication.processEvents()
