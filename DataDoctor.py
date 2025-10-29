@@ -288,23 +288,15 @@ class uiMain(QMainWindow):
         if not item:
             return
 
-        data = item.data(Qt.UserRole)
+        data = item.data(Qt.ItemDataRole.UserRole)
         if not data:
             return
-        
-        p = data['primaryVal']
-        s = data['secondaryVal']
-        d = data['delta']
-    
-        pStr = Logic.valuePrecision(str(p)) if np.isfinite(p) and not Config.rawData else str(p) if np.isfinite(p) else ''
-        sStr = Logic.valuePrecision(str(p)) if np.isfinite(s) and not Config.rawData else str(s) if np.isfinite(s) else ''
-        dStr = Logic.valuePrecision(str(p)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
 
-        msg = f"{data['dataId1']} value: {pStr}\n"
-        msg += f"{data['dataId2']} value: {sStr}\n"
+        msg = f"{data['dataId1']} value: {data['primaryVal']}\n"
+        msg += f"{data['dataId2']} value: {data['secondaryVal']}\n"
         msg += f"{data['dataId1']} database: {data['db1']}\n"
         msg += f"{data['dataId2']} database: {data['db2']}\n"
-        msg += f"Delta: {dStr}"
+        msg += f"Delta: {data['delta']}"
 
         self.showMessage("Cell Details", msg)
 

@@ -24,6 +24,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
     col = 0
     pairIndex = 0
     columnMetadata = []
+
     while col < table.columnCount() - 1:
         pIdx = col
         sIdx = col + 1
@@ -31,6 +32,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
         # Dynamically extract vals for current pair
         primaryVals = np.full(numRows, np.nan)
         secondaryVals = np.full(numRows, np.nan)
+
         for r in range(numRows):
             pItem = table.item(r, pIdx)
             sItem = table.item(r, sIdx)
@@ -52,6 +54,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
         if deltaChecked:
             insertIdx = sIdx + 1
             addDeltaColumn(table, insertIdx, deltas)
+            deltaIdx = insertIdx # Set deltaIdx
             columnMetadata.append({
                 'type': 'delta',
                 'dataIds': [dataIds[pairIndex*2], dataIds[pairIndex*2+1]],
@@ -69,6 +72,10 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
                 'queryInfos': [queryInfos[pairIndex*2], queryInfos[pairIndex*2+1]],
                 'pairIndex': pairIndex
             })
+
+            # If deltaChecked, update deltaIdx after shift
+            if deltaChecked:
+                deltaIdx -= 1 # Adjust for removal
 
         if not overlayChecked and not deltaChecked:
             columnMetadata.append({
@@ -101,6 +108,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
     # Set columnMetadata on mainWindow
     widget = table
     mainWindow = None
+
     while widget is not None:
         if isinstance(widget, uiMain):
             mainWindow = widget
@@ -119,6 +127,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
     metrics = QFontMetrics(font)
     sampleRows = min(1000, numRows)
     columnWidths = []
+
     for c in range(table.columnCount()):
         cellValues = [table.item(r, c).text() if table.item(r, c) else "0.00" for r in range(sampleRows)]
         nonEmptyValues = [val for val in cellValues if val]
@@ -131,6 +140,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
         headerLines = headerText.split('\n')
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
         finalWidth = max(maxCellWidth, headerWidth)
+
         if headerWidth > maxCellWidth:
             paddingIncrease = headerWidth - maxCellWidth
             finalWidth = maxCellWidth + paddingIncrease + 10
@@ -150,7 +160,8 @@ def processDelta(primaryVals, secondaryVals):
 def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, queryInfos, pairIndex):
     for r in range(numRows):
         item = table.item(r, pIdx)
-        if item:
+        
+        if item:            
             # Dynamically get vals for hasP/hasS/d
             primaryVal = float(item.text()) if item.text() else np.nan
             sItem = table.item(r, sIdx)
@@ -158,22 +169,26 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
             hasP = np.isfinite(primaryVal)
             hasS = np.isfinite(secondaryVal)
             d = deltas[r]
+
             if hasP and hasS:
                 if d != 0:
-                    item.setForeground(QColor(255, 0, 0))  # Red
+                    item.setForeground(QColor(255, 0, 0)) # Red
+                    item.setBackground(QColor(0, 0, 0, 0)) # System default
+                else:
+                    item.setForeground(QColor(0, 0, 0)) # Black
+                    item.setBackground(QColor(0, 0, 0, 0)) # System default
             elif not hasP and hasS:
-                item.setBackground(QColor(221, 160, 221))  # Light purple
-                item.setForeground(QColor(0, 0, 0))
+                item.setBackground(QColor(221, 160, 221)) # Light purple
+                item.setForeground(QColor(0, 0, 0)) # Black
             elif hasP and not hasS:
-                item.setBackground(QColor(255, 182, 193))  # Light pink
-                item.setForeground(QColor(0, 0, 0))
+                item.setBackground(QColor(255, 182, 193)) # Light pink
+                item.setForeground(QColor(0, 0, 0)) # Black
+
             # Set data for details
-            p = primaryVal
-            s = secondaryVal
-            pStr = Logic.valuePrecision(str(p)) if hasP and not Config.rawData else str(p) if hasP else ''
-            sStr = Logic.valuePrecision(str(s)) if hasS and not Config.rawData else str(s) if hasS else ''
+            pStr = Logic.valuePrecision(str(primaryVal)) if hasP and not Config.rawData else str(primaryVal) if hasP else ''
+            sStr = Logic.valuePrecision(str(secondaryVal)) if hasS and not Config.rawData else str(secondaryVal) if hasS else ''
             dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
-            item.setData(Qt.UserRole, {
+            item.setData(Qt.ItemDataRole.UserRole, {
                 'primaryVal': pStr,
                 'secondaryVal': sStr,
                 'delta': dStr,
@@ -182,9 +197,11 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
                 'db1': databases[pairIndex*2],
                 'db2': databases[pairIndex*2+1]
             })
+
             # Update text to display (use p if available, else s)
             newText = pStr if hasP else sStr if hasS else ''
             item.setText(newText)
+
     # Remove sIdx column
     table.removeColumn(sIdx)
 
@@ -198,6 +215,7 @@ def addDeltaColumn(table, insertIdx, deltas):
     table.insertColumn(insertIdx)
     fullLabel = "Delta"
     table.setHorizontalHeaderItem(insertIdx, QTableWidgetItem(fullLabel))
+
     for r in range(numRows):
         d = deltas[r]
         dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
@@ -207,18 +225,20 @@ def addDeltaColumn(table, insertIdx, deltas):
             try:
                 val = float(dStr)
                 if val > 0:
-                    item.setForeground(QColor(255, 165, 0))  # Orange
+                    item.setForeground(QColor(255, 165, 0)) # Orange
                 elif val < 0:
-                    item.setForeground(QColor(0, 0, 255))  # Blue
+                    item.setForeground(QColor(0, 0, 255)) # Blue
             except ValueError:
                 pass
         table.setItem(r, insertIdx, item)
 
 def combineOverlay(table, pIdx, sIdx, deltas):
     numRows = table.rowCount()
+
     # Replace pIdx with combined, remove sIdx
     for r in range(numRows):
         item = table.item(r, pIdx)
+
         if item:
             primaryVal = values[r, pIdx]
             secondaryVal = values[r, sIdx]
@@ -227,13 +247,14 @@ def combineOverlay(table, pIdx, sIdx, deltas):
             d = deltas[r]
             if hasP and hasS:
                 if d != 0:
-                    item.setForeground(QColor(255, 0, 0))  # Red
+                    item.setForeground(QColor(255, 0, 0)) # Red
             elif not hasP and hasS:
-                item.setBackground(QColor(221, 160, 221))  # Light purple
+                item.setBackground(QColor(221, 160, 221)) # Light purple
                 item.setForeground(QColor(0, 0, 0))
             elif hasP and not hasS:
-                item.setBackground(QColor(255, 182, 193))  # Light pink
+                item.setBackground(QColor(255, 182, 193)) # Light pink
                 item.setForeground(QColor(0, 0, 0))
+
             # Set data for details
             p = primaryVal
             s = secondaryVal
@@ -249,8 +270,10 @@ def combineOverlay(table, pIdx, sIdx, deltas):
                 'db1': databases[pIdx],
                 'db2': databases[sIdx]
             })
+
             # Update text to display (use p if available, else s)
             newText = pStr if hasP else sStr if hasS else ''
             item.setText(newText)
+            
     # Remove sIdx column
     table.removeColumn(sIdx)
