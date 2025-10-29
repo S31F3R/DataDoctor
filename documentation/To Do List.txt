@@ -4,6 +4,16 @@
 -replace showDataIdMessage with showMessage
 -Can't save quickLook but debug says why. Run this after other testing done
 -Aquairus queries broke, not sure how or when
+-Need to fix context menu with Overlay
+
+
+
+
+You can use the darkdetect package in Python to check if the operating system is in light or dark mode. After installing it with pip install darkdetect, you can call darkdetect.isDark() to determine if dark mode is active, returning True for dark mode and False for light mode
+
+
+
+
 
 ####### HOUSE KEEPING #######
 -Logging and debugging, best practices
