@@ -316,7 +316,7 @@ if __name__ == '__main__':
     winAbout = uiAbout(winMain)
     winMain.winQuery = winQuery
     winMain.winDataDictionary = winDataDictionary
-    winMain.winQuickLook = winQuery
+    winMain.winQuickLook = winQuickLook
     winMain.winOptions = winOptions
     winMain.winAbout = winAbout
 
