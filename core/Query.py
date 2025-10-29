@@ -1,12 +1,11 @@
 import queue
 import time
-import numpy as np
 from collections import defaultdict
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QCoreApplication, QTimer
-from PyQt6.QtGui import QColor, QBrush, QFontMetrics
+from PyQt6.QtGui import QColor, QBrush, QFont, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
-from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils
+from core import Logic, USBR, USGS, Aquarius, Config, Utils, QueryUtils
 
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)
@@ -233,7 +232,7 @@ def combineParameters(data, newData):
         data[d] = f'{data[d]},{parseLine[1]}'
     return data
 
-def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None, deltaChecked=False, overlayChecked=False):
+def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None):
     if Config.debug:
         print("[DEBUG] buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
     table.clear()
@@ -314,7 +313,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                     fullLabel = f"{dataId} \n{intervalStr}"
                     if Config.debug:
                         print(f"[DEBUG] buildTable: USBR not in dict, header {i}: {fullLabel}")
-            processedHeaders.append(fullLabel)
+        processedHeaders.append(fullLabel)
     headers = processedHeaders
     skipDateCol = dataDictionaryTable is not None
     numCols = len(headers)
@@ -430,9 +429,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if Config.debug:
             print("[DEBUG] buildTable: QAQC skipped, cleared cell backgrounds")
 
-    # Post-QAQC delta/overlay if checked
-    if deltaChecked or overlayChecked:        
-        QueryUtils.processDeltaOverlay(table, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds)
+    if Config.deltaChecked or Config.overlayChecked:
+        QueryUtils.modifyTableForDeltaOverlay(table, Config.deltaChecked, Config.overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds)
 
 def getDataDictionaryItem(table, dataId):
     for r in range(table.rowCount()):
@@ -597,8 +595,11 @@ def timestampSortTable(table, dataDictionaryTable):
         print("[DEBUG] Timestamp sort worker started.")
 
 def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable, deltaChecked=False, overlayChecked=False):
+    Config.deltaChecked = deltaChecked
+    Config.overlayChecked = overlayChecked
+
     if Config.debug:
-        print("[DEBUG] executeQuery: isInternal={}, items={}, delta={}, overlay={}".format(isInternal, len(queryItems), deltaChecked, overlayChecked))
+        print("[DEBUG] executeQuery: isInternal={}, items={}".format(isInternal, len(queryItems)))
     if not isInternal:
         queryItems = [item for item in queryItems if item[2] != 'AQUARIUS']
         if Config.debug:
@@ -812,7 +813,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         progressDialog.repaint()
         QCoreApplication.processEvents()
         mainWindow.mainTable.clear()
-        buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems, deltaChecked, overlayChecked)
+        buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases)
         progressDialog.setValue(72)
         progressDialog.repaint()
         QCoreApplication.processEvents()
