@@ -2,6 +2,8 @@
 -Rename check boxes to chkb instead of cb. cb is used for combo box
     -Need to look at them ALL. Currently only Overlay and Deltas is fixed
 -replace showDataIdMessage with showMessage
+-Can't save quickLook but debug says why. Run this after other testing done
+-Aquairus queries broke, not sure how or when
 
 ####### HOUSE KEEPING #######
 -Logging and debugging, best practices
