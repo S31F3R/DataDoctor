@@ -9,3 +9,5 @@ fontSize = 10  # Default app-wide retro font size
 periodOffset = True
 sortState = {}
 appRoot = ""
+deltaChecked = False
+overlayChecked = False
