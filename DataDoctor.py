@@ -2,11 +2,11 @@ import sys
 import os
 import csv
 import json
-import numpy as np
 from datetime import datetime
-from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QSizePolicy, QMessageBox, QFileDialog, QMenu
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, 
+                             QSizePolicy, QMessageBox, QFileDialog, QMenu, QLabel, QVBoxLayout)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPalette
+from PyQt6.QtGui import QPalette, QFontMetrics, QPixmap
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
 from ui.uiAbout import uiAbout
@@ -263,13 +263,6 @@ class uiMain(QMainWindow):
         if Config.debug:
             print("[DEBUG] showCellContextMenu: Displayed menu for cell ({}, {})".format(row, col))
 
-    def showDataIdMessage(self, queryInfo):
-        """Display QMessageBox with full query info."""
-        QMessageBox.information(self, "Full Query Info", queryInfo)
-
-        if Config.debug:
-            print("[DEBUG] showDataIdMessage: Showed queryInfo {}".format(queryInfo))
-
     def onTabCloseRequested(self, index):
         self.tabWidget.removeTab(index)
 
@@ -277,27 +270,55 @@ class uiMain(QMainWindow):
             print(f"[DEBUG] onTabCloseRequested: Closed tab at index {index}")
 
     def showMessage(self, title, content):
-        """Display QMessageBox with given title and content."""
-        QMessageBox.information(self, title, content)
+        """Display QMessageBox with given title and content, auto-sized without word-wrap."""
+        msgBox = QMessageBox(self)
+        msgBox.setWindowTitle(title)
+        pixmap = QPixmap(Logic.resourcePath('ui/icons/Info.png'))
+        pixmap = pixmap.scaled(22, 22, Qt.AspectRatioMode.KeepAspectRatio)
+        msgBox.setIconPixmap(pixmap)
+        label = QLabel(content)
+        label.setWordWrap(False) # Disable word-wrap
+        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse) # Allow selection
+        layout = QVBoxLayout()
+        layout.addWidget(label)
+        layout.setContentsMargins(0, 0, 0, 0)
+        msgWidget = QWidget()
+        msgWidget.setLayout(layout)
+        msgBox.layout().addWidget(msgWidget, 1, 0, 1, msgBox.layout().columnCount())
+        msgBox.layout().setContentsMargins(10, 5, 10, 5)
+        msgBox.setStandardButtons(QMessageBox.StandardButton.Ok)
 
+        # Auto-size width to fit longest line
+        fontMetrics = QFontMetrics(label.font())
+        lines = content.split('\n')
+        maxWidth = max(fontMetrics.horizontalAdvance(line) for line in lines) + 40 # Padding
+        msgBox.setFixedWidth(min(maxWidth, QApplication.primaryScreen().availableGeometry().width() - 100)) # Cap to screen
+        msgBox.exec()
         if Config.debug:
             print("[DEBUG] showMessage: Showed {}: {}".format(title, content))
 
     def showOverlayCellDetails(self, row, col):
         """Display details for overlay cell."""
         item = self.mainTable.item(row, col)
+
         if not item:
             return
-
         data = item.data(Qt.ItemDataRole.UserRole)
+
         if not data:
             return
+        
+        # Set blank logic
+        primaryVal = data['primaryVal'] if data['primaryVal'] else "NDA!"
+        secondaryVal = data['secondaryVal'] if data['secondaryVal'] else "NDA!"
+        delta = data['delta'] if data['delta'] else "N/A"
 
-        msg = f"{data['dataId1']} value: {data['primaryVal']}\n"
-        msg += f"{data['dataId2']} value: {data['secondaryVal']}\n"
+        # Build message
+        msg = f"{data['dataId1']} value: {primaryVal}\n"
+        msg += f"{data['dataId2']} value: {secondaryVal}\n"
         msg += f"{data['dataId1']} database: {data['db1']}\n"
         msg += f"{data['dataId2']} database: {data['db2']}\n"
-        msg += f"Delta: {data['delta']}"
+        msg += f"Delta: {delta}"
 
         self.showMessage("Cell Details", msg)
 
