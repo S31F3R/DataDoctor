@@ -7,193 +7,6 @@ from PyQt6.QtWidgets import QTableWidgetItem
 from core import Logic, Config
 from DataDoctor import uiMain
 
-def processDeltaOverlay(data, dataIds, databases, lookupIds, intervals, queryItems, deltaChecked, overlayChecked):
-    """
-    Post-process query data for delta and overlay features.
-    Parses values, processes pairs, applies logic, and reconstructs data with metadata.
-    """
-    if Config.debug:
-        print("[DEBUG] processDeltaOverlay: Starting with {} rows, {} columns, delta={}, overlay={}".format(len(data), len(dataIds), deltaChecked, overlayChecked))
-
-    # Parse data to timestamps and 2D list of floats/None
-    timestamps = []
-    values = []
-    for rowStr in data:
-        parts = rowStr.split(',')
-        timestamps.append(parts[0].strip())
-        rowValues = []
-        for valStr in parts[1:]:
-            valStr = valStr.strip()
-            try:
-                rowValues.append(float(valStr) if valStr else np.nan)
-            except ValueError:
-                rowValues.append(np.nan)
-        values.append(rowValues)
-
-    values = np.array(values)  # For easier computation
-
-    numRows, numCols = values.shape
-
-    # Query infos
-    queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
-
-    # Determine pairs
-    pairs = [(i, i+1) for i in range(0, numCols, 2)]
-
-    if numCols % 2 == 1 and (deltaChecked or overlayChecked):
-        print("[WARN] Odd number of query items; last item omitted from delta/overlay processing.")
-
-    # Build new structures
-    newValues = [[] for _ in range(numRows)]  # Will hold floats/None
-    newDataIds = []
-    newDatabases = []
-    newLookupIds = []
-    newIntervals = []
-    columnMetadata = []
-    overlayInfo = []
-
-    col = 0
-    pairIndex = 0
-    while col < numCols:
-        if col < numCols - 1 and (deltaChecked or overlayChecked):
-            pIdx = col
-            sIdx = col + 1
-            primaryVals = values[:, pIdx]
-            secondaryVals = values[:, sIdx]
-            deltas = np.subtract(primaryVals, secondaryVals)
-            deltas[~ (np.isfinite(primaryVals) & np.isfinite(secondaryVals))] = np.nan
-
-            if overlayChecked:
-                # Compute display floats
-                displays = np.copy(primaryVals)
-                displays[np.isnan(primaryVals)] = secondaryVals[np.isnan(primaryVals)]
-
-                # Add overlay column
-                for r in range(numRows):
-                    newValues[r].append(displays[r] if np.isfinite(displays[r]) else None)
-
-                newDataIds.append(dataIds[pIdx])
-                newDatabases.append(databases[pIdx])
-                newLookupIds.append(lookupIds[pIdx])
-                newIntervals.append(intervals[pIdx])
-
-                columnMetadata.append({
-                    'type': 'overlay',
-                    'dataIds': [dataIds[pIdx], dataIds[sIdx]],
-                    'dbs': [databases[pIdx], databases[sIdx]],
-                    'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
-                    'pairIndex': pairIndex
-                })
-
-                overlayInfo.append({
-                    'primaryVal': primaryVals,
-                    'secondaryVal': secondaryVals,
-                    'delta': deltas,
-                    'dataId1': dataIds[pIdx],
-                    'dataId2': dataIds[sIdx],
-                    'db1': databases[pIdx],
-                    'db2': databases[sIdx]
-                })
-
-                # Add delta column if checked
-                if deltaChecked:
-                    for r in range(numRows):
-                        newValues[r].append(deltas[r] if np.isfinite(deltas[r]) else None)
-
-                    newDataIds.append('Delta')
-                    newDatabases.append(None)
-                    newLookupIds.append(None)
-                    newIntervals.append('')
-
-                    columnMetadata.append({
-                        'type': 'delta',
-                        'dataIds': [dataIds[pIdx], dataIds[sIdx]],
-                        'dbs': [databases[pIdx], databases[sIdx]],
-                        'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
-                        'pairIndex': pairIndex
-                    })
-
-                    overlayInfo.append(None)
-
-                pairIndex += 1
-                col += 2
-                continue
-
-            else:
-                # No overlay, add primary and secondary as normal
-                for idx in [pIdx, sIdx]:
-                    for r in range(numRows):
-                        newValues[r].append(values[r, idx] if np.isfinite(values[r, idx]) else None)
-
-                    newDataIds.append(dataIds[idx])
-                    newDatabases.append(databases[idx])
-                    newLookupIds.append(lookupIds[idx])
-                    newIntervals.append(intervals[idx])
-
-                    columnMetadata.append({
-                        'type': 'normal',
-                        'dataIds': [dataIds[idx]],
-                        'dbs': [databases[idx]],
-                        'queryInfos': [queryInfos[idx]]
-                    })
-
-                    overlayInfo.append(None)
-
-                # Add delta if checked
-                if deltaChecked:
-                    for r in range(numRows):
-                        newValues[r].append(deltas[r] if np.isfinite(deltas[r]) else None)
-
-                    newDataIds.append('Delta')
-                    newDatabases.append(None)
-                    newLookupIds.append(None)
-                    newIntervals.append('')
-
-                    columnMetadata.append({
-                        'type': 'delta',
-                        'dataIds': [dataIds[pIdx], dataIds[sIdx]],
-                        'dbs': [databases[pIdx], databases[sIdx]],
-                        'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
-                        'pairIndex': pairIndex
-                    })
-
-                    overlayInfo.append(None)
-
-                pairIndex += 1
-                col += 2
-                continue
-
-        # Odd last or non-pair
-        for r in range(numRows):
-            newValues[r].append(values[r, col] if np.isfinite(values[r, col]) else None)
-
-        newDataIds.append(dataIds[col])
-        newDatabases.append(databases[col])
-        newLookupIds.append(lookupIds[col])
-        newIntervals.append(intervals[col])
-
-        columnMetadata.append({
-            'type': 'normal',
-            'dataIds': [dataIds[col]],
-            'dbs': [databases[col]],
-            'queryInfos': [queryInfos[col]]
-        })
-
-        overlayInfo.append(None)
-
-        col += 1
-
-    # Reconstruct data as list of strings, apply precision only when displaying in table
-    newData = []
-    for r in range(numRows):
-        rowStrs = [str(newValues[r][c]) if newValues[r][c] is not None else '' for c in range(len(newDataIds))]
-        newData.append(f"{timestamps[r]},{','.join(rowStrs)}")
-
-    if Config.debug:
-        print("[DEBUG] processDeltaOverlay: Completed with {} new columns".format(len(newDataIds)))
-
-    return newData, newDataIds, newDatabases, newLookupIds, newIntervals, columnMetadata, overlayInfo
-
 def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds):
     if Config.debug:
         print("[DEBUG] modifyTable: Starting with delta={}, overlay={}".format(deltaChecked, overlayChecked))
@@ -201,148 +14,89 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
     numRows = table.rowCount()
     numCols = table.columnCount()
 
-    # Extract current data as 2D array of floats/nan, and strings for display
-    values = np.full((numRows, numCols), np.nan)
-    displayTexts = [[''] * numCols for _ in range(numRows)]
-    for r in range(numRows):
-        for c in range(numCols):
-            item = table.item(r, c)
-            if item:
-                displayTexts[r][c] = item.text()
-                try:
-                    values[r, c] = float(item.text()) if item.text() else np.nan
-                except ValueError:
-                    values[r, c] = np.nan
-
     # Original dataIds from lookupIds
     dataIds = lookupIds
 
     # Query infos
     queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
 
-    # Determine pairs based on original numCols, process in reverse to avoid shift issues
-    pairs = [(i, i+1) for i in range(0, numCols, 2)][::-1]  # Reverse order
-
-    if numCols % 2 == 1 and (deltaChecked or overlayChecked):
-        print("[WARN] Odd number of query items; last item omitted from delta/overlay processing.")
-
-    # Process pairs from end to start (no addedCols adjustment needed for reverse)
+    # Iterate col by col, processing pairs dynamically
+    col = 0
+    pairIndex = 0
     columnMetadata = []
-    for relPairIndex, (pIdx, sIdx) in enumerate(pairs):
-        primaryVals = values[:, pIdx]
-        secondaryVals = values[:, sIdx]
-        deltas = np.subtract(primaryVals, secondaryVals)
-        deltas[~ (np.isfinite(primaryVals) & np.isfinite(secondaryVals))] = np.nan
+    while col < table.columnCount() - 1:
+        pIdx = col
+        sIdx = col + 1
 
-        if overlayChecked:
-            # Replace pIdx with combined, remove sIdx
-            for r in range(numRows):
-                item = table.item(r, pIdx)
-                if item:
-                    hasP = np.isfinite(primaryVals[r])
-                    hasS = np.isfinite(secondaryVals[r])
-                    d = deltas[r]
-                    if hasP and hasS:
-                        if d != 0:
-                            item.setForeground(QColor(255, 0, 0))  # Red
-                    elif not hasP and hasS:
-                        item.setBackground(QColor(221, 160, 221))  # Light purple
-                        item.setForeground(QColor(0, 0, 0))
-                    elif hasP and not hasS:
-                        item.setBackground(QColor(255, 182, 193))  # Light pink
-                        item.setForeground(QColor(0, 0, 0))
-                    # Set data for details
-                    p = primaryVals[r]
-                    s = secondaryVals[r]
-                    pStr = Logic.valuePrecision(str(p)) if hasP and not Config.rawData else str(p) if hasP else ''
-                    sStr = Logic.valuePrecision(str(s)) if hasS and not Config.rawData else str(s) if hasS else ''
-                    dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
-                    item.setData(Qt.UserRole, {
-                        'primaryVal': pStr,
-                        'secondaryVal': sStr,
-                        'delta': dStr,
-                        'dataId1': dataIds[pIdx],
-                        'dataId2': dataIds[sIdx],
-                        'db1': databases[pIdx],
-                        'db2': databases[sIdx]
-                    })
-                    # Update text to display (use p if available, else s)
-                    newText = pStr if hasP else sStr if hasS else ''
-                    item.setText(newText)
-            # Remove sIdx column
-            table.removeColumn(sIdx)
+        # Dynamically extract vals for current pair
+        primaryVals = np.full(numRows, np.nan)
+        secondaryVals = np.full(numRows, np.nan)
+        for r in range(numRows):
+            pItem = table.item(r, pIdx)
+            sItem = table.item(r, sIdx)
+            if pItem and pItem.text():
+                try:
+                    primaryVals[r] = float(pItem.text())
+                except ValueError:
+                    pass
+            if sItem and sItem.text():
+                try:
+                    secondaryVals[r] = float(sItem.text())
+                except ValueError:
+                    pass
 
-            # Add metadata for overlay at pIdx
-            absPairIndex = len(pairs) - 1 - relPairIndex  # Absolute from left
-            columnMetadata.append({
-                'type': 'overlay',
-                'dataIds': [dataIds[pIdx], dataIds[sIdx]],
-                'dbs': [databases[pIdx], databases[sIdx]],
-                'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
-                'pairIndex': absPairIndex
-            })
+        deltas = computeDeltas(primaryVals, secondaryVals)
 
+        # Always add delta column first if deltaChecked (at end of pair)
+        deltaIdx = None
         if deltaChecked:
-            # Insert delta after sIdx (or pIdx if overlay removed sIdx)
-            insertIdx = sIdx + 1 if not overlayChecked else pIdx + 1
-            table.insertColumn(insertIdx)
-            # Set header
-            fullLabel = "Delta"
-            table.setHorizontalHeaderItem(insertIdx, QTableWidgetItem(fullLabel))
-            # Set cells
-            for r in range(numRows):
-                d = deltas[r]
-                dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
-                item = QTableWidgetItem(dStr)
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-                if dStr:
-                    try:
-                        val = float(dStr)
-                        if val > 0:
-                            item.setForeground(QColor(255, 165, 0))  # Orange
-                        elif val < 0:
-                            item.setForeground(QColor(0, 0, 255))  # Blue
-                    except ValueError:
-                        pass
-                table.setItem(r, insertIdx, item)
-
-            # Add metadata for delta at insertIdx
-            absPairIndex = len(pairs) - 1 - relPairIndex
+            insertIdx = sIdx + 1
+            addDeltaColumn(table, insertIdx, deltas)
             columnMetadata.append({
                 'type': 'delta',
-                'dataIds': [dataIds[pIdx], dataIds[sIdx]],
-                'dbs': [databases[pIdx], databases[sIdx]],
-                'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
-                'pairIndex': absPairIndex
+                'dataIds': [dataIds[pairIndex*2], dataIds[pairIndex*2+1]],
+                'dbs': [databases[pairIndex*2], databases[pairIndex*2+1]],
+                'queryInfos': [queryInfos[pairIndex*2], queryInfos[pairIndex*2+1]],
+                'pairIndex': pairIndex
             })
 
-        if not overlayChecked:
-            # Add metadata for normal pIdx and sIdx
-            absPairIndex = len(pairs) - 1 - relPairIndex
+        if overlayChecked:
+            processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, queryInfos, pairIndex)
+            columnMetadata.append({
+                'type': 'overlay',
+                'dataIds': [dataIds[pairIndex*2], dataIds[pairIndex*2+1]],
+                'dbs': [databases[pairIndex*2], databases[pairIndex*2+1]],
+                'queryInfos': [queryInfos[pairIndex*2], queryInfos[pairIndex*2+1]],
+                'pairIndex': pairIndex
+            })
+
+        if not overlayChecked and not deltaChecked:
             columnMetadata.append({
                 'type': 'normal',
-                'dataIds': [dataIds[pIdx]],
-                'dbs': [databases[pIdx]],
-                'queryInfos': [queryInfos[pIdx]]
+                'dataIds': [dataIds[pairIndex*2]],
+                'dbs': [databases[pairIndex*2]],
+                'queryInfos': [queryInfos[pairIndex*2]]
             })
             columnMetadata.append({
                 'type': 'normal',
-                'dataIds': [dataIds[sIdx]],
-                'dbs': [databases[sIdx]],
-                'queryInfos': [queryInfos[sIdx]]
+                'dataIds': [dataIds[pairIndex*2+1]],
+                'dbs': [databases[pairIndex*2+1]],
+                'queryInfos': [queryInfos[pairIndex*2+1]]
             })
+
+        # Advance col
+        col += 2 + (1 if deltaChecked else 0) - (1 if overlayChecked else 0)
+
+        pairIndex += 1
 
     # For odd last column if any
-    if numCols % 2 == 1:
+    if col < table.columnCount():
         columnMetadata.append({
             'type': 'normal',
             'dataIds': [dataIds[-1]],
             'dbs': [databases[-1]],
             'queryInfos': [queryInfos[-1]]
         })
-
-    # Sort and clean columnMetadata (since append in reverse, reverse it)
-    columnMetadata = columnMetadata[::-1]  # Reverse to original order
 
     # Set columnMetadata on mainWindow
     widget = table
@@ -387,3 +141,116 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
         table.setColumnWidth(c, columnWidths[c])
         if Config.debug:
             print(f"[DEBUG] modifyTable: Set column {c} width to {columnWidths[c]}")
+
+def processDelta(primaryVals, secondaryVals):
+    deltas = np.subtract(primaryVals, secondaryVals)
+    deltas[~ (np.isfinite(primaryVals) & np.isfinite(secondaryVals))] = np.nan
+    return deltas
+
+def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, queryInfos, pairIndex):
+    for r in range(numRows):
+        item = table.item(r, pIdx)
+        if item:
+            # Dynamically get vals for hasP/hasS/d
+            primaryVal = float(item.text()) if item.text() else np.nan
+            sItem = table.item(r, sIdx)
+            secondaryVal = float(sItem.text()) if sItem and sItem.text() else np.nan
+            hasP = np.isfinite(primaryVal)
+            hasS = np.isfinite(secondaryVal)
+            d = deltas[r]
+            if hasP and hasS:
+                if d != 0:
+                    item.setForeground(QColor(255, 0, 0))  # Red
+            elif not hasP and hasS:
+                item.setBackground(QColor(221, 160, 221))  # Light purple
+                item.setForeground(QColor(0, 0, 0))
+            elif hasP and not hasS:
+                item.setBackground(QColor(255, 182, 193))  # Light pink
+                item.setForeground(QColor(0, 0, 0))
+            # Set data for details
+            p = primaryVal
+            s = secondaryVal
+            pStr = Logic.valuePrecision(str(p)) if hasP and not Config.rawData else str(p) if hasP else ''
+            sStr = Logic.valuePrecision(str(s)) if hasS and not Config.rawData else str(s) if hasS else ''
+            dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
+            item.setData(Qt.UserRole, {
+                'primaryVal': pStr,
+                'secondaryVal': sStr,
+                'delta': dStr,
+                'dataId1': dataIds[pairIndex*2],
+                'dataId2': dataIds[pairIndex*2+1],
+                'db1': databases[pairIndex*2],
+                'db2': databases[pairIndex*2+1]
+            })
+            # Update text to display (use p if available, else s)
+            newText = pStr if hasP else sStr if hasS else ''
+            item.setText(newText)
+    # Remove sIdx column
+    table.removeColumn(sIdx)
+
+def computeDeltas(primaryVals, secondaryVals):
+    deltas = np.subtract(primaryVals, secondaryVals)
+    deltas[~ (np.isfinite(primaryVals) & np.isfinite(secondaryVals))] = np.nan
+    return deltas
+
+def addDeltaColumn(table, insertIdx, deltas):
+    numRows = table.rowCount()
+    table.insertColumn(insertIdx)
+    fullLabel = "Delta"
+    table.setHorizontalHeaderItem(insertIdx, QTableWidgetItem(fullLabel))
+    for r in range(numRows):
+        d = deltas[r]
+        dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
+        item = QTableWidgetItem(dStr)
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        if dStr:
+            try:
+                val = float(dStr)
+                if val > 0:
+                    item.setForeground(QColor(255, 165, 0))  # Orange
+                elif val < 0:
+                    item.setForeground(QColor(0, 0, 255))  # Blue
+            except ValueError:
+                pass
+        table.setItem(r, insertIdx, item)
+
+def combineOverlay(table, pIdx, sIdx, deltas):
+    numRows = table.rowCount()
+    # Replace pIdx with combined, remove sIdx
+    for r in range(numRows):
+        item = table.item(r, pIdx)
+        if item:
+            primaryVal = values[r, pIdx]
+            secondaryVal = values[r, sIdx]
+            hasP = np.isfinite(primaryVal)
+            hasS = np.isfinite(secondaryVal)
+            d = deltas[r]
+            if hasP and hasS:
+                if d != 0:
+                    item.setForeground(QColor(255, 0, 0))  # Red
+            elif not hasP and hasS:
+                item.setBackground(QColor(221, 160, 221))  # Light purple
+                item.setForeground(QColor(0, 0, 0))
+            elif hasP and not hasS:
+                item.setBackground(QColor(255, 182, 193))  # Light pink
+                item.setForeground(QColor(0, 0, 0))
+            # Set data for details
+            p = primaryVal
+            s = secondaryVal
+            pStr = Logic.valuePrecision(str(p)) if hasP and not Config.rawData else str(p) if hasP else ''
+            sStr = Logic.valuePrecision(str(s)) if hasS and not Config.rawData else str(s) if hasS else ''
+            dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
+            item.setData(Qt.UserRole, {
+                'primaryVal': pStr,
+                'secondaryVal': sStr,
+                'delta': dStr,
+                'dataId1': dataIds[pIdx],
+                'dataId2': dataIds[sIdx],
+                'db1': databases[pIdx],
+                'db2': databases[sIdx]
+            })
+            # Update text to display (use p if available, else s)
+            newText = pStr if hasP else sStr if hasS else ''
+            item.setText(newText)
+    # Remove sIdx column
+    table.removeColumn(sIdx)
