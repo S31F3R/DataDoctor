@@ -175,7 +175,7 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
                     item.setForeground(QColor(255, 0, 0)) # Red
                     item.setBackground(QColor(0, 0, 0, 0)) # System default
                 else:
-                    item.setForeground(QColor(0, 0, 0)) # Black
+                    item.setForeground(QColor(0, 0, 0, 0)) # System default
                     item.setBackground(QColor(0, 0, 0, 0)) # System default
             elif not hasP and hasS:
                 item.setBackground(QColor(221, 160, 221)) # Light purple
