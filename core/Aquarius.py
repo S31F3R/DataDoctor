@@ -34,10 +34,10 @@ def apiRead(dataIDs, startDate, endDate, interval):
     startDate = f'{startYear}-{startMonth}-{startDay} {startHour}:{startMinute}'
     endDate = f'{endYear}-{endMonth}-{endDay} {endHour}:{endMinute}'
 
-    # Apply utc offset for Aquarius query
+    # Apply utc offset for Aquarius query (keep exact)
     offsetHours = Logic.getUtcOffsetInt(Config.utcOffset)
     startDateTime = startDateTime - timedelta(hours=offsetHours)
-    endDateTime = endDateTime + timedelta(minutes=1)
+    endDateTime = endDateTime - timedelta(hours=offsetHours) + timedelta(minutes=1)
 
     # Re-pad after offset
     startMonth = f'{startDateTime.month:02d}'
