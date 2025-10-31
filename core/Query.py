@@ -1,12 +1,13 @@
+# Query.py
+
 import queue
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QCoreApplication, QTimer
-from PyQt6.QtGui import QColor, QBrush, QFont, QFontMetrics
+from PyQt6.QtGui import QColor, QBrush, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
-from core import Logic, USBR, USGS, Aquarius, Config, Utils, QueryUtils
-from DataDoctor import uiMain
+from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils
 
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)

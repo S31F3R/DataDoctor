@@ -1,8 +1,10 @@
+# Utils.py
+
 import os
 import json
 import configparser
-from PyQt6.QtCore import QStandardPaths, QDir
-from PyQt6.QtWidgets import QApplication, QTableWidget, QListWidget, QSplitter, QTreeView, QFileDialog, QWidget
+from PyQt6.QtCore import QStandardPaths
+from PyQt6.QtWidgets import QWidget
 from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication
 from core import Logic, Config
 

@@ -1,7 +1,8 @@
+# uiQuickLook.py
+
 import os
 import json
 from PyQt6.QtWidgets import QDialog, QLineEdit, QPushButton, QMessageBox
-from PyQt6.QtCore import Qt
 from PyQt6 import uic
 from core import Logic, Utils, Config
 

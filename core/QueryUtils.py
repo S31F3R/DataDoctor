@@ -225,7 +225,7 @@ def addDeltaColumn(table, insertIdx, deltas):
                 if val > 0:
                     item.setForeground(QColor(255, 165, 0)) # Orange
                 elif val < 0:
-                    item.setForeground(QColor(0, 0, 255)) # Blue
+                    item.setForeground(QColor(68, 165, 255)) # Blue
             except ValueError:
                 pass
         table.setItem(r, insertIdx, item)

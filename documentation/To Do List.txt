@@ -1,17 +1,24 @@
--Add a pop up after data dictionary save so user knows it actually worked
+-Create json or database for data dictionary
+
+
+
+-Add max, min, mean to header context menu
+-Convert quickLooks to json. Have them grouped by dataID
+
+####### UI UPGRADES #######
+-Modify Query remove button to be inbetween the up and down arrow
 -Rename check boxes to chkb instead of cb. cb is used for combo box
     -Need to look at them ALL. Currently only Overlay and Deltas is fixed
--Create json or database for data dictionary
--Round query start times down to nearest interval based on timestamp interval
-    -HOUR: 1606 = 1600, 1645 = 1600
+
 
 ####### HOUSE KEEPING #######
 -Logging and debugging, best practices
     -Any current [DEBUG] after an exception should be a ERROR and logged, no matter if DEBUG = true
--Save dialog for CSV needs wider columns or auto size needs to be fixed (linux is fine)
--Export to CSV needs work. Remembering path isn't working across platform, possibly Qt issue. Lots of trial and error code left in there, needs to be removed when completed
--Any new successful dataID in a query should automatically be appeneded to data dictionary
-    -If Aquarius, add label to common name
+-Round query start times down to nearest interval based on timestamp interval
+    -HOUR: 1606 = 1600, 1645 = 1600
+-Refresh (maybe undo also) need to recgonize delta and overlay check boxes
+-Add a pop up after data dictionary save so user knows it actually worked
+
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look

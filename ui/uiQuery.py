@@ -1,3 +1,5 @@
+# uiQuery.py
+
 import json
 import os
 from PyQt6.QtWidgets import QMainWindow, QLineEdit, QComboBox, QDateTimeEdit, QListWidget, QPushButton, QRadioButton, QButtonGroup, QCheckBox, QMessageBox

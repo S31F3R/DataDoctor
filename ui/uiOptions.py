@@ -1,3 +1,5 @@
+# uiOptions.py
+
 from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox, QPushButton, QTabWidget, QMessageBox
 from PyQt6.QtCore import QTimer, QEvent
 from PyQt6.QtGui import QIcon

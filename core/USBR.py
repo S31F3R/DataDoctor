@@ -1,6 +1,8 @@
+# USBR.py
+
 import requests
 import json
-from core import Oracle, Logic, Query, Config
+from core import Oracle, Query, Config
 from datetime import datetime, timedelta
 
 def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
@@ -140,7 +142,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     try:
         startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
         endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
-        if periodOffset and interval == 'HOUR': startDateTime = startDateTime - timedelta(hours=1)
+        if Config.periodOffset and interval == 'HOUR': startDateTime = startDateTime - timedelta(hours=1)
     except ValueError as e:
         print(f"[ERROR] sqlRead: Date parse failed: {e}")
         return {}

@@ -1,4 +1,5 @@
-import os
+# uiDataDictionary.py
+
 from PyQt6.QtWidgets import QMainWindow, QTableWidget, QPushButton
 from PyQt6 import uic
 from core import Logic, Utils, Config

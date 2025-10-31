@@ -1,14 +1,12 @@
+# Logic.py
+
 import os
 import sys
-import time
 import json
-import queue
 from datetime import datetime, timedelta
-from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QTimer, QCoreApplication
-from PyQt6.QtGui import QColor, QBrush
-from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
-from collections import defaultdict
-from core import USBR, USGS, Aquarius, Config, Utils
+from PyQt6.QtCore import QThreadPool, QDir
+from PyQt6.QtWidgets import QTableWidgetItem, QFileDialog, QSplitter, QTreeView
+from core import Config, Utils
 
 def resourcePath(relativePath):
     """Get absolute path to resource, works for dev and PyInstaller"""

@@ -1,9 +1,10 @@
+# USGS.py
+
 import requests
 import json
 import keyring
 import re
 import time
-import ssl
 from datetime import datetime, timedelta
 from core import Logic, Query, Config
 

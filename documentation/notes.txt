@@ -3,8 +3,8 @@
 # The steps below show how to create. Once created, used source to activate each time a package
 # is needed bo be installed. Use deactivate to close
 ##################################################################################################
-python -m venv env # Creates a folder called 'env' with isolated python
-source env/bin/activate # On Linux/Mac; use env\Scripts\activate on Windows
+python -m venv .venv # Creates a folder called '.venv' with isolated python
+source .venv/bin/activate # On Linux/Mac; use .venv\Scripts\activate on Windows
 pip install # Package here
 deactivate
 
