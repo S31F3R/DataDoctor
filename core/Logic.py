@@ -3,6 +3,7 @@
 import os
 import sys
 import json
+import sqlite3
 from datetime import datetime, timedelta
 from PyQt6.QtCore import QThreadPool, QDir
 from PyQt6.QtWidgets import QTableWidgetItem, QFileDialog, QSplitter, QTreeView
@@ -19,29 +20,36 @@ def resourcePath(relativePath):
 
 def buildDataDictionary(table):
     table.clear()
+    dbPath = resourcePath('core/bunker.db')
 
-    with open(resourcePath('DataDictionary.csv'), 'r', encoding='utf-8-sig') as f:
-        data = [line.strip().split(',') for line in f.readlines()]
-    if not data:
-        if Config.debug:
-            print("[DEBUG] DataDictionary.csv empty")
+    try:
+        with sqlite3.connect(dbPath) as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM dataDictionary")
+            rows = cur.fetchall()
+
+            if not rows:
+                if Config.debug:
+                    print("[DEBUG] dataDictionary table empty")
+                return
+            headers = [desc[0] for desc in cur.description]
+            table.setColumnCount(len(headers))
+
+            for c, header in enumerate(headers):
+                item = QTableWidgetItem(header.strip())
+                table.setHorizontalHeaderItem(c, item)
+            table.setRowCount(len(rows))
+
+            for r, row in enumerate(rows):
+                for c, value in enumerate(row):
+                    valStr = str(value) if value is not None else ''
+                    item = QTableWidgetItem(valStr)
+                    table.setItem(r, c, item)
+    except Exception as e:
+        print(f"[ERROR] Failed to build DataDictionary from DB: {e}")
         return
-    table.setRowCount(len(data) - 1)
-    table.setColumnCount(len(data[0]))
-
-    for c, header in enumerate(data[0]):
-        item = QTableWidgetItem(header.strip())
-        table.setHorizontalHeaderItem(c, item)
-
-    for r in range(1, len(data)):
-        for c in range(len(data[r])):
-            value = data[r][c].strip()
-            item = QTableWidgetItem(value)
-            table.setItem(r-1, c, item)
-
     for c in range(table.columnCount()):
         table.resizeColumnToContents(c)
-        
     if Config.debug:
         print(f"[DEBUG] Built DataDictionary with {table.rowCount()} rows, {table.columnCount()} columns")
 
