@@ -205,19 +205,6 @@
      <string>Query List</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="btnRemoveQuery">
-    <property name="geometry">
-     <rect>
-      <x>160</x>
-      <y>560</y>
-      <width>131</width>
-      <height>31</height>
-     </rect>
-    </property>
-    <property name="text">
-     <string>Remove Query</string>
-    </property>
-   </widget>
    <widget class="QPushButton" name="btnSaveQuickLook">
     <property name="geometry">
      <rect>
@@ -702,6 +689,47 @@
      <bool>true</bool>
     </property>
    </widget>
+   <widget class="QPushButton" name="btnRemoveQuery">
+    <property name="geometry">
+     <rect>
+      <x>300</x>
+      <y>355</y>
+      <width>31</width>
+      <height>20</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string/>
+    </property>
+    <property name="icon">
+     <iconset>
+      <normaloff>icons/Delete.png</normaloff>icons/Delete.png</iconset>
+    </property>
+    <property name="iconSize">
+     <size>
+      <width>24</width>
+      <height>24</height>
+     </size>
+    </property>
+    <property name="flat">
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="btnDeleteQuickLook">
+    <property name="geometry">
+     <rect>
+      <x>160</x>
+      <y>560</y>
+      <width>131</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Delete Quick Look</string>
+    </property>
+   </widget>
+   <zorder>chkbDelta</zorder>
+   <zorder>chkbOverlay</zorder>
    <zorder>qleDataID</zorder>
    <zorder>btnQuery</zorder>
    <zorder>label</zorder>
@@ -710,7 +738,6 @@
    <zorder>label_4</zorder>
    <zorder>btnAddQuery</zorder>
    <zorder>label_5</zorder>
-   <zorder>btnRemoveQuery</zorder>
    <zorder>btnSaveQuickLook</zorder>
    <zorder>label_7</zorder>
    <zorder>cbQuickLook</zorder>
@@ -728,8 +755,6 @@
    <zorder>label_8</zorder>
    <zorder>label_6</zorder>
    <zorder>label_9</zorder>
-   <zorder>cbDelta</zorder>
-   <zorder>cbOverlay</zorder>
    <zorder>btnQueryOptionsInfo</zorder>
    <zorder>btnUpMax</zorder>
    <zorder>btnUp15</zorder>
@@ -741,6 +766,8 @@
    <zorder>btnDown5</zorder>
    <zorder>listQueryList</zorder>
    <zorder>btnSearch</zorder>
+   <zorder>btnRemoveQuery</zorder>
+   <zorder>btnDeleteQuickLook</zorder>
   </widget>
  </widget>
  <resources/>
