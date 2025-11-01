@@ -27,10 +27,10 @@ class uiOptions(QDialog):
         self.rbBOP = self.findChild(QRadioButton, 'rbBOP')
         self.rbEOP = self.findChild(QRadioButton, 'rbEOP')
         self.btnbOptions = self.findChild(QDialogButtonBox, 'btnbOptions')
-        self.cbRetroMode = self.findChild(QCheckBox, 'cbRetroMode')
-        self.cbQAQC = self.findChild(QCheckBox, 'cbQAQC')
-        self.cbRawData = self.findChild(QCheckBox, 'cbRawData')
-        self.cbDebug = self.findChild(QCheckBox, 'cbDebug')
+        self.chkbRetroMode = self.findChild(QCheckBox, 'chkbRetroMode')
+        self.chkbQAQC = self.findChild(QCheckBox, 'chkbQAQC')
+        self.chkbRawData = self.findChild(QCheckBox, 'chkbRawData')
+        self.chkbDebug = self.findChild(QCheckBox, 'chkbDebug')
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
         self.btnShowPassword = self.findChild(QPushButton, 'btnShowPassword')
         self.btnShowUSGSKey = self.findChild(QPushButton, 'btnShowUSGSKey')
@@ -280,21 +280,21 @@ class uiOptions(QDialog):
             if Config.debug:
                 print("[DEBUG] utcOffset '{}' not found, set to default UTC+00:00".format(utcOffset))
 
-        self.cbRetroMode.setChecked(bool(config.get('retroMode', True)))
+        self.chkbRetroMode.setChecked(bool(config.get('retroMode', True)))
         if Config.debug:
-            print("[DEBUG] Set cbRetroMode to: {}".format(self.cbRetroMode.isChecked()))
+            print("[DEBUG] Set chkbRetroMode to: {}".format(self.chkbRetroMode.isChecked()))
             
-        self.cbQAQC.setChecked(bool(config.get('qaqc', True)))
+        self.chkbQAQC.setChecked(bool(config.get('qaqc', True)))
         if Config.debug:
-            print("[DEBUG] Set cbQAQC to: {}".format(self.cbQAQC.isChecked()))
+            print("[DEBUG] Set chkbQAQC to: {}".format(self.chkbQAQC.isChecked()))
 
-        self.cbRawData.setChecked(bool(config.get('rawData', False)))
+        self.chkbRawData.setChecked(bool(config.get('rawData', False)))
         if Config.debug:
-            print("[DEBUG] Set cbRawData to: {}".format(self.cbRawData.isChecked()))
+            print("[DEBUG] Set chkbRawData to: {}".format(self.chkbRawData.isChecked()))
 
-        self.cbDebug.setChecked(bool(config.get('debugMode', False)))
+        self.chkbDebug.setChecked(bool(config.get('debugMode', False)))
         if Config.debug:
-            print("[DEBUG] Set cbDebug to: {}".format(self.cbDebug.isChecked()))
+            print("[DEBUG] Set chkbDebug to: {}".format(self.chkbDebug.isChecked()))
 
         tnsPath = config.get('tnsNamesLocation', '')
 
@@ -357,7 +357,7 @@ class uiOptions(QDialog):
                     print("[ERROR] Failed to load user.config for save: {}".format(e))
 
         previousRetro = config.get('retroMode', True)
-        newRetro = self.cbRetroMode.isChecked()
+        newRetro = self.chkbRetroMode.isChecked()
         tnsPath = self.qleTNSNames.text()
 
         if '%AppRoot%' in tnsPath:
@@ -365,9 +365,9 @@ class uiOptions(QDialog):
         config.update({
             'utcOffset': self.cbUTCOffset.currentText(),
             'retroMode': newRetro,
-            'qaqc': self.cbQAQC.isChecked(),
-            'rawData': self.cbRawData.isChecked(),
-            'debugMode': self.cbDebug.isChecked(),
+            'qaqc': self.chkbQAQC.isChecked(),
+            'rawData': self.chkbRawData.isChecked(),
+            'debugMode': self.chkbDebug.isChecked(),
             'tnsNamesLocation': tnsPath,
             'hourTimestampMethod': 'EOP' if self.rbEOP.isChecked() else 'BOP',
             'lastExportPath': config.get('lastExportPath', '')
@@ -376,7 +376,7 @@ class uiOptions(QDialog):
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(config, configFile, indent=2)
         if Config.debug:
-            print("[DEBUG] Saved user.config with retroMode: {}, qaqc: {}, rawData: {}".format(newRetro, self.cbQAQC.isChecked(), self.cbRawData.isChecked()))
+            print("[DEBUG] Saved user.config with retroMode: {}, qaqc: {}, rawData: {}".format(newRetro, self.chkbQAQC.isChecked(), self.chkbRawData.isChecked()))
         Utils.reloadGlobals()
 
         if newRetro != previousRetro:
@@ -390,7 +390,7 @@ class uiOptions(QDialog):
                 python = sys.executable
                 os.execl(python, python, *sys.argv)
             else:
-                self.cbRetroMode.setChecked(previousRetro)
+                self.chkbRetroMode.setChecked(previousRetro)
                 config['retroMode'] = previousRetro
 
                 with open(configPath, 'w', encoding='utf-8') as configFile:
