@@ -40,6 +40,7 @@ class uiQuery(QMainWindow):
         self.btnSaveQuickLook = self.findChild(QPushButton, 'btnSaveQuickLook')
         self.cbQuickLook = self.findChild(QComboBox, 'cbQuickLook')
         self.btnLoadQuickLook = self.findChild(QPushButton, 'btnLoadQuickLook')
+        self.btnDeleteQuickLook = self.findChild(QPushButton, 'btnDeleteQuickLook')
         self.btnClearQuery = self.findChild(QPushButton, 'btnClearQuery')
         self.btnDataIdInfo = self.findChild(QPushButton, 'btnDataIdInfo')
         self.btnIntervalInfo = self.findChild(QPushButton, 'btnIntervalInfo')
@@ -90,7 +91,8 @@ class uiQuery(QMainWindow):
         self.btnAddQuery.clicked.connect(self.btnAddQueryPressed)
         self.btnRemoveQuery.clicked.connect(self.btnRemoveQueryPressed)
         self.btnSaveQuickLook.clicked.connect(self.btnSaveQuickLookPressed)
-        self.btnLoadQuickLook.clicked.connect(self.btnLoadQuickLookPressed)
+        self.btnLoadQuickLook.clicked.connect(self.btnLoadQuickLookPressed) 
+        self.btnDeleteQuickLook.clicked.connect(self.btnDeleteQuickLookPressed)
         self.btnClearQuery.clicked.connect(self.btnClearQueryPressed)
         self.btnDataIdInfo.clicked.connect(self.btnDataIdInfoPressed)
         self.btnIntervalInfo.clicked.connect(self.btnIntervalInfoPressed)
@@ -273,6 +275,33 @@ class uiQuery(QMainWindow):
             json.dump(config, configFile, indent=2)
         if Config.debug:
             print(f"[DEBUG] Loaded quick look: {self.cbQuickLook.currentText()}")
+
+    def btnDeleteQuickLookPressed(self):
+        quickLookName = self.cbQuickLook.currentText()
+
+        if not quickLookName:
+            if Logic.Config.debug:
+                print("[DEBUG] btnDeleteQuickLookPressed: No Quick Look selected to delete")
+            return
+        
+        # Confirm deletion with user
+        reply = QMessageBox.question(self, "Delete Quick Look", f"Are you sure you want to delete '{quickLookName}'?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+
+        if reply == QMessageBox.StandardButton.No:
+            return        
+        deleted = Logic.deleteQuickLook(quickLookName)
+
+        if deleted:
+            currentIndex = self.cbQuickLook.currentIndex()
+            self.cbQuickLook.removeItem(currentIndex)
+            self.cbQuickLook.setCurrentIndex(-1)
+            
+            if Logic.Config.debug:
+                print(f"[DEBUG] btnDeleteQuickLookPressed: Removed '{quickLookName}' from combo box and cleared selection")
+        else:
+            QMessageBox.warning(self, "Cannot Delete", "Example Quick Looks cannot be deleted.")
+            if Logic.Config.debug:
+                print(f"[DEBUG] btnDeleteQuickLookPressed: Attempted to delete example Quick Look '{quickLookName}'—skipped")
 
     def btnAddQueryPressed(self):
         dataID = self.qleDataID.text().strip()

@@ -356,6 +356,9 @@ if __name__ == '__main__':
 
     # Show main window
     winMain.show()
+
+    # Convert legacy quickLooks
+    Logic.convertLegacyQuickLooks()
     
     # Start application
     sys.exit(app.exec())

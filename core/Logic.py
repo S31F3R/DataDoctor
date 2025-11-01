@@ -55,35 +55,103 @@ def buildDataDictionary(table):
 
 def loadAllQuickLooks(cbQuickLook):
     cbQuickLook.clear()
-    quickLookPaths = []
-
-    # User-specific Quick Looks from query subfolder
+    quickLookNames = set() # Use set to avoid duplicates
+    
+    # User-specific Quick Looks from query subfolder (prefer .json, but include .txt for legacy)
     userDir = Utils.getQuickLookDir()
+    for ext in ['.json', '.txt']: # Scan .json first
+        for file in os.listdir(userDir):
+            if file.endswith(ext):
+                name = os.path.splitext(file)[0] # Get name without extension
 
-    for file in os.listdir(userDir):
-        if file.endswith(".txt"):
-            quickLookPaths.append(os.path.join(userDir, file))
-            if Config.debug:
-                print("[DEBUG] loadAllQuickLooks: Found user Quick Look: {}".format(file))
-
-    # Append example Quick Looks (no duplicates – check names)
+                if name not in quickLookNames:
+                    quickLookNames.add(name)
+                    
+                    if Config.debug:
+                        print(f"[DEBUG] loadAllQuickLooks: Found user Quick Look: {file}")
+    
+    # Append example Quick Looks (no duplicates – only if not in user)
     exampleDir = Utils.getExampleQuickLookDir()
 
-    for file in os.listdir(exampleDir):
-        if file.endswith(".txt"):
-            examplePath = os.path.join(exampleDir, file)
-            userPath = os.path.join(userDir, file)
-            if not os.path.exists(userPath):
-                quickLookPaths.append(examplePath)
-                if Config.debug:
-                    print("[DEBUG] loadAllQuickLooks: Added example Quick Look: {}".format(file))
+    for ext in ['.json', '.txt']: # Scan .json first
+        for file in os.listdir(exampleDir):
+            if file.endswith(ext):
+                name = os.path.splitext(file)[0] # Get name without extension
 
-    # Add to combo (use basename without .txt)
-    for path in quickLookPaths:
-        name = os.path.basename(path).replace('.txt', '')
+                if name not in quickLookNames:
+                    quickLookNames.add(name)
+
+                    if Config.debug:
+                        print(f"[DEBUG] loadAllQuickLooks: Added example Quick Look: {file}")
+    
+    # Add sorted names to combo box for consistent order
+    sortedNames = sorted(quickLookNames)
+
+    for name in sortedNames:
         cbQuickLook.addItem(name)
         if Config.debug:
-            print("[DEBUG] loadAllQuickLooks: Added {} to cbQuickLook".format(name))
+            print(f"[DEBUG] loadAllQuickLooks: Added {name} to cbQuickLook")
+
+def convertLegacyQuickLooks():
+    quickLookDir = Utils.getQuickLookDir()
+
+    if not os.path.exists(quickLookDir):
+        if Config.debug:
+            print("[DEBUG] convertLegacyQuickLooks: Quick Look directory does not exist—skipped.")
+        return
+    
+    for fileName in os.listdir(quickLookDir):
+        if fileName.endswith('.txt'):
+            txtPath = os.path.join(quickLookDir, fileName)
+            name = fileName[:-4] # Remove .txt extension
+            jsonPath = os.path.join(quickLookDir, f'{name}.json')
+            
+            if os.path.exists(jsonPath):
+                if Config.debug:
+                    print(f"[WARN] convertLegacyQuickLooks: JSON already exists for {name}—skipping {txtPath}")
+                continue
+            
+            try:
+                with open(txtPath, 'r', encoding='utf-8-sig') as f:
+                    content = f.read().strip()
+                if content:
+                    if ',' in content:
+                        # Legacy comma-separated format
+                        data = content.split(',')
+                    else:
+                        # New line-separated format
+                        data = content.splitlines()
+                    processedData = []
+                    for itemText in data:
+                        itemText = itemText.strip()
+                        if not itemText:
+                            continue
+                        parts = itemText.split('|')
+                        if len(parts) == 3:
+                            dataID, interval, database = parts
+
+                            # Convert historical INSTANT queries to new format
+                            if interval == 'INSTANT':
+                                if database.startswith('USBR-'):
+                                    interval = 'INSTANT:60'
+                                elif database == 'USGS-NWIS':
+                                    interval = 'INSTANT:15'
+                                elif database == 'AQUARIUS':
+                                    interval = 'INSTANT:1'
+                            processedData.append(f'{dataID}|{interval}|{database}')
+                
+                # Save as JSON
+                with open(jsonPath, 'w', encoding='utf-8') as f:
+                    json.dump(processedData, f, indent=4)
+                
+                # Delete the .txt file
+                os.remove(txtPath)
+                
+                if Config.debug:
+                    print(f"[DEBUG] convertLegacyQuickLooks: Converted and deleted {txtPath} to {jsonPath}")
+            except Exception as e:
+                if Config.debug:
+                    print(f"[ERROR] convertLegacyQuickLooks: Failed to convert {txtPath}: {e}")
 
 def saveQuickLook(textQuickLookName, listQueryList):
     name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
@@ -92,15 +160,13 @@ def saveQuickLook(textQuickLookName, listQueryList):
         if Config.debug:
             print("[WARN] Empty quick look name—skipped.")
         return
-
     data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
-    quicklookPath = os.path.join(Utils.getQuickLookDir(), f'{name}.txt')
+    quicklookPath = os.path.join(Utils.getQuickLookDir(), f'{name}.json')
     os.makedirs(os.path.dirname(quicklookPath), exist_ok=True)
 
     try:
-        with open(quicklookPath, 'w', encoding='utf-8-sig') as f:
-            for item in data:
-                f.write(item + '\n') # Write each item on a new line
+        with open(quicklookPath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
         if Config.debug:
             print("[DEBUG] saveQuickLook: Saved Quick Look to {}".format(quicklookPath))
     except Exception as e:
@@ -114,49 +180,102 @@ def loadQuickLook(cbQuickLook, listQueryList):
         if Config.debug:
             print("[DEBUG] loadQuickLook: No quick look selected")
         return
-
     listQueryList.clear()
-    userQuickLookPath = os.path.join(Utils.getQuickLookDir(), '{}.txt'.format(quickLookName))
-    exampleQuickLookPath = resourcePath('quickLook/{}.txt'.format(quickLookName))
-    quickLookPath = userQuickLookPath if os.path.exists(userQuickLookPath) else exampleQuickLookPath
+    userJsonPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.json')
+    userTxtPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.txt') # Fallback for legacy
+    exampleJsonPath = resourcePath(f'quickLook/{quickLookName}.json')
+    exampleTxtPath = resourcePath(f'quickLook/{quickLookName}.txt') # Fallback for example legacy
+    
+    # Determine the path to load from, preferring JSON
+    quickLookPath = None
 
-    try:
-        with open(quickLookPath, 'r', encoding='utf-8-sig') as f:
-            content = f.read().strip()
-        if content:
-            if ',' in content:
-                # Legacy comma-separated format
-                data = content.split(',')
-            else:
-                # New line-separated format
-                data = content.splitlines()
-            for itemText in data:
-                itemText = itemText.strip()
-
-                if not itemText:
-                    continue
-                parts = itemText.split('|')
-
-                if len(parts) == 3:
-                    dataID, interval, database = parts
-
-                    # Convert historical INSTANT queries to new format
-                    if interval == 'INSTANT':
-                        if database.startswith('USBR-'):
-                            interval = 'INSTANT:60'
-                        elif database == 'USGS-NWIS':
-                            interval = 'INSTANT:15'
-                        elif database == 'AQUARIUS':
-                            interval = 'INSTANT:1'
-                    listQueryList.addItem('{}|{}|{}'.format(dataID, interval, database))
-
-                    if Config.debug:
-                        print("[DEBUG] loadQuickLook: Added item {}".format('{}|{}|{}'.format(dataID, interval, database)))
-    except FileNotFoundError:
+    if os.path.exists(userJsonPath):
+        quickLookPath = userJsonPath
+    elif os.path.exists(userTxtPath):
+        quickLookPath = userTxtPath
+    elif os.path.exists(exampleJsonPath):
+        quickLookPath = exampleJsonPath
+    elif os.path.exists(exampleTxtPath):
+        quickLookPath = exampleTxtPath
+    
+    if not quickLookPath:
         if Config.debug:
             print("[WARN] Quick look '{}' not found.".format(quickLookName))
-    if Config.debug:
-        print("[DEBUG] loadQuickLook: Loaded '{}' with {} items".format(quickLookName, listQueryList.count()))
+        return
+    
+    try:
+        if quickLookPath.endswith('.json'):
+            with open(quickLookPath, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        else: # .txt
+            with open(quickLookPath, 'r', encoding='utf-8-sig') as f:
+                content = f.read().strip()
+            if content:
+                if ',' in content:
+                    # Legacy comma-separated format
+                    data = content.split(',')
+                else:
+                    # New line-separated format
+                    data = content.splitlines()
+            else:
+                data = []
+        
+        for itemText in data:
+            itemText = itemText.strip()
+            if not itemText:
+                continue
+            parts = itemText.split('|')
+            if len(parts) == 3:
+                dataID, interval, database = parts
+
+                # Convert historical INSTANT queries to new format
+                if interval == 'INSTANT':
+                    if database.startswith('USBR-'):
+                        interval = 'INSTANT:60'
+                    elif database == 'USGS-NWIS':
+                        interval = 'INSTANT:15'
+                    elif database == 'AQUARIUS':
+                        interval = 'INSTANT:1'
+                listQueryList.addItem(f'{dataID}|{interval}|{database}')
+
+                if Config.debug:
+                    print("[DEBUG] loadQuickLook: Added item {}".format(f'{dataID}|{interval}|{database}'))
+        
+        if Config.debug:
+            print("[DEBUG] loadQuickLook: Loaded '{}' with {} items".format(quickLookName, listQueryList.count()))
+        
+        # If loaded from user .txt, convert to .json and delete .txt
+        if quickLookPath == userTxtPath:
+            saveQuickLook(quickLookName, listQueryList)
+            os.remove(userTxtPath)
+            if Config.debug:
+                print(f"[DEBUG] loadQuickLook: Converted legacy {userTxtPath} to .json and deleted .txt")
+    except Exception as e:
+        if Config.debug:
+            print("[ERROR] loadQuickLook: Failed to load Quick Look from {}: {}".format(quickLookPath, e))
+
+def deleteQuickLook(quickLookName):
+    if not quickLookName:
+        if Config.debug:
+            print("[WARN] Empty quick look name—cannot delete.")
+        return False
+    
+    userQuickLookPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.json')
+    
+    if os.path.exists(userQuickLookPath):
+        try:
+            os.remove(userQuickLookPath)
+            if Config.debug:
+                print(f"[DEBUG] deleteQuickLook: Deleted Quick Look at {userQuickLookPath}")
+            return True
+        except Exception as e:
+            if Config.debug:
+                print(f"[ERROR] deleteQuickLook: Failed to delete Quick Look at {userQuickLookPath}: {e}")
+            return False
+    else:
+        if Config.debug:
+            print(f"[WARN] deleteQuickLook: Cannot delete example Quick Look '{quickLookName}'")
+        return False
 
 def exportTableToCSV(table, fileLocation, fileName):
     if table.rowCount() == 0:
