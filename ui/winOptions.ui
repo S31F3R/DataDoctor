@@ -101,7 +101,7 @@
       <string>Quality Control Checks:</string>
      </property>
     </widget>
-    <widget class="QCheckBox" name="cbRawData">
+    <widget class="QCheckBox" name="chkbRawData">
      <property name="geometry">
       <rect>
        <x>84</x>
@@ -127,7 +127,7 @@
       <string>Debug Mode:</string>
      </property>
     </widget>
-    <widget class="QCheckBox" name="cbQAQC">
+    <widget class="QCheckBox" name="chkbQAQC">
      <property name="geometry">
       <rect>
        <x>178</x>
@@ -140,7 +140,7 @@
       <string/>
      </property>
     </widget>
-    <widget class="QCheckBox" name="cbDebug">
+    <widget class="QCheckBox" name="chkbDebug">
      <property name="geometry">
       <rect>
        <x>110</x>
@@ -153,7 +153,7 @@
       <string/>
      </property>
     </widget>
-    <widget class="QCheckBox" name="cbRetroMode">
+    <widget class="QCheckBox" name="chkbRetroMode">
      <property name="geometry">
       <rect>
        <x>100</x>
@@ -182,10 +182,10 @@
     <zorder>lbRawData</zorder>
     <zorder>lbUTCOffset</zorder>
     <zorder>cbUTCOffset</zorder>
-    <zorder>cbRawData</zorder>
-    <zorder>cbQAQC</zorder>
-    <zorder>cbDebug</zorder>
-    <zorder>cbRetroMode</zorder>
+    <zorder>chkbRawData</zorder>
+    <zorder>chkbQAQC</zorder>
+    <zorder>chkbDebug</zorder>
+    <zorder>chkbRetroMode</zorder>
     <zorder>lbQc</zorder>
     <zorder>lbRetroMode</zorder>
     <zorder>lbDebug</zorder>
