@@ -6,7 +6,11 @@
 python -m venv .venv # Creates a folder called '.venv' with isolated python
 source .venv/bin/activate # On Linux/Mac; use .venv\Scripts\activate on Windows
 pip install # Package here
-deactivate
+deactivate # Closes python vm
+
+If VS Code doesn't use .venv correctly, hit Ctrl+Shift+P
+Type and select Python: Select Interpreter
+Select .venv
 
 
 
