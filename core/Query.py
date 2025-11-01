@@ -234,6 +234,26 @@ def combineParameters(data, newData):
         data[d] = f'{data[d]},{parseLine[1]}'
     return data
 
+def getDataDictionaryItem(table, dataId):
+    idCol = getColByName(table, 'dataID')
+    if idCol == -1:
+        return -1
+    for r in range(table.rowCount()):
+        item = table.item(r, idCol)
+        if item and item.text().strip() == dataId.strip():
+            return r
+    return -1
+
+def getColByName(table, name):
+    for c in range(table.columnCount()):
+        header = table.horizontalHeaderItem(c)
+        if header and header.text().strip() == name:
+            return c
+    if Config.debug:
+        print(f"[DEBUG] Available DataDictionary columns: {[table.horizontalHeaderItem(c).text().strip() for c in range(table.columnCount()) if table.horizontalHeaderItem(c)]}")
+    print(f"[WARN] Column not found in DataDictionary: {name}")
+    return -1
+
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None):
     if Config.debug:
         print("[DEBUG] buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
@@ -258,8 +278,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             dataId = parts[0]
             mrid = parts[1] if len(parts) > 1 else '0'
         if dictRow != -1:
-            siteItem = dataDictionaryTable.item(dictRow, 1)
-            baseLabel = siteItem.text().strip() if siteItem else dataId
+            commonCol = getColByName(dataDictionaryTable, 'commonName')
+            commonItem = dataDictionaryTable.item(dictRow, commonCol) if commonCol != -1 else None
+            baseLabel = commonItem.text().strip() if commonItem else dataId
             if database == 'USGS-NWIS':
                 parts = dataId.split('-')
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
@@ -322,8 +343,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     numRows = len(data)
     if numRows > 10000:
         reply = QMessageBox.warning(None, "Large Dataset Warning",
-                                   f"Query returned {numRows} rows, which may slow down the UI. Consider a smaller date range or coarser interval (e.g., HOUR instead of INSTANT:1). Continue?",
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                                    f"Query returned {numRows} rows, which may slow down the UI. Consider a smaller date range or coarser interval (e.g., HOUR instead of INSTANT:1). Continue?",
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.No:
             if Config.debug:
                 print(f"[DEBUG] buildTable: User canceled due to large dataset ({numRows} rows)")
@@ -431,13 +452,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if Config.debug:
             print("[DEBUG] buildTable: QAQC skipped, cleared cell backgrounds")
 
-def getDataDictionaryItem(table, dataId):
-    for r in range(table.rowCount()):
-        item = table.item(r, 0)
-        if item and item.text().strip() == dataId.strip():
-            return r
-    return -1
-
 def qaqc(table, dataDictionaryTable, lookupIds):
     if not Config.qaqcEnabled:
         if Config.debug:
@@ -459,19 +473,24 @@ def qaqc(table, dataDictionaryTable, lookupIds):
         cutoffMax = None
         rateOfChange = None
         if rowIndex != -1:
-            expectedMinItem = dataDictionaryTable.item(rowIndex, 3)
+            expectedMinCol = getColByName(dataDictionaryTable, 'expectedMin')
+            expectedMinItem = dataDictionaryTable.item(rowIndex, expectedMinCol) if expectedMinCol != -1 else None
             if expectedMinItem and expectedMinItem.text().strip():
                 expectedMin = float(expectedMinItem.text().strip())
-            expectedMaxItem = dataDictionaryTable.item(rowIndex, 4)
+            expectedMaxCol = getColByName(dataDictionaryTable, 'expectedMax')
+            expectedMaxItem = dataDictionaryTable.item(rowIndex, expectedMaxCol) if expectedMaxCol != -1 else None
             if expectedMaxItem and expectedMaxItem.text().strip():
                 expectedMax = float(expectedMaxItem.text().strip())
-            cutoffMinItem = dataDictionaryTable.item(rowIndex, 5)
+            cutoffMinCol = getColByName(dataDictionaryTable, 'cuttoffMin')
+            cutoffMinItem = dataDictionaryTable.item(rowIndex, cutoffMinCol) if cutoffMinCol != -1 else None
             if cutoffMinItem and cutoffMinItem.text().strip():
                 cutoffMin = float(cutoffMinItem.text().strip())
-            cutoffMaxItem = dataDictionaryTable.item(rowIndex, 6)
+            cutoffMaxCol = getColByName(dataDictionaryTable, 'cutoffMax')
+            cutoffMaxItem = dataDictionaryTable.item(rowIndex, cutoffMaxCol) if cutoffMaxCol != -1 else None
             if cutoffMaxItem and cutoffMaxItem.text().strip():
                 cutoffMax = float(cutoffMaxItem.text().strip())
-            rateOfChangeItem = dataDictionaryTable.item(rowIndex, 7)
+            rateOfChangeCol = getColByName(dataDictionaryTable, 'rateOfChange')
+            rateOfChangeItem = dataDictionaryTable.item(rowIndex, rateOfChangeCol) if rateOfChangeCol != -1 else None
             if rateOfChangeItem and rateOfChangeItem.text().strip():
                 rateOfChange = float(rateOfChangeItem.text().strip())
         prevVal = None
@@ -509,10 +528,10 @@ def qaqc(table, dataDictionaryTable, lookupIds):
                 elif cutoffMax is not None and val > cutoffMax:
                     item.setBackground(QColor(192, 28, 40))
                     item.setData(Qt.ItemDataRole.ForegroundRole, None)
-                if rateOfChange is not None and prevVal is not None:
-                    if abs(val - prevVal) > rateOfChange:
-                        item.setBackground(QColor(246, 97, 81))
-                        item.setData(Qt.ItemDataRole.ForegroundRole, None)
+            if rateOfChange is not None and prevVal is not None:
+                if abs(val - prevVal) > rateOfChange:
+                    item.setBackground(QColor(246, 97, 81))
+                    item.setData(Qt.ItemDataRole.ForegroundRole, None)
             if prevVal is not None and val == prevVal:
                 item.setBackground(QColor(87, 227, 137))
                 item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))
