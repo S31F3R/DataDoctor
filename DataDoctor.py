@@ -20,7 +20,7 @@ from ui.uiQuickLook import uiQuickLook
 class uiMain(QMainWindow):
     def __init__(self):
         super().__init__()
-        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self)
+        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self)             
 
         # Define controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
@@ -108,7 +108,7 @@ class uiMain(QMainWindow):
         Utils.reloadGlobals()
 
         if Config.debug:
-            print("[DEBUG] uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
+            Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))     
 
     def btnPublicQueryPressed(self):
         if self.winQuery:
@@ -116,7 +116,7 @@ class uiMain(QMainWindow):
             self.winQuery.show()
 
             if Config.debug:
-                print("[DEBUG] btnPublicQueryPressed: Opened uiQuery as public")
+                Logic.logMessage("DEBUG", "btnPublicQueryPressed: Opened uiQuery as public")                  
 
     def btnInternalQueryPressed(self):
         if self.winQuery:
@@ -124,20 +124,21 @@ class uiMain(QMainWindow):
             self.winQuery.show()
 
             if Config.debug:
-                print("[DEBUG] btnInternalQueryPressed: Opened uiQuery as internal")
+                Logic.logMessage("DEBUG", "btnInternalQueryPressed: Opened uiQuery as internal")           
 
     def showDataDictionary(self):
         if self.winDataDictionary:
             self.winDataDictionary.show()
 
             if Config.debug:
-                print("[DEBUG] showDataDictionary: Opened data dictionary")
+                Logic.logMessage("DEBUG", "showDataDictionary: Opened data dictionary")        
 
     def btnExportCSVPressed(self):
         if self.mainTable.rowCount() == 0:
             QMessageBox.warning(self, "Export CSV", "No data to export.")
+
             if Config.debug:
-                print("[DEBUG] btnExportCSVPressed: No data to export")
+                Logic.logMessage("DEBUG", "btnExportCSVPressed: No data to export")
             return
 
         config = Utils.loadConfig()
@@ -151,7 +152,7 @@ class uiMain(QMainWindow):
 
         if not fileName:
             if Config.debug:
-                print("[DEBUG] btnExportCSVPressed: Export canceled by user")
+                Logic.logMessage("DEBUG", "btnExportCSVPressed: Export canceled by user")
             return
         try:
             with open(fileName, 'w', newline='', encoding='utf-8-sig') as csvFile:
@@ -174,10 +175,9 @@ class uiMain(QMainWindow):
             with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
                 json.dump(config, configFile, indent=2)
             if Config.debug:
-                print(f"[DEBUG] btnExportCSVPressed: Exported table to {fileName}")
+                Logic.logMessage("DEBUG", f"btnExportCSVPressed: Exported table to {fileName}")
         except Exception as e:
-            if Config.debug:
-                print(f"[ERROR] btnExportCSVPressed: Failed to export CSV: {e}")
+            Logic.logMessage("ERROR", f"btnExportCSVPressed: Failed to export CSV: {e}")                
             QMessageBox.warning(self, "Export Error", f"Failed to export CSV: {e}")
 
     def btnOptionsPressed(self):
@@ -185,35 +185,35 @@ class uiMain(QMainWindow):
             self.winOptions.exec()
 
             if Config.debug:
-                print("[DEBUG] btnOptionsPressed: Opened options dialog")
+                Logic.logMessage("DEBUG", "btnOptionsPressed: Opened options dialog")
 
     def btnInfoPressed(self):
         if self.winAbout:
             self.winAbout.exec()
 
             if Config.debug:
-                print("[DEBUG] btnInfoPressed: Opened about dialog")
+                Logic.logMessage("DEBUG", "btnInfoPressed: Opened about dialog")
 
     def btnRefreshPressed(self):
         if self.lastQueryType and self.lastQueryItems:
             Query.executeQuery(self, self.lastQueryItems, self.lastStartDate, self.lastEndDate,
                               self.lastQueryType == 'internal', self.winDataDictionary.mainTable)
             if Config.debug:
-                print("[DEBUG] btnRefreshPressed: Refreshed query with last parameters")
+                Logic.logMessage("DEBUG", "btnRefreshPressed: Refreshed query with last parameters")
         else:
             if Config.debug:
-                print("[DEBUG] btnRefreshPressed: No previous query to refresh")
+                Logic.logMessage("DEBUG", "btnRefreshPressed: No previous query to refresh")
 
     def btnUndoPressed(self):
         if self.mainTable.rowCount() == 0:
             if Config.debug:
-                print("[DEBUG] btnUndoPressed: No data to sort")
+                Logic.logMessage("DEBUG", "btnUndoPressed: No data to sort")
             QMessageBox.information(self, "Undo", "No data to sort.")
             return
         Query.timestampSortTable(self.mainTable, self.winDataDictionary.mainTable)
 
         if Config.debug:
-            print("[DEBUG] btnUndoPressed: Called timestampSortTable")
+            Logic.logMessage("DEBUG", "btnUndoPressed: Called timestampSortTable")
 
     def showHeaderContextMenu(self, pos):
         """Show context menu for header right-click to display full query info."""
@@ -222,7 +222,7 @@ class uiMain(QMainWindow):
 
         if col < 0 or col >= len(self.columnMetadata):
             if Config.debug:
-                print("[DEBUG] showHeaderContextMenu: Invalid column {} clicked".format(col))
+                Logic.logMessage("DEBUG", "showHeaderContextMenu: Invalid column {} clicked".format(col))
             return
 
         meta = self.columnMetadata[col]
@@ -244,7 +244,7 @@ class uiMain(QMainWindow):
         menu.exec(header.mapToGlobal(pos))
 
         if Config.debug:
-            print("[DEBUG] showHeaderContextMenu: Displayed menu for column {}, type {}".format(col, meta['type']))
+            Logic.logMessage("DEBUG", "showHeaderContextMenu: Displayed menu for column {}, type {}".format(col, meta['type']))
 
     def showCellContextMenu(self, pos):
         """Show context menu for cell right-click in overlay columns."""
@@ -263,13 +263,13 @@ class uiMain(QMainWindow):
         menu.exec(self.mainTable.viewport().mapToGlobal(pos))
 
         if Config.debug:
-            print("[DEBUG] showCellContextMenu: Displayed menu for cell ({}, {})".format(row, col))
+            Logic.logMessage("DEBUG", "showCellContextMenu: Displayed menu for cell ({}, {})".format(row, col))
 
     def onTabCloseRequested(self, index):
         self.tabWidget.removeTab(index)
 
         if Config.debug:
-            print(f"[DEBUG] onTabCloseRequested: Closed tab at index {index}")
+            Logic.logMessage("DEBUG", f"onTabCloseRequested: Closed tab at index {index}")
 
     def showMessage(self, title, content):
         """Display QMessageBox with given title and content, auto-sized without word-wrap."""
@@ -297,7 +297,7 @@ class uiMain(QMainWindow):
         msgBox.setFixedWidth(min(maxWidth, QApplication.primaryScreen().availableGeometry().width() - 100)) # Cap to screen
         msgBox.exec()
         if Config.debug:
-            print("[DEBUG] showMessage: Showed {}: {}".format(title, content))
+            Logic.logMessage("DEBUG", "showMessage: Showed {}: {}".format(title, content))
 
     def showOverlayCellDetails(self, row, col):
         """Display details for overlay cell."""
@@ -325,11 +325,14 @@ class uiMain(QMainWindow):
         self.showMessage("Cell Details", msg)
 
         if Config.debug:
-            print("[DEBUG] showOverlayCellDetails: Showed details for cell ({}, {})".format(row, col))
+            Logic.logMessage("DEBUG", "showOverlayCellDetails: Showed details for cell ({}, {})".format(row, col))
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setApplicationName("Data Doctor")
+
+    # Init logging early to capture all events
+    Logic.initLogging()  
 
     # Grab system font color and save as global
     Config.systemTextColor = app.palette().color(QPalette.ColorRole.Text)

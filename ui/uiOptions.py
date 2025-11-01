@@ -112,11 +112,11 @@ class uiOptions(QDialog):
         self.cbUTCOffset.setCurrentIndex(14)
 
         if Config.debug:
-            print("[DEBUG] uiOptions initialized")
+            Logic.logMessage("DEBUG", "uiOptions initialized")
 
     def showEvent(self, event):
         if Config.debug:
-            print(f"[DEBUG] uiOptions showEvent")
+            Logic.logMessage("DEBUG", f"uiOptions showEvent")
 
         Utils.centerWindowToParent(self)
         super().showEvent(event)
@@ -124,7 +124,7 @@ class uiOptions(QDialog):
         self.tabWidget.setCurrentIndex(0)
 
         if Config.debug:
-            print("[DEBUG] uiOptions showEvent")
+            Logic.logMessage("DEBUG", "uiOptions showEvent")
 
     def eventFilter(self, obj, event):
         if obj == self.qleAQPassword and event.type() == QEvent.Type.KeyPress:
@@ -135,7 +135,7 @@ class uiOptions(QDialog):
             self.lastCharTimer.start(500)
 
             if Config.debug:
-                print("[DEBUG] AQ password keypress, showing temporarily")
+                Logic.logMessage("DEBUG", "AQ password keypress, showing temporarily")
         elif obj == self.qleUSGSAPIKey and event.type() == QEvent.Type.KeyPress:
             if self.lastCharTimerUSGS.isActive():
                 self.lastCharTimerUSGS.stop()
@@ -144,7 +144,7 @@ class uiOptions(QDialog):
             self.lastCharTimerUSGS.start(500)
 
             if Config.debug:
-                print("[DEBUG] USGS API key keypress, showing temporarily")
+                Logic.logMessage("DEBUG", "USGS API key keypress, showing temporarily")
         elif obj == self.qleOraclePassword and event.type() == QEvent.Type.KeyPress:
             if self.lastCharTimerOracle.isActive():
                 self.lastCharTimerOracle.stop()
@@ -153,7 +153,7 @@ class uiOptions(QDialog):
             self.lastCharTimerOracle.start(500)
 
             if Config.debug:
-                print("[DEBUG] Oracle password keypress, showing temporarily")
+                Logic.logMessage("DEBUG", "Oracle password keypress, showing temporarily")
         elif obj == self.qleAQPassword and event.type() == QEvent.Type.InputMethod:
             if self.lastCharTimer.isActive():
                 self.lastCharTimer.stop()
@@ -162,7 +162,7 @@ class uiOptions(QDialog):
             self.lastCharTimer.start(500)
 
             if Config.debug:
-                print("[DEBUG] AQ password paste, showing temporarily")
+                Logic.logMessage("DEBUG", "AQ password paste, showing temporarily")
         elif obj == self.qleUSGSAPIKey and event.type() == QEvent.Type.InputMethod:
             if self.lastCharTimerUSGS.isActive():
                 self.lastCharTimerUSGS.stop()
@@ -171,7 +171,7 @@ class uiOptions(QDialog):
             self.lastCharTimerUSGS.start(500)
 
             if Config.debug:
-                print("[DEBUG] USGS API key paste, showing temporarily")
+                Logic.logMessage("DEBUG", "USGS API key paste, showing temporarily")
         elif obj == self.qleOraclePassword and event.type() == QEvent.Type.InputMethod:
             if self.lastCharTimerOracle.isActive():
                 self.lastCharTimerOracle.stop()
@@ -180,26 +180,26 @@ class uiOptions(QDialog):
             self.lastCharTimerOracle.start(500)
 
             if Config.debug:
-                print("[DEBUG] Oracle password paste, showing temporarily")
+                Logic.logMessage("DEBUG", "Oracle password paste, showing temporarily")
         return super().eventFilter(obj, event)
 
     def maskLastChar(self):
         self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)
 
         if Config.debug:
-            print("[DEBUG] AQ password re-masked")
+            Logic.logMessage("DEBUG", "AQ password re-masked")
 
     def maskLastCharUSGS(self):
         self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Password)
 
         if Config.debug:
-            print("[DEBUG] USGS API key re-masked")
+            Logic.logMessage("DEBUG", "USGS API key re-masked")
 
     def maskLastCharOracle(self):
         self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Password)
 
         if Config.debug:
-            print("[DEBUG] Oracle password re-masked")
+            Logic.logMessage("DEBUG", "Oracle password re-masked")
 
     def togglePasswordVisibility(self):
         if self.lastCharTimer.isActive():
@@ -210,13 +210,13 @@ class uiOptions(QDialog):
             self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
 
             if Config.debug:
-                print("[DEBUG] AQ password shown via button")
+                Logic.logMessage("DEBUG", "AQ password shown via button")
         else:
             self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)
             self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
 
             if Config.debug:
-                print("[DEBUG] AQ password masked via button")
+                Logic.logMessage("DEBUG", "AQ password masked via button")
 
     def toggleUSGSKeyVisibility(self):
         if self.lastCharTimerUSGS.isActive():
@@ -227,13 +227,13 @@ class uiOptions(QDialog):
             self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
 
             if Config.debug:
-                print("[DEBUG] USGS API key shown via button")
+                Logic.logMessage("DEBUG", "USGS API key shown via button")
         else:
             self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Password)
             self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
 
             if Config.debug:
-                print("[DEBUG] USGS API key masked via button")
+                Logic.logMessage("DEBUG", "USGS API key masked via button")
 
     def toggleOraclePasswordVisibility(self):
         if self.lastCharTimerOracle.isActive():
@@ -244,13 +244,13 @@ class uiOptions(QDialog):
             self.btnShowOraclePassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
 
             if Config.debug:
-                print("[DEBUG] Oracle password shown via button")
+                Logic.logMessage("DEBUG", "Oracle password shown via button")
         else:
             self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Password)
             self.btnShowOraclePassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
 
             if Config.debug:
-                print("[DEBUG] Oracle password masked via button")
+                Logic.logMessage("DEBUG", "Oracle password masked via button")
 
     def loadSettings(self):
         configPath = Utils.getConfigPath()
@@ -261,10 +261,9 @@ class uiOptions(QDialog):
                 with open(configPath, 'r', encoding='utf-8') as configFile:
                     config = json.load(configFile)
                 if Config.debug:
-                    print("[DEBUG] Loaded config from user.config: {}".format(config))
+                    Logic.logMessage("DEBUG", "Loaded config from user.config: {}".format(config))
             except Exception as e:
-                if Config.debug:
-                    print("[ERROR] Failed to load user.config: {}".format(e))
+                Logic.logMessage("ERROR", "Failed to load user.config: {}".format(e))
 
         utcOffset = config.get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London")
         index = self.cbUTCOffset.findText(utcOffset)
@@ -273,28 +272,28 @@ class uiOptions(QDialog):
             self.cbUTCOffset.setCurrentIndex(index)
 
             if Config.debug:
-                print("[DEBUG] Set cbUTCOffset to: {}".format(utcOffset))
+                Logic.logMessage("DEBUG", "Set cbUTCOffset to: {}".format(utcOffset))
         else:
             self.cbUTCOffset.setCurrentIndex(14)
 
             if Config.debug:
-                print("[DEBUG] utcOffset '{}' not found, set to default UTC+00:00".format(utcOffset))
+                Logic.logMessage("DEBUG", "utcOffset '{}' not found, set to default UTC+00:00".format(utcOffset))
 
         self.chkbRetroMode.setChecked(bool(config.get('retroMode', True)))
         if Config.debug:
-            print("[DEBUG] Set chkbRetroMode to: {}".format(self.chkbRetroMode.isChecked()))
+            Logic.logMessage("DEBUG", "Set chkbRetroMode to: {}".format(self.chkbRetroMode.isChecked()))
             
         self.chkbQAQC.setChecked(bool(config.get('qaqc', True)))
         if Config.debug:
-            print("[DEBUG] Set chkbQAQC to: {}".format(self.chkbQAQC.isChecked()))
+            Logic.logMessage("DEBUG", "Set chkbQAQC to: {}".format(self.chkbQAQC.isChecked()))
 
         self.chkbRawData.setChecked(bool(config.get('rawData', False)))
         if Config.debug:
-            print("[DEBUG] Set chkbRawData to: {}".format(self.chkbRawData.isChecked()))
+            Logic.logMessage("DEBUG", "Set chkbRawData to: {}".format(self.chkbRawData.isChecked()))
 
         self.chkbDebug.setChecked(bool(config.get('debugMode', False)))
         if Config.debug:
-            print("[DEBUG] Set chkbDebug to: {}".format(self.chkbDebug.isChecked()))
+            Logic.logMessage("DEBUG", "Set chkbDebug to: {}".format(self.chkbDebug.isChecked()))
 
         tnsPath = config.get('tnsNamesLocation', '')
 
@@ -310,7 +309,7 @@ class uiOptions(QDialog):
             self.qleTNSNames.setText(envTns)
 
         if Config.debug:
-            print("[DEBUG] Set qleTNSNames to: {}".format(tnsPath))
+            Logic.logMessage("DEBUG", "Set qleTNSNames to: {}".format(tnsPath))
         hourMethod = config.get('hourTimestampMethod', 'EOP')
 
         if hourMethod == 'EOP':
@@ -318,7 +317,7 @@ class uiOptions(QDialog):
         else:
             self.rbBOP.setChecked(True)
         if Config.debug:
-            print("[DEBUG] Set hourTimestampMethod to: {}".format(hourMethod))
+            Logic.logMessage("DEBUG", "Set hourTimestampMethod to: {}".format(hourMethod))
         try:
             self.qleAQServer.setText(keyring.get_password("DataDoctor", "aqServer") or "")
             self.qleAQUser.setText(keyring.get_password("DataDoctor", "aqUser") or "")
@@ -328,10 +327,9 @@ class uiOptions(QDialog):
             self.qleOraclePassword.setText(keyring.get_password("DataDoctor", "oraclePassword") or "")
 
             if Config.debug:
-                print("[DEBUG] Successfully loaded keyring credentials")
+                Logic.logMessage("DEBUG", "Successfully loaded keyring credentials")
         except Exception as e:
-            if Config.debug:
-                print("[ERROR] Failed to load keyring credentials: {}. Using empty strings".format(e))
+            Logic.logMessage("ERROR", "Failed to load keyring credentials: {}. Using empty strings".format(e))
 
             self.qleAQServer.setText("")
             self.qleAQUser.setText("")
@@ -340,7 +338,7 @@ class uiOptions(QDialog):
             self.qleOracleUser.setText("")
             self.qleOraclePassword.setText("")
         if Config.debug:
-            print("[DEBUG] Settings loaded")
+            Logic.logMessage("DEBUG", "Settings loaded")
 
     def onSavePressed(self):
         configPath = Utils.getConfigPath()
@@ -351,10 +349,9 @@ class uiOptions(QDialog):
                 with open(configPath, 'r', encoding='utf-8') as configFile:
                     config = json.load(configFile)
                 if Config.debug:
-                    print("[DEBUG] Read existing user.config: {}".format(config))
+                    Logic.logMessage("DEBUG", "Read existing user.config: {}".format(config))
             except Exception as e:
-                if Config.debug:
-                    print("[ERROR] Failed to load user.config for save: {}".format(e))
+                Logic.logMessage("ERROR", "Failed to load user.config for save: {}".format(e))
 
         previousRetro = config.get('retroMode', True)
         newRetro = self.chkbRetroMode.isChecked()
@@ -376,7 +373,7 @@ class uiOptions(QDialog):
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(config, configFile, indent=2)
         if Config.debug:
-            print("[DEBUG] Saved user.config with retroMode: {}, qaqc: {}, rawData: {}".format(newRetro, self.chkbQAQC.isChecked(), self.chkbRawData.isChecked()))
+            Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}, qaqc: {}, rawData: {}".format(newRetro, self.chkbQAQC.isChecked(), self.chkbRawData.isChecked()))
         Utils.reloadGlobals()
 
         if newRetro != previousRetro:
@@ -398,7 +395,7 @@ class uiOptions(QDialog):
                 Utils.reloadGlobals()
 
                 if Config.debug:
-                    print("[DEBUG] Reverted retro mode to {}".format(previousRetro))
+                    Logic.logMessage("DEBUG", "Reverted retro mode to {}".format(previousRetro))
         credentials = [
             ("aqServer", self.qleAQServer.text()),
             ("aqUser", self.qleAQUser.text()),
@@ -414,11 +411,10 @@ class uiOptions(QDialog):
                     keyring.set_password("DataDoctor", key, value)
 
                     if Config.debug:
-                        print("[DEBUG] Saved {} to keyring".format(key))
+                        Logic.logMessage("DEBUG", "Saved {} to keyring".format(key))
                 except Exception as e:
-                    if Config.debug:
-                        print("[ERROR] Failed to save {} to keyring: {}".format(key, e))
+                    Logic.logMessage("ERROR", "Failed to save {} to keyring: {}".format(key, e))
                     QMessageBox.warning(self, "Credential Save Error", "Failed to save {}: {}".format(key, e))
                     
             elif Config.debug:
-                print("[DEBUG] Skipped saving {} to keyring: empty or invalid".format(key))
+                Logic.logMessage("DEBUG", "Skipped saving {} to keyring: empty or invalid".format(key))

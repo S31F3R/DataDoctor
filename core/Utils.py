@@ -6,7 +6,7 @@ import configparser
 from PyQt6.QtCore import QStandardPaths
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication
-from core import Logic, Config
+from core import Logic, Config, Utils
 
 def applyStylesAndFonts(app, mainTable, queryList):
     """Apply stylesheet and retro font if enabled."""
@@ -428,3 +428,10 @@ def getConfigDir():
     if not os.path.exists(configDir):
         os.makedirs(configDir)
     return configDir
+
+def getLogDir():
+    userConfigDir = Utils.getConfigDir()
+    return os.path.join(userConfigDir, 'logs')
+
+def getLogPath(filename):
+    return os.path.join(Utils.getLogDir(), filename)

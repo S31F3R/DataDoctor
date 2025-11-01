@@ -9,7 +9,7 @@ from DataDoctor import uiMain
 
 def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds, mainWindow=None):
     if Config.debug:
-        print("[DEBUG] modifyTable: Starting with delta={}, overlay={}".format(deltaChecked, overlayChecked))
+        Logic.logMessage("DEBUG", "modifyTable: Starting with delta={}, overlay={}".format(deltaChecked, overlayChecked))
     numRows = table.rowCount()
 
     # Original dataIds from lookupIds
@@ -102,7 +102,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
     if mainWindow:
         mainWindow.columnMetadata = columnMetadata
         if Config.debug:
-            print("[DEBUG] modifyTable: Set columnMetadata via passed mainWindow with {} entries".format(len(columnMetadata)))
+            Logic.logMessage("DEBUG", "modifyTable: Set columnMetadata via passed mainWindow with {} entries".format(len(columnMetadata)))
     else:
         widget = table
         mainWindowFound = None
@@ -114,10 +114,10 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
         if mainWindowFound:
             mainWindowFound.columnMetadata = columnMetadata
             if Config.debug:
-                print("[DEBUG] modifyTable: Set columnMetadata with {} entries".format(len(columnMetadata)))
+                Logic.logMessage("DEBUG", "modifyTable: Set columnMetadata with {} entries".format(len(columnMetadata)))
         else:
             if Config.debug:
-                print("[WARN] modifyTable: Could not find uiMain for columnMetadata")
+                Logic.logMessage("WARN", "modifyTable: Could not find uiMain for columnMetadata")
 
     # Recalculate widths for updated table
     font = table.font()
@@ -146,7 +146,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
     for c in range(table.columnCount()):
         table.setColumnWidth(c, columnWidths[c])
         if Config.debug:
-            print(f"[DEBUG] modifyTable: Set column {c} width to {columnWidths[c]}")
+            Logic.logMessage("DEBUG", f"modifyTable: Set column {c} width to {columnWidths[c]}")
 
 def processDelta(primaryVals, secondaryVals):
     deltas = np.subtract(primaryVals, secondaryVals)

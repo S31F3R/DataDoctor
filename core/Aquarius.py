@@ -14,7 +14,7 @@ maxThreads = 15 # Configurable max number of threads
 
 def apiRead(dataIDs, startDate, endDate, interval):
     if Config.debug:
-        print("[DEBUG] Aquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}".format(dataIDs, interval, startDate, endDate))
+        Logic.logMessage("DEBUG", "Aquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}".format(dataIDs, interval, startDate, endDate))
 
     # Parse start
     startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
@@ -61,7 +61,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
     password = keyring.get_password("DataDoctor", "aqPassword") or ''
 
     if not server or not user or not password:
-        print("[ERROR] Missing Aquarius credentials.")
+        Logic.logMessage("ERROR", "Missing Aquarius credentials.")
         return {uid: {'data': [], 'label': uid} for uid in dataIDs}
 
     # Authenticate session with fallback for SSL verification
@@ -73,7 +73,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
         try:
             if attempt == 'custom_cert' and not os.path.exists(certPath):
                 if Config.debug:
-                    print("[DEBUG] No certificate found at '{}', skipping to unverified.".format(certPath))
+                    Logic.logMessage("DEBUG", "No certificate found at '{}', skipping to unverified.".format(certPath))
                 continue
 
             verifyMode = certPath if attempt == 'custom_cert' else False if attempt == 'unverified' else True
@@ -81,19 +81,19 @@ def apiRead(dataIDs, startDate, endDate, interval):
             authResponse.raise_for_status()
 
             if Config.debug:
-                print(f"[DEBUG] Authentication succeeded with verify={verifyMode}")
+                Logic.logMessage("DEBUG", f"Authentication succeeded with verify={verifyMode}")
             if attempt == 'unverified' and Config.debug:
-                print("[WARN] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.")
+                Logic.logMessage("WARN", "SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.")
             break
         except requests.exceptions.SSLError as e:
             if Config.debug:
-                print(f"[DEBUG] SSL error with verify={verifyMode}: {e}")
+                Logic.logMessage("DEBUG", f"SSL error with verify={verifyMode}: {e}")
             continue
         except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Authentication failed: {e}")
+            Logic.logMessage("ERROR", f"Authentication failed: {e}")
             return {uid: {'data': [], 'label': uid} for uid in dataIDs}
     else:
-        print("[ERROR] Aquarius authentication failed after all attempts.")
+        Logic.logMessage("ERROR", f"Aquarius authentication failed after all attempts.")
         return {uid: {'data': [], 'label': uid} for uid in dataIDs}
 
     token = authResponse.text.strip('"')
@@ -114,13 +114,13 @@ def apiRead(dataIDs, startDate, endDate, interval):
     elif interval == 'DAY':
         delta = timedelta(days=1)
     else:
-        print(f"[ERROR] Unsupported interval: {interval}")
+        Logic.logMessage("ERROR", f"Unsupported interval: {interval}")
         return {uid: {'data': [], 'label': uid} for uid in dataIDs}
     totalPoints = int(totalDuration.total_seconds() / delta.total_seconds()) + 1
     numChunks = (totalPoints + queryLimit - 1) // queryLimit
 
     if Config.debug:
-        print(f"[DEBUG] Estimated {totalPoints} points, splitting into {numChunks} chunks of ~{queryLimit} points each")
+        Logic.logMessage("DEBUG", f"Estimated {totalPoints} points, splitting into {numChunks} chunks of ~{queryLimit} points each")
 
     # Generate sub-ranges
     subRanges = []
@@ -134,7 +134,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
         subRanges.append((subStartStr, subEndStr))
 
     if Config.debug:
-        print(f"[DEBUG] Generated {len(subRanges)} sub-ranges: {[(s, e) for s, e in subRanges[:3]]}")
+        Logic.logMessage("DEBUG", f"Generated {len(subRanges)} sub-ranges: {[(s, e) for s, e in subRanges[:3]]}")
 
     # Threading setup
     resultQueue = queue.Queue()
@@ -143,11 +143,11 @@ def apiRead(dataIDs, startDate, endDate, interval):
     numThreads = min(maxThreads, numTasks)
 
     if Config.debug:
-        print(f"[DEBUG] Created {numTasks} tasks for {len(dataIDs)} UIDs across {len(subRanges)} sub-ranges, using {numThreads} threads")
+        Logic.logMessage("DEBUG", f"Created {numTasks} tasks for {len(dataIDs)} UIDs across {len(subRanges)} sub-ranges, using {numThreads} threads")
 
     def queryTask(uid, subStart, subEnd, threadId):
         if Config.debug:
-            print(f"[DEBUG] Thread {threadId} processing task for UID {uid}, range {subStart} to {subEnd}")
+            Logic.logMessage("DEBUG", f"Thread {threadId} processing task for UID {uid}, range {subStart} to {subEnd}")
         subStartDt = datetime.strptime(subStart, '%Y-%m-%d %H:%M')
         subEndDt = datetime.strptime(subEnd, '%Y-%m-%d %H:%M')
         subStartYear = subStartDt.year
@@ -170,7 +170,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
         try:
             readFile = json.loads(response.content)
         except Exception as e:
-            print(f"[WARN] Aquarius fetch failed for UID '{uid}' in thread {threadId}, range {subStart} to {subEnd}: {e}")
+            Logic.logMessage("WARN", f"Aquarius fetch failed for UID '{uid}' in thread {threadId}, range {subStart} to {subEnd}: {e}")
             resultQueue.put((uid, {'data': [], 'label': uid}))
             return
 
@@ -180,7 +180,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
         points = readFile['Points']
 
         if Config.debug:
-            print(f"[DEBUG] Thread {threadId} fetched {len(points)} points for UID '{uid}', range {subStart} to {subEnd}")
+            Logic.logMessage("DEBUG", f"Thread {threadId} fetched {len(points)} points for UID '{uid}', range {subStart} to {subEnd}")
         outputData = []
 
         for point in points:
@@ -196,7 +196,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
         resultQueue.put((uid, {'data': outputData, 'label': fullLabel}))
 
         if Config.debug:
-            print(f"[DEBUG] Thread {threadId} completed task for UID {uid} with {len(outputData)} points")
+            Logic.logMessage("DEBUG", f"Thread {threadId} completed task for UID {uid} with {len(outputData)} points")
             
     # Start threads
     taskQueue = queue.Queue()
@@ -211,7 +211,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
                 taskQueue.task_done()
             except queue.Empty:
                 if Config.debug:
-                    print(f"[DEBUG] Thread {threadId} found no more tasks")
+                    Logic.logMessage("DEBUG", f"Thread {threadId} found no more tasks")
                 break
     for i in range(numThreads):
         t = threading.Thread(target=worker, args=(i,))
@@ -219,12 +219,12 @@ def apiRead(dataIDs, startDate, endDate, interval):
         t.start()
 
         if Config.debug:
-            print(f"[DEBUG] Started thread {i} for task processing")
+            Logic.logMessage("DEBUG", f"Started thread {i} for task processing")
     for t in threads:
         t.join()
 
         if Config.debug:
-            print(f"[DEBUG] Thread {threads.index(t)} joined")
+            Logic.logMessage("DEBUG", f"Thread {threads.index(t)} joined")
     result = {}
 
     while not resultQueue.empty():
@@ -237,15 +237,15 @@ def apiRead(dataIDs, startDate, endDate, interval):
     for uid in result:
         result[uid]['data'].sort(key=lambda x: datetime.strptime(x.split(',')[0], '%m/%d/%y %H:%M:00'))
     if Config.debug:
-        print(f"[DEBUG] Combined results from {numTasks} tasks with {len(result)} UIDs")
+        Logic.logMessage("DEBUG", f"Combined results from {numTasks} tasks with {len(result)} UIDs")
     for uid in dataIDs:
         if uid not in result:
             result[uid] = {'data': [], 'label': uid}
 
             if Config.debug:
-                print(f"[DEBUG] Added empty result for UID {uid}")
+                Logic.logMessage("DEBUG", f"Added empty result for UID {uid}")
     server = None
     
     if Config.debug:
-        print(f"[DEBUG] Returning result dict with {len(result)} UIDs")
+        Logic.logMessage("DEBUG", f"Returning result dict with {len(result)} UIDs")
     return result

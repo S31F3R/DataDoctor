@@ -63,32 +63,32 @@ class queryWorker(QRunnable):
                         apiInterval = interval
                         result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
                         if Config.debug:
-                            print(f"[DEBUG] queryWorker: USBR result for SDIDs {SDIDs}: {result}")
+                            Logic.logMessage("DEBUG", f"queryWorker: USBR result for SDIDs {SDIDs}: {result}")
                     except Exception as e:
                         if Config.debug:
-                            print(f"[DEBUG] queryWorker: USBR apiRead failed for SDIDs {SDIDs}: {e}")
+                            Logic.logMessage("DEBUG", f"queryWorker: USBR apiRead failed for SDIDs {SDIDs}: {e}")
                         result = {}
                 elif db == 'AQUARIUS' and self.isInternal:
                     try:
                         result = Aquarius.apiRead(SDIDs, self.startDate, self.endDate, interval)
                         if Config.debug:
-                            print(f"[DEBUG] queryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
+                            Logic.logMessage("DEBUG", f"queryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
                     except Exception as e:
                         if Config.debug:
-                            print(f"[DEBUG] queryWorker: Aquarius apiRead failed for SDIDs {SDIDs}: {e}")
+                            Logic.logMessage("DEBUG", f"queryWorker: Aquarius apiRead failed for SDIDs {SDIDs}: {e}")
                         result = {}
                 elif db == 'USGS-NWIS':
                     try:
                         result = USGS.apiRead(SDIDs, interval, self.startDate, self.endDate)
                         if Config.debug:
-                            print(f"[DEBUG] queryWorker: USGS result for SDIDs {SDIDs}: {result}")
+                            Logic.logMessage("DEBUG", f"queryWorker: USGS result for SDIDs {SDIDs}: {result}")
                     except Exception as e:
                         if Config.debug:
-                            print(f"[DEBUG] queryWorker: USGS apiRead failed for SDIDs {SDIDs}: {e}")
+                            Logic.logMessage("DEBUG", f"queryWorker: USGS apiRead failed for SDIDs {SDIDs}: {e}")
                         result = {}
                 else:
                     if Config.debug:
-                        print(f"[DEBUG] queryWorker: Unknown db skipped: {db}")
+                        Logic.logMessage("DEBUG", f"queryWorker: Unknown db skipped: {db}")
                     continue
                 for idx, (origIndex, dataID, SDID) in enumerate(items):
                     if SDID in result and result[SDID]:
@@ -96,7 +96,7 @@ class queryWorker(QRunnable):
                             outputData = result.get(SDID, {}).get('data', [])
                             groupLabels[dataID] = result.get(SDID, {}).get('label', dataID)
                             if Config.debug:
-                                print(f"[DEBUG] queryWorker: Aquarius label for {dataID}: {groupLabels[dataID]}")
+                                Logic.logMessage("DEBUG", f"queryWorker: Aquarius label for {dataID}: {groupLabels[dataID]}")
                         else:
                             outputData = result.get(SDID, [])
                         alignedData = gapCheck(self.timestamps, outputData, dataID)
@@ -107,12 +107,12 @@ class queryWorker(QRunnable):
                         if db == 'AQUARIUS':
                             groupLabels[dataID] = dataID
                         if Config.debug:
-                            print(f"[DEBUG] queryWorker: No data for SDID {SDID} in {db}")
+                            Logic.logMessage("DEBUG", f"queryWorker: No data for SDID {SDID} in {db}")
             if Config.debug:
-                print(f"[DEBUG] queryWorker: Completed group {self.groupKey} with {len(groupResult)} items")
+                Logic.logMessage("DEBUG", f"queryWorker: Completed group {self.groupKey} with {len(groupResult)} items")
         except Exception as e:
             if Config.debug:
-                print(f"[DEBUG] queryWorker: Failed for group {self.groupKey}: {e}")
+                Logic.logMessage("DEBUG", f"queryWorker: Failed for group {self.groupKey}: {e}")
             for _, dataID, _ in items:
                 groupResult[dataID] = self.defaultBlanks
                 if db == 'AQUARIUS':
@@ -121,12 +121,12 @@ class queryWorker(QRunnable):
 
 def buildTimestamps(startDateStr, endDateStr, intervalStr):
     if Config.debug:
-        print("[DEBUG] buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
+        Logic.logMessage("DEBUG", "buildTimestamps called with start: {}, end: {}, interval: {}".format(startDateStr, endDateStr, intervalStr))
     try:
         start = datetime.strptime(startDateStr, '%Y-%m-%d %H:%M')
         end = datetime.strptime(endDateStr, '%Y-%m-%d %H:%M')
     except ValueError as e:
-        print("[ERROR] Invalid date format in buildTimestamps: {}".format(e))
+        Logic.logMessage("ERROR", "Invalid date format in buildTimestamps: {}".format(e))
         return []
     if intervalStr == 'HOUR':
         delta = timedelta(hours=1)
@@ -144,16 +144,16 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
             elif minutes == 60:
                 start = start.replace(minute=0)
             else:
-                print("[ERROR] Unsupported INSTANT interval: {}".format(intervalStr))
+                Logic.logMessage("ERROR", "Unsupported INSTANT interval: {}".format(intervalStr))
                 return []
         except (IndexError, ValueError) as e:
-            print("[ERROR] Invalid INSTANT interval format: {}".format(e))
+            Logic.logMessage("ERROR", "Invalid INSTANT interval format: {}".format(e))
             return []
     elif intervalStr == 'DAY':
         delta = timedelta(days=1)
         start = start.replace(hour=0, minute=0, second=0)
     else:
-        print("[ERROR] Unknown intervalStr: {}".format(intervalStr))
+        Logic.logMessage("ERROR", "Unknown intervalStr: {}".format(intervalStr))
         return []
     timestamps = []
     current = start
@@ -162,18 +162,18 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
         timestamps.append(ts)
         current += delta
     if Config.debug:
-        print("[DEBUG] Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
+        Logic.logMessage("DEBUG", "Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
     return timestamps
 
 def gapCheck(timestamps, data, dataID=''):
     if Config.debug:
-        print("[DEBUG] gapCheck for dataID '{}': timestamps len={}, data len={}".format(dataID, len(timestamps), len(data)))
+        Logic.logMessage("DEBUG", "gapCheck for dataID '{}': timestamps len={}, data len={}".format(dataID, len(timestamps), len(data)))
     if not timestamps:
         return data
     try:
         expectedDateTimes = [datetime.strptime(ts, '%m/%d/%y %H:%M:00') for ts in timestamps]
     except ValueError as e:
-        print("[ERROR] Invalid timestamp format in timestamps: {}".format(e))
+        Logic.logMessage("ERROR", "Invalid timestamp format in timestamps: {}".format(e))
         return data
     newData = []
     removed = []
@@ -221,9 +221,9 @@ def gapCheck(timestamps, data, dataID=''):
         i += 1
     if removed:
         if Config.debug:
-            print("[DEBUG] Removed {} extra/mismatched rows from '{}': ts {}".format(len(removed), dataID, removed))
+            Logic.logMessage("DEBUG", "Removed {} extra/mismatched rows from '{}': ts {}".format(len(removed), dataID, removed))
     if Config.debug:
-        print("[DEBUG] Post-gapCheck len={}, sample first 3: {}".format(len(newData), newData[:3]))
+        Logic.logMessage("DEBUG", "Post-gapCheck len={}, sample first 3: {}".format(len(newData), newData[:3]))
     return newData
 
 def combineParameters(data, newData):
@@ -250,17 +250,17 @@ def getColByName(table, name):
         if header and header.text().strip() == name:
             return c
     if Config.debug:
-        print(f"[DEBUG] Available DataDictionary columns: {[table.horizontalHeaderItem(c).text().strip() for c in range(table.columnCount()) if table.horizontalHeaderItem(c)]}")
+        Logic.logMessage("DEBUG", f"Available DataDictionary columns: {[table.horizontalHeaderItem(c).text().strip() for c in range(table.columnCount()) if table.horizontalHeaderItem(c)]}")
     print(f"[WARN] Column not found in DataDictionary: {name}")
     return -1
 
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None):
     if Config.debug:
-        print("[DEBUG] buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
+        Logic.logMessage("DEBUG", "buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
     table.clear()
     if not data:
         if Config.debug:
-            print("[DEBUG] buildTable: No data to display.")
+            Logic.logMessage("DEBUG", "buildTable: No data to display.")
         return
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
@@ -286,11 +286,11 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                     fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
                     if Config.debug:
-                        print(f"[DEBUG] buildTable: USGS in dict, header {i}: {fullLabel}")
+                        Logic.logMessage("DEBUG", f"buildTable: USGS in dict, header {i}: {fullLabel}")
                 else:
                     fullLabel = f"{baseLabel} \n{intervalStr}"
                     if Config.debug:
-                        print(f"[DEBUG] buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
+                        Logic.logMessage("DEBUG", f"buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
@@ -298,27 +298,27 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 location = parts[1].strip() if len(parts) >= 2 else dataId
                 fullLabel = f"{label} \n{location}"
                 if Config.debug:
-                    print(f"[DEBUG] buildTable: Aquarius in dict, header {i}: {fullLabel}")
+                    Logic.logMessage("DEBUG", f"buildTable: Aquarius in dict, header {i}: {fullLabel}")
             else:
                 if mrid and mrid != '0':
                     fullLabel = f"{baseLabel} \n{dataId}-{mrid}"
                     if Config.debug:
-                        print(f"[DEBUG] buildTable: USBR in dict with MRID, header {i}: {fullLabel}")
+                        Logic.logMessage("DEBUG", f"buildTable: USBR in dict with MRID, header {i}: {fullLabel}")
                 else:
                     fullLabel = f"{baseLabel} \n{dataId}"
                     if Config.debug:
-                        print(f"[DEBUG] buildTable: USBR in dict, header {i}: {fullLabel}")
+                        Logic.logMessage("DEBUG", f"buildTable: USBR in dict, header {i}: {fullLabel}")
         else:
             if database == 'USGS-NWIS':
                 parts = dataId.split('-')
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                     fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
                     if Config.debug:
-                        print(f"[DEBUG] buildTable: Parsed USGS header {i}: {fullLabel}")
+                        Logic.logMessage("DEBUG", f"buildTable: Parsed USGS header {i}: {fullLabel}")
                 else:
                     fullLabel = f"{dataId} \n{intervalStr}"
                     if Config.debug:
-                        print(f"[DEBUG] buildTable: USGS not in dict, header {i}: {fullLabel}")
+                        Logic.logMessage("DEBUG", f"buildTable: USGS not in dict, header {i}: {fullLabel}")
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
@@ -326,16 +326,16 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 location = parts[1].strip() if len(parts) >= 2 else dataId
                 fullLabel = f"{label} \n{location}"
                 if Config.debug:
-                    print(f"[DEBUG] buildTable: Aquarius not in dict, header {i}: {fullLabel}")
+                    Logic.logMessage("DEBUG", f"buildTable: Aquarius not in dict, header {i}: {fullLabel}")
             else:
                 if mrid and mrid != '0':
                     fullLabel = f"{dataId}-{mrid} \n{intervalStr}"
                     if Config.debug:
-                        print(f"[DEBUG] buildTable: USBR not in dict with MRID, header {i}: {fullLabel}")
+                        Logic.logMessage("DEBUG", f"buildTable: USBR not in dict with MRID, header {i}: {fullLabel}")
                 else:
                     fullLabel = f"{dataId} \n{intervalStr}"
                     if Config.debug:
-                        print(f"[DEBUG] buildTable: USBR not in dict, header {i}: {fullLabel}")
+                        Logic.logMessage("DEBUG", f"buildTable: USBR not in dict, header {i}: {fullLabel}")
         processedHeaders.append(fullLabel)
     headers = processedHeaders
     skipDateCol = dataDictionaryTable is not None
@@ -347,10 +347,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.No:
             if Config.debug:
-                print(f"[DEBUG] buildTable: User canceled due to large dataset ({numRows} rows)")
+                Logic.logMessage("DEBUG", f"buildTable: User canceled due to large dataset ({numRows} rows)")
             return
     if Config.debug:
-        print(f"[DEBUG] buildTable: Setting table to {numRows} rows, {numCols} columns")
+        Logic.logMessage("DEBUG", f"buildTable: Setting table to {numRows} rows, {numCols} columns")
     table.setRowCount(numRows)
     table.setColumnCount(numCols)
     table.setHorizontalHeaderLabels(headers)
@@ -369,7 +369,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     columnWidths = []
     sampleRows = min(1000, numRows)
     if Config.debug:
-        print(f"[DEBUG] buildTable: Sampling {sampleRows} rows for column widths")
+        Logic.logMessage("DEBUG", f"buildTable: Sampling {sampleRows} rows for column widths")
     for c in range(numCols):
         cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data[:sampleRows]]
         nonEmptyValues = [val for val in cellValues if val]
@@ -378,11 +378,11 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         else:
             maxCellWidth = metrics.horizontalAdvance("0.00")
             if Config.debug:
-                print(f"[DEBUG] buildTable col {c}: No non-empty values, using fallback width {maxCellWidth}")
+                Logic.logMessage("DEBUG", f"buildTable col {c}: No non-empty values, using fallback width {maxCellWidth}")
         headerLines = headers[c].split('\n')
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
         if Config.debug:
-            print(f"[DEBUG] buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
+            Logic.logMessage("DEBUG", f"buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
         finalWidth = max(maxCellWidth, headerWidth)
         if headerWidth > maxCellWidth:
             paddingIncrease = headerWidth - maxCellWidth
@@ -392,7 +392,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         columnWidths.append(finalWidth)
     table.setUpdatesEnabled(False)
     if Config.debug:
-        print("[DEBUG] buildTable: Disabled table updates for population")
+        Logic.logMessage("DEBUG", "buildTable: Disabled table updates for population")
     for rowIdx, rowStr in enumerate(data):
         rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
         for colIdx in range(min(numCols, len(rowData))):
@@ -404,7 +404,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             table.setItem(rowIdx, colIdx, item)
     table.setUpdatesEnabled(True)
     if Config.debug:
-        print("[DEBUG] buildTable: Re-enabled table updates after population")
+        Logic.logMessage("DEBUG", "buildTable: Re-enabled table updates after population")
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
     header = table.horizontalHeader()
     vHeader = table.verticalHeader()
@@ -413,14 +413,14 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.update()
     header.setStretchLastSection(False)
     if Config.debug:
-        print("[DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.")
+        Logic.logMessage("DEBUG", "buildTable: Set stretchLastSection=False to prevent last column expansion.")
     if dataDictionaryTable:
         maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
         vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
     for c in range(numCols):
         table.setColumnWidth(c, columnWidths[c])
         if Config.debug:
-            print(f"[DEBUG] buildTable: Set column {c} width to {columnWidths[c]}")
+            Logic.logMessage("DEBUG", f"buildTable: Set column {c} width to {columnWidths[c]}")
     rowHeight = metrics.height() + 10
     sampleItem = QTableWidgetItem("189.5140")
     sampleItem.setFont(font)
@@ -429,17 +429,17 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         sampleCellHeight = metrics.height()
     adjustedRowHeight = max(rowHeight, sampleCellHeight + 2)
     if Config.debug:
-        print(f"[DEBUG] buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
+        Logic.logMessage("DEBUG", f"buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
     vHeader.setDefaultSectionSize(adjustedRowHeight)
     if Config.debug:
-        print(f"[DEBUG] buildTable: Set default row height to {adjustedRowHeight}")
+        Logic.logMessage("DEBUG", f"buildTable: Set default row height to {adjustedRowHeight}")
     header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     table.update()
     table.horizontalScrollBar().setValue(0)
     visibleWidth = table.columnWidth(1) if numCols > 1 else 0
     if Config.debug and numCols > 1:
-        print(f"[DEBUG] buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
+        Logic.logMessage("DEBUG", f"buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
     dataIds = buildHeader
     if Config.qaqcEnabled:
         qaqc(table, dataDictionaryTable, dataIds)
@@ -450,12 +450,12 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 if item:
                     item.setBackground(QColor(0, 0, 0, 0))
         if Config.debug:
-            print("[DEBUG] buildTable: QAQC skipped, cleared cell backgrounds")
+            Logic.logMessage("DEBUG", "buildTable: QAQC skipped, cleared cell backgrounds")
 
 def qaqc(table, dataDictionaryTable, lookupIds):
     if not Config.qaqcEnabled:
         if Config.debug:
-            print("[DEBUG] qaqc: Skipped, QAQC disabled in config")
+            Logic.logMessage("DEBUG", "qaqc: Skipped, QAQC disabled in config")
         for r in range(table.rowCount()):
             for c in range(table.columnCount()):
                 item = table.item(r, c)
@@ -465,7 +465,7 @@ def qaqc(table, dataDictionaryTable, lookupIds):
     now = datetime.now()
     for col, lookupId in enumerate(lookupIds):
         if Config.debug:
-            print("[DEBUG] qaqc: Processing column {} for lookupId {}".format(col, lookupId))
+            Logic.logMessage("DEBUG", "qaqc: Processing column {} for lookupId {}".format(col, lookupId))
         rowIndex = getDataDictionaryItem(dataDictionaryTable, lookupId)
         expectedMin = None
         expectedMax = None
@@ -537,7 +537,7 @@ def qaqc(table, dataDictionaryTable, lookupIds):
                 item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))
             prevVal = val
         if Config.debug:
-            print("[DEBUG] qaqc: Processed column {} for lookupId {}".format(col, lookupId))
+            Logic.logMessage("DEBUG", "qaqc: Processed column {} for lookupId {}".format(col, lookupId))
 
 def customSortTable(table, col, dataDictionaryTable):
     pool = QThreadPool.globalInstance()
@@ -575,7 +575,7 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
                 item.setText(Logic.valuePrecision(cellText))
             table.setItem(rowIdx, c, item)
     if Config.debug:
-        print("[DEBUG] Updated table after sort; widths not locked.")
+        Logic.logMessage("DEBUG", "Updated table after sort; widths not locked.")
     headerLabels = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
     dataIds = [label.split('\n')[-1].strip() for label in headerLabels]
     if Config.qaqcEnabled:
@@ -587,12 +587,12 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
                 if item:
                     item.setBackground(QColor(0, 0, 0, 0))
         if Config.debug:
-            print("[DEBUG] updateTableAfterSort: QAQC skipped, cleared cell backgrounds")
+            Logic.logMessage("DEBUG", "updateTableAfterSort: QAQC skipped, cleared cell backgrounds")
     table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
 
 def timestampSortTable(table, dataDictionaryTable):
     if Config.debug:
-        print("[DEBUG] timestampSortTable: Starting sort by timestamps.")
+        Logic.logMessage("DEBUG", "timestampSortTable: Starting sort by timestamps.")
     numRows = table.rowCount()
     rows = []
     for rowIdx in range(numRows):
@@ -610,22 +610,22 @@ def timestampSortTable(table, dataDictionaryTable):
     worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, -1))
     pool.start(worker)
     if Config.debug:
-        print("[DEBUG] Timestamp sort worker started.")
+        Logic.logMessage("DEBUG", "Timestamp sort worker started.")
 
 def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable, deltaChecked=False, overlayChecked=False):
     Config.deltaChecked = deltaChecked
     Config.overlayChecked = overlayChecked
 
     if Config.debug:
-        print("[DEBUG] executeQuery: isInternal={}, items={}".format(isInternal, len(queryItems)))
+        Logic.logMessage("DEBUG", "executeQuery: isInternal={}, items={}".format(isInternal, len(queryItems)))
     if not isInternal:
         queryItems = [item for item in queryItems if item[2] != 'AQUARIUS']
         if Config.debug:
-            print("[DEBUG] executeQuery: Filtered AQUARIUS for public query, remaining items={}".format(len(queryItems)))
+            Logic.logMessage("DEBUG", "executeQuery: Filtered AQUARIUS for public query, remaining items={}".format(len(queryItems)))
     if not queryItems:
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid query items (AQUARIUS not allowed in public queries).")
         if Config.debug:
-            print("[DEBUG] executeQuery: No valid items after filtering, aborting")
+            Logic.logMessage("DEBUG", "executeQuery: No valid items after filtering, aborting")
         return
     progressDialog = QProgressDialog(f"Querying data... (0/{len(set(item[2] for item in queryItems))} complete)", "Cancel", 0, 100, mainWindow)
     progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
@@ -637,7 +637,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     progressDialog.setValue(10)
     progressDialog.repaint()
     if Config.debug:
-        print("[DEBUG] executeQuery: Initialized and showed progress dialog")
+        Logic.logMessage("DEBUG", "executeQuery: Initialized and showed progress dialog")
     queryItems.sort(key=lambda x: x[4])
     firstInterval = queryItems[0][1]
     firstDb = queryItems[0][2]
@@ -657,7 +657,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     progressDialog.repaint()
     QCoreApplication.processEvents()
     if Config.debug:
-        print("[DEBUG] executeQuery: Setup complete, progress at 20%")
+        Logic.logMessage("DEBUG", "executeQuery: Setup complete, progress at 20%")
     defaultBlanks = [''] * len(timestamps)
     labelsDict = {} if isInternal else None
     groups = defaultdict(list)
@@ -678,7 +678,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     numGroups = len(groups)
     numThreads = min(maxDbThreads, numGroups)
     if Config.debug:
-        print(f"[DEBUG] Starting {numThreads} threads for {numGroups} groups in background")
+        Logic.logMessage("DEBUG", f"Starting {numThreads} threads for {numGroups} groups in background")
     threadsStarted = 0
     valueDict = {}
     collected = 0
@@ -689,12 +689,12 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         groupKey, groupResult, groupLabels = result
         if groupKey in processedGroups:
             if Config.debug:
-                print(f"[DEBUG] executeQuery: Duplicate group {groupKey}, skipping")
+                Logic.logMessage("DEBUG", f"executeQuery: Duplicate group {groupKey}, skipping")
             return
         processedGroups.add(groupKey)
         if all(all(v == '' for v in values) for values in groupResult.values()):
             if Config.debug:
-                print(f"[DEBUG] executeQuery: Skipping empty group {groupKey}, no data")
+                Logic.logMessage("DEBUG", f"executeQuery: Skipping empty group {groupKey}, no data")
             collected += 1
             if not progressDialog.wasCanceled():
                 progressDialog.setValue(20 + int(50 * collected / numGroups))
@@ -706,10 +706,10 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         if groupLabels and labelsDict is not None:
             labelsDict.update(groupLabels)
             if Config.debug:
-                print(f"[DEBUG] executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
+                Logic.logMessage("DEBUG", f"executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
         collected += 1
         if Config.debug:
-            print(f"[DEBUG] executeQuery: Collected results for group {groupKey} with {len(groupResult)} items ({collected}/{numGroups})")
+            Logic.logMessage("DEBUG", f"executeQuery: Collected results for group {groupKey} with {len(groupResult)} items ({collected}/{numGroups})")
         if not progressDialog.wasCanceled():
             progressDialog.setValue(20 + int(50 * collected / numGroups))
             progressDialog.setLabelText(f"Completed {groupKey[0]} query ({collected}/{numGroups})")
@@ -719,11 +719,11 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     for i, groupKey in enumerate(groups.keys()):
         signals = queryWorkerSignals()
         worker = queryWorker(groupKey, groups[groupKey], signals, startDate, endDate, isInternal, timestamps, defaultBlanks)
-        signals.resultSignal.connect(lambda result, i=i: [print(f"[DEBUG] executeQuery: Signal received for group {result[0]}") if Config.debug else None, resultQueue.put(result), handleResult(result)][-1])
+        signals.resultSignal.connect(lambda result, i=i: [Logic.logMessage("DEBUG", f"executeQuery: Signal received for group {result[0]}") if Config.debug else None, resultQueue.put(result), handleResult(result)][-1])
         pool.start(worker)
         threadsStarted += 1
         if Config.debug:
-            print(f"[DEBUG] Started background worker {i} for group {groupKey}")
+            Logic.logMessage("DEBUG", f"Started background worker {i} for group {groupKey}")
     if not progressDialog.wasCanceled():
         progressDialog.setValue(20)
         progressDialog.setLabelText(f"Querying data... (0/{numGroups} complete)")
@@ -740,7 +740,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             timer.stop()
             if elapsed > timeoutSeconds:
                 if Config.debug:
-                    print(f"[DEBUG] executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")
+                    Logic.logMessage("DEBUG", f"executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")
                 print(f"[WARN] Query timeout after {timeoutSeconds} seconds; some data may be missing")
                 progressDialog.cancel()
                 QMessageBox.warning(mainWindow, "Query Timeout", "Query timed out; some data may be missing.")
@@ -750,7 +750,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 try:
                     result = resultQueue.get_nowait()
                     if Config.debug:
-                        print(f"[DEBUG] executeQuery: Retrieved result from queue: {result[0]}")
+                        Logic.logMessage("DEBUG", f"executeQuery: Retrieved result from queue: {result[0]}")
                     handleResult(result)
                 except queue.Empty:
                     break
@@ -761,7 +761,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     timer.timeout.connect(checkQueueAndProgress)
     timer.start(100)
     if Config.debug:
-        print("[DEBUG] executeQuery: Started timer for progress updates")
+        Logic.logMessage("DEBUG", "executeQuery: Started timer for progress updates")
     while (collected < numGroups or not resultQueue.empty() or pool.activeThreadCount() > 0) and not progressDialog.wasCanceled():
         time.sleep(0.05)
         QCoreApplication.processEvents()
@@ -770,7 +770,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             try:
                 result = resultQueue.get_nowait()
                 if Config.debug:
-                    print(f"[DEBUG] executeQuery: Processed extra queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
+                    Logic.logMessage("DEBUG", f"executeQuery: Processed extra queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
                 handleResult(result)
             except queue.Empty:
                 break
@@ -780,25 +780,25 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             try:
                 result = resultQueue.get_nowait()
                 if Config.debug:
-                    print(f"[DEBUG] executeQuery: Processed final queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
+                    Logic.logMessage("DEBUG", f"executeQuery: Processed final queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
                 handleResult(result)
             except queue.Empty:
                 break
             retryCount += 1
         if retryCount >= maxRetries:
             if Config.debug:
-                print(f"[DEBUG] executeQuery: Max retries ({maxRetries}) reached for final queue flush, queue size {resultQueue.qsize()}")
+                Logic.logMessage("DEBUG", f"executeQuery: Max retries ({maxRetries}) reached for final queue flush, queue size {resultQueue.qsize()}")
     timer.stop()
     if Config.debug:
-        print(f"[DEBUG] executeQuery: Timer stopped, wait loop ended, final collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
+        Logic.logMessage("DEBUG", f"executeQuery: Timer stopped, wait loop ended, final collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
     QCoreApplication.processEvents()
     if progressDialog.wasCanceled():
         if Config.debug:
-            print(f"[DEBUG] executeQuery: User canceled via progress dialog")
+            Logic.logMessage("DEBUG", f"executeQuery: User canceled via progress dialog")
         progressDialog.cancel()
         return
     if Config.debug:
-        print(f"[DEBUG] executeQuery: All {collected} groups merged")
+        Logic.logMessage("DEBUG", f"executeQuery: All {collected} groups merged")
     progressDialog.setLabelText("Merging results...")
     progressDialog.setValue(70)
     progressDialog.repaint()
@@ -807,7 +807,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         if dataID not in valueDict:
             valueDict[dataID] = defaultBlanks
             if Config.debug:
-                print(f"[DEBUG] Added empty result for dataID {dataID}")
+                Logic.logMessage("DEBUG", f"Added empty result for dataID {dataID}")
     originalDataIds = [item[0] for item in queryItems]
     originalIntervals = [item[1] for item in queryItems]
     databases = [item[2] for item in queryItems]
@@ -822,9 +822,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             progressDialog.repaint()
             QCoreApplication.processEvents()
         if Config.debug:
-            print(f"[DEBUG] executeQuery: Building row {r}/{len(timestamps)}")
+            Logic.logMessage("DEBUG", f"executeQuery: Building row {r}/{len(timestamps)}")
     if Config.debug:
-        print(f"[DEBUG] executeQuery: Built {len(data)} rows for table")
+        Logic.logMessage("DEBUG", f"executeQuery: Built {len(data)} rows for table")
     if not progressDialog.wasCanceled():
         progressDialog.setLabelText("Building table...")
         progressDialog.setValue(70)
@@ -853,21 +853,21 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     'queryInfos': [f"{queryItems[i][0]}|{queryItems[i][1]}|{queryItems[i][2]}"]
                 })
             if Config.debug:
-                print("[DEBUG] executeQuery: Set normal columnMetadata with {} entries".format(len(mainWindow.columnMetadata)))
+                Logic.logMessage("DEBUG", "executeQuery: Set normal columnMetadata with {} entries".format(len(mainWindow.columnMetadata)))
 
         progressDialog.setValue(72)
         progressDialog.repaint()
         QCoreApplication.processEvents()
     if Config.debug:
-        print(f"[DEBUG] executeQuery: Table built, progress dialog completed")
+        Logic.logMessage("DEBUG", f"executeQuery: Table built, progress dialog completed")
     if progressDialog.wasCanceled():
         if Config.debug:
-            print(f"[DEBUG] executeQuery: User canceled during table building")
+            Logic.logMessage("DEBUG", f"executeQuery: User canceled during table building")
         progressDialog.cancel()
         return
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
         if Config.debug:
-            print("[DEBUG] Query executed and table updated.")
+            Logic.logMessage("DEBUG", "Query executed and table updated.")
     progressDialog.cancel()
     QCoreApplication.processEvents()

@@ -4,10 +4,15 @@ import os
 import sys
 import json
 import sqlite3
+import logging
+from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
 from PyQt6.QtCore import QThreadPool, QDir
 from PyQt6.QtWidgets import QTableWidgetItem, QFileDialog, QSplitter, QTreeView
 from core import Config, Utils
+
+# Flag to prevent multiple initializations (module-level for encapsulation)
+_logging_initialized = False
 
 def resourcePath(relativePath):
     """Get absolute path to resource, works for dev and PyInstaller"""
@@ -17,6 +22,57 @@ def resourcePath(relativePath):
         basePath = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # Project root (parent of core/)
     Config.appRoot = basePath
     return os.path.normpath(os.path.join(basePath, relativePath))
+
+def initLogging():
+    global _logging_initialized
+
+    if _logging_initialized:
+        return # Already initialized
+    
+    logDir = Utils.getLogDir()
+    os.makedirs(logDir, exist_ok=True)
+    
+    logger = logging.getLogger('Data Doctor')
+    logger.setLevel(logging.DEBUG) # Capture all levels
+    
+    # Console handler: Print to terminal, format like current prints
+    consoleHandler = logging.StreamHandler()
+    consoleLevel = logging.DEBUG if Config.debug else logging.WARNING
+    consoleHandler.setLevel(consoleLevel)
+    consoleFormatter = logging.Formatter('[%(levelname)s] %(message)s')
+    consoleHandler.setFormatter(consoleFormatter)
+    logger.addHandler(consoleHandler)
+    
+    # File handler: Log to rotating file with timestamps
+    filePath = Utils.getLogPath('app.log')
+    fileHandler = RotatingFileHandler(filePath, maxBytes=1048576, backupCount=5, encoding='utf-8') # 1MB max, 5 backups
+    fileHandler.setLevel(logging.DEBUG) # Log all
+    fileFormatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    fileHandler.setFormatter(fileFormatter)
+    logger.addHandler(fileHandler)
+    
+    _logging_initialized = True
+    
+    if Config.debug:
+        logger.debug("initLogging: Logging initialized with console level {} and file at {}".format(logging.getLevelName(consoleLevel), filePath))
+
+# Log a message with the given level
+def logMessage(level, message):
+    logger = logging.getLogger('Data Doctor')
+    level = level.upper()
+
+    if level == 'DEBUG':
+        logger.debug(message)
+    elif level == 'INFO':
+        logger.info(message)
+    elif level == 'WARN':
+        logger.warning(message)
+    elif level == 'ERROR':
+        logger.error(message)
+    elif level == 'CRITICAL':
+        logger.critical(message)
+    else:
+        logger.warning(f"Unknown log level '{level}': {message}")
 
 def buildDataDictionary(table):
     table.clear()
@@ -30,7 +86,7 @@ def buildDataDictionary(table):
 
             if not rows:
                 if Config.debug:
-                    print("[DEBUG] dataDictionary table empty")
+                    Logic.logMessage("DEBUG", "dataDictionary table empty")
                 return
             headers = [desc[0] for desc in cur.description]
             table.setColumnCount(len(headers))
@@ -46,12 +102,12 @@ def buildDataDictionary(table):
                     item = QTableWidgetItem(valStr)
                     table.setItem(r, c, item)
     except Exception as e:
-        print(f"[ERROR] Failed to build DataDictionary from DB: {e}")
+        Logic.logMessage("ERROR", f"Failed to build DataDictionary from DB: {e}")
         return
     for c in range(table.columnCount()):
         table.resizeColumnToContents(c)
     if Config.debug:
-        print(f"[DEBUG] Built DataDictionary with {table.rowCount()} rows, {table.columnCount()} columns")
+        Logic.logMessage("DEBUG", f"Built DataDictionary with {table.rowCount()} rows, {table.columnCount()} columns")
 
 def loadAllQuickLooks(cbQuickLook):
     cbQuickLook.clear()
@@ -66,9 +122,9 @@ def loadAllQuickLooks(cbQuickLook):
 
                 if name not in quickLookNames:
                     quickLookNames.add(name)
-                    
+
                     if Config.debug:
-                        print(f"[DEBUG] loadAllQuickLooks: Found user Quick Look: {file}")
+                        Logic.logMessage("DEBUG", f"loadAllQuickLooks: Found user Quick Look: {file}")
     
     # Append example Quick Looks (no duplicates – only if not in user)
     exampleDir = Utils.getExampleQuickLookDir()
@@ -82,7 +138,7 @@ def loadAllQuickLooks(cbQuickLook):
                     quickLookNames.add(name)
 
                     if Config.debug:
-                        print(f"[DEBUG] loadAllQuickLooks: Added example Quick Look: {file}")
+                        Logic.logMessage("DEBUG", f"loadAllQuickLooks: Added example Quick Look: {file}")
     
     # Add sorted names to combo box for consistent order
     sortedNames = sorted(quickLookNames)
@@ -90,14 +146,14 @@ def loadAllQuickLooks(cbQuickLook):
     for name in sortedNames:
         cbQuickLook.addItem(name)
         if Config.debug:
-            print(f"[DEBUG] loadAllQuickLooks: Added {name} to cbQuickLook")
+            Logic.logMessage("DEBUG", f"loadAllQuickLooks: Added {name} to cbQuickLook")
 
 def convertLegacyQuickLooks():
     quickLookDir = Utils.getQuickLookDir()
 
     if not os.path.exists(quickLookDir):
         if Config.debug:
-            print("[DEBUG] convertLegacyQuickLooks: Quick Look directory does not exist—skipped.")
+            Logic.logMessage("DEBUG", "convertLegacyQuickLooks: Quick Look directory does not exist—skipped.")
         return
     
     for fileName in os.listdir(quickLookDir):
@@ -108,7 +164,7 @@ def convertLegacyQuickLooks():
             
             if os.path.exists(jsonPath):
                 if Config.debug:
-                    print(f"[WARN] convertLegacyQuickLooks: JSON already exists for {name}—skipping {txtPath}")
+                    Logic.logMessage("DEBUG", f"convertLegacyQuickLooks: JSON already exists for {name}—skipping {txtPath}")
                 continue
             
             try:
@@ -148,17 +204,16 @@ def convertLegacyQuickLooks():
                 os.remove(txtPath)
                 
                 if Config.debug:
-                    print(f"[DEBUG] convertLegacyQuickLooks: Converted and deleted {txtPath} to {jsonPath}")
-            except Exception as e:
-                if Config.debug:
-                    print(f"[ERROR] convertLegacyQuickLooks: Failed to convert {txtPath}: {e}")
+                    Logic.logMessage("DEBUG", f"convertLegacyQuickLooks: Converted and deleted {txtPath} to {jsonPath}")
+            except Exception as e:                
+                Logic.logMessage("ERROR", f"convertLegacyQuickLooks: Failed to convert {txtPath}: {e}")
 
 def saveQuickLook(textQuickLookName, listQueryList):
     name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
 
     if not name:
         if Config.debug:
-            print("[WARN] Empty quick look name—skipped.")
+            Logic.logMessage("WARN", "Empty quick look name—skipped.")
         return
     data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
     quicklookPath = os.path.join(Utils.getQuickLookDir(), f'{name}.json')
@@ -168,17 +223,16 @@ def saveQuickLook(textQuickLookName, listQueryList):
         with open(quicklookPath, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
         if Config.debug:
-            print("[DEBUG] saveQuickLook: Saved Quick Look to {}".format(quicklookPath))
-    except Exception as e:
-        if Config.debug:
-            print("[ERROR] saveQuickLook: Failed to save Quick Look to {}: {}".format(quicklookPath, e))
+            Logic.logMessage("DEBUG", "saveQuickLook: Saved Quick Look to {}".format(quicklookPath))
+    except Exception as e:        
+        Logic.logMessage("ERROR", "saveQuickLook: Failed to save Quick Look to {}: {}".format(quicklookPath, e))
 
 def loadQuickLook(cbQuickLook, listQueryList):
     quickLookName = cbQuickLook.currentText()
 
     if not quickLookName:
         if Config.debug:
-            print("[DEBUG] loadQuickLook: No quick look selected")
+            Logic.logMessage("DEBUG", "loadQuickLook: No quick look selected")
         return
     listQueryList.clear()
     userJsonPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.json')
@@ -198,9 +252,8 @@ def loadQuickLook(cbQuickLook, listQueryList):
     elif os.path.exists(exampleTxtPath):
         quickLookPath = exampleTxtPath
     
-    if not quickLookPath:
-        if Config.debug:
-            print("[WARN] Quick look '{}' not found.".format(quickLookName))
+    if not quickLookPath:        
+        Logic.logMessage("DEWARNBUG", "Quick look '{}' not found.".format(quickLookName))
         return
     
     try:
@@ -239,25 +292,23 @@ def loadQuickLook(cbQuickLook, listQueryList):
                 listQueryList.addItem(f'{dataID}|{interval}|{database}')
 
                 if Config.debug:
-                    print("[DEBUG] loadQuickLook: Added item {}".format(f'{dataID}|{interval}|{database}'))
+                    Logic.logMessage("DEBUG", "loadQuickLook: Added item {}".format(f'{dataID}|{interval}|{database}'))
         
         if Config.debug:
-            print("[DEBUG] loadQuickLook: Loaded '{}' with {} items".format(quickLookName, listQueryList.count()))
+            Logic.logMessage("DEBUG", "loadQuickLook: Loaded '{}' with {} items".format(quickLookName, listQueryList.count()))
         
         # If loaded from user .txt, convert to .json and delete .txt
         if quickLookPath == userTxtPath:
             saveQuickLook(quickLookName, listQueryList)
             os.remove(userTxtPath)
             if Config.debug:
-                print(f"[DEBUG] loadQuickLook: Converted legacy {userTxtPath} to .json and deleted .txt")
-    except Exception as e:
-        if Config.debug:
-            print("[ERROR] loadQuickLook: Failed to load Quick Look from {}: {}".format(quickLookPath, e))
+                Logic.logMessage("DEBUG", f"loadQuickLook: Converted legacy {userTxtPath} to .json and deleted .txt")
+    except Exception as e:        
+        Logic.logMessage("ERROR", "loadQuickLook: Failed to load Quick Look from {}: {}".format(quickLookPath, e))
 
 def deleteQuickLook(quickLookName):
-    if not quickLookName:
-        if Config.debug:
-            print("[WARN] Empty quick look name—cannot delete.")
+    if not quickLookName:        
+        Logic.logMessage("WARN", "Empty quick look name—cannot delete.")
         return False
     
     userQuickLookPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.json')
@@ -266,36 +317,35 @@ def deleteQuickLook(quickLookName):
         try:
             os.remove(userQuickLookPath)
             if Config.debug:
-                print(f"[DEBUG] deleteQuickLook: Deleted Quick Look at {userQuickLookPath}")
+                Logic.logMessage("DEBUG", f"deleteQuickLook: Deleted Quick Look at {userQuickLookPath}")
             return True
         except Exception as e:
             if Config.debug:
-                print(f"[ERROR] deleteQuickLook: Failed to delete Quick Look at {userQuickLookPath}: {e}")
+                Logic.logMessage("DEBUG", f"deleteQuickLook: Failed to delete Quick Look at {userQuickLookPath}: {e}")
             return False
     else:
-        if Config.debug:
-            print(f"[WARN] deleteQuickLook: Cannot delete example Quick Look '{quickLookName}'")
+        Logic.logMessage("WARN", f"deleteQuickLook: Cannot delete example Quick Look '{quickLookName}'")
         return False
 
 def exportTableToCSV(table, fileLocation, fileName):
     if table.rowCount() == 0:
         if Config.debug:
-            print("[DEBUG] exportTableToCSV: Empty table-no export")
+            Logic.logMessage("DEBUG", "exportTableToCSV: Empty table-no export")
         return
     settings = Utils.loadConfig()
 
     if Config.debug:
-        print("[DEBUG] exportTableToCSV: Loaded full settings: {}".format(settings))
+        Logic.logMessage("DEBUG", "exportTableToCSV: Loaded full settings: {}".format(settings))
 
     lastPath = settings.get('lastExportPath', os.path.expanduser("~/Documents"))
     lastPath = os.path.normpath(os.path.abspath(lastPath)) if lastPath else None
 
     if Config.debug:
-        print("[DEBUG] exportTableToCSV: Normalized lastPath: {}".format(lastPath))
+        Logic.logMessage("DEBUG", "exportTableToCSV: Normalized lastPath: {}".format(lastPath))
     if not lastPath or not os.path.exists(lastPath):
         lastPath = os.path.normpath(os.path.expanduser("~/Documents"))
     if Config.debug:
-        print("[DEBUG] exportTableToCSV: Used fallback Documents path")
+        Logic.logMessage("DEBUG", "exportTableToCSV: Used fallback Documents path")
 
     defaultDir = lastPath
     timestamp = datetime.now().strftime('%Y-%m-%d %H%M%S')
@@ -303,7 +353,7 @@ def exportTableToCSV(table, fileLocation, fileName):
     suggestedPath = os.path.normpath(os.path.join(defaultDir, defaultName))
 
     if Config.debug:
-        print("[DEBUG] exportTableToCSV: Suggested path: {}".format(suggestedPath))
+        Logic.logMessage("DEBUG", "exportTableToCSV: Suggested path: {}".format(suggestedPath))
 
     dlg = QFileDialog(None)
     dlg.setWindowTitle("Save CSV As")
@@ -322,7 +372,7 @@ def exportTableToCSV(table, fileLocation, fileName):
     if splitter:
         splitter.setSizes([150, dlg.width() - 150])
     if Config.debug:
-        print("[DEBUG] exportTableToCSV: Adjusted splitter sizes")
+        Logic.logMessage("DEBUG", "exportTableToCSV: Adjusted splitter sizes")
     mainView = dlg.findChild(QTreeView, "fileview")
 
     if not mainView:
@@ -333,19 +383,19 @@ def exportTableToCSV(table, fileLocation, fileName):
         for i in range(header.count()):
             mainView.resizeColumnToContents(i)
     if Config.debug:
-        print("[DEBUG] exportTableToCSV: Resized main view columns")
+        Logic.logMessage("DEBUG", "exportTableToCSV: Resized main view columns")
     if dlg.exec():
         filePath = dlg.selectedFiles()[0]
     else:
         if Config.debug:
-            print("[DEBUG] exportTableToCSV: User canceled dialog")
+            Logic.logMessage("DEBUG", "exportTableToCSV: User canceled dialog")
         return
 
     headers = [table.horizontalHeaderItem(h).text().replace('\n', ' | ') for h in range(table.columnCount())]
     csvLines = ['Date/Time,' + ','.join(headers)]
 
     if Config.debug:
-        print("[DEBUG] exportTableToCSV: Built headers: {}".format(csvLines[0]))
+        Logic.logMessage("DEBUG", "exportTableToCSV: Built headers: {}".format(csvLines[0]))
     timestamps = [table.verticalHeaderItem(r).text() if table.verticalHeaderItem(r) else '' for r in range(table.rowCount())]
 
     for r in range(table.rowCount()):
@@ -355,29 +405,29 @@ def exportTableToCSV(table, fileLocation, fileName):
         with open(filePath, 'w', encoding='utf-8-sig', newline='') as f:
             f.write('\n'.join(csvLines))
         if Config.debug:
-            print("[DEBUG] exportTableToCSV: Successfully wrote CSV to {}".format(filePath))
+            Logic.logMessage("DEBUG", "exportTableToCSV: Successfully wrote CSV to {}".format(filePath))
     except Exception as e:
         if Config.debug:
-            print("[DEBUG] exportTableToCSV: Failed to write CSV: {}".format(e))
+            Logic.logMessage("DEBUG", "exportTableToCSV: Failed to write CSV: {}".format(e))
         return
     exportDir = os.path.normpath(os.path.dirname(filePath))
 
     if Config.debug:
-        print("[DEBUG] exportTableToCSV: Updating lastExportPath to {}".format(exportDir))
+        Logic.logMessage("DEBUG", "exportTableToCSV: Updating lastExportPath to {}".format(exportDir))
     settings['lastExportPath'] = exportDir
 
     if Config.debug:
-        print("[DEBUG] exportTableToCSV: Full settings after update: {}".format(settings))
+        Logic.logMessage("DEBUG", "exportTableToCSV: Full settings after update: {}".format(settings))
     configPath = Utils.getConfigPath()
 
     try:
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(settings, configFile, indent=2)
         if Config.debug:
-            print("[DEBUG] exportTableToCSV: Updated user.config with new lastExportPath-full file preserved")
+            Logic.logMessage("DEBUG", "exportTableToCSV: Updated user.config with new lastExportPath-full file preserved")
     except Exception as e:
         if Config.debug:
-            print("[DEBUG] exportTableToCSV: Failed to update user.config: {}".format(e))
+            Logic.logMessage("DEBUG", "exportTableToCSV: Failed to update user.config: {}".format(e))
 
 def valuePrecision(value):
     """Format value to 2 decimals if <10, 1 if 10-99, 0 if >=100."""
@@ -422,7 +472,7 @@ def setQueryDateRange(window, radioButton, dteStartDate, dteEndDate):
         dteEndDate.setDateTime(now)
     else:
         if Config.debug:
-            print("[DEBUG] Unknown radio button in setQueryDateRange")
+            Logic.logMessage("DEBUG", "Unknown radio button in setQueryDateRange")
 
 def setDefaultButton(window, widget, btnAddQuery, btnQuery):
     if widget == window.qleDataID:
@@ -435,14 +485,14 @@ def setDefaultButton(window, widget, btnAddQuery, btnQuery):
 def initializeQueryWindow(ui, rbCustomDateTime, dteStartDate, dteEndDate):
     """Initialize query window controls"""
     if Config.debug:
-        print("[DEBUG] initializeQueryWindow: Setting initial state")
+        Logic.logMessage("DEBUG", "initializeQueryWindow: Setting initial state")
 
     rbCustomDateTime.setChecked(True)
     dteStartDate.setDateTime(datetime.now() - timedelta(hours=72))
     dteEndDate.setDateTime(datetime.now())
 
     if Config.debug:
-        print("[DEBUG] initializeQueryWindow: Set default dates and radio button")
+        Logic.logMessage("DEBUG", "initializeQueryWindow: Set default dates and radio button")
 
 def loadLastQuickLook(cbQuickLook):
     configPath = Utils.getConfigPath()
@@ -453,10 +503,10 @@ def loadLastQuickLook(cbQuickLook):
             with open(configPath, 'r', encoding='utf-8') as configFile:
                 config = json.load(configFile)
             if Config.debug:
-                print(f"[DEBUG] Loaded config for quick look: {config.get('lastQuickLook', 'none')}")
+                Logic.logMessage("DEBUG", f"Loaded config for quick look: {config.get('lastQuickLook', 'none')}")
         except Exception as e:
             if Config.debug:
-                print(f"[DEBUG] Failed to load user.config for quick look: {e}")
+                Logic.logMessage("DEBUG", f"Failed to load user.config for quick look: {e}")
     if 'lastQuickLook' in config:
         lastQuickLook = config['lastQuickLook']
         index = cbQuickLook.findText(lastQuickLook)
@@ -465,10 +515,10 @@ def loadLastQuickLook(cbQuickLook):
             cbQuickLook.setCurrentIndex(index)
 
             if Config.debug:
-                print(f"[DEBUG] Set cbQuickLook to index {index}: {lastQuickLook}")
+                Logic.logMessage("DEBUG", f"Set cbQuickLook to index {index}: {lastQuickLook}")
         else:
             if Config.debug:
-                print(f"[DEBUG] Last quick look '{lastQuickLook}' not found, setting to -1")
+                Logic.logMessage("DEBUG", f"Last quick look '{lastQuickLook}' not found, setting to -1")
             cbQuickLook.setCurrentIndex(-1)
     else:
         cbQuickLook.setCurrentIndex(-1)
@@ -483,9 +533,9 @@ def getUtcOffsetInt(utcOffsetStr):
         offset = hours + (minutes / 60.0) * (-1 if hours < 0 else 1)
         
         if Config.debug:
-            print("[DEBUG] getUtcOffsetInt: Parsed '{}' to {} hours".format(utcOffsetStr, offset))
+            Logic.logMessage("DEBUG", "getUtcOffsetInt: Parsed '{}' to {} hours".format(utcOffsetStr, offset))
         return offset
     except (ValueError, IndexError) as e:
         if Config.debug:
-            print("[ERROR] getUtcOffsetInt: Failed to parse '{}': {}. Returning 0".format(utcOffsetStr, e))
+            Logic.logMessage("ERROR", "getUtcOffsetInt: Failed to parse '{}': {}. Returning 0".format(utcOffsetStr, e))
         return 0.0

@@ -63,12 +63,10 @@ class uiAbout(QDialog):
             self.soundEffect.setLoopCount(QSoundEffect.Infinite)
             self.soundEffect.setVolume(0.8)
         except Exception as e:
-            if Config.debug:
-                print(f"[ERROR] Failed to load sound effect: {e}")
+            Logic.logMessage("WARN", f"Failed to load sound effect: {e}")
     
-    def showEvent(self, event):
-        if Config.debug:
-            print(f"[DEBUG] uiAbout showEvent")
+    def showEvent(self, event):        
+        Logic.logMessage("WARN", f"uiAbout showEvent")
         Utils.centerWindowToParent(self)     
         
         if self.soundEffect:

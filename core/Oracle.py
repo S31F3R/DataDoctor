@@ -37,10 +37,10 @@ class oracleConnection:
 
         requiredFiles = expectedFiles.get(system)
         if not requiredFiles: raise RuntimeError(f"Unsupported platform: {system}")
-        if Config.debug: print(f"[DEBUG] oracleConnection._setup: Checking for platform-specific files in {clientDir}: {requiredFiles}")
+        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Checking for platform-specific files in {clientDir}: {requiredFiles}")
         filesExist = all((clientDir / f).exists() for f in requiredFiles)
         if not filesExist: raise FileNotFoundError(f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. Please download and unzip the correct Instant Client 23.9 for your platform into oracle/client.")
-        if Config.debug: print(f"[DEBUG] oracleConnection._setup: Validated Instant Client files for {system}")
+        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Validated Instant Client files for {system}")
 
         # Set platform-specific library path
         if system == "windows":
@@ -51,7 +51,7 @@ class oracleConnection:
             os.environ['DYLD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
 
         oracledb.init_oracle_client(lib_dir=str(clientDir))
-        if Config.debug: print(f"[DEBUG] oracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
+        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
 
         # Setup TNS_ADMIN 
         config = Logic.loadConfig()
@@ -62,7 +62,7 @@ class oracleConnection:
 
         if not srcAdminDir.exists():
             srcAdminDir = Path(Logic.resourcePath('oracle/network/admin'))
-            if Config.debug: print(f"[DEBUG] oracleConnection._setup: tnsNamesLocation {tnsAdmin} not found, falling back to {srcAdminDir}")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: tnsNamesLocation {tnsAdmin} not found, falling back to {srcAdminDir}")
 
         self.tnsDir = Path(tempfile.mkdtemp())
         tnsPath = self.tnsDir / "tnsnames.ora"
@@ -70,10 +70,10 @@ class oracleConnection:
 
         if (srcAdminDir / "tnsnames.ora").exists():
             shutil.copy(srcAdminDir / "tnsnames.ora", tnsPath)
-            if Config.debug: print(f"[DEBUG] oracleConnection._setup: Copied tnsnames.ora to {tnsPath}")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Copied tnsnames.ora to {tnsPath}")
         else:
             tnsPath.write_text("")
-            if Config.debug: print("[DEBUG] oracleConnection._setup: Created empty tnsnames.ora")
+            if Config.debug: Logic.logMessage("DEBUG", "oracleConnection._setup: Created empty tnsnames.ora")
         if (srcAdminDir / "sqlnet.ora").exists():
             sqlnetContent = (srcAdminDir / "sqlnet.ora").read_text()
             srcWalletDir = srcAdminDir / "wallet"
@@ -93,15 +93,15 @@ class oracleConnection:
                         f"(METHOD_DATA = (DIRECTORY = {walletDir}))"
                     )
 
-                if Config.debug: print(f"[DEBUG] oracleConnection._setup: Updated sqlnet.ora WALLET_LOCATION to {walletDir}")
+                if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Updated sqlnet.ora WALLET_LOCATION to {walletDir}")
 
             sqlnetPath.write_text(sqlnetContent)
-            if Config.debug: print(f"[DEBUG] oracleConnection._setup: Copied/updated sqlnet.ora to {sqlnetPath}")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Copied/updated sqlnet.ora to {sqlnetPath}")
         else:
             raise FileNotFoundError("sqlnet.ora not found for PIV/MCS configuration.")
         
         os.environ['TNS_ADMIN'] = str(self.tnsDir)
-        if Config.debug: print(f"[DEBUG] oracleConnection._setup: Set TNS_ADMIN to {self.tnsDir}")
+        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Set TNS_ADMIN to {self.tnsDir}")
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""
@@ -110,21 +110,21 @@ class oracleConnection:
             password = keyring.get_password("DataDoctor", "oraclePassword") or ''
 
             if not user or not password:
-                if Config.debug: print("[DEBUG] oracleConnection.connect: Missing Oracle credentials")
+                if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.connect: Missing Oracle credentials")
                 raise ValueError("Oracle username or password not set in keyring")
             
             self.connection = oracledb.connect(user=user, password=password, dsn=self.dsn)
-            if Config.debug: print(f"[DEBUG] oracleConnection.connect: Connection established to {self.dsn}")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Connection established to {self.dsn}")
             user = None
             password = None
             return self.connection
         except oracledb.Error as e:
-            if Config.debug: print(f"[DEBUG] oracleConnection.connect: Error connecting to Oracle: {e}")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Error connecting to Oracle: {e}")
             user = None
             password = None
             raise
         except Exception as e:
-            if Config.debug: print(f"[DEBUG] oracleConnection.connect: Unexpected error: {e}")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Unexpected error: {e}")
             user = None
             password = None
             raise
@@ -134,18 +134,18 @@ class oracleConnection:
 
         # Detect bind variables (e.g., :1, :name) more precisely
         hasBindVars = bool(re.search(r'(?<!\w):(\d+|[a-zA-Z]\w*)', query))
-        if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Query '{query[:100]}' has bind vars: {hasBindVars}")
+        if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Query '{query[:100]}' has bind vars: {hasBindVars}")
 
         if not params and hasBindVars:
-            if Config.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
+            if Config.debug: pLogic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
             raise ValueError("Bind variables found in query but params not provided. Use parameterized input to prevent SQL injection.")
 
         if params and not isinstance(params, (list, tuple)):
-            if Config.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Invalid params type, risking SQL injection")
+            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Invalid params type, risking SQL injection")
             raise ValueError("Params must be a list or tuple to prevent SQL injection")
 
         if params and not hasBindVars:
-            if Config.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Params provided but no bind variables in query")
+            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Params provided but no bind variables in query")
             raise ValueError("Query has no bind variables but params were provided")
 
         cursor = self.connection.cursor()
@@ -155,42 +155,42 @@ class oracleConnection:
 
         try:
             exactQuery = query 
-            if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Validating query: {exactQuery}")
+            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Validating query: {exactQuery}")
 
             if params:
                 cursor.execute(exactQuery, params)
             else:
                 cursor.execute(exactQuery)
 
-            if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Executed query: {exactQuery[:100]} with params {params}")
+            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Executed query: {exactQuery[:100]} with params {params}")
             isSelect = cursor.description is not None
             executionTime = time.time() - startTime
-            if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds")
+            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds")
 
             if isSelect:
                 if fetchAll:
                     results = cursor.fetchall()
-                    if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Fetched {len(results)} rows")
+                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Fetched {len(results)} rows")
                 else:
                     results = cursor.fetchone()
-                    if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Fetched single row: {results}")
+                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Fetched single row: {results}")
                 if cursor.description:
                     columns = [desc[0] for desc in cursor.description]
-                    if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Found columns: {columns}")
+                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Found columns: {columns}")
                     formattedResults = [dict(zip(columns, row)) for row in (results if isinstance(results, list) else [results] if results else [])]
                     return formattedResults
 
                 return results if isinstance(results, list) else [results] if results else []
             else:
                 rowCount = cursor.rowcount
-                if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Affected {rowCount} rows")
+                if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Affected {rowCount} rows")
                 return rowCount
         except oracledb.Error as e:
-            if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Oracle error: {e}")
+            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Oracle error: {e}")
             raise
         finally:
             cursor.close()
-            if Config.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Cursor closed")
+            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Cursor closed")
 
     def executeCustomQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> Any:
         if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
@@ -199,15 +199,15 @@ class oracleConnection:
         hasBindVars = bool(re.search(r':\d+|:[\w]+', query))
 
         if not params and hasBindVars:
-            if Config.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
+            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
             raise ValueError("Bind variables found in query but params not provided. Use parameterized input to prevent SQL injection.")
 
         if params and not isinstance(params, (list, tuple)):
-            if Config.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Invalid params type, risking SQL injection")
+            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Invalid params type, risking SQL injection")
             raise ValueError("Params must be a list or tuple to prevent SQL injection")
 
         if params and not hasBindVars:
-            if Config.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Params provided but no bind variables in query")
+            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Params provided but no bind variables in query")
             raise ValueError("Query has no bind variables but params were provided")
 
         cursor = self.connection.cursor()
@@ -221,35 +221,35 @@ class oracleConnection:
             else:
                 cursor.execute(query)
 
-            if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Executed query: {query[:100]} with params {params}")
+            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Executed query: {query[:100]} with params {params}")
             isSelect = cursor.description is not None
             executionTime = time.time() - startTime
-            if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds")
+            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds")
 
             if isSelect:
                 if fetchAll:
                     results = cursor.fetchall()
-                    if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Fetched {len(results)} rows")
+                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Fetched {len(results)} rows")
                 else:
                     results = cursor.fetchone()
-                    if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Fetched single row: {results}")
+                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Fetched single row: {results}")
                 if cursor.description:
                     columns = [desc[0] for desc in cursor.description]
-                    if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Found columns: {columns}")
+                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Found columns: {columns}")
                     formattedResults = [dict(zip(columns, row)) for row in (results if isinstance(results, list) else [results] if results else [])]
                     return formattedResults
 
                 return results if isinstance(results, list) else [results] if results else []
             else:
                 rowCount = cursor.rowcount
-                if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Affected {rowCount} rows")
+                if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Affected {rowCount} rows")
                 return rowCount
         except oracledb.Error as e:
-            if Config.debug: print(f"[DEBUG] OracleConnection.executeCustomQuery: Oracle error: {e}")
+            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Oracle error: {e}")
             raise
         finally:
             cursor.close()
-            if Config.debug: print("[DEBUG] OracleConnection.executeCustomQuery: Cursor closed")            
+            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Cursor closed")            
 
     def callStoredProcedure(self, procedureName: str, params: Optional[List[Any]] = None) -> List[Any]:
         """Call an Oracle stored procedure and return output values."""
@@ -258,41 +258,41 @@ class oracleConnection:
 
         try:
             output = cursor.callproc(procedureName, params or [])
-            if Config.debug: print(f"[DEBUG] oracleConnection.callStoredProcedure: Called {procedureName} with params: {params}")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.callStoredProcedure: Called {procedureName} with params: {params}")
             return output
         except oracledb.Error as e:
-            if Config.debug: print(f"[DEBUG] oracleConnection.callStoredProcedure: Error calling procedure: {e}")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.callStoredProcedure: Error calling procedure: {e}")
             raise
         finally:
             cursor.close()
-            if Config.debug: print("[DEBUG] oracleConnection.callStoredProcedure: Cursor closed")
+            if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.callStoredProcedure: Cursor closed")
 
     def close(self):
         """Close connection and clean up TNS_ADMIN directory."""
         try:
             if self.connection:
                 self.connection.close()
-                if Config.debug: print("[DEBUG] oracleConnection.close: Connection closed.")
+                if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.close: Connection closed.")
         except oracledb.Error as e:
-            if Config.debug: print(f"[DEBUG] oracleConnection.close: Error closing connection: {e}")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.close: Error closing connection: {e}")
         finally:
             if self.tnsDir:
                 shutil.rmtree(self.tnsDir, ignore_errors=True)
-                if Config.debug: print("[DEBUG] oracleConnection.close: Cleaned up TNS_ADMIN directory")
+                if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.close: Cleaned up TNS_ADMIN directory")
 
     def testConnection(self):
-        if Config.debug: print(f"[DEBUG] oracleConnection.testConnection: Testing connection to {self.dsn}")       
+        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.testConnection: Testing connection to {self.dsn}")       
 
         try:
             self.connect()
             result = self.executeQuery("SELECT SYSDATE FROM DUAL", fetchAll=False)
-            if Config.debug: print(f"[DEBUG] oracleConnection.testConnection: Query result: {result}")
-            if result: print(f"[INFO] Successfully connected to {self.dsn} and fetched SYSDATE: {result[0]}")
-            else: print(f"[WARN] Connected to {self.dsn} but no result from query")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.testConnection: Query result: {result}")
+            if result: Logic.logMessage("INFO", f"Successfully connected to {self.dsn} and fetched SYSDATE: {result[0]}")
+            else: Logic.logMessage("WARN", f"Connected to {self.dsn} but no result from query")
             return True
         except Exception as e:
-            if Config.debug: print(f"[DEBUG] oracleConnection.testConnection: Failed to connect to {self.dsn}: {e}")
-            print(f"[ERROR] Connected test failed: {e}")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.testConnection: Failed to connect to {self.dsn}: {e}")
+            Logic.logMessage("ERROR", f"Connected test failed: {e}")
             return False
         finally: 
             self.close()

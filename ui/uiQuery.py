@@ -15,14 +15,13 @@ class uiQuery(QMainWindow):
         ui_path = Logic.resourcePath('ui/winQuery.ui')
 
         if Config.debug:
-            print(f"[DEBUG] Loading UI file: {ui_path}")
+            Logic.logMessage("DEBUG", f"Loading UI file: {ui_path}")
             if not os.path.exists(ui_path):
-                print(f"[ERROR] UI file not found: {ui_path}")
+                Logic.logMessage("ERROR", f"UI file not found: {ui_path}")
         try:
             uic.loadUi(ui_path, self)
         except Exception as e:
-            if Config.debug:
-                print(f"[ERROR] Failed to load UI file: {e}")
+            Logic.logMessage("ERROR", f"Failed to load UI file: {e}")
             raise
 
         # Define controls
@@ -118,11 +117,11 @@ class uiQuery(QMainWindow):
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowMaximizeButtonHint)
 
         if Config.debug:
-            print("[DEBUG] uiQuery initialized")
+            Logic.logMessage("DEBUG", "uiQuery initialized")
 
     def showEvent(self, event):
         if Config.debug:
-            print("[DEBUG] uiQuery showEvent: queryType={}".format(self.queryType))
+            Logic.logMessage("DEBUG", "uiQuery showEvent: queryType={}".format(self.queryType))
         Utils.centerWindowToParent(self)
         Logic.loadLastQuickLook(self.cbQuickLook)
         Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
@@ -136,16 +135,15 @@ class uiQuery(QMainWindow):
             self.setWindowTitle("Public Query")
 
             if Config.debug:
-                print("[DEBUG] uiQuery showEvent: Set window icon to PublicQuery.png and title to Public Query")
+                Logic.logMessage("DEBUG", "uiQuery showEvent: Set window icon to PublicQuery.png and title to Public Query")
         elif self.queryType == 'internal':
             self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/InternalQuery.png')))
             self.setWindowTitle("Internal Query")
 
             if Config.debug:
-                print("[DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png and title to Internal Query")
+                Logic.logMessage("DEBUG", "uiQuery showEvent: Set window icon to InternalQuery.png and title to Internal Query")
         else:
-            if Config.debug:
-                print("[WARN] uiQuery showEvent: queryType not set, defaulting to public")
+            Logic.logMessage("WARN", "uiQuery showEvent: queryType not set, defaulting to public")
 
             self.queryType = 'public'
             self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/PublicQuery.png')))
@@ -155,29 +153,29 @@ class uiQuery(QMainWindow):
     def eventFilter(self, obj, event):
         if obj == self.qleDataID and event.type() == QEvent.Type.FocusIn:
             if Config.debug:
-                print("[DEBUG] qleDataID focus in, setting Add Query default")
+                Logic.logMessage("DEBUG", "qleDataID focus in, setting Add Query default")
             Logic.setDefaultButton(self, self.qleDataID, self.btnAddQuery, self.btnQuery)
         elif obj == self.qleDataID and event.type() == QEvent.Type.FocusOut:
             if Config.debug:
-                print("[DEBUG] qleDataID focus out, setting Query Data default")
+                Logic.logMessage("DEBUG", "qleDataID focus out, setting Query Data default")
             Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
         elif event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if Config.debug:
-                print("[DEBUG] Enter key pressed")
+                Logic.logMessage("DEBUG", "Enter key pressed")
             if self.qleDataID.hasFocus():
                 if Config.debug:
-                    print("[DEBUG] qleDataID focused, triggering btnAddQueryPressed")
+                    Logic.logMessage("DEBUG", "qleDataID focused, triggering btnAddQueryPressed")
                 self.btnAddQueryPressed()
             elif self.btnQuery.isDefault():
                 if Config.debug:
-                    print("[DEBUG] btnQuery is default, triggering btnQueryPressed")
+                    Logic.logMessage("DEBUG", "btnQuery is default, triggering btnQueryPressed")
                 self.btnQueryPressed()
             return True
         return super().eventFilter(obj, event)
 
     def btnQueryPressed(self):
         if Config.debug:
-            print("[DEBUG] btnQueryPressed: Starting query process, queryType={}".format(self.queryType))
+            Logic.logMessage("DEBUG", "btnQueryPressed: Starting query process, queryType={}".format(self.queryType))
         startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
         endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
         queryItems = []
@@ -187,9 +185,9 @@ class uiQuery(QMainWindow):
             parts = itemText.split('|')
 
             if Config.debug:
-                print(f"[DEBUG] Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
+                Logic.logMessage("DEBUG", f"Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
             if len(parts) != 3:
-                print(f"[WARN] Invalid item skipped: {itemText}")
+                Logic.logMessage("WARN", f"Invalid item skipped: {itemText}")
                 continue
 
             dataId, interval, database = parts
@@ -201,7 +199,7 @@ class uiQuery(QMainWindow):
             queryItems.append((dataId, interval, database, mrid, i))
 
             if Config.debug:
-                print(f"[DEBUG] Added queryItem: {(dataId, interval, database, mrid, i)}")
+                Logic.logMessage("DEBUG", f"Added queryItem: {(dataId, interval, database, mrid, i)}")
         if not queryItems and self.qleDataID.text().strip():
             dataId = self.qleDataID.text().strip()
             interval = self.cbInterval.currentText()
@@ -214,12 +212,13 @@ class uiQuery(QMainWindow):
             queryItems.append((dataId, interval, database, mrid, 0))
 
             if Config.debug:
-                print(f"[DEBUG] Added single query: {(dataId, interval, database, mrid, 0)}")
+                Logic.logMessage("DEBUG", f"Added single query: {(dataId, interval, database, mrid, 0)}")
         elif not queryItems:
-            print("[WARN] No valid query items.")
+            Logic.logMessage("WARN", "No valid query items.")
             return
         deltaChecked = self.chkbDelta.isChecked()
         overlayChecked = self.chkbOverlay.isChecked()
+
         if self.winMain:
             self.winMain.lastQueryType = self.queryType
             self.winMain.lastQueryItems = queryItems
@@ -229,20 +228,20 @@ class uiQuery(QMainWindow):
             self.winMain.lastInterval = self.cbInterval.currentText() if not queryItems else None
 
             if Config.debug:
-                print("[DEBUG] Stored last query as {}".format(self.queryType))
+                Logic.logMessage("DEBUG", "Stored last query as {}".format(self.queryType))
             Query.executeQuery(self.winMain, queryItems, startDate, endDate,
                               self.queryType == 'internal', self.winMain.winDataDictionary.mainTable, deltaChecked, overlayChecked)
             self.close()
 
             if Config.debug:
-                print("[DEBUG] Query window closed after query.")
+                Logic.logMessage("DEBUG", "Query window closed after query.")
 
     def btnSaveQuickLookPressed(self):
         if Config.debug:
-            print("[DEBUG] btnSaveQuickLookPressed: Attempting to open Save Quick Look dialog")
+            Logic.logMessage("DEBUG", "btnSaveQuickLookPressed: Attempting to open Save Quick Look dialog")
         if self.listQueryList.count() == 0:
             if Config.debug:
-                print("[DEBUG] btnSaveQuickLookPressed: Empty query list, showing warning")
+                Logic.logMessage("DEBUG", "btnSaveQuickLookPressed: Empty query list, showing warning")
             QMessageBox.warning(self, "Empty Query List", "Cannot save Quick Look: No items in the query list.")
             return
         if self.winMain:
@@ -253,7 +252,7 @@ class uiQuery(QMainWindow):
             self.activateWindow()
 
             if Config.debug:
-                print("[DEBUG] btnSaveQuickLookPressed: Save Quick Look dialog opened and closed")
+                Logic.logMessage("DEBUG", "btnSaveQuickLookPressed: Save Quick Look dialog opened and closed")
 
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
@@ -265,23 +264,22 @@ class uiQuery(QMainWindow):
                 with open(configPath, 'r', encoding='utf-8') as configFile:
                     config = json.load(configFile)
                 if Config.debug:
-                    print(f"[DEBUG] Loaded config: {config}")
+                    Logic.logMessage("DEBUG", f"Loaded config: {config}")
             except Exception as e:
-                if Config.debug:
-                    print(f"[ERROR] Failed to load user.config: {e}")
+                Logic.logMessage("ERROR", f"Failed to load user.config: {e}")
         config['lastQuickLook'] = self.cbQuickLook.currentText()
 
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(config, configFile, indent=2)
         if Config.debug:
-            print(f"[DEBUG] Loaded quick look: {self.cbQuickLook.currentText()}")
+            Logic.logMessage("DEBUG", f"Loaded quick look: {self.cbQuickLook.currentText()}")
 
     def btnDeleteQuickLookPressed(self):
         quickLookName = self.cbQuickLook.currentText()
 
         if not quickLookName:
             if Logic.Config.debug:
-                print("[DEBUG] btnDeleteQuickLookPressed: No Quick Look selected to delete")
+                Logic.logMessage("DEBUG", "btnDeleteQuickLookPressed: No Quick Look selected to delete")
             return
         
         # Confirm deletion with user
@@ -297,11 +295,11 @@ class uiQuery(QMainWindow):
             self.cbQuickLook.setCurrentIndex(-1)
             
             if Logic.Config.debug:
-                print(f"[DEBUG] btnDeleteQuickLookPressed: Removed '{quickLookName}' from combo box and cleared selection")
+                Logic.logMessage("DEBUG", f"btnDeleteQuickLookPressed: Removed '{quickLookName}' from combo box and cleared selection")
         else:
             QMessageBox.warning(self, "Cannot Delete", "Example Quick Looks cannot be deleted.")
             if Logic.Config.debug:
-                print(f"[DEBUG] btnDeleteQuickLookPressed: Attempted to delete example Quick Look '{quickLookName}'—skipped")
+                Logic.logMessage("DEBUG", f"btnDeleteQuickLookPressed: Attempted to delete example Quick Look '{quickLookName}'—skipped")
 
     def btnAddQueryPressed(self):
         dataID = self.qleDataID.text().strip()
@@ -310,7 +308,7 @@ class uiQuery(QMainWindow):
 
         if not dataID:
             if Config.debug:
-                print("[DEBUG] btnAddQueryPressed: No Data ID entered, skipping")
+                Logic.logMessage("DEBUG", "btnAddQueryPressed: No Data ID entered, skipping")
             return
 
         itemText = f"{dataID}|{interval}|{database}"
@@ -320,61 +318,61 @@ class uiQuery(QMainWindow):
         self.listQueryList.scrollToBottom()
 
         if Config.debug:
-            print(f"[DEBUG] btnAddQueryPressed: Added item: {itemText}")
+            Logic.logMessage("DEBUG", f"btnAddQueryPressed: Added item: {itemText}")
 
     def btnRemoveQueryPressed(self):
         selectedItems = self.listQueryList.selectedItems()
 
         if not selectedItems:
             if Config.debug:
-                print("[DEBUG] btnRemoveQueryPressed: No items selected, skipping")
+                Logic.logMessage("DEBUG", "btnRemoveQueryPressed: No items selected, skipping")
             return
         for item in selectedItems:
             self.listQueryList.takeItem(self.listQueryList.row(item))
         if Config.debug:
-            print(f"[DEBUG] btnRemoveQueryPressed: Removed {len(selectedItems)} items")
+            Logic.logMessage("DEBUG", f"btnRemoveQueryPressed: Removed {len(selectedItems)} items")
 
     def btnClearQueryPressed(self):
         self.listQueryList.clear()
         if Config.debug:
-            print("[DEBUG] btnClearQueryPressed: Cleared query list")
+            Logic.logMessage("DEBUG", "btnClearQueryPressed: Cleared query list")
 
     def btnDataIdInfoPressed(self):
         QMessageBox.information(self, "DataID Formats", "AQUARIUS Format: \nUID \n\nUSBR Format: \nSDID \nSDID-MRID \n\nUSGS Format: \nSite-Method-Parameter")
         if Config.debug:
-            print("[DEBUG] Data ID info displayed")
+            Logic.logMessage("DEBUG", "Data ID info displayed")
 
     def btnIntervalInfoPressed(self):
         QMessageBox.information(self, "Interval Info", "Interval determines what timestamps are displayed and what table the data is queried from (USBR).\n\nIn a query list, timestamp interval is determined by first dataID in the list.")
         if Config.debug:
-            print("[DEBUG] Interval info displayed")
+            Logic.logMessage("DEBUG", "Interval info displayed")
 
     def btnUpMaxPressed(self):
         selectedItems = self.listQueryList.selectedItems()
         if not selectedItems:
             if Config.debug:
-                print("[DEBUG] btnUpMaxPressed: No items selected, skipping")
+                Logic.logMessage("DEBUG", "btnUpMaxPressed: No items selected, skipping")
             return
         for item in selectedItems:
             currentRow = self.listQueryList.row(item)
 
             if currentRow == 0:
                 if Config.debug:
-                    print(f"[DEBUG] btnUpMaxPressed: Item at row {currentRow} already at top")
+                    Logic.logMessage("DEBUG", f"btnUpMaxPressed: Item at row {currentRow} already at top")
                 continue
 
             self.listQueryList.takeItem(currentRow)
             self.listQueryList.insertItem(0, item)
             self.listQueryList.setCurrentItem(item)
         if Config.debug:
-            print("[DEBUG] btnUpMaxPressed: Moved selected items to top")
+            Logic.logMessage("DEBUG", "btnUpMaxPressed: Moved selected items to top")
 
     def btnUp15Pressed(self):
         selectedItems = self.listQueryList.selectedItems()
 
         if not selectedItems:
             if Config.debug:
-                print("[DEBUG] btnUp15Pressed: No items selected, skipping")
+                Logic.logMessage("DEBUG", "btnUp15Pressed: No items selected, skipping")
             return
         for item in selectedItems:
             currentRow = self.listQueryList.row(item)
@@ -382,21 +380,21 @@ class uiQuery(QMainWindow):
 
             if currentRow == newRow:
                 if Config.debug:
-                    print(f"[DEBUG] btnUp15Pressed: Item at row {currentRow} already at top")
+                    Logic.logMessage("DEBUG", f"btnUp15Pressed: Item at row {currentRow} already at top")
                 continue
 
             self.listQueryList.takeItem(currentRow)
             self.listQueryList.insertItem(newRow, item)
             self.listQueryList.setCurrentItem(item)
         if Config.debug:
-            print("[DEBUG] btnUp15Pressed: Moved selected items up by 15")
+            Logic.logMessage("DEBUG", "btnUp15Pressed: Moved selected items up by 15")
 
     def btnUp5Pressed(self):
         selectedItems = self.listQueryList.selectedItems()
 
         if not selectedItems:
             if Config.debug:
-                print("[DEBUG] btnUp5Pressed: No items selected, skipping")
+                Logic.logMessage("DEBUG", "btnUp5Pressed: No items selected, skipping")
             return
         for item in selectedItems:
             currentRow = self.listQueryList.row(item)
@@ -404,21 +402,21 @@ class uiQuery(QMainWindow):
 
             if currentRow == newRow:
                 if Config.debug:
-                    print(f"[DEBUG] btnUp5Pressed: Item at row {currentRow} already at top")
+                    Logic.logMessage("DEBUG", f"btnUp5Pressed: Item at row {currentRow} already at top")
                 continue
 
             self.listQueryList.takeItem(currentRow)
             self.listQueryList.insertItem(newRow, item)
             self.listQueryList.setCurrentItem(item)
         if Config.debug:
-            print("[DEBUG] btnUp5Pressed: Moved selected items up by 5")
+            Logic.logMessage("DEBUG", "btnUp5Pressed: Moved selected items up by 5")
 
     def btnUp1Pressed(self):
         selectedItems = self.listQueryList.selectedItems()
 
         if not selectedItems:
             if Config.debug:
-                print("[DEBUG] btnUp1Pressed: No items selected, skipping")
+                Logic.logMessage("DEBUG", "btnUp1Pressed: No items selected, skipping")
             return
         for item in selectedItems:
             currentRow = self.listQueryList.row(item)
@@ -426,21 +424,21 @@ class uiQuery(QMainWindow):
 
             if currentRow == newRow:
                 if Config.debug:
-                    print(f"[DEBUG] btnUp1Pressed: Item at row {currentRow} already at top")
+                    Logic.logMessage("DEBUG", f"btnUp1Pressed: Item at row {currentRow} already at top")
                 continue
 
             self.listQueryList.takeItem(currentRow)
             self.listQueryList.insertItem(newRow, item)
             self.listQueryList.setCurrentItem(item)
         if Config.debug:
-            print("[DEBUG] btnUp1Pressed: Moved selected items up by 1")
+            Logic.logMessage("DEBUG", "btnUp1Pressed: Moved selected items up by 1")
 
     def btnDownMaxPressed(self):
         selectedItems = self.listQueryList.selectedItems()
         
         if not selectedItems:
             if Config.debug:
-                print("[DEBUG] btnDownMaxPressed: No items selected, skipping")
+                Logic.logMessage("DEBUG", "btnDownMaxPressed: No items selected, skipping")
             return
         bottomRow = self.listQueryList.count() - 1
 
@@ -449,21 +447,21 @@ class uiQuery(QMainWindow):
 
             if currentRow == bottomRow:
                 if Config.debug:
-                    print(f"[DEBUG] btnDownMaxPressed: Item at row {currentRow} already at bottom")
+                    Logic.logMessage("DEBUG", f"btnDownMaxPressed: Item at row {currentRow} already at bottom")
                 continue
 
             self.listQueryList.takeItem(currentRow)
             self.listQueryList.addItem(item)
             self.listQueryList.setCurrentItem(item)
         if Config.debug:
-            print("[DEBUG] btnDownMaxPressed: Moved selected items to bottom")
+            Logic.logMessage("DEBUG", "btnDownMaxPressed: Moved selected items to bottom")
 
     def btnDown15Pressed(self):
         selectedItems = self.listQueryList.selectedItems()
 
         if not selectedItems:
             if Config.debug:
-                print("[DEBUG] btnDown15Pressed: No items selected, skipping")
+                Logic.logMessage("DEBUG", "btnDown15Pressed: No items selected, skipping")
             return
         bottomRow = self.listQueryList.count() - 1
 
@@ -473,21 +471,21 @@ class uiQuery(QMainWindow):
 
             if currentRow == newRow:
                 if Config.debug:
-                    print(f"[DEBUG] btnDown15Pressed: Item at row {currentRow} already at bottom")
+                    Logic.logMessage("DEBUG", f"btnDown15Pressed: Item at row {currentRow} already at bottom")
                 continue
 
             self.listQueryList.takeItem(currentRow)
             self.listQueryList.insertItem(newRow, item)
             self.listQueryList.setCurrentItem(item)
         if Config.debug:
-            print("[DEBUG] btnDown15Pressed: Moved selected items down by 15")
+            Logic.logMessage("DEBUG", "btnDown15Pressed: Moved selected items down by 15")
 
     def btnDown5Pressed(self):
         selectedItems = self.listQueryList.selectedItems()
 
         if not selectedItems:
             if Config.debug:
-                print("[DEBUG] btnDown5Pressed: No items selected, skipping")
+                Logic.logMessage("DEBUG", "btnDown5Pressed: No items selected, skipping")
             return
         bottomRow = self.listQueryList.count() - 1
 
@@ -497,21 +495,21 @@ class uiQuery(QMainWindow):
 
             if currentRow == newRow:
                 if Config.debug:
-                    print(f"[DEBUG] btnDown5Pressed: Item at row {currentRow} already at bottom")
+                    Logic.logMessage("DEBUG", f"btnDown5Pressed: Item at row {currentRow} already at bottom")
                 continue
 
             self.listQueryList.takeItem(currentRow)
             self.listQueryList.insertItem(newRow, item)
             self.listQueryList.setCurrentItem(item)
         if Config.debug:
-            print("[DEBUG] btnDown5Pressed: Moved selected items down by 5")
+            Logic.logMessage("DEBUG", "btnDown5Pressed: Moved selected items down by 5")
 
     def btnDown1Pressed(self):
         selectedItems = self.listQueryList.selectedItems()
 
         if not selectedItems:
             if Config.debug:
-                print("[DEBUG] btnDown1Pressed: No items selected, skipping")
+                Logic.logMessage("DEBUG", "btnDown1Pressed: No items selected, skipping")
             return
         bottomRow = self.listQueryList.count() - 1
 
@@ -521,22 +519,22 @@ class uiQuery(QMainWindow):
 
             if currentRow == newRow:
                 if Config.debug:
-                    print(f"[DEBUG] btnDown1Pressed: Item at row {currentRow} already at bottom")
+                    Logic.logMessage("DEBUG", f"btnDown1Pressed: Item at row {currentRow} already at bottom")
                 continue
             
             self.listQueryList.takeItem(currentRow)
             self.listQueryList.insertItem(newRow, item)
             self.listQueryList.setCurrentItem(item)
         if Config.debug:
-            print("[DEBUG] btnDown1Pressed: Moved selected items down by 1")
+            Logic.logMessage("DEBUG", "btnDown1Pressed: Moved selected items down by 1")
 
     def btnSearchPressed(self):
         if Config.debug:
-            print("[DEBUG] btnSearchPressed: Search functionality not implemented")
+            Logic.logMessage("DEBUG", "btnSearchPressed: Search functionality not implemented")
         QMessageBox.information(self, "Search", "Search functionality is not yet implemented.")
 
     def btnQueryOptionsInfoPressed(self):
         QMessageBox.information(self, "Query Options Info",
                                 "Delta: Calculate and display the change between consecutive values.\n\nOverlay: Display multiple datasets in a single view for comparison.")
         if Config.debug:
-            print("[DEBUG] btnQueryOptionsInfoPressed: Showed Query Options info dialog")
+            Logic.logMessage("DEBUG", "btnQueryOptionsInfoPressed: Showed Query Options info dialog")

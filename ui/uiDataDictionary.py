@@ -29,11 +29,11 @@ class uiDataDictionary(QMainWindow):
         Utils.buttonStyle(self.btnDeleteRow)
         
         if Config.debug:
-            print("[DEBUG] uiDataDictionary initialized with btnDeleteRow")
+            Logic.logMessage("DEBUG", "uiDataDictionary initialized with btnDeleteRow")
     
     def showEvent(self, event):
         if Config.debug:
-            print(f"[DEBUG] uiDataDictionary showEvent")
+            Logic.logMessage("DEBUG", f"uiDataDictionary showEvent")
         Utils.centerWindowToParent(self)
         super().showEvent(event)
     
@@ -41,8 +41,7 @@ class uiDataDictionary(QMainWindow):
         columns = [self.mainTable.horizontalHeaderItem(c).text().strip() for c in range(self.mainTable.columnCount()) if self.mainTable.horizontalHeaderItem(c)]
 
         if not columns:
-            if Config.debug:
-                print("[WARN] No columns found in DataDictionary table for saving")
+            Logic.logMessage("WARN", "No columns found in DataDictionary table for saving")
             return
         dataRows = []
 
@@ -70,10 +69,10 @@ class uiDataDictionary(QMainWindow):
                 dataRows.append(rowData)
 
                 if Config.debug:
-                    print(f"[DEBUG] Saved row {r} with data: {rowData}")
+                    Logic.logMessage("DEBUG", f"Saved row {r} with data: {rowData}")
             else:
                 if Config.debug:
-                    print(f"[DEBUG] Skipped empty row {r}")
+                    Logic.logMessage("DEBUG", f"Skipped empty row {r}")
         dbPath = Logic.resourcePath('core/bunker.db')
 
         try:
@@ -86,20 +85,19 @@ class uiDataDictionary(QMainWindow):
                     cur.execute(f"INSERT INTO dataDictionary ({','.join(columns)}) VALUES ({placeholders})", row)
                 conn.commit()
         except Exception as e:
-            if Config.debug:
-                print(f"[ERROR] Failed to save DataDictionary to DB: {e}")
+            Logic.logMessage("ERROR", f"Failed to save DataDictionary to DB: {e}")
             return
         for c in range(self.mainTable.columnCount()):
             self.mainTable.resizeColumnToContents(c)
         if Config.debug:
-            print(f"[DEBUG] DataDictionary saved with {len(dataRows)} rows and columns resized")
+            Logic.logMessage("DEBUG", f"DataDictionary saved with {len(dataRows)} rows and columns resized")
     
     def btnAddRowPressed(self):
         self.mainTable.setRowCount(self.mainTable.rowCount() + 1)
         self.mainTable.scrollToBottom()
 
         if Config.debug:
-            print(f"[DEBUG] Added row to DataDictionary, scrolled to bottom, new row count: {self.mainTable.rowCount()}")
+            Logic.logMessage("DEBUG", f"Added row to DataDictionary, scrolled to bottom, new row count: {self.mainTable.rowCount()}")
     
     def btnDeleteRowPressed(self):
         currentRow = self.mainTable.currentRow()
@@ -108,7 +106,7 @@ class uiDataDictionary(QMainWindow):
             self.mainTable.removeRow(currentRow)
             
             if Config.debug:
-                print(f"[DEBUG] Removed row {currentRow} from DataDictionary, new row count: {self.mainTable.rowCount()}")
+                Logic.logMessage("DEBUG", f"Removed row {currentRow} from DataDictionary, new row count: {self.mainTable.rowCount()}")
         else:
             if Config.debug:
-                print("[DEBUG] No row selected for removal in DataDictionary")
+                Logic.logMessage("DEBUG", "No row selected for removal in DataDictionary")

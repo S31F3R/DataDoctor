@@ -25,7 +25,7 @@ class uiQuickLook(QDialog):
         self.btnCancel.clicked.connect(self.btnCancelPressed)
 
         if Config.debug:
-            print("[DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName")
+            Logic.logMessage("DEBUG", "uiQuickLook initialized with QLineEdit qleQuickLookName")
 
     def showEvent(self, event):
         Utils.centerWindowToParent(self)
@@ -34,13 +34,13 @@ class uiQuickLook(QDialog):
     def btnSavePressed(self):
         if not self.currentListQueryList or not self.CurrentCbQuickLook:
             if Config.debug:
-                print("[DEBUG] btnSavePressed: No query list or combo box set")
+                Logic.logMessage("DEBUG", "btnSavePressed: No query list or combo box set")
             return
         quickLookName = self.qleQuickLookName.text().strip()
 
         if not quickLookName:
             if Config.debug:
-                print("[DEBUG] btnSavePressed: Empty Quick Look name, showing warning")
+                Logic.logMessage("DEBUG", "btnSavePressed: Empty Quick Look name, showing warning")
             QMessageBox.warning(self, "Invalid Name", "Please enter a valid Quick Look name.")
             return
         quickLookPath = os.path.join(Utils.getQuickLookDir(), f"{quickLookName}.txt")
@@ -49,7 +49,7 @@ class uiQuickLook(QDialog):
             items = [self.currentListQueryList.item(i).text() for i in range(self.currentListQueryList.count()) if self.currentListQueryList.item(i)]
             if not items:
                 if Config.debug:
-                    print("[DEBUG] btnSavePressed: No items in query list, showing warning")
+                    Logic.logMessage("DEBUG", "btnSavePressed: No items in query list, showing warning")
                 QMessageBox.warning(self, "Empty Query List", "Cannot save Quick Look: No items in the query list.")
                 return
             with open(quickLookPath, 'w', encoding='utf-8-sig') as f:
@@ -67,10 +67,9 @@ class uiQuickLook(QDialog):
             with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
                 json.dump(config, configFile, indent=2)
             if Config.debug:
-                print(f"[DEBUG] btnSavePressed: Saved Quick Look to {quickLookPath}, set cbQuickLook to {quickLookName}")
+                Logic.logMessage("DEBUG", f"btnSavePressed: Saved Quick Look to {quickLookPath}, set cbQuickLook to {quickLookName}")
         except Exception as e:
-            if Config.debug:
-                print(f"[ERROR] btnSavePressed: Failed to save Quick Look: {e}")
+            iLogic.logMessage("ERROR", f"btnSavePressed: Failed to save Quick Look: {e}")
             QMessageBox.warning(self, "Save Error", f"Failed to save Quick Look: {e}")
         self.clear()
         self.accept()
@@ -79,9 +78,9 @@ class uiQuickLook(QDialog):
         self.clear()
         self.reject()
         if Config.debug:
-            print("[DEBUG] btnCancelPressed: Cleared qleQuickLookName and closed dialog")
+            Logic.logMessage("DEBUG", "btnCancelPressed: Cleared qleQuickLookName and closed dialog")
 
     def clear(self):
         self.qleQuickLookName.clear()
         if Config.debug:
-            print("[DEBUG] Cleared qleQuickLookName")
+            Logic.logMessage("DEBUG", "Cleared qleQuickLookName")
