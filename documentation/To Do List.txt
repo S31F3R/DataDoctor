@@ -1,15 +1,7 @@
--Create json or database for data dictionary
-
-
-
--Add max, min, mean to header context menu
--Convert quickLooks to json. Have them grouped by dataID
-
 ####### UI UPGRADES #######
 -Modify Query remove button to be inbetween the up and down arrow
 -Rename check boxes to chkb instead of cb. cb is used for combo box
     -Need to look at them ALL. Currently only Overlay and Deltas is fixed
-
 
 ####### HOUSE KEEPING #######
 -Logging and debugging, best practices
@@ -18,7 +10,8 @@
     -HOUR: 1606 = 1600, 1645 = 1600
 -Refresh (maybe undo also) need to recgonize delta and overlay check boxes
 -Add a pop up after data dictionary save so user knows it actually worked
-
+-Add max, min, mean to header context menu
+-Convert quickLooks to json. Have them grouped by dataID
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
