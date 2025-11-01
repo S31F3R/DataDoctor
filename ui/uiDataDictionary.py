@@ -1,5 +1,6 @@
 # uiDataDictionary.py
 
+import sqlite3
 from PyQt6.QtWidgets import QMainWindow, QTableWidget, QPushButton
 from PyQt6 import uic
 from core import Logic, Utils, Config
@@ -37,14 +38,14 @@ class uiDataDictionary(QMainWindow):
         super().showEvent(event)
     
     def btnSavePressed(self):
-        data = []
+        columns = [self.mainTable.horizontalHeaderItem(c).text().strip() for c in range(self.mainTable.columnCount()) if self.mainTable.horizontalHeaderItem(c)]
 
-        with open(Logic.resourcePath('DataDictionary.csv'), 'r', encoding='utf-8-sig') as f:
-            header = f.readlines()[0].rstrip('\n')
-            data.append(header)
-
+        if not columns:
             if Config.debug:
-                print(f"[DEBUG] Appended stripped header: {header}")
+                print("[WARN] No columns found in DataDictionary table for saving")
+            return
+        dataRows = []
+
         for r in range(self.mainTable.rowCount()):
             rowData = []
             isEmptyRow = True
@@ -52,24 +53,46 @@ class uiDataDictionary(QMainWindow):
             for c in range(self.mainTable.columnCount()):
                 item = self.mainTable.item(r, c)
                 cellText = item.text().strip() if item else ''
+
+                # Attempt float conversion for REAL columns (based on naming pattern)
+                if columns[c].startswith('123_'):
+                    try:
+                        cellText = float(cellText) if cellText else None
+                    except ValueError:
+                        pass # Keep as str if invalid
+                else:
+                    cellText = cellText if cellText else None
                 rowData.append(cellText)
 
-                if cellText:
+                if cellText is not None and cellText != '':
                     isEmptyRow = False
             if not isEmptyRow:
-                data.append(','.join(rowData))
-                
+                dataRows.append(rowData)
+
                 if Config.debug:
                     print(f"[DEBUG] Saved row {r} with data: {rowData}")
             else:
                 if Config.debug:
                     print(f"[DEBUG] Skipped empty row {r}")
-        with open(Logic.resourcePath('DataDictionary.csv'), 'w', encoding='utf-8-sig') as f:
-            f.write('\n'.join(data) + '\n')
+        dbPath = Logic.resourcePath('core/bunker.db')
+
+        try:
+            with sqlite3.connect(dbPath) as conn:
+                cur = conn.cursor()
+                cur.execute("DELETE FROM dataDictionary")
+
+                for row in dataRows:
+                    placeholders = ','.join('?' for _ in row)
+                    cur.execute(f"INSERT INTO dataDictionary ({','.join(columns)}) VALUES ({placeholders})", row)
+                conn.commit()
+        except Exception as e:
+            if Config.debug:
+                print(f"[ERROR] Failed to save DataDictionary to DB: {e}")
+            return
         for c in range(self.mainTable.columnCount()):
             self.mainTable.resizeColumnToContents(c)
         if Config.debug:
-            print(f"[DEBUG] DataDictionary saved with {len(data)-1} rows and columns resized")
+            print(f"[DEBUG] DataDictionary saved with {len(dataRows)} rows and columns resized")
     
     def btnAddRowPressed(self):
         self.mainTable.setRowCount(self.mainTable.rowCount() + 1)
