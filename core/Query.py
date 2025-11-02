@@ -860,19 +860,21 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         # Modify table if query tools are checked
         if deltaChecked or overlayChecked:
             QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, originalIntervals, lookupIds, mainWindow=mainWindow)
-        else:
-            self.columnMetadata = []
-            for i in range(len(headers)):
+        else:    
+            mainWindow.columnMetadata = []
+
+            for col in range(len(mergedHeaders)):  
                 metadata = {
                     'type': 'normal',
-                    'dataIds': [dataId], 
-                    'dbs': [db], 
-                    'queryInfos': [queryInfo], 
-                    'lookupId': dataId 
+                    'dataIds': mergedDataIds[col], 
+                    'dbs': mergedDbs[col], 
+                    'queryInfos': mergedQueryInfos[col],  
+                    'lookupId': mergedDataIds[col][0] if mergedDataIds[col] else None  
                 }
-                self.columnMetadata.append(metadata)
+                mainWindow.columnMetadata.append(metadata)
+
             if Config.debug:
-                Logic.logMessage("DEBUG", f"Set columnMetadata with lookupId: {repr(self.columnMetadata)}")
+                Logic.logMessage("DEBUG", f"Set columnMetadata with lookupId: {repr(mainWindow.columnMetadata)}")
         progressDialog.setValue(100)
         progressDialog.repaint()
         QCoreApplication.processEvents()
