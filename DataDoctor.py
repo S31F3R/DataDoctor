@@ -295,14 +295,13 @@ class uiMain(QMainWindow):
         
         # Add metadata details if internal query, non-overlay, and response exists
         isOverlay = col < len(self.columnMetadata) and self.columnMetadata[col].get('type') == 'overlay'
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"showCellContextMenu: Condition check - internal={self.currentQueryType == 'internal'}, not overlay={not isOverlay}, response={bool(response)}")
         if self.currentQueryType == 'internal' and not isOverlay and response:
             detailsAction = menu.addAction("Show details")
             detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response))
             if Config.debug:
                 Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' action")
-        else:
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"showCellContextMenu: Skipped 'Show details' - internal={self.currentQueryType == 'internal'}, not overlay={not isOverlay}, response={bool(response)}")
         
         # Add overlay if column is overlay (existing logic, with renamed action)
         if isOverlay:
