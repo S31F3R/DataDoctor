@@ -694,6 +694,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     valueDict = {}
     collected = 0
     processedGroups = set()
+    rawResponses = {}  # New: Collect raw responses for AQUARIUS
     def handleResult(result):
         nonlocal collected
         groupKey, groupResult, groupLabels = result
@@ -735,7 +736,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         if Config.debug:
             Logic.logMessage("DEBUG", f"Started background worker {i} for group {groupKey}")
     if not progressDialog.wasCanceled():
-        progressDialog.setValue(20)
         progressDialog.setLabelText(f"Querying data... (0/{numGroups} complete)")
         progressDialog.repaint()
     timeoutSeconds = 600
@@ -847,6 +847,15 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
         # Build the table
         buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
+        # Store rawResponses for Aquarius (using fullLabel as key)
+        rawResponses = {}
+        for dataID in originalDataIds:
+            if 'AQUARIUS' in [db for db in databases if db == 'AQUARIUS']:
+                fullLabel = labelsDict.get(dataID, dataID)
+                rawResponses[fullLabel] = result.get(dataID, {}).get('rawResponse', {})  # Assuming result from apiRead available; adjust if needed
+        mainWindow.storeQueryData(rawResponses, 'internal' if isInternal else 'public')
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Stored {len(rawResponses)} rawResponses for Aquarius")
         # Modify table if query tools are checked
         if deltaChecked or overlayChecked:
             QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, originalIntervals, lookupIds, mainWindow=mainWindow)

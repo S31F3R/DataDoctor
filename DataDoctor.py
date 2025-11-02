@@ -270,7 +270,7 @@ class uiMain(QMainWindow):
             Logic.logMessage("DEBUG", f"showHeaderDetails: Opened details for {seriesLabel}")
 
     def showCellContextMenu(self, pos):
-        """Show context menu for cell right-click: Metadata details (internal only) + overlay if applicable."""
+        """Show context menu for cell right-click: Metadata details (internal only, non-overlay) + overlay if applicable."""
         index = self.mainTable.indexAt(pos)
         if not index.isValid():
             return
@@ -294,13 +294,14 @@ class uiMain(QMainWindow):
         
         menu = QMenu(self)
         
-        # Add metadata details if internal query and response exists
-        if self.currentQueryType == 'internal' and response:
+        # Add metadata details if internal query, non-overlay, and response exists
+        isOverlay = col < len(self.columnMetadata) and self.columnMetadata[col].get('type') == 'overlay'
+        if self.currentQueryType == 'internal' and not isOverlay and response:
             detailsAction = menu.addAction("Show details")
             detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response))
         
         # Add overlay if column is overlay (existing logic, with renamed action)
-        if col < len(self.columnMetadata) and self.columnMetadata[col].get('type') == 'overlay':
+        if isOverlay:
             overlayAction = menu.addAction("Overlay details")
             overlayAction.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
         
@@ -314,9 +315,9 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", f"showCellContextMenu: No actions for cell ({row}, {col})")
 
     def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response):
-        """Open uiDetails for metadata."""
+        """Open uiDetails for Aquarius metadata."""
         detailsWin = uiDetails(parent=self)
-        detailsWin.populateDetails(self.currentQueryType, seriesLabel, timestampStr, response)
+        detailsWin.populateDetails('AQUARIUS', seriesLabel, timestampStr, response)
         detailsWin.show()
         
         if Config.debug:
