@@ -1,5 +1,17 @@
 # Aquarius.py
 
+import requests
+import json
+import keyring
+import os
+import threading
+import queue
+from datetime import datetime, timedelta
+from core import Logic, Config
+
+queryLimit = 500 # Configurable max points per API call
+maxThreads = 15 # Configurable max number of threads
+
 def apiRead(dataIDs, startDate, endDate, interval):
     if Config.debug:
         Logic.logMessage("DEBUG", "Aquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}".format(dataIDs, interval, startDate, endDate))
