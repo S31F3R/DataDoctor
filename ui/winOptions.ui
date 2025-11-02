@@ -75,7 +75,7 @@
       </rect>
      </property>
     </widget>
-    <widget class="QLabel" name="lbRawData">
+    <widget class="QLabel" name="lblRawData">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -88,7 +88,7 @@
       <string>Raw Data:</string>
      </property>
     </widget>
-    <widget class="QLabel" name="lbQc">
+    <widget class="QLabel" name="lblQc">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -114,7 +114,7 @@
       <string/>
      </property>
     </widget>
-    <widget class="QLabel" name="lbDebug">
+    <widget class="QLabel" name="lblDebug">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -166,7 +166,7 @@
       <string/>
      </property>
     </widget>
-    <widget class="QLabel" name="lbRetroMode">
+    <widget class="QLabel" name="lblRetroMode">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -179,22 +179,22 @@
       <string>Retro Mode:</string>
      </property>
     </widget>
-    <zorder>lbRawData</zorder>
+    <zorder>lblRawData</zorder>
     <zorder>lbUTCOffset</zorder>
     <zorder>cbUTCOffset</zorder>
     <zorder>chkbRawData</zorder>
     <zorder>chkbQAQC</zorder>
     <zorder>chkbDebug</zorder>
     <zorder>chkbRetroMode</zorder>
-    <zorder>lbQc</zorder>
-    <zorder>lbRetroMode</zorder>
-    <zorder>lbDebug</zorder>
+    <zorder>lblQc</zorder>
+    <zorder>lblRetroMode</zorder>
+    <zorder>lblDebug</zorder>
    </widget>
    <widget class="QWidget" name="tabAquarius">
     <attribute name="title">
      <string>Aquarius</string>
     </attribute>
-    <widget class="QLabel" name="lbAQServer">
+    <widget class="QLabel" name="lblAQServer">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -207,7 +207,7 @@
       <string>Server Link</string>
      </property>
     </widget>
-    <widget class="QLabel" name="lbAQUserName">
+    <widget class="QLabel" name="lblAQUserName">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -220,7 +220,7 @@
       <string>User Name</string>
      </property>
     </widget>
-    <widget class="QLabel" name="lbAQPassword">
+    <widget class="QLabel" name="lblAQPassword">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -294,7 +294,7 @@
     <attribute name="title">
      <string>USGS</string>
     </attribute>
-    <widget class="QLabel" name="lbUSGSAPIKey">
+    <widget class="QLabel" name="lblUSGSAPIKey">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -348,7 +348,7 @@
     <attribute name="title">
      <string>USBR</string>
     </attribute>
-    <widget class="QLabel" name="lbTNSNames">
+    <widget class="QLabel" name="lblTNSNames">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -387,7 +387,7 @@
       <string>End of Period</string>
      </property>
     </widget>
-    <widget class="QLabel" name="lbTimeStampMethod">
+    <widget class="QLabel" name="lblTimeStampMethod">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -400,7 +400,7 @@
       <string>HOUR Timestamp Method:</string>
      </property>
     </widget>
-    <widget class="QLabel" name="lbOraclePassword">
+    <widget class="QLabel" name="lblOraclePassword">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -413,7 +413,7 @@
       <string>Password</string>
      </property>
     </widget>
-    <widget class="QLabel" name="lbOracleUserName">
+    <widget class="QLabel" name="lblOracleUserName">
      <property name="geometry">
       <rect>
        <x>10</x>
