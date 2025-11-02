@@ -289,13 +289,17 @@ class uiMain(QMainWindow):
             Logic.logMessage("WARN", "Invalid cell: No timestamp or series label")
             return
         
-        # Normalize seriesLabel by replacing \n with space, collapsing multiple spaces, and stripping
-        normalizedLabel = ' '.join(seriesLabel.replace('\n', ' ').split())
+        # Split to remove trailing db if present (e.g., 'Label DB' -> 'Label')
+        label_parts = seriesLabel.rsplit(' ', 1)
+        label_without_db = label_parts[0] if len(label_parts) > 1 else seriesLabel
+        
+        # Normalize by replacing \n with space, collapsing multiple spaces, and stripping
+        normalizedLabel = ' '.join(label_without_db.replace('\n', ' ').split())
         
         # Get response if available (use normalized)
         response = self.seriesResponses.get(normalizedLabel)
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response exists={bool(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k)for k in self.seriesResponses.keys()]}")
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, label_without_db={label_without_db!r}, normalizedLabel={normalizedLabel!r}, response exists={bool(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
         
         menu = QMenu(self)
         
