@@ -115,11 +115,14 @@ class uiMain(QMainWindow):
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
-        self.seriesResponses = responses  # dict {seriesLabel: response_dict}
+        # Normalize keys by replacing \n with space, collapsing multiple spaces, and stripping
+        normalizedResponses = {' '.join(k.replace('\n', ' ').split()): v for k, v in responses.items()}
+        self.seriesResponses = normalizedResponses
         self.currentQueryType = queryType
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Stored query data: {len(responses)} series, type {queryType}, keys={list(responses.keys())}")
+            Logic.logMessage("DEBUG", f"Stored query data: {len(normalizedResponses)} series, type {queryType}, keys={[repr(k) for k in normalizedResponses.keys()]}")
+
 
     def btnPublicQueryPressed(self):
         if self.winQuery:
@@ -286,10 +289,13 @@ class uiMain(QMainWindow):
             Logic.logMessage("WARN", "Invalid cell: No timestamp or series label")
             return
         
-        # Get response if available
-        response = self.seriesResponses.get(seriesLabel)
+        # Normalize seriesLabel by replacing \n with space, collapsing multiple spaces, and stripping
+        normalizedLabel = ' '.join(seriesLabel.replace('\n', ' ').split())
+        
+        # Get response if available (use normalized)
+        response = self.seriesResponses.get(normalizedLabel)
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel}, response exists={bool(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={list(self.seriesResponses.keys())}")
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response exists={bool(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k)for k in self.seriesResponses.keys()]}")
         
         menu = QMenu(self)
         
