@@ -115,8 +115,8 @@ class uiMain(QMainWindow):
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
-        # Normalize keys by replacing \n with space, collapsing multiple spaces, and stripping
-        normalizedResponses = {' '.join(k.replace('\n', ' ').split()): v for k, v in responses.items()}
+        # Normalize keys by replacing \n with space, collapsing multiple spaces, stripping, and ensuring no invisible chars
+        normalizedResponses = {' '.join(k.replace('\n', ' ').split()).strip(): v for k, v in responses.items()}
         self.seriesResponses = normalizedResponses
         self.currentQueryType = queryType
         
@@ -290,19 +290,22 @@ class uiMain(QMainWindow):
             return
         
         # First, clean the label: replace \n with space and collapse multiple spaces
-        clean_label = ' '.join(seriesLabel.replace('\n', ' ').split())
+        clean_label = ' '.join(seriesLabel.replace('\n', ' ').split()).strip()
         
         # Then, check if last part is SDID (numeric)
         parts = clean_label.rsplit(' ', 1)
         if len(parts) > 1 and parts[1].isdigit():
-            normalizedLabel = parts[1]  # Use SDID for USBR
+            normalized_label = parts[1]  # Use SDID for USBR
         else:
-            normalizedLabel = clean_label  # Full for Aquarius/other
+            normalized_label = clean_label  # Full for Aquarius/other
         
         # Get response if available (use normalized)
-        response = self.seriesResponses.get(normalizedLabel)
+        response = self.seriesResponses.get(normalized_label)
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, clean_label={clean_label!r}, parts={parts!r}, normalizedLabel={normalizedLabel!r}, response exists={bool(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, clean_label={clean_label!r}, parts={parts!r}, normalized_label={normalized_label!r}, response exists={bool(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
+            if self.seriesResponses:
+                key = list(self.seriesResponses.keys())[0]
+                Logic.logMessage("DEBUG", f"Key bytes: {list(key.encode())}, Label bytes: {list(normalized_label.encode())}, Equal: {key == normalized_label}")
         
         menu = QMenu(self)
         
