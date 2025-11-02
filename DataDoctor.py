@@ -115,11 +115,11 @@ class uiMain(QMainWindow):
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
-        self.seriesResponses = responses # dict {seriesLabel: response_dict}
+        self.seriesResponses = responses  # dict {seriesLabel: response_dict}
         self.currentQueryType = queryType
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Stored query data: {len(responses)} series, type {queryType}")   
+            Logic.logMessage("DEBUG", f"Stored query data: {len(responses)} series, type {queryType}, keys={list(responses.keys())}")
 
     def btnPublicQueryPressed(self):
         if self.winQuery:
@@ -289,7 +289,7 @@ class uiMain(QMainWindow):
         # Get response if available
         response = self.seriesResponses.get(seriesLabel)
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel}, response exists={bool(response)}, currentQueryType={self.currentQueryType}")
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel}, response exists={bool(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={list(self.seriesResponses.keys())}")
         
         menu = QMenu(self)
         
