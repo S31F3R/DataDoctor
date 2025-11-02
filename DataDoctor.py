@@ -115,20 +115,12 @@ class uiMain(QMainWindow):
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
-        normalizedResponses = {}
-        for k, v in responses.items():
-            if isinstance(v, dict) and 'label' in v:
-                label = v['label'].replace('\n', ' ').replace('\u00a0', ' ')
-                key = ' '.join(label.split()).strip()
-            else:
-                key = str(k).strip()
-            normalizedResponses[key] = v
-        
-        self.seriesResponses = normalizedResponses
+        # Store as-is with dataID as key (no normalization needed, avoids \n issues)
+        self.seriesResponses = {k.strip(): v for k, v in responses.items()}  # Strip just in case
         self.currentQueryType = queryType
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Stored query data: {len(normalizedResponses)} series, type {queryType}, keys={[repr(k) for k in normalizedResponses.keys()]}")
+            Logic.logMessage("DEBUG", f"Stored query data: {len(self.seriesResponses)} series, type {queryType}, keys={[repr(k) for k in self.seriesResponses.keys()]}")
 
 
     def btnPublicQueryPressed(self):
@@ -296,49 +288,36 @@ class uiMain(QMainWindow):
             Logic.logMessage("WARN", "Invalid cell: No timestamp or series label")
             return
         
-        # Clean the label: replace \n and NBSP with space, collapse, strip
-        clean_label = seriesLabel.replace('\n', ' ').replace('\u00a0', ' ')
-        clean_label = ' '.join(clean_label.split()).strip()
+        # Get lookupId from columnMetadata (unique dataID)
+        lookupId = self.columnMetadata[col].get('lookupId') if col < len(self.columnMetadata) else None
+        if not lookupId:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"showCellContextMenu: No lookupId for col {col}")
+            return
         
-        # Check if last part is SDID (numeric)
-        parts = clean_label.rsplit(' ', 1)
-        if len(parts) > 1 and parts[1].isdigit():
-            normalized_label = parts[1]  # Use SDID for USBR
-        else:
-            normalized_label = clean_label  # Full for Aquarius/other
-        
-        # Get response if available
-        response = self.seriesResponses.get(normalized_label)
+        # Get response using lookupId
+        response = self.seriesResponses.get(lookupId)
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, clean_label={clean_label!r}, parts={parts!r}, normalized_label={normalized_label!r}, response={repr(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
-        
-        # Fallback lookup if get fails (rare, but for debug)
-        if response is None:
-            for dk in self.seriesResponses:
-                if dk == normalized_label:
-                    response = self.seriesResponses[dk]
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", f"Fallback: Found response for {normalized_label} via loop")
-                    break
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, lookupId={lookupId!r}, response type={type(response).__name__ if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
         
         menu = QMenu(self)
         
-        # Add metadata details if internal query, non-overlay, and response exists
+        # Add metadata details if internal query, non-overlay, and response is dict (for Aquarius metadata)
         isOverlay = col < len(self.columnMetadata) and self.columnMetadata[col].get('type') == 'overlay'
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: Condition check - internal={self.currentQueryType == 'internal'}, not overlay={not isOverlay}, response={bool(response)}")
-        if self.currentQueryType == 'internal' and not isOverlay and response:
+            Logic.logMessage("DEBUG", f"showCellContextMenu: Condition check - internal={self.currentQueryType == 'internal'}, not overlay={not isOverlay}, response dict={isinstance(response, dict)}")
+        if self.currentQueryType == 'internal' and not isOverlay and isinstance(response, dict):
             detailsAction = menu.addAction("Show details")
             detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response))
             if Config.debug:
                 Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' action")
         
-        # Add overlay if column is overlay
+        # Add overlay if column is overlay (existing logic, with renamed action)
         if isOverlay:
             overlayAction = menu.addAction("Overlay details")
             overlayAction.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
         
-        if menu.actions():
+        if menu.actions():  # Only show if actions added
             menu.exec(self.mainTable.viewport().mapToGlobal(pos))
             
             if Config.debug:
