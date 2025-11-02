@@ -103,22 +103,6 @@ def apiRead(dataIDs, startDate, endDate, interval):
     user = None
     password = None
 
-    # Fetch metadata for full range (non-chunked)
-    metaDict = {}
-    for uid in dataIDs:
-        response = requests.get(
-            f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={startDate}&QueryTo={endDate}&utcOffset={offsetHours}&GetParts=All&format=json',
-            headers=headers, verify=verifyMode
-        )
-        try:
-            readFileMeta = json.loads(response.content)
-            metaDict[uid] = readFileMeta
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Fetched metadata for UID {uid}")
-        except Exception as e:
-            Logic.logMessage("WARN", f"Metadata fetch failed for UID {uid}: {e}")
-            metaDict[uid] = {}
-
     # Calculate total points
     totalDuration = endDateTime - startDateTime
     
@@ -131,7 +115,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
         delta = timedelta(days=1)
     else:
         Logic.logMessage("ERROR", f"Unsupported interval: {interval}")
-        return {uid: {'data': [], 'label': uid, 'rawResponse': metaDict.get(uid, {})} for uid in dataIDs}
+        return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
     totalPoints = int(totalDuration.total_seconds() / delta.total_seconds()) + 1
     numChunks = (totalPoints + queryLimit - 1) // queryLimit
 
@@ -252,12 +236,11 @@ def apiRead(dataIDs, startDate, endDate, interval):
             result[uid] = data
     for uid in result:
         result[uid]['data'].sort(key=lambda x: datetime.strptime(x.split(',')[0], '%m/%d/%y %H:%M:00'))
-        result[uid]['rawResponse'] = metaDict.get(uid, {})  # Add rawResponse from meta
     if Config.debug:
         Logic.logMessage("DEBUG", f"Combined results from {numTasks} tasks with {len(result)} UIDs")
     for uid in dataIDs:
         if uid not in result:
-            result[uid] = {'data': [], 'label': uid, 'rawResponse': metaDict.get(uid, {})}
+            result[uid] = {'data': [], 'label': uid}
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Added empty result for UID {uid}")

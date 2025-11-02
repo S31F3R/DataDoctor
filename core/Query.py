@@ -49,6 +49,7 @@ class queryWorker(QRunnable):
         db, _, _ = self.groupKey
         groupResult = {}
         groupLabels = {} if db == 'AQUARIUS' else None
+        groupRawResponses = {} if db == 'AQUARIUS' else None
         usbrGroups = defaultdict(list)
         for origIndex, dataID, SDID, itemDb, interval, mrid in self.groupItems:
             usbrGroups[(itemDb, interval, mrid)].append((origIndex, dataID, SDID))
@@ -73,6 +74,7 @@ class queryWorker(QRunnable):
                         result = Aquarius.apiRead(SDIDs, self.startDate, self.endDate, interval)
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
+                        groupRawResponses = {SDID: result.get(SDID, {}).get('rawResponse', {}) for SDID in SDIDs}
                     except Exception as e:
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: Aquarius apiRead failed for SDIDs {SDIDs}: {e}")
@@ -89,7 +91,7 @@ class queryWorker(QRunnable):
                 else:
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"queryWorker: Unknown db skipped: {db}")
-                    continue
+                        continue
                 for idx, (origIndex, dataID, SDID) in enumerate(items):
                     if SDID in result and result[SDID]:
                         if db == 'AQUARIUS':
@@ -117,7 +119,7 @@ class queryWorker(QRunnable):
                 groupResult[dataID] = self.defaultBlanks
                 if db == 'AQUARIUS':
                     groupLabels[dataID] = dataID
-        self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels))
+        self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels, groupRawResponses))
 
 def buildTimestamps(startDateStr, endDateStr, intervalStr):
     if Config.debug:
@@ -692,12 +694,12 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         Logic.logMessage("DEBUG", f"Starting {numThreads} threads for {numGroups} groups in background")
     threadsStarted = 0
     valueDict = {}
+    rawResponses = {}
     collected = 0
     processedGroups = set()
-    rawResponses = {}  # New: Collect raw responses for AQUARIUS
     def handleResult(result):
         nonlocal collected
-        groupKey, groupResult, groupLabels = result
+        groupKey, groupResult, groupLabels, groupRawResponses = result
         if groupKey in processedGroups:
             if Config.debug:
                 Logic.logMessage("DEBUG", f"executeQuery: Duplicate group {groupKey}, skipping")
@@ -718,6 +720,8 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             labelsDict.update(groupLabels)
             if Config.debug:
                 Logic.logMessage("DEBUG", f"executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
+        if groupRawResponses:
+            rawResponses.update(groupRawResponses)
         collected += 1
         if Config.debug:
             Logic.logMessage("DEBUG", f"executeQuery: Collected results for group {groupKey} with {len(groupResult)} items ({collected}/{numGroups})")
@@ -847,12 +851,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
         # Build the table
         buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
-        # Store rawResponses for Aquarius (using fullLabel as key)
-        rawResponses = {}
-        for dataID in originalDataIds:
-            if 'AQUARIUS' in [db for db in databases if db == 'AQUARIUS']:
-                fullLabel = labelsDict.get(dataID, dataID)
-                rawResponses[fullLabel] = result.get(dataID, {}).get('rawResponse', {})  # Assuming result from apiRead available; adjust if needed
+        # Remap rawResponses keys to fullLabel
+        rawResponses = {labelsDict.get(k, k): v for k, v in rawResponses.items()}
+        # Store rawResponses for Aquarius
         mainWindow.storeQueryData(rawResponses, 'internal' if isInternal else 'public')
         if Config.debug:
             Logic.logMessage("DEBUG", f"Stored {len(rawResponses)} rawResponses for Aquarius")
