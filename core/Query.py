@@ -56,7 +56,7 @@ class queryWorker(QRunnable):
         try:
             for (itemDb, interval, mrid), items in usbrGroups.items():
                 SDIDs = [item[2] for item in items]
-                result = {}
+                result = {}  # Initialize result here to avoid UnboundLocalError
                 if db.startswith('USBR'):
                     try:
                         svr = itemDb.split('-')[1].lower() if '-' in itemDb else 'lchdb'

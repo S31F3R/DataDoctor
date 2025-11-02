@@ -288,9 +288,8 @@ class uiMain(QMainWindow):
         
         # Get response if available
         response = self.seriesResponses.get(seriesLabel)
-        if not response:
-            Logic.logMessage("WARN", f"No response data for series: {seriesLabel}")
-            # Still show overlay if applicable, but skip metadata
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel}, response exists={bool(response)}, currentQueryType={self.currentQueryType}")
         
         menu = QMenu(self)
         
@@ -299,6 +298,11 @@ class uiMain(QMainWindow):
         if self.currentQueryType == 'internal' and not isOverlay and response:
             detailsAction = menu.addAction("Show details")
             detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response))
+            if Config.debug:
+                Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' action")
+        else:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"showCellContextMenu: Skipped 'Show details' - internal={self.currentQueryType == 'internal'}, not overlay={not isOverlay}, response={bool(response)}")
         
         # Add overlay if column is overlay (existing logic, with renamed action)
         if isOverlay:
