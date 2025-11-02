@@ -301,29 +301,10 @@ class uiMain(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}")
         
-        response = None
-        if lookupId:
-            response = self.seriesResponses.get(lookupId)
-        
-        # Fallback if no lookupId or response None: use normalized label
-        if response is None:
-            # Clean the label: replace \n and NBSP with space, collapse, strip
-            cleanLabel = seriesLabel.replace('\n', ' ').replace('\u00a0', ' ')
-            cleanLabel = ' '.join(cleanLabel.split()).strip()
-            
-            # Check if last part is SDID (numeric)
-            parts = cleanLabel.rsplit(' ', 1)
-            if len(parts) > 1 and parts[1].isdigit():
-                normalizedLabel = parts[1]  # Use SDID for USBR
-            else:
-                normalizedLabel = cleanLabel  # Full for Aquarius/other
-            
-            response = self.seriesResponses.get(normalizedLabel)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"showCellContextMenu: Fallback normalizedLabel={normalizedLabel!r}")
+        response = self.seriesResponses.get(lookupId) if lookupId else None
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, response type={type(response).__name__ if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
         
         menu = QMenu(self)
         
@@ -337,7 +318,7 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' action")
         
-        # Add overlay if column is overlay
+        # Add overlay if column is overlay (existing logic, with renamed action)
         if isOverlay:
             overlayAction = menu.addAction("Overlay details")
             overlayAction.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
