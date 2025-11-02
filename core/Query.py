@@ -867,12 +867,15 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             mergedQueryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]  # Constructed from queryItems
             mergedHeaders = originalDataIds  # Or processedHeaders if set earlier
             for col in range(len(mergedHeaders)):  
+                dataId = mergedDataIds[col][0] if mergedDataIds[col] else None
+                db = mergedDbs[col]
+                lookupId = labelsDict.get(dataId, dataId) if db == 'AQUARIUS' else dataId
                 metadata = {
                     'type': 'normal',
                     'dataIds': mergedDataIds[col], 
-                    'dbs': mergedDbs[col], 
+                    'dbs': db, 
                     'queryInfos': mergedQueryInfos[col],  
-                    'lookupId': mergedDataIds[col][0] if mergedDataIds[col] else None  
+                    'lookupId': lookupId  
                 }
                 mainWindow.columnMetadata.append(metadata)
 

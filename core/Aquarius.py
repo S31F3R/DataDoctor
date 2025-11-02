@@ -1,17 +1,5 @@
 # Aquarius.py
 
-import requests
-import json
-import keyring
-import os
-import threading
-import queue
-from core import Logic, Config
-from datetime import datetime, timedelta
-
-queryLimit = 500 # Configurable max points per API call
-maxThreads = 15 # Configurable max number of threads
-
 def apiRead(dataIDs, startDate, endDate, interval):
     if Config.debug:
         Logic.logMessage("DEBUG", "Aquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}".format(dataIDs, interval, startDate, endDate))
@@ -171,7 +159,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
             readFile = json.loads(response.content)
         except Exception as e:
             Logic.logMessage("WARN", f"Aquarius fetch failed for UID '{uid}' in thread {threadId}, range {subStart} to {subEnd}: {e}")
-            resultQueue.put((uid, {'data': [], 'label': uid}))
+            resultQueue.put((uid, {'data': [], 'label': uid, 'rawResponse': {}}))
             return
 
         location = readFile.get('LocationIdentifier', uid)
@@ -193,7 +181,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
 
             if value is not None:
                 outputData.append(f'{formattedTs},{value}')
-        resultQueue.put((uid, {'data': outputData, 'label': fullLabel}))
+        resultQueue.put((uid, {'data': outputData, 'label': fullLabel, 'rawResponse': readFile}))
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"Thread {threadId} completed task for UID {uid} with {len(outputData)} points")
@@ -231,7 +219,8 @@ def apiRead(dataIDs, startDate, endDate, interval):
         uid, data = resultQueue.get()
         if uid in result:
             result[uid]['data'].extend(data['data'])
-            result[uid]['label'] = data['label']
+            if 'rawResponse' not in result[uid] and 'rawResponse' in data:
+                result[uid]['rawResponse'] = data['rawResponse']
         else:
             result[uid] = data
     for uid in result:
@@ -240,7 +229,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
         Logic.logMessage("DEBUG", f"Combined results from {numTasks} tasks with {len(result)} UIDs")
     for uid in dataIDs:
         if uid not in result:
-            result[uid] = {'data': [], 'label': uid}
+            result[uid] = {'data': [], 'label': uid, 'rawResponse': {}}
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Added empty result for UID {uid}")
