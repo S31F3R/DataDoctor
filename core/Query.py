@@ -615,13 +615,12 @@ def timestampSortTable(table, dataDictionaryTable):
 def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable, deltaChecked=False, overlayChecked=False):
     Config.deltaChecked = deltaChecked
     Config.overlayChecked = overlayChecked
-
     if Config.debug:
-        Logic.logMessage("DEBUG", "executeQuery: isInternal={}, items={}".format(isInternal, len(queryItems)))
+        Logic.logMessage("DEBUG", "executeQuery: isInternal={}, items={}, deltaChecked={}, overlayChecked={}".format(isInternal, len(queryItems), deltaChecked, overlayChecked))
     if not isInternal:
         queryItems = [item for item in queryItems if item[2] != 'AQUARIUS']
-        if Config.debug:
-            Logic.logMessage("DEBUG", "executeQuery: Filtered AQUARIUS for public query, remaining items={}".format(len(queryItems)))
+    if Config.debug:
+        Logic.logMessage("DEBUG", "executeQuery: Filtered AQUARIUS for public query, remaining items={}".format(len(queryItems)))
     if not queryItems:
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid query items (AQUARIUS not allowed in public queries).")
         if Config.debug:
@@ -638,6 +637,13 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     progressDialog.repaint()
     if Config.debug:
         Logic.logMessage("DEBUG", "executeQuery: Initialized and showed progress dialog")
+    # Convert to datetime for rounding if necessary
+    if not isinstance(startDate, datetime):
+        startDate = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
+    if not isinstance(endDate, datetime):
+        endDate = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"executeQuery: Ensured dates are datetime for rounding: start={startDate}, end={endDate}")
     queryItems.sort(key=lambda x: x[4])
     firstInterval = queryItems[0][1]
     firstDb = queryItems[0][2]
@@ -648,7 +654,12 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             firstInterval = 'INSTANT:15'
         elif firstDb == 'AQUARIUS':
             firstInterval = 'INSTANT:1'
-    timestamps = buildTimestamps(startDate, endDate, firstInterval)
+    # Round down startDate to nearest firstInterval
+    startDate = roundDownToInterval(startDate, firstInterval)
+    # Convert back to str for buildTimestamps
+    startDateStr = startDate.strftime('%Y-%m-%d %H:%M')
+    endDateStr = endDate.strftime('%Y-%m-%d %H:%M')
+    timestamps = buildTimestamps(startDateStr, endDateStr, firstInterval)
     if not timestamps:
         progressDialog.cancel()
         QMessageBox.warning(mainWindow, "Date Error", "Invalid dates or interval.")
@@ -683,7 +694,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     valueDict = {}
     collected = 0
     processedGroups = set()
-
     def handleResult(result):
         nonlocal collected
         groupKey, groupResult, groupLabels = result
@@ -715,10 +725,10 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             progressDialog.setLabelText(f"Completed {groupKey[0]} query ({collected}/{numGroups})")
             progressDialog.repaint()
             QCoreApplication.processEvents()
-
     for i, groupKey in enumerate(groups.keys()):
         signals = queryWorkerSignals()
-        worker = queryWorker(groupKey, groups[groupKey], signals, startDate, endDate, isInternal, timestamps, defaultBlanks)
+        # Pass str dates to queryWorker if it expects str; assuming it does based on original
+        worker = queryWorker(groupKey, groups[groupKey], signals, startDateStr, endDateStr, isInternal, timestamps, defaultBlanks)
         signals.resultSignal.connect(lambda result, i=i: [Logic.logMessage("DEBUG", f"executeQuery: Signal received for group {result[0]}") if Config.debug else None, resultQueue.put(result), handleResult(result)][-1])
         pool.start(worker)
         threadsStarted += 1
@@ -732,7 +742,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     startTime = time.time()
     timer = QTimer()
     timer.setSingleShot(False)
-
     def checkQueueAndProgress():
         nonlocal collected
         elapsed = time.time() - startTime
@@ -744,7 +753,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 print(f"[WARN] Query timeout after {timeoutSeconds} seconds; some data may be missing")
                 progressDialog.cancel()
                 QMessageBox.warning(mainWindow, "Query Timeout", "Query timed out; some data may be missing.")
-                return
+            return
         if not progressDialog.wasCanceled():
             while not resultQueue.empty():
                 try:
@@ -757,7 +766,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             progressDialog.setLabelText(f"Querying data... ({collected}/{numGroups} complete)")
             progressDialog.repaint()
             QCoreApplication.processEvents()
-
     timer.timeout.connect(checkQueueAndProgress)
     timer.start(100)
     if Config.debug:
@@ -813,13 +821,12 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     databases = [item[2] for item in queryItems]
     lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
     data = []
-    
     for r in range(len(timestamps)):
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
-        if r % 100 == 0:
+        if r % 100 == 0 or r % 10 == 0:  # Update more frequently for small tables
             progressDialog.setLabelText(f"Building rows... ({r}/{len(timestamps)} rows)")
-            progressDialog.setValue(72 + int(28 * r / len(timestamps)))
+            progressDialog.setValue(70 + int(20 * r / len(timestamps)))  # Adjusted to 70-90 for rows
             progressDialog.repaint()
             QCoreApplication.processEvents()
         if Config.debug:
@@ -828,24 +835,23 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         Logic.logMessage("DEBUG", f"executeQuery: Built {len(data)} rows for table")
     if not progressDialog.wasCanceled():
         progressDialog.setLabelText("Building table...")
-        progressDialog.setValue(70)
+        progressDialog.setValue(90)
         progressDialog.repaint()
         QCoreApplication.processEvents()
         mainWindow.mainTable.clear()
-
+        mainWindow.mainTable.setRowCount(0)
+        mainWindow.mainTable.setColumnCount(0)  # Fully reset table to prevent freeze on column count change
+        QCoreApplication.processEvents()  # Ensure UI refresh after reset
         # Add tab before building table
         if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
             mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
-
         # Build the table
         buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
-
         # Modify table if query tools are checked
         if deltaChecked or overlayChecked:
             QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, originalIntervals, lookupIds, mainWindow=mainWindow)
         else:
             mainWindow.columnMetadata = []
-            
             for i in range(mainWindow.mainTable.columnCount()):
                 mainWindow.columnMetadata.append({
                     'type': 'normal',
@@ -855,8 +861,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 })
             if Config.debug:
                 Logic.logMessage("DEBUG", "executeQuery: Set normal columnMetadata with {} entries".format(len(mainWindow.columnMetadata)))
-
-        progressDialog.setValue(72)
+        progressDialog.setValue(100)
         progressDialog.repaint()
         QCoreApplication.processEvents()
     if Config.debug:
@@ -868,7 +873,40 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         return
     if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
-        if Config.debug:
-            Logic.logMessage("DEBUG", "Query executed and table updated.")
+    if Config.debug:
+        Logic.logMessage("DEBUG", "Query executed and table updated.")
+    # Store last delta and overlay states for refresh using globals
+    Config.lastDeltaChecked = deltaChecked
+    Config.lastOverlayChecked = overlayChecked
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"executeQuery: Stored lastDeltaChecked={deltaChecked}, lastOverlayChecked={overlayChecked}")
     progressDialog.cancel()
     QCoreApplication.processEvents()
+
+def roundDownToInterval(dt, interval):
+    """Round down datetime to the nearest specified interval."""
+    if interval == 'HOUR' or interval == 'INSTANT:60':
+        # Round down to nearest hour
+        dt = dt.replace(minute=0, second=0, microsecond=0)
+    elif interval == 'INSTANT:1':
+        # Round down to nearest minute
+        dt = dt.replace(second=0, microsecond=0)
+    elif interval == 'INSTANT:15':
+        # Round down to nearest 15-minute interval
+        try:
+            n = 15
+            minutes_down = (dt.minute // n) * n
+            dt = dt.replace(minute=minutes_down, second=0, microsecond=0)
+        except ValueError:
+            if Config.debug:
+                Logic.logMessage("WARN", f"Error rounding INSTANT:15, no rounding applied")
+            return dt
+    else:
+        # For other intervals, no manipulation needed
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Interval {interval} does not require rounding, returning unchanged")
+        return dt
+    
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"Rounded down {dt} to {interval}")
+    return dt
