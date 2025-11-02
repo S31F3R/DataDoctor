@@ -115,8 +115,15 @@ class uiMain(QMainWindow):
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
-        # Normalize keys by replacing \n with space, collapsing multiple spaces, stripping, and ensuring no invisible chars
-        normalizedResponses = {' '.join(k.replace('\n', ' ').split()).strip(): v for k, v in responses.items()}
+        normalizedResponses = {}
+        for k, v in responses.items():
+            if isinstance(v, dict) and 'label' in v:
+                label = v['label'].replace('\n', ' ').replace('\u00a0', ' ')
+                key = ' '.join(label.split()).strip()
+            else:
+                key = str(k).strip()
+            normalizedResponses[key] = v
+        
         self.seriesResponses = normalizedResponses
         self.currentQueryType = queryType
         
@@ -289,23 +296,30 @@ class uiMain(QMainWindow):
             Logic.logMessage("WARN", "Invalid cell: No timestamp or series label")
             return
         
-        # First, clean the label: replace \n with space and collapse multiple spaces
-        clean_label = ' '.join(seriesLabel.replace('\n', ' ').split()).strip()
+        # Clean the label: replace \n and NBSP with space, collapse, strip
+        clean_label = seriesLabel.replace('\n', ' ').replace('\u00a0', ' ')
+        clean_label = ' '.join(clean_label.split()).strip()
         
-        # Then, check if last part is SDID (numeric)
+        # Check if last part is SDID (numeric)
         parts = clean_label.rsplit(' ', 1)
         if len(parts) > 1 and parts[1].isdigit():
             normalized_label = parts[1]  # Use SDID for USBR
         else:
             normalized_label = clean_label  # Full for Aquarius/other
         
-        # Get response if available (use normalized)
+        # Get response if available
         response = self.seriesResponses.get(normalized_label)
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, clean_label={clean_label!r}, parts={parts!r}, normalized_label={normalized_label!r}, response exists={bool(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
-            if self.seriesResponses:
-                key = list(self.seriesResponses.keys())[0]
-                Logic.logMessage("DEBUG", f"Key bytes: {list(key.encode())}, Label bytes: {list(normalized_label.encode())}, Equal: {key == normalized_label}")
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, clean_label={clean_label!r}, parts={parts!r}, normalized_label={normalized_label!r}, response={repr(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
+        
+        # Fallback lookup if get fails (rare, but for debug)
+        if response is None:
+            for dk in self.seriesResponses:
+                if dk == normalized_label:
+                    response = self.seriesResponses[dk]
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", f"Fallback: Found response for {normalized_label} via loop")
+                    break
         
         menu = QMenu(self)
         
@@ -319,12 +333,12 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' action")
         
-        # Add overlay if column is overlay (existing logic, with renamed action)
+        # Add overlay if column is overlay
         if isOverlay:
             overlayAction = menu.addAction("Overlay details")
             overlayAction.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
         
-        if menu.actions():  # Only show if actions added
+        if menu.actions():
             menu.exec(self.mainTable.viewport().mapToGlobal(pos))
             
             if Config.debug:
