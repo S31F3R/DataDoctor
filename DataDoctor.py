@@ -117,10 +117,10 @@ class uiMain(QMainWindow):
         """Store API responses and query type after successful query."""
         normalizedResponses = {}
         for k, v in responses.items():
-            key = str(k).strip()
+            key = str(k).strip()  # Use SDID/UID as key
             if isinstance(v, dict) and 'label' in v:
                 v['label'] = v['label'].replace('\n', ' ').replace('\u00a0', ' ')
-                v['label'] = ' '.join(v['label'].split()).strip()
+                v['label'] = ' '.join(v['label'].split()).strip()  # Clean label inside v
             normalizedResponses[key] = v
         
         self.seriesResponses = normalizedResponses
