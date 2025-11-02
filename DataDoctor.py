@@ -115,21 +115,11 @@ class uiMain(QMainWindow):
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
-        normalizedResponses = {}
-
-        for k, v in responses.items():
-            if isinstance(v, dict) and 'label' in v:
-                label = v['label'].replace('\n', ' ').replace('\u00a0', ' ')
-                key = ' '.join(label.split()).strip()
-            else:
-                key = str(k).strip()
-            normalizedResponses[key] = v
-        
-        self.seriesResponses = normalizedResponses
+        self.seriesResponses = {str(k).strip(): v for k, v in responses.items()}  # Use dataID as key for both
         self.currentQueryType = queryType
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Stored query data: {len(normalizedResponses)} series, type {queryType}, keys={[repr(k) for k in normalizedResponses.keys()]}")
+            Logic.logMessage("DEBUG", f"Stored query data: {len(self.seriesResponses)} series, type {queryType}, keys={[repr(k) for k in self.seriesResponses.keys()]}")
 
 
     def btnPublicQueryPressed(self):
@@ -310,19 +300,19 @@ class uiMain(QMainWindow):
         # Fallback if no lookupId or response None: use normalized label
         if response is None:
             # Clean the label: replace \n and NBSP with space, collapse, strip
-            clean_label = seriesLabel.replace('\n', ' ').replace('\u00a0', ' ')
-            clean_label = ' '.join(clean_label.split()).strip()
+            cleanLabel = seriesLabel.replace('\n', ' ').replace('\u00a0', ' ')
+            cleanLabel = ' '.join(cleanLabel.split()).strip()
             
             # Check if last part is SDID (numeric)
-            parts = clean_label.rsplit(' ', 1)
+            parts = cleanLabel.rsplit(' ', 1)
             if len(parts) > 1 and parts[1].isdigit():
-                normalized_label = parts[1] # Use SDID for USBR
+                normalizedLabel = parts[1]  # Use SDID for USBR
             else:
-                normalized_label = clean_label # Full for Aquarius/other
+                normalizedLabel = cleanLabel  # Full for Aquarius/other
             
-            response = self.seriesResponses.get(normalized_label)
+            response = self.seriesResponses.get(normalizedLabel)
             if Config.debug:
-                Logic.logMessage("DEBUG", f"showCellContextMenu: Fallback normalized_label={normalized_label!r}")
+                Logic.logMessage("DEBUG", f"showCellContextMenu: Fallback normalizedLabel={normalizedLabel!r}")
         
         if Config.debug:
             Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, response type={type(response).__name__ if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
