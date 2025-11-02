@@ -289,21 +289,20 @@ class uiMain(QMainWindow):
             Logic.logMessage("WARN", "Invalid cell: No timestamp or series label")
             return
         
-        # Normalize seriesLabel
-        if '\n' in seriesLabel:
-            parts = seriesLabel.split('\n')
-            if len(parts) == 2 and parts[1].strip().isdigit():  # USBR format: 'Site \nSDID'
-                normalizedLabel = parts[1].strip()  # Use SDID as key
-            else:  # Aquarius or other: keep full after normalization
-                temp_label = ' '.join(seriesLabel.replace('\n', ' ').split())
-                normalizedLabel = temp_label
+        # First, clean the label: replace \n with space and collapse multiple spaces
+        clean_label = ' '.join(seriesLabel.replace('\n', ' ').split())
+        
+        # Then, check if last part is SDID (numeric)
+        parts = clean_label.rsplit(' ', 1)
+        if len(parts) > 1 and parts[1].isdigit():
+            normalizedLabel = parts[1]  # Use SDID for USBR
         else:
-            normalizedLabel = ' '.join(seriesLabel.split())
+            normalizedLabel = clean_label  # Full for Aquarius/other
         
         # Get response if available (use normalized)
         response = self.seriesResponses.get(normalizedLabel)
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response exists={bool(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, clean_label={clean_label!r}, parts={parts!r}, normalizedLabel={normalizedLabel!r}, response exists={bool(response)}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
         
         menu = QMenu(self)
         
