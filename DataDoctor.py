@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, 
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QLabel, QVBoxLayout)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtGui import QPalette, QFontMetrics, QPixmap
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
@@ -16,6 +16,7 @@ from ui.uiDataDictionary import uiDataDictionary
 from ui.uiOptions import uiOptions
 from ui.uiQuery import uiQuery
 from ui.uiQuickLook import uiQuickLook
+from ui.uiDetails import uiDetails
 
 class uiMain(QMainWindow):
     def __init__(self):
@@ -39,6 +40,8 @@ class uiMain(QMainWindow):
         self.lastStartDate = None
         self.lastEndDate = None
         self.columnMetadata = []
+        self.seriesResponses = {}  # Dict to store {seriesLabel: response_dict} post-query
+        self.currentQueryType = ""  # str: "AQUARIUS", etc., set post-query
 
         # Set button style
         for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
@@ -108,7 +111,15 @@ class uiMain(QMainWindow):
         Utils.reloadGlobals()
 
         if Config.debug:
-            Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))     
+            Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))  
+
+    def storeQueryData(self, responses, queryType):
+        """Store API responses and query type after successful query."""
+        self.seriesResponses = responses # dict {seriesLabel: response_dict}
+        self.currentQueryType = queryType
+        
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Stored query data: {len(responses)} series, type {queryType}")   
 
     def btnPublicQueryPressed(self):
         if self.winQuery:
@@ -199,7 +210,7 @@ class uiMain(QMainWindow):
             # Retrieve last delta and overlay states from globals, default to False if not set
             deltaChecked = getattr(Config, 'lastDeltaChecked', False)
             overlayChecked = getattr(Config, 'lastOverlayChecked', False)
-            
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"btnRefreshPressed: Refreshing with deltaChecked={deltaChecked}, overlayChecked={overlayChecked}")
             Query.executeQuery(self, self.lastQueryItems, self.lastStartDate, self.lastEndDate,
@@ -223,7 +234,7 @@ class uiMain(QMainWindow):
             Logic.logMessage("DEBUG", "btnUndoPressed: Called timestampSortTable")
 
     def showHeaderContextMenu(self, pos):
-        """Show context menu for header right-click to display full query info."""
+        """Show context menu for header right-click to display full query info using uiDetails."""
         header = self.mainTable.horizontalHeader()
         col = header.logicalIndexAt(pos)
         if col < 0 or col >= len(self.columnMetadata):
@@ -231,78 +242,85 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", "showHeaderContextMenu: Invalid column {} clicked".format(col))
             return
         meta = self.columnMetadata[col]
+        meta['col'] = col  # Add col for stats computation
         menu = QMenu(self)
         
-        def computeColumnStats():
-            values = []
-            for row in range(self.mainTable.rowCount()):
-                item = self.mainTable.item(row, col)
-                if item and item.text().strip():
-                    try:
-                        values.append(float(item.text()))
-                    except ValueError:
-                        pass
-            if not values:
-                return "N/A", "N/A", "N/A"
-            maxVal = max(values)
-            minVal = min(values)
-            meanVal = sum(values) / len(values)
-            
-            # Use valuePrecision for formatting, handles rawData internally
-            maxStr = Logic.valuePrecision(maxVal)
-            minStr = Logic.valuePrecision(minVal)
-            meanStr = Logic.valuePrecision(meanVal)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"showHeaderContextMenu: Computed stats for column {col}: Max {maxStr}, Min {minStr}, Mean {meanStr}")
-            return maxStr, minStr, meanStr
-        
         if meta['type'] == 'normal':
-            content = meta['queryInfos'][0]
-            def showQueryInfo():
-                maxStr, minStr, meanStr = computeColumnStats()
-                statsStr = f"\n\nStats:\nMax: {maxStr}\nMin: {minStr}\nMean: {meanStr}"
-                self.showMessage("Full Query Info", content + statsStr)
             action = menu.addAction("Show Query Info")
-            action.triggered.connect(showQueryInfo)
+            action.triggered.connect(lambda: self.showHeaderDetails("header_normal", meta))
         elif meta['type'] == 'delta':
-            content = f"{meta['dataIds'][0]} - {meta['dataIds'][1]}"
-            def showDetails():
-                maxStr, minStr, meanStr = computeColumnStats()
-                statsStr = f"\n\nStats:\nMax: {maxStr}\nMin: {minStr}\nMean: {meanStr}"
-                self.showMessage("Details", content + statsStr)
             action = menu.addAction("Show details")
-            action.triggered.connect(showDetails)
+            action.triggered.connect(lambda: self.showHeaderDetails("header_delta", meta))
         elif meta['type'] == 'overlay':
-            content = f"{meta['queryInfos'][0]}\n{meta['queryInfos'][1]}"
-            def showDetails():
-                maxStr, minStr, meanStr = computeColumnStats()
-                statsStr = f"\n\nStats:\nMax: {maxStr}\nMin: {minStr}\nMean: {meanStr}"
-                self.showMessage("Details", content + statsStr)
             action = menu.addAction("Show details")
-            action.triggered.connect(showDetails)
+            action.triggered.connect(lambda: self.showHeaderDetails("header_overlay", meta))
         
         menu.exec(header.mapToGlobal(pos))
         if Config.debug:
             Logic.logMessage("DEBUG", "showHeaderContextMenu: Displayed menu for column {}, type {}".format(col, meta['type']))
 
-    def showCellContextMenu(self, pos):
-        """Show context menu for cell right-click in overlay columns."""
-        row = self.mainTable.rowAt(pos.y())
-        col = self.mainTable.columnAt(pos.x())
-
-        if row < 0 or col < 0:
-            return
-
-        if col >= len(self.columnMetadata) or self.columnMetadata[col].get('type') != 'overlay':
-            return
-
-        menu = QMenu(self)
-        action = menu.addAction("Show details")
-        action.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
-        menu.exec(self.mainTable.viewport().mapToGlobal(pos))
-
+    def showHeaderDetails(self, queryType, meta):
+        """Open uiDetails for header metadata."""
+        seriesLabel = self.mainTable.horizontalHeaderItem(meta['col']).text() if self.mainTable.horizontalHeaderItem(meta['col']) else ""
+        detailsWin = uiDetails(parent=self)
+        detailsWin.populateDetails(queryType, seriesLabel, "", meta)
+        detailsWin.show()
+        
         if Config.debug:
-            Logic.logMessage("DEBUG", "showCellContextMenu: Displayed menu for cell ({}, {})".format(row, col))
+            Logic.logMessage("DEBUG", f"showHeaderDetails: Opened details for {seriesLabel}")
+
+    def showCellContextMenu(self, pos):
+        """Show context menu for cell right-click: Metadata details (internal only) + overlay if applicable."""
+        index = self.mainTable.indexAt(pos)
+        if not index.isValid():
+            return
+        
+        row = index.row()
+        col = index.column()
+        
+        # Get timestamp and series (from headers)
+        timestampStr = self.mainTable.verticalHeaderItem(row).text() if self.mainTable.verticalHeaderItem(row) else ""
+        seriesLabel = self.mainTable.horizontalHeaderItem(col).text() if self.mainTable.horizontalHeaderItem(col) else ""
+        
+        if not timestampStr or not seriesLabel:
+            Logic.logMessage("WARN", "Invalid cell: No timestamp or series label")
+            return
+        
+        # Get response if available
+        response = self.seriesResponses.get(seriesLabel)
+        if not response:
+            Logic.logMessage("WARN", f"No response data for series: {seriesLabel}")
+            # Still show overlay if applicable, but skip metadata
+        
+        menu = QMenu(self)
+        
+        # Add metadata details if internal query and response exists
+        if self.currentQueryType == 'internal' and response:
+            detailsAction = menu.addAction("Show details")
+            detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response))
+        
+        # Add overlay if column is overlay (existing logic, with renamed action)
+        if col < len(self.columnMetadata) and self.columnMetadata[col].get('type') == 'overlay':
+            overlayAction = menu.addAction("Overlay details")
+            overlayAction.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
+        
+        if menu.actions():  # Only show if actions added
+            menu.exec(self.mainTable.viewport().mapToGlobal(pos))
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"showCellContextMenu: Displayed menu for cell ({row}, {col})")
+        else:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"showCellContextMenu: No actions for cell ({row}, {col})")
+
+    def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response):
+        """Open uiDetails for metadata."""
+        detailsWin = uiDetails(parent=self)
+        detailsWin.populateDetails(self.currentQueryType, seriesLabel, timestampStr, response)
+        detailsWin.show()
+        
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"showMetadataDetails: Opened details for {timestampStr} - {seriesLabel}")
 
     def onTabCloseRequested(self, index):
         self.tabWidget.removeTab(index)
@@ -310,61 +328,29 @@ class uiMain(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", f"onTabCloseRequested: Closed tab at index {index}")
 
-    def showMessage(self, title, content):
-        """Display QMessageBox with given title and content, auto-sized without word-wrap."""
-        msgBox = QMessageBox(self)
-        msgBox.setWindowTitle(title)
-        pixmap = QPixmap(Logic.resourcePath('ui/icons/Info.png'))
-        pixmap = pixmap.scaled(22, 22, Qt.AspectRatioMode.KeepAspectRatio)
-        msgBox.setIconPixmap(pixmap)
-        label = QLabel(content)
-        label.setWordWrap(False) # Disable word-wrap
-        label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse) # Allow selection
-        layout = QVBoxLayout()
-        layout.addWidget(label)
-        layout.setContentsMargins(0, 0, 0, 0)
-        msgWidget = QWidget()
-        msgWidget.setLayout(layout)
-        msgBox.layout().addWidget(msgWidget, 1, 0, 1, msgBox.layout().columnCount())
-        msgBox.layout().setContentsMargins(10, 5, 10, 5)
-        msgBox.setStandardButtons(QMessageBox.StandardButton.Ok)
-
-        # Auto-size width to fit longest line
-        fontMetrics = QFontMetrics(label.font())
-        lines = content.split('\n')
-        maxWidth = max(fontMetrics.horizontalAdvance(line) for line in lines) + 40 # Padding
-        msgBox.setFixedWidth(min(maxWidth, QApplication.primaryScreen().availableGeometry().width() - 100)) # Cap to screen
-        msgBox.exec()
-        if Config.debug:
-            Logic.logMessage("DEBUG", "showMessage: Showed {}: {}".format(title, content))
-
     def showOverlayCellDetails(self, row, col):
-        """Display details for overlay cell."""
+        """Display details for overlay cell using uiDetails window."""
         item = self.mainTable.item(row, col)
-
+        
         if not item:
             return
+        
         data = item.data(Qt.ItemDataRole.UserRole)
-
+        
         if not data:
             return
         
-        # Set blank logic
-        primaryVal = data['primaryVal'] if data['primaryVal'] else "NDA!"
-        secondaryVal = data['secondaryVal'] if data['secondaryVal'] else "NDA!"
-        delta = data['delta'] if data['delta'] else "N/A"
-
-        # Build message
-        msg = f"{data['dataId1']} value: {primaryVal}\n"
-        msg += f"{data['dataId2']} value: {secondaryVal}\n"
-        msg += f"{data['dataId1']} database: {data['db1']}\n"
-        msg += f"{data['dataId2']} database: {data['db2']}\n"
-        msg += f"Delta: {delta}"
-
-        self.showMessage("Cell Details", msg)
-
+        # Get timestamp and series for title
+        timestampStr = self.mainTable.verticalHeaderItem(row).text() if self.mainTable.verticalHeaderItem(row) else ""
+        seriesLabel = self.mainTable.horizontalHeaderItem(col).text() if self.mainTable.horizontalHeaderItem(col) else ""
+        
+        # Open uiDetails with overlay mode
+        detailsWin = uiDetails(parent=self)
+        detailsWin.populateDetails('overlay', seriesLabel, timestampStr, data)
+        detailsWin.show()
+        
         if Config.debug:
-            Logic.logMessage("DEBUG", "showOverlayCellDetails: Showed details for cell ({}, {})".format(row, col))
+            Logic.logMessage("DEBUG", f"showOverlayCellDetails: Opened details for cell ({row}, {col})")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
