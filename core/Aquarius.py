@@ -163,7 +163,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
         subStartStr = f'{subStartYear}-{subStartMonth}-{subStartDay} {subStartHour}:{subStartMinute}'
         subEndStr = f'{subEndYear}-{subEndMonth}-{subEndDay} {subEndHour}:{subEndMinute}'
         response = requests.get(
-            f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={subStartStr}&QueryTo={subEndStr}&utcOffset={offsetHours}&GetParts=PointsOnly&format=json',
+            f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={subStartStr}&QueryTo={subEndStr}&utcOffset={offsetHours}&GetParts=All&format=json',
             headers=headers, verify=verifyMode
         )
 
