@@ -861,16 +861,18 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         if deltaChecked or overlayChecked:
             QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, originalIntervals, lookupIds, mainWindow=mainWindow)
         else:
-            mainWindow.columnMetadata = []
-            for i in range(mainWindow.mainTable.columnCount()):
-                mainWindow.columnMetadata.append({
+            self.columnMetadata = []
+            for i in range(len(headers)):
+                metadata = {
                     'type': 'normal',
-                    'dataIds': [lookupIds[i]],
-                    'dbs': [databases[i]],
-                    'queryInfos': [f"{queryItems[i][0]}|{queryItems[i][1]}|{queryItems[i][2]}"]
-                })
+                    'dataIds': [dataId], 
+                    'dbs': [db], 
+                    'queryInfos': [queryInfo], 
+                    'lookupId': dataId 
+                }
+                self.columnMetadata.append(metadata)
             if Config.debug:
-                Logic.logMessage("DEBUG", "executeQuery: Set normal columnMetadata with {} entries".format(len(mainWindow.columnMetadata)))
+                Logic.logMessage("DEBUG", f"Set columnMetadata with lookupId: {repr(self.columnMetadata)}")
         progressDialog.setValue(100)
         progressDialog.repaint()
         QCoreApplication.processEvents()

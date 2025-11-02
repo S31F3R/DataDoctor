@@ -115,11 +115,19 @@ class uiMain(QMainWindow):
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
-        self.seriesResponses = {str(k).strip(): v for k, v in responses.items()}  # Use dataID as key for both
+        normalizedResponses = {}
+        for k, v in responses.items():
+            key = str(k).strip()
+            if isinstance(v, dict) and 'label' in v:
+                v['label'] = v['label'].replace('\n', ' ').replace('\u00a0', ' ')
+                v['label'] = ' '.join(v['label'].split()).strip()
+            normalizedResponses[key] = v
+        
+        self.seriesResponses = normalizedResponses
         self.currentQueryType = queryType
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Stored query data: {len(self.seriesResponses)} series, type {queryType}, keys={[repr(k) for k in self.seriesResponses.keys()]}")
+            Logic.logMessage("DEBUG", f"Stored query data: {len(normalizedResponses)} series, type {queryType}, keys={[repr(k) for k in normalizedResponses.keys()]}")
 
 
     def btnPublicQueryPressed(self):
