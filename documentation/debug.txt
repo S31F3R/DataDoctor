@@ -1,207 +1,201 @@
-2025-11-02 13:26:32,787 [DEBUG] uiMain initialized with header context menu, Config.rawData: False
-2025-11-02 13:26:32,788 [DEBUG] Loading UI file: C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\winQuery.ui
-2025-11-02 13:26:32,828 [DEBUG] initializeQueryWindow: Setting initial state
-2025-11-02 13:26:32,829 [DEBUG] initializeQueryWindow: Set default dates and radio button
-2025-11-02 13:26:36,968 [DEBUG] uiQuery initialized
-2025-11-02 13:26:36,988 [DEBUG] uiDataDictionary initialized with btnDeleteRow
-2025-11-02 13:26:37,007 [DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName
-2025-11-02 13:26:37,036 [DEBUG] uiOptions initialized
-2025-11-02 13:26:37,091 [WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
-2025-11-02 13:26:38,055 [DEBUG] Built DataDictionary with 29304 rows, 11 columns
-2025-11-02 13:26:38,059 [DEBUG] loadAllQuickLooks: Found user Quick Look: BIBLC TEST.json
-2025-11-02 13:26:38,059 [DEBUG] loadAllQuickLooks: Found user Quick Look: TEST.json
-2025-11-02 13:26:38,060 [DEBUG] loadAllQuickLooks: Found user Quick Look: USGS TESTING.json
-2025-11-02 13:26:38,060 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (AQUARIUS).txt
-2025-11-02 13:26:38,060 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & AQUARIUS).txt
-2025-11-02 13:26:38,060 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & USGS).txt
-2025-11-02 13:26:38,060 [DEBUG] loadAllQuickLooks: Added example Quick Look: MRID TEST.txt
-2025-11-02 13:26:38,060 [DEBUG] loadAllQuickLooks: Added example Quick Look: USGS Example.txt
-2025-11-02 13:26:38,060 [DEBUG] loadAllQuickLooks: Added BIBLC TEST to cbQuickLook
-2025-11-02 13:26:38,060 [DEBUG] loadAllQuickLooks: Added Data Check (AQUARIUS) to cbQuickLook
-2025-11-02 13:26:38,061 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & AQUARIUS) to cbQuickLook
-2025-11-02 13:26:38,061 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & USGS) to cbQuickLook
-2025-11-02 13:26:38,061 [DEBUG] loadAllQuickLooks: Added MRID TEST to cbQuickLook
-2025-11-02 13:26:38,061 [DEBUG] loadAllQuickLooks: Added TEST to cbQuickLook
-2025-11-02 13:26:38,061 [DEBUG] loadAllQuickLooks: Added USGS Example to cbQuickLook
-2025-11-02 13:26:38,061 [DEBUG] loadAllQuickLooks: Added USGS TESTING to cbQuickLook
-2025-11-02 13:26:40,854 [DEBUG] uiQuery showEvent: queryType=internal
-2025-11-02 13:26:40,856 [DEBUG] Loaded config for quick look: BIBLC TEST
-2025-11-02 13:26:40,856 [DEBUG] Set cbQuickLook to index 0: BIBLC TEST
-2025-11-02 13:26:40,861 [DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png and title to Internal Query
-2025-11-02 13:26:40,868 [DEBUG] btnInternalQueryPressed: Opened uiQuery as internal
-2025-11-02 13:26:42,915 [DEBUG] loadQuickLook: Added item a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS
-2025-11-02 13:26:42,915 [DEBUG] loadQuickLook: Added item 20181|HOUR|USBR-LCHDB
-2025-11-02 13:26:42,915 [DEBUG] loadQuickLook: Loaded 'BIBLC TEST' with 2 items
-2025-11-02 13:26:42,916 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin'}
-2025-11-02 13:26:42,917 [DEBUG] Loaded quick look: BIBLC TEST
-2025-11-02 13:26:44,785 [DEBUG] btnQueryPressed: Starting query process, queryType=internal
-2025-11-02 13:26:44,786 [DEBUG] Item text: 'a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS', parts: ['a3456c1764b846779ea76ce5b1c8c277', 'HOUR', 'AQUARIUS'], len: 3
-2025-11-02 13:26:44,786 [DEBUG] Added queryItem: ('a3456c1764b846779ea76ce5b1c8c277', 'HOUR', 'AQUARIUS', '0', 0)
-2025-11-02 13:26:44,786 [DEBUG] Item text: '20181|HOUR|USBR-LCHDB', parts: ['20181', 'HOUR', 'USBR-LCHDB'], len: 3
-2025-11-02 13:26:44,786 [DEBUG] Added queryItem: ('20181', 'HOUR', 'USBR-LCHDB', '0', 1)
-2025-11-02 13:26:44,786 [DEBUG] Stored last query as internal
-2025-11-02 13:26:44,786 [DEBUG] executeQuery: isInternal=True, items=2, deltaChecked=False, overlayChecked=False
-2025-11-02 13:26:44,786 [DEBUG] executeQuery: Filtered AQUARIUS for public query, remaining items=2
-2025-11-02 13:26:44,797 [DEBUG] executeQuery: Initialized and showed progress dialog
-2025-11-02 13:26:44,802 [DEBUG] executeQuery: Ensured dates are datetime for rounding: start=2025-11-01 01:00:00, end=2025-11-02 13:26:00
-2025-11-02 13:26:44,802 [DEBUG] Rounded down 2025-11-01 01:00:00 to HOUR
-2025-11-02 13:26:44,802 [DEBUG] buildTimestamps called with start: 2025-11-01 01:00, end: 2025-11-02 13:26, interval: HOUR
-2025-11-02 13:26:44,802 [DEBUG] Generated 37 timestamps, sample first 3: ['11/01/25 01:00:00', '11/01/25 02:00:00', '11/01/25 03:00:00']
-2025-11-02 13:26:44,807 [DEBUG] executeQuery: Setup complete, progress at 20%
-2025-11-02 13:26:44,807 [DEBUG] Starting 2 threads for 2 groups in background
-2025-11-02 13:26:44,807 [DEBUG] Started background worker 0 for group ('AQUARIUS', None, None)
-2025-11-02 13:26:44,807 [DEBUG] Started background worker 1 for group ('USBR', None, None)
-2025-11-02 13:26:44,810 [DEBUG] Aquarius.apiRead called with dataIDs: ['a3456c1764b846779ea76ce5b1c8c277'], interval: HOUR, start: 2025-11-01 01:00, end: 2025-11-02 13:26
-2025-11-02 13:26:44,810 [DEBUG] getUtcOffsetInt: Parsed 'UTC-07:00 | Mountain Time (US & Canada)/Arizona' to -7.0 hours
-2025-11-02 13:26:44,811 [DEBUG] USBR.apiRead called with svr: lchdb, SDIDs: ['20181'], interval: HOUR, start: 2025-11-01 01:00, end: 2025-11-02 13:26, mrid: 0, table='R'
-2025-11-02 13:26:44,811 [DEBUG] buildTimestamps called with start: 2025-11-01 01:00, end: 2025-11-02 13:26, interval: HOUR
-2025-11-02 13:26:44,812 [DEBUG] Generated 37 timestamps, sample first 3: ['11/01/25 01:00:00', '11/01/25 02:00:00', '11/01/25 03:00:00']
-2025-11-02 13:26:44,812 [DEBUG] executeQuery: Started timer for progress updates
-2025-11-02 13:26:44,812 [DEBUG] Fetching USBR URL: https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr=lchdb&SDI=20181&tstp=HR&t1=2025-11-01T00:00&t2=2025-11-02T13:26&table=R&mrid=0&format=json
-2025-11-02 13:26:45,911 [DEBUG] SSL error with verify=True: HTTPSConnectionPool(host='ibrmazap013.bor.doi.net', port=443): Max retries exceeded with url: /AQUARIUS/Provisioning/v1/session (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1032)')))
-2025-11-02 13:26:45,911 [DEBUG] No certificate found at 'C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\certs\aquarius.pem', skipping to unverified.
-2025-11-02 13:26:46,168 [DEBUG] Fetched 1 series entries.
-2025-11-02 13:26:46,168 [DEBUG] Found series for '20181': 38 points.
-2025-11-02 13:26:46,169 [DEBUG] queryWorker: USBR result for SDIDs ['20181']: {'20181': ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513', '11/01/25 04:00:00,246.7397', '11/01/25 05:00:00,246.6843', '11/01/25 06:00:00,246.5908', '11/01/25 07:00:00,246.4715', '11/01/25 08:00:00,246.3479', '11/01/25 09:00:00,246.2508', '11/01/25 10:00:00,246.1937', '11/01/25 11:00:00,246.1945', '11/01/25 12:00:00,246.2570', '11/01/25 13:00:00,246.3749', '11/01/25 14:00:00,246.5287', '11/01/25 15:00:00,246.6958', '11/01/25 16:00:00,246.8531', '11/01/25 17:00:00,246.9873', '11/01/25 18:00:00,247.0917', '11/01/25 19:00:00,247.1801', '11/01/25 20:00:00,247.2676', '11/01/25 21:00:00,247.3523', '11/01/25 22:00:00,247.4383', '11/01/25 23:00:00,247.5170', '11/02/25 00:00:00,247.5812', '11/02/25 01:00:00,247.6307', '11/02/25 02:00:00,247.65', '11/02/25 03:00:00,247.6352', '11/02/25 04:00:00,247.5840', '11/02/25 05:00:00,247.4991', '11/02/25 06:00:00,247.3891', '11/02/25 07:00:00,247.2660', '11/02/25 08:00:00,247.1388', '11/02/25 09:00:00,247.0181', '11/02/25 10:00:00,246.9178', '11/02/25 11:00:00,246.8437', '11/02/25 12:00:00,246.8037', '11/02/25 13:00:00,246.7915', '11/02/25 14:00:00,']}
-2025-11-02 13:26:46,169 [DEBUG] gapCheck for dataID '20181': timestamps len=37, data len=38
-2025-11-02 13:26:46,172 [DEBUG] Removed 1 extra/mismatched rows from '20181': ts ['11/02/25 14:00:00']
-2025-11-02 13:26:46,172 [DEBUG] Post-gapCheck len=37, sample first 3: ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513']
-2025-11-02 13:26:46,172 [DEBUG] queryWorker: Completed group ('USBR', None, None) with 1 items
-2025-11-02 13:26:46,179 [DEBUG] executeQuery: Signal received for group ('USBR', None, None)
-2025-11-02 13:26:46,179 [DEBUG] executeQuery: Collected results for group ('USBR', None, None) with 1 items (1/2)
-2025-11-02 13:26:46,181 [DEBUG] executeQuery: Retrieved result from queue: ('USBR', None, None)
-2025-11-02 13:26:46,181 [DEBUG] executeQuery: Duplicate group ('USBR', None, None), skipping
-2025-11-02 13:26:46,250 [DEBUG] Authentication succeeded with verify=False
-2025-11-02 13:26:46,250 [WARNING] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.
-2025-11-02 13:26:46,259 [DEBUG] Estimated 37 points, splitting into 1 chunks of ~500 points each
-2025-11-02 13:26:46,259 [DEBUG] Generated 1 sub-ranges: [('2025-11-01 08:00', '2025-11-02 20:27')]
-2025-11-02 13:26:46,259 [DEBUG] Created 1 tasks for 1 UIDs across 1 sub-ranges, using 1 threads
-2025-11-02 13:26:46,261 [DEBUG] Thread 0 processing task for UID a3456c1764b846779ea76ce5b1c8c277, range 2025-11-01 08:00 to 2025-11-02 20:27
-2025-11-02 13:26:46,261 [DEBUG] Started thread 0 for task processing
-2025-11-02 13:26:46,625 [DEBUG] Thread 0 fetched 37 points for UID 'a3456c1764b846779ea76ce5b1c8c277', range 2025-11-01 08:00 to 2025-11-02 20:27
-2025-11-02 13:26:46,625 [DEBUG] Thread 0 completed task for UID a3456c1764b846779ea76ce5b1c8c277 with 37 points
-2025-11-02 13:26:46,625 [DEBUG] Thread 0 found no more tasks
-2025-11-02 13:26:46,627 [DEBUG] Thread 0 joined
-2025-11-02 13:26:46,627 [DEBUG] Combined results from 1 tasks with 1 UIDs
-2025-11-02 13:26:46,627 [DEBUG] Returning result dict with 1 UIDs
-2025-11-02 13:26:46,627 [DEBUG] queryWorker: Aquarius result for SDIDs ['a3456c1764b846779ea76ce5b1c8c277']: {'a3456c1764b846779ea76ce5b1c8c277': {'data': ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513', '11/01/25 04:00:00,246.7397', '11/01/25 05:00:00,246.6843', '11/01/25 06:00:00,246.5908', '11/01/25 07:00:00,246.4715', '11/01/25 08:00:00,246.3479', '11/01/25 09:00:00,246.2508', '11/01/25 10:00:00,246.1937', '11/01/25 11:00:00,246.1945', '11/01/25 12:00:00,246.257', '11/01/25 13:00:00,246.3749', '11/01/25 14:00:00,246.5287', '11/01/25 15:00:00,246.6958', '11/01/25 16:00:00,246.8531', '11/01/25 17:00:00,246.9873', '11/01/25 18:00:00,247.0917', '11/01/25 19:00:00,247.1801', '11/01/25 20:00:00,247.2676', '11/01/25 21:00:00,247.3523', '11/01/25 22:00:00,247.4383', '11/01/25 23:00:00,247.517', '11/02/25 00:00:00,247.5812', '11/02/25 01:00:00,247.6307', '11/02/25 02:00:00,247.65', '11/02/25 03:00:00,247.6352', '11/02/25 04:00:00,247.584', '11/02/25 05:00:00,247.4991', '11/02/25 06:00:00,247.3891', '11/02/25 07:00:00,247.266', '11/02/25 08:00:00,247.1388', '11/02/25 09:00:00,247.0181', '11/02/25 10:00:00,246.9178', '11/02/25 11:00:00,246.8437', '11/02/25 12:00:00,246.8037', '11/02/25 13:00:00,246.7915'], 'label': 'BIBLC-EH-Corrected \nSystem'}}
-2025-11-02 13:26:46,628 [DEBUG] queryWorker: Aquarius label for a3456c1764b846779ea76ce5b1c8c277: BIBLC-EH-Corrected 
+2025-11-02 13:41:51,764 [DEBUG] uiMain initialized with header context menu, Config.rawData: False
+2025-11-02 13:41:51,765 [DEBUG] Loading UI file: C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\winQuery.ui
+2025-11-02 13:41:51,806 [DEBUG] initializeQueryWindow: Setting initial state
+2025-11-02 13:41:51,806 [DEBUG] initializeQueryWindow: Set default dates and radio button
+2025-11-02 13:41:55,914 [DEBUG] uiQuery initialized
+2025-11-02 13:41:55,932 [DEBUG] uiDataDictionary initialized with btnDeleteRow
+2025-11-02 13:41:55,950 [DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName
+2025-11-02 13:41:55,971 [DEBUG] uiOptions initialized
+2025-11-02 13:41:56,020 [WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
+2025-11-02 13:41:56,953 [DEBUG] Built DataDictionary with 29304 rows, 11 columns
+2025-11-02 13:41:56,958 [DEBUG] loadAllQuickLooks: Found user Quick Look: BIBLC TEST.json
+2025-11-02 13:41:56,958 [DEBUG] loadAllQuickLooks: Found user Quick Look: TEST.json
+2025-11-02 13:41:56,958 [DEBUG] loadAllQuickLooks: Found user Quick Look: USGS TESTING.json
+2025-11-02 13:41:56,959 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (AQUARIUS).txt
+2025-11-02 13:41:56,959 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & AQUARIUS).txt
+2025-11-02 13:41:56,959 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & USGS).txt
+2025-11-02 13:41:56,959 [DEBUG] loadAllQuickLooks: Added example Quick Look: MRID TEST.txt
+2025-11-02 13:41:56,959 [DEBUG] loadAllQuickLooks: Added example Quick Look: USGS Example.txt
+2025-11-02 13:41:56,959 [DEBUG] loadAllQuickLooks: Added BIBLC TEST to cbQuickLook
+2025-11-02 13:41:56,959 [DEBUG] loadAllQuickLooks: Added Data Check (AQUARIUS) to cbQuickLook
+2025-11-02 13:41:56,959 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & AQUARIUS) to cbQuickLook
+2025-11-02 13:41:56,959 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & USGS) to cbQuickLook
+2025-11-02 13:41:56,959 [DEBUG] loadAllQuickLooks: Added MRID TEST to cbQuickLook
+2025-11-02 13:41:56,960 [DEBUG] loadAllQuickLooks: Added TEST to cbQuickLook
+2025-11-02 13:41:56,960 [DEBUG] loadAllQuickLooks: Added USGS Example to cbQuickLook
+2025-11-02 13:41:56,960 [DEBUG] loadAllQuickLooks: Added USGS TESTING to cbQuickLook
+2025-11-02 13:41:58,447 [DEBUG] uiQuery showEvent: queryType=internal
+2025-11-02 13:41:58,449 [DEBUG] Loaded config for quick look: BIBLC TEST
+2025-11-02 13:41:58,449 [DEBUG] Set cbQuickLook to index 0: BIBLC TEST
+2025-11-02 13:41:58,456 [DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png and title to Internal Query
+2025-11-02 13:41:58,462 [DEBUG] btnInternalQueryPressed: Opened uiQuery as internal
+2025-11-02 13:41:59,909 [DEBUG] loadQuickLook: Added item a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS
+2025-11-02 13:41:59,909 [DEBUG] loadQuickLook: Added item 20181|HOUR|USBR-LCHDB
+2025-11-02 13:41:59,909 [DEBUG] loadQuickLook: Loaded 'BIBLC TEST' with 2 items
+2025-11-02 13:41:59,909 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin'}
+2025-11-02 13:41:59,911 [DEBUG] Loaded quick look: BIBLC TEST
+2025-11-02 13:42:01,446 [DEBUG] btnQueryPressed: Starting query process, queryType=internal
+2025-11-02 13:42:01,447 [DEBUG] Item text: 'a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS', parts: ['a3456c1764b846779ea76ce5b1c8c277', 'HOUR', 'AQUARIUS'], len: 3
+2025-11-02 13:42:01,447 [DEBUG] Added queryItem: ('a3456c1764b846779ea76ce5b1c8c277', 'HOUR', 'AQUARIUS', '0', 0)
+2025-11-02 13:42:01,447 [DEBUG] Item text: '20181|HOUR|USBR-LCHDB', parts: ['20181', 'HOUR', 'USBR-LCHDB'], len: 3
+2025-11-02 13:42:01,447 [DEBUG] Added queryItem: ('20181', 'HOUR', 'USBR-LCHDB', '0', 1)
+2025-11-02 13:42:01,447 [DEBUG] Stored last query as internal
+2025-11-02 13:42:01,447 [DEBUG] executeQuery: isInternal=True, items=2, deltaChecked=False, overlayChecked=False
+2025-11-02 13:42:01,447 [DEBUG] executeQuery: Filtered AQUARIUS for public query, remaining items=2
+2025-11-02 13:42:01,460 [DEBUG] executeQuery: Initialized and showed progress dialog
+2025-11-02 13:42:01,466 [DEBUG] executeQuery: Ensured dates are datetime for rounding: start=2025-11-01 01:00:00, end=2025-11-02 13:42:00
+2025-11-02 13:42:01,466 [DEBUG] Rounded down 2025-11-01 01:00:00 to HOUR
+2025-11-02 13:42:01,466 [DEBUG] buildTimestamps called with start: 2025-11-01 01:00, end: 2025-11-02 13:42, interval: HOUR
+2025-11-02 13:42:01,467 [DEBUG] Generated 37 timestamps, sample first 3: ['11/01/25 01:00:00', '11/01/25 02:00:00', '11/01/25 03:00:00']
+2025-11-02 13:42:01,470 [DEBUG] executeQuery: Setup complete, progress at 20%
+2025-11-02 13:42:01,471 [DEBUG] Starting 2 threads for 2 groups in background
+2025-11-02 13:42:01,471 [DEBUG] Started background worker 0 for group ('AQUARIUS', None, None)
+2025-11-02 13:42:01,471 [DEBUG] Started background worker 1 for group ('USBR', None, None)
+2025-11-02 13:42:01,473 [DEBUG] Aquarius.apiRead called with dataIDs: ['a3456c1764b846779ea76ce5b1c8c277'], interval: HOUR, start: 2025-11-01 01:00, end: 2025-11-02 13:42
+2025-11-02 13:42:01,473 [DEBUG] USBR.apiRead called with svr: lchdb, SDIDs: ['20181'], interval: HOUR, start: 2025-11-01 01:00, end: 2025-11-02 13:42, mrid: 0, table='R'
+2025-11-02 13:42:01,473 [DEBUG] executeQuery: Started timer for progress updates
+2025-11-02 13:42:01,473 [DEBUG] getUtcOffsetInt: Parsed 'UTC-07:00 | Mountain Time (US & Canada)/Arizona' to -7.0 hours
+2025-11-02 13:42:01,473 [DEBUG] buildTimestamps called with start: 2025-11-01 01:00, end: 2025-11-02 13:42, interval: HOUR
+2025-11-02 13:42:01,474 [DEBUG] Generated 37 timestamps, sample first 3: ['11/01/25 01:00:00', '11/01/25 02:00:00', '11/01/25 03:00:00']
+2025-11-02 13:42:01,474 [DEBUG] Fetching USBR URL: https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr=lchdb&SDI=20181&tstp=HR&t1=2025-11-01T00:00&t2=2025-11-02T13:42&table=R&mrid=0&format=json
+2025-11-02 13:42:02,658 [DEBUG] SSL error with verify=True: HTTPSConnectionPool(host='ibrmazap013.bor.doi.net', port=443): Max retries exceeded with url: /AQUARIUS/Provisioning/v1/session (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1032)')))
+2025-11-02 13:42:02,659 [DEBUG] No certificate found at 'C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\certs\aquarius.pem', skipping to unverified.
+2025-11-02 13:42:02,975 [DEBUG] Fetched 1 series entries.
+2025-11-02 13:42:02,975 [DEBUG] Found series for '20181': 38 points.
+2025-11-02 13:42:02,975 [DEBUG] queryWorker: USBR result for SDIDs ['20181']: {'20181': ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513', '11/01/25 04:00:00,246.7397', '11/01/25 05:00:00,246.6843', '11/01/25 06:00:00,246.5908', '11/01/25 07:00:00,246.4715', '11/01/25 08:00:00,246.3479', '11/01/25 09:00:00,246.2508', '11/01/25 10:00:00,246.1937', '11/01/25 11:00:00,246.1945', '11/01/25 12:00:00,246.2570', '11/01/25 13:00:00,246.3749', '11/01/25 14:00:00,246.5287', '11/01/25 15:00:00,246.6958', '11/01/25 16:00:00,246.8531', '11/01/25 17:00:00,246.9873', '11/01/25 18:00:00,247.0917', '11/01/25 19:00:00,247.1801', '11/01/25 20:00:00,247.2676', '11/01/25 21:00:00,247.3523', '11/01/25 22:00:00,247.4383', '11/01/25 23:00:00,247.5170', '11/02/25 00:00:00,247.5812', '11/02/25 01:00:00,247.6307', '11/02/25 02:00:00,247.65', '11/02/25 03:00:00,247.6352', '11/02/25 04:00:00,247.5840', '11/02/25 05:00:00,247.4991', '11/02/25 06:00:00,247.3891', '11/02/25 07:00:00,247.2660', '11/02/25 08:00:00,247.1388', '11/02/25 09:00:00,247.0181', '11/02/25 10:00:00,246.9178', '11/02/25 11:00:00,246.8437', '11/02/25 12:00:00,246.8037', '11/02/25 13:00:00,246.7915', '11/02/25 14:00:00,']}
+2025-11-02 13:42:02,975 [DEBUG] gapCheck for dataID '20181': timestamps len=37, data len=38
+2025-11-02 13:42:02,978 [DEBUG] Removed 1 extra/mismatched rows from '20181': ts ['11/02/25 14:00:00']
+2025-11-02 13:42:02,979 [DEBUG] Post-gapCheck len=37, sample first 3: ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513']
+2025-11-02 13:42:02,979 [DEBUG] queryWorker: Completed group ('USBR', None, None) with 1 items
+2025-11-02 13:42:02,990 [DEBUG] executeQuery: Signal received for group ('USBR', None, None)
+2025-11-02 13:42:02,990 [DEBUG] executeQuery: Collected results for group ('USBR', None, None) with 1 items (1/2)
+2025-11-02 13:42:03,013 [DEBUG] Authentication succeeded with verify=False
+2025-11-02 13:42:03,013 [WARNING] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.
+2025-11-02 13:42:03,013 [DEBUG] Estimated 37 points, splitting into 1 chunks of ~500 points each
+2025-11-02 13:42:03,013 [DEBUG] Generated 1 sub-ranges: [('2025-11-01 08:00', '2025-11-02 20:43')]
+2025-11-02 13:42:03,013 [DEBUG] Created 1 tasks for 1 UIDs across 1 sub-ranges, using 1 threads
+2025-11-02 13:42:03,014 [DEBUG] Thread 0 processing task for UID a3456c1764b846779ea76ce5b1c8c277, range 2025-11-01 08:00 to 2025-11-02 20:43
+2025-11-02 13:42:03,014 [DEBUG] Started thread 0 for task processing
+2025-11-02 13:42:03,042 [DEBUG] executeQuery: Retrieved result from queue: ('USBR', None, None)
+2025-11-02 13:42:03,042 [DEBUG] executeQuery: Duplicate group ('USBR', None, None), skipping
+2025-11-02 13:42:03,355 [DEBUG] Thread 0 fetched 37 points for UID 'a3456c1764b846779ea76ce5b1c8c277', range 2025-11-01 08:00 to 2025-11-02 20:43
+2025-11-02 13:42:03,356 [DEBUG] Thread 0 completed task for UID a3456c1764b846779ea76ce5b1c8c277 with 37 points
+2025-11-02 13:42:03,356 [DEBUG] Thread 0 found no more tasks
+2025-11-02 13:42:03,358 [DEBUG] Thread 0 joined
+2025-11-02 13:42:03,358 [DEBUG] Combined results from 1 tasks with 1 UIDs
+2025-11-02 13:42:03,358 [DEBUG] Returning result dict with 1 UIDs
+2025-11-02 13:42:03,358 [DEBUG] queryWorker: Aquarius result for SDIDs ['a3456c1764b846779ea76ce5b1c8c277']: {'a3456c1764b846779ea76ce5b1c8c277': {'data': ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513', '11/01/25 04:00:00,246.7397', '11/01/25 05:00:00,246.6843', '11/01/25 06:00:00,246.5908', '11/01/25 07:00:00,246.4715', '11/01/25 08:00:00,246.3479', '11/01/25 09:00:00,246.2508', '11/01/25 10:00:00,246.1937', '11/01/25 11:00:00,246.1945', '11/01/25 12:00:00,246.257', '11/01/25 13:00:00,246.3749', '11/01/25 14:00:00,246.5287', '11/01/25 15:00:00,246.6958', '11/01/25 16:00:00,246.8531', '11/01/25 17:00:00,246.9873', '11/01/25 18:00:00,247.0917', '11/01/25 19:00:00,247.1801', '11/01/25 20:00:00,247.2676', '11/01/25 21:00:00,247.3523', '11/01/25 22:00:00,247.4383', '11/01/25 23:00:00,247.517', '11/02/25 00:00:00,247.5812', '11/02/25 01:00:00,247.6307', '11/02/25 02:00:00,247.65', '11/02/25 03:00:00,247.6352', '11/02/25 04:00:00,247.584', '11/02/25 05:00:00,247.4991', '11/02/25 06:00:00,247.3891', '11/02/25 07:00:00,247.266', '11/02/25 08:00:00,247.1388', '11/02/25 09:00:00,247.0181', '11/02/25 10:00:00,246.9178', '11/02/25 11:00:00,246.8437', '11/02/25 12:00:00,246.8037', '11/02/25 13:00:00,246.7915'], 'label': 'BIBLC-EH-Corrected \nSystem'}}
+2025-11-02 13:42:03,358 [DEBUG] queryWorker: Aquarius label for a3456c1764b846779ea76ce5b1c8c277: BIBLC-EH-Corrected 
 System
-2025-11-02 13:26:46,628 [DEBUG] gapCheck for dataID 'a3456c1764b846779ea76ce5b1c8c277': timestamps len=37, data len=37
-2025-11-02 13:26:46,628 [DEBUG] Post-gapCheck len=37, sample first 3: ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513']
-2025-11-02 13:26:46,628 [DEBUG] queryWorker: Completed group ('AQUARIUS', None, None) with 1 items
-2025-11-02 13:26:46,669 [DEBUG] executeQuery: Signal received for group ('AQUARIUS', None, None)
-2025-11-02 13:26:46,669 [DEBUG] executeQuery: Updated labelsDict with ['a3456c1764b846779ea76ce5b1c8c277']
-2025-11-02 13:26:46,669 [DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, None) with 1 items (2/2)
-2025-11-02 13:26:46,721 [DEBUG] executeQuery: Retrieved result from queue: ('AQUARIUS', None, None)
-2025-11-02 13:26:46,721 [DEBUG] executeQuery: Duplicate group ('AQUARIUS', None, None), skipping
-2025-11-02 13:26:46,722 [DEBUG] executeQuery: Timer stopped, wait loop ended, final collected 2/2, queue size 0, active threads 0
-2025-11-02 13:26:46,722 [DEBUG] executeQuery: All 2 groups merged
-2025-11-02 13:26:46,723 [DEBUG] executeQuery: Building row 0/37
-2025-11-02 13:26:46,724 [DEBUG] executeQuery: Building row 1/37
-2025-11-02 13:26:46,724 [DEBUG] executeQuery: Building row 2/37
-2025-11-02 13:26:46,724 [DEBUG] executeQuery: Building row 3/37
-2025-11-02 13:26:46,724 [DEBUG] executeQuery: Building row 4/37
-2025-11-02 13:26:46,724 [DEBUG] executeQuery: Building row 5/37
-2025-11-02 13:26:46,724 [DEBUG] executeQuery: Building row 6/37
-2025-11-02 13:26:46,724 [DEBUG] executeQuery: Building row 7/37
-2025-11-02 13:26:46,724 [DEBUG] executeQuery: Building row 8/37
-2025-11-02 13:26:46,724 [DEBUG] executeQuery: Building row 9/37
-2025-11-02 13:26:46,725 [DEBUG] executeQuery: Building row 10/37
-2025-11-02 13:26:46,725 [DEBUG] executeQuery: Building row 11/37
-2025-11-02 13:26:46,725 [DEBUG] executeQuery: Building row 12/37
-2025-11-02 13:26:46,725 [DEBUG] executeQuery: Building row 13/37
-2025-11-02 13:26:46,725 [DEBUG] executeQuery: Building row 14/37
-2025-11-02 13:26:46,725 [DEBUG] executeQuery: Building row 15/37
-2025-11-02 13:26:46,725 [DEBUG] executeQuery: Building row 16/37
-2025-11-02 13:26:46,725 [DEBUG] executeQuery: Building row 17/37
-2025-11-02 13:26:46,725 [DEBUG] executeQuery: Building row 18/37
-2025-11-02 13:26:46,725 [DEBUG] executeQuery: Building row 19/37
-2025-11-02 13:26:46,726 [DEBUG] executeQuery: Building row 20/37
-2025-11-02 13:26:46,726 [DEBUG] executeQuery: Building row 21/37
-2025-11-02 13:26:46,726 [DEBUG] executeQuery: Building row 22/37
-2025-11-02 13:26:46,726 [DEBUG] executeQuery: Building row 23/37
-2025-11-02 13:26:46,726 [DEBUG] executeQuery: Building row 24/37
-2025-11-02 13:26:46,726 [DEBUG] executeQuery: Building row 25/37
-2025-11-02 13:26:46,726 [DEBUG] executeQuery: Building row 26/37
-2025-11-02 13:26:46,726 [DEBUG] executeQuery: Building row 27/37
-2025-11-02 13:26:46,726 [DEBUG] executeQuery: Building row 28/37
-2025-11-02 13:26:46,727 [DEBUG] executeQuery: Building row 29/37
-2025-11-02 13:26:46,727 [DEBUG] executeQuery: Building row 30/37
-2025-11-02 13:26:46,727 [DEBUG] executeQuery: Building row 31/37
-2025-11-02 13:26:46,727 [DEBUG] executeQuery: Building row 32/37
-2025-11-02 13:26:46,727 [DEBUG] executeQuery: Building row 33/37
-2025-11-02 13:26:46,727 [DEBUG] executeQuery: Building row 34/37
-2025-11-02 13:26:46,727 [DEBUG] executeQuery: Building row 35/37
-2025-11-02 13:26:46,727 [DEBUG] executeQuery: Building row 36/37
-2025-11-02 13:26:46,727 [DEBUG] executeQuery: Built 37 rows for table
-2025-11-02 13:26:46,731 [DEBUG] buildTable: Starting with 37 rows, 2 headers
-2025-11-02 13:26:46,758 [DEBUG] buildTable: Aquarius not in dict, header 0: BIBLC-EH-Corrected 
+2025-11-02 13:42:03,358 [DEBUG] gapCheck for dataID 'a3456c1764b846779ea76ce5b1c8c277': timestamps len=37, data len=37
+2025-11-02 13:42:03,359 [DEBUG] Post-gapCheck len=37, sample first 3: ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513']
+2025-11-02 13:42:03,359 [DEBUG] queryWorker: Completed group ('AQUARIUS', None, None) with 1 items
+2025-11-02 13:42:03,401 [DEBUG] executeQuery: Signal received for group ('AQUARIUS', None, None)
+2025-11-02 13:42:03,401 [DEBUG] executeQuery: Updated labelsDict with ['a3456c1764b846779ea76ce5b1c8c277']
+2025-11-02 13:42:03,401 [DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, None) with 1 items (2/2)
+2025-11-02 13:42:03,453 [DEBUG] executeQuery: Retrieved result from queue: ('AQUARIUS', None, None)
+2025-11-02 13:42:03,453 [DEBUG] executeQuery: Duplicate group ('AQUARIUS', None, None), skipping
+2025-11-02 13:42:03,454 [DEBUG] executeQuery: Timer stopped, wait loop ended, final collected 2/2, queue size 0, active threads 0
+2025-11-02 13:42:03,454 [DEBUG] executeQuery: All 2 groups merged
+2025-11-02 13:42:03,455 [DEBUG] executeQuery: Building row 0/37
+2025-11-02 13:42:03,455 [DEBUG] executeQuery: Building row 1/37
+2025-11-02 13:42:03,455 [DEBUG] executeQuery: Building row 2/37
+2025-11-02 13:42:03,455 [DEBUG] executeQuery: Building row 3/37
+2025-11-02 13:42:03,456 [DEBUG] executeQuery: Building row 4/37
+2025-11-02 13:42:03,456 [DEBUG] executeQuery: Building row 5/37
+2025-11-02 13:42:03,456 [DEBUG] executeQuery: Building row 6/37
+2025-11-02 13:42:03,456 [DEBUG] executeQuery: Building row 7/37
+2025-11-02 13:42:03,456 [DEBUG] executeQuery: Building row 8/37
+2025-11-02 13:42:03,456 [DEBUG] executeQuery: Building row 9/37
+2025-11-02 13:42:03,457 [DEBUG] executeQuery: Building row 10/37
+2025-11-02 13:42:03,457 [DEBUG] executeQuery: Building row 11/37
+2025-11-02 13:42:03,457 [DEBUG] executeQuery: Building row 12/37
+2025-11-02 13:42:03,457 [DEBUG] executeQuery: Building row 13/37
+2025-11-02 13:42:03,457 [DEBUG] executeQuery: Building row 14/37
+2025-11-02 13:42:03,457 [DEBUG] executeQuery: Building row 15/37
+2025-11-02 13:42:03,457 [DEBUG] executeQuery: Building row 16/37
+2025-11-02 13:42:03,457 [DEBUG] executeQuery: Building row 17/37
+2025-11-02 13:42:03,457 [DEBUG] executeQuery: Building row 18/37
+2025-11-02 13:42:03,457 [DEBUG] executeQuery: Building row 19/37
+2025-11-02 13:42:03,458 [DEBUG] executeQuery: Building row 20/37
+2025-11-02 13:42:03,458 [DEBUG] executeQuery: Building row 21/37
+2025-11-02 13:42:03,458 [DEBUG] executeQuery: Building row 22/37
+2025-11-02 13:42:03,458 [DEBUG] executeQuery: Building row 23/37
+2025-11-02 13:42:03,458 [DEBUG] executeQuery: Building row 24/37
+2025-11-02 13:42:03,458 [DEBUG] executeQuery: Building row 25/37
+2025-11-02 13:42:03,458 [DEBUG] executeQuery: Building row 26/37
+2025-11-02 13:42:03,458 [DEBUG] executeQuery: Building row 27/37
+2025-11-02 13:42:03,458 [DEBUG] executeQuery: Building row 28/37
+2025-11-02 13:42:03,458 [DEBUG] executeQuery: Building row 29/37
+2025-11-02 13:42:03,459 [DEBUG] executeQuery: Building row 30/37
+2025-11-02 13:42:03,459 [DEBUG] executeQuery: Building row 31/37
+2025-11-02 13:42:03,459 [DEBUG] executeQuery: Building row 32/37
+2025-11-02 13:42:03,459 [DEBUG] executeQuery: Building row 33/37
+2025-11-02 13:42:03,459 [DEBUG] executeQuery: Building row 34/37
+2025-11-02 13:42:03,459 [DEBUG] executeQuery: Building row 35/37
+2025-11-02 13:42:03,459 [DEBUG] executeQuery: Building row 36/37
+2025-11-02 13:42:03,459 [DEBUG] executeQuery: Built 37 rows for table
+2025-11-02 13:42:03,462 [DEBUG] buildTable: Starting with 37 rows, 2 headers
+2025-11-02 13:42:03,491 [DEBUG] buildTable: Aquarius not in dict, header 0: BIBLC-EH-Corrected 
 System
-2025-11-02 13:26:46,773 [DEBUG] buildTable: USBR in dict, header 1: BIBLC 
+2025-11-02 13:42:03,512 [DEBUG] buildTable: USBR in dict, header 1: BIBLC 
 20181
-2025-11-02 13:26:46,774 [DEBUG] buildTable: Setting table to 37 rows, 2 columns
-2025-11-02 13:26:46,779 [DEBUG] buildTable: Sampling 37 rows for column widths
-2025-11-02 13:26:46,779 [DEBUG] buildTable col 0: maxCellWidth=68, headerWidth=141
-2025-11-02 13:26:46,779 [DEBUG] buildTable col 1: maxCellWidth=68, headerWidth=45
-2025-11-02 13:26:46,779 [DEBUG] buildTable: Disabled table updates for population
-2025-11-02 13:26:46,780 [DEBUG] buildTable: Re-enabled table updates after population
-2025-11-02 13:26:46,780 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
-2025-11-02 13:26:46,781 [DEBUG] buildTable: Set column 0 width to 151
-2025-11-02 13:26:46,781 [DEBUG] buildTable: Set column 1 width to 88
-2025-11-02 13:26:46,781 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
-2025-11-02 13:26:46,781 [DEBUG] buildTable: Set default row height to 29
-2025-11-02 13:26:46,781 [DEBUG] buildTable: Custom resized 2 columns. Text width for col 1: 92, Visible width: 88, Row height: 29
-2025-11-02 13:26:46,781 [DEBUG] qaqc: Processing column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
-2025-11-02 13:26:46,810 [DEBUG] qaqc: Processed column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
-2025-11-02 13:26:46,810 [DEBUG] qaqc: Processing column 1 for lookupId 20181
-2025-11-02 13:26:46,827 [DEBUG] qaqc: Processed column 1 for lookupId 20181
-2025-11-02 13:26:46,827 [DEBUG] Stored query data: 1 series, type internal, keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:46,827 [DEBUG] Stored 1 rawResponses for Aquarius
-2025-11-02 13:26:46,827 [DEBUG] executeQuery: Set normal columnMetadata with 2 entries
-2025-11-02 13:26:46,839 [DEBUG] executeQuery: Table built, progress dialog completed
-2025-11-02 13:26:46,839 [DEBUG] Query executed and table updated.
-2025-11-02 13:26:46,839 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
-2025-11-02 13:26:46,847 [DEBUG] Query window closed after query.
-2025-11-02 13:26:48,644 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:48,644 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:48,645 [DEBUG] showCellContextMenu: No actions for cell (3, 0)
-2025-11-02 13:26:49,387 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:49,387 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:49,387 [DEBUG] showCellContextMenu: No actions for cell (3, 0)
-2025-11-02 13:26:49,956 [DEBUG] showCellContextMenu: seriesLabel='BIBLC \n20181', clean_label='BIBLC 20181', parts=['BIBLC', '20181'], normalizedLabel='20181', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:49,956 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:49,956 [DEBUG] showCellContextMenu: No actions for cell (3, 1)
-2025-11-02 13:26:50,342 [DEBUG] showCellContextMenu: seriesLabel='BIBLC \n20181', clean_label='BIBLC 20181', parts=['BIBLC', '20181'], normalizedLabel='20181', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:50,343 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:50,343 [DEBUG] showCellContextMenu: No actions for cell (3, 1)
-2025-11-02 13:26:50,721 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:50,721 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:50,721 [DEBUG] showCellContextMenu: No actions for cell (4, 0)
-2025-11-02 13:26:50,881 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:50,882 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:50,882 [DEBUG] showCellContextMenu: No actions for cell (4, 0)
-2025-11-02 13:26:51,502 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:51,502 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:51,502 [DEBUG] showCellContextMenu: No actions for cell (10, 0)
-2025-11-02 13:26:51,677 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:51,677 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:51,677 [DEBUG] showCellContextMenu: No actions for cell (10, 0)
-2025-11-02 13:26:51,806 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:51,806 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:51,806 [DEBUG] showCellContextMenu: No actions for cell (10, 0)
-2025-11-02 13:26:51,973 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:51,973 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:51,974 [DEBUG] showCellContextMenu: No actions for cell (10, 0)
-2025-11-02 13:26:52,125 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:52,125 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:52,125 [DEBUG] showCellContextMenu: No actions for cell (10, 0)
-2025-11-02 13:26:52,299 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:52,299 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:52,299 [DEBUG] showCellContextMenu: No actions for cell (10, 0)
-2025-11-02 13:26:52,474 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:52,475 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:52,475 [DEBUG] showCellContextMenu: No actions for cell (10, 0)
-2025-11-02 13:26:52,716 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalizedLabel='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
-2025-11-02 13:26:52,716 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
-2025-11-02 13:26:52,716 [DEBUG] showCellContextMenu: No actions for cell (10, 0)
+2025-11-02 13:42:03,512 [DEBUG] buildTable: Setting table to 37 rows, 2 columns
+2025-11-02 13:42:03,516 [DEBUG] buildTable: Sampling 37 rows for column widths
+2025-11-02 13:42:03,517 [DEBUG] buildTable col 0: maxCellWidth=68, headerWidth=141
+2025-11-02 13:42:03,517 [DEBUG] buildTable col 1: maxCellWidth=68, headerWidth=45
+2025-11-02 13:42:03,517 [DEBUG] buildTable: Disabled table updates for population
+2025-11-02 13:42:03,518 [DEBUG] buildTable: Re-enabled table updates after population
+2025-11-02 13:42:03,518 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
+2025-11-02 13:42:03,518 [DEBUG] buildTable: Set column 0 width to 151
+2025-11-02 13:42:03,518 [DEBUG] buildTable: Set column 1 width to 88
+2025-11-02 13:42:03,518 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
+2025-11-02 13:42:03,518 [DEBUG] buildTable: Set default row height to 29
+2025-11-02 13:42:03,519 [DEBUG] buildTable: Custom resized 2 columns. Text width for col 1: 92, Visible width: 88, Row height: 29
+2025-11-02 13:42:03,519 [DEBUG] qaqc: Processing column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
+2025-11-02 13:42:03,547 [DEBUG] qaqc: Processed column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
+2025-11-02 13:42:03,547 [DEBUG] qaqc: Processing column 1 for lookupId 20181
+2025-11-02 13:42:03,567 [DEBUG] qaqc: Processed column 1 for lookupId 20181
+2025-11-02 13:42:03,568 [DEBUG] Stored query data: 1 series, type internal, keys=["'BIBLC-EH-Corrected System'"]
+2025-11-02 13:42:03,568 [DEBUG] Stored 1 rawResponses for Aquarius
+2025-11-02 13:42:03,568 [DEBUG] executeQuery: Set normal columnMetadata with 2 entries
+2025-11-02 13:42:03,579 [DEBUG] executeQuery: Table built, progress dialog completed
+2025-11-02 13:42:03,579 [DEBUG] Query executed and table updated.
+2025-11-02 13:42:03,579 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
+2025-11-02 13:42:03,585 [DEBUG] Query window closed after query.
+2025-11-02 13:42:04,494 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalized_label='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
+2025-11-02 13:42:04,494 [DEBUG] Key bytes: [66, 73, 66, 76, 67, 45, 69, 72, 45, 67, 111, 114, 114, 101, 99, 116, 101, 100, 32, 83, 121, 115, 116, 101, 109], Label bytes: [66, 73, 66, 76, 67, 45, 69, 72, 45, 67, 111, 114, 114, 101, 99, 116, 101, 100, 32, 83, 121, 115, 116, 101, 109], Equal: True
+2025-11-02 13:42:04,494 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
+2025-11-02 13:42:04,494 [DEBUG] showCellContextMenu: No actions for cell (3, 0)
+2025-11-02 13:42:05,161 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalized_label='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
+2025-11-02 13:42:05,161 [DEBUG] Key bytes: [66, 73, 66, 76, 67, 45, 69, 72, 45, 67, 111, 114, 114, 101, 99, 116, 101, 100, 32, 83, 121, 115, 116, 101, 109], Label bytes: [66, 73, 66, 76, 67, 45, 69, 72, 45, 67, 111, 114, 114, 101, 99, 116, 101, 100, 32, 83, 121, 115, 116, 101, 109], Equal: True
+2025-11-02 13:42:05,161 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
+2025-11-02 13:42:05,161 [DEBUG] showCellContextMenu: No actions for cell (3, 0)
+2025-11-02 13:42:05,335 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', clean_label='BIBLC-EH-Corrected System', parts=['BIBLC-EH-Corrected', 'System'], normalized_label='BIBLC-EH-Corrected System', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
+2025-11-02 13:42:05,335 [DEBUG] Key bytes: [66, 73, 66, 76, 67, 45, 69, 72, 45, 67, 111, 114, 114, 101, 99, 116, 101, 100, 32, 83, 121, 115, 116, 101, 109], Label bytes: [66, 73, 66, 76, 67, 45, 69, 72, 45, 67, 111, 114, 114, 101, 99, 116, 101, 100, 32, 83, 121, 115, 116, 101, 109], Equal: True
+2025-11-02 13:42:05,335 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
+2025-11-02 13:42:05,336 [DEBUG] showCellContextMenu: No actions for cell (3, 0)
+2025-11-02 13:42:05,730 [DEBUG] showCellContextMenu: seriesLabel='BIBLC \n20181', clean_label='BIBLC 20181', parts=['BIBLC', '20181'], normalized_label='20181', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
+2025-11-02 13:42:05,730 [DEBUG] Key bytes: [66, 73, 66, 76, 67, 45, 69, 72, 45, 67, 111, 114, 114, 101, 99, 116, 101, 100, 32, 83, 121, 115, 116, 101, 109], Label bytes: [50, 48, 49, 56, 49], Equal: False
+2025-11-02 13:42:05,730 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
+2025-11-02 13:42:05,730 [DEBUG] showCellContextMenu: No actions for cell (2, 1)
+2025-11-02 13:42:05,941 [DEBUG] showCellContextMenu: seriesLabel='BIBLC \n20181', clean_label='BIBLC 20181', parts=['BIBLC', '20181'], normalized_label='20181', response exists=False, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected System'"]
+2025-11-02 13:42:05,941 [DEBUG] Key bytes: [66, 73, 66, 76, 67, 45, 69, 72, 45, 67, 111, 114, 114, 101, 99, 116, 101, 100, 32, 83, 121, 115, 116, 101, 109], Label bytes: [50, 48, 49, 56, 49], Equal: False
+2025-11-02 13:42:05,941 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response=False
+2025-11-02 13:42:05,941 [DEBUG] showCellContextMenu: No actions for cell (2, 1)
+2025-11-02 13:42:07,232 [DEBUG] uiDetails initialized
+2025-11-02 13:42:07,232 [DEBUG] Populating details for queryType: header_normal, series: BIBLC 
+20181, timestamp: 
+2025-11-02 13:42:07,233 [DEBUG] Computed stats for column 1: Max 247.65, Min 246.19, Mean 246.94
+2025-11-02 13:42:07,233 [DEBUG] Populated 4 rows
+2025-11-02 13:42:07,243 [DEBUG] showHeaderDetails: Opened details for BIBLC 
+20181
+2025-11-02 13:42:07,246 [DEBUG] showHeaderContextMenu: Displayed menu for column 1, type normal
+2025-11-02 13:42:10,098 [DEBUG] uiDetails initialized
+2025-11-02 13:42:10,099 [DEBUG] Populating details for queryType: header_normal, series: BIBLC-EH-Corrected 
+System, timestamp: 
+2025-11-02 13:42:10,099 [DEBUG] Computed stats for column 0: Max 247.65, Min 246.19, Mean 246.94
+2025-11-02 13:42:10,100 [DEBUG] Populated 4 rows
+2025-11-02 13:42:10,111 [DEBUG] showHeaderDetails: Opened details for BIBLC-EH-Corrected 
+System
+2025-11-02 13:42:10,113 [DEBUG] showHeaderContextMenu: Displayed menu for column 0, type normal
