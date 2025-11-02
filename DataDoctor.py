@@ -196,8 +196,15 @@ class uiMain(QMainWindow):
 
     def btnRefreshPressed(self):
         if self.lastQueryType and self.lastQueryItems:
+            # Retrieve last delta and overlay states from globals, default to False if not set
+            deltaChecked = getattr(Config, 'lastDeltaChecked', False)
+            overlayChecked = getattr(Config, 'lastOverlayChecked', False)
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"btnRefreshPressed: Refreshing with deltaChecked={deltaChecked}, overlayChecked={overlayChecked}")
             Query.executeQuery(self, self.lastQueryItems, self.lastStartDate, self.lastEndDate,
-                              self.lastQueryType == 'internal', self.winDataDictionary.mainTable)
+                            self.lastQueryType == 'internal', self.winDataDictionary.mainTable,
+                            deltaChecked=deltaChecked, overlayChecked=overlayChecked)
             if Config.debug:
                 Logic.logMessage("DEBUG", "btnRefreshPressed: Refreshed query with last parameters")
         else:
@@ -219,30 +226,62 @@ class uiMain(QMainWindow):
         """Show context menu for header right-click to display full query info."""
         header = self.mainTable.horizontalHeader()
         col = header.logicalIndexAt(pos)
-
         if col < 0 or col >= len(self.columnMetadata):
             if Config.debug:
                 Logic.logMessage("DEBUG", "showHeaderContextMenu: Invalid column {} clicked".format(col))
             return
-
         meta = self.columnMetadata[col]
         menu = QMenu(self)
-
+        
+        def computeColumnStats():
+            values = []
+            for row in range(self.mainTable.rowCount()):
+                item = self.mainTable.item(row, col)
+                if item and item.text().strip():
+                    try:
+                        values.append(float(item.text()))
+                    except ValueError:
+                        pass
+            if not values:
+                return "N/A", "N/A", "N/A"
+            maxVal = max(values)
+            minVal = min(values)
+            meanVal = sum(values) / len(values)
+            
+            # Use valuePrecision for formatting, handles rawData internally
+            maxStr = Logic.valuePrecision(maxVal)
+            minStr = Logic.valuePrecision(minVal)
+            meanStr = Logic.valuePrecision(meanVal)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"showHeaderContextMenu: Computed stats for column {col}: Max {maxStr}, Min {minStr}, Mean {meanStr}")
+            return maxStr, minStr, meanStr
+        
         if meta['type'] == 'normal':
             content = meta['queryInfos'][0]
+            def showQueryInfo():
+                maxStr, minStr, meanStr = computeColumnStats()
+                statsStr = f"\n\nStats:\nMax: {maxStr}\nMin: {minStr}\nMean: {meanStr}"
+                self.showMessage("Full Query Info", content + statsStr)
             action = menu.addAction("Show Query Info")
-            action.triggered.connect(lambda: self.showMessage("Full Query Info", content))
+            action.triggered.connect(showQueryInfo)
         elif meta['type'] == 'delta':
             content = f"{meta['dataIds'][0]} - {meta['dataIds'][1]}"
+            def showDetails():
+                maxStr, minStr, meanStr = computeColumnStats()
+                statsStr = f"\n\nStats:\nMax: {maxStr}\nMin: {minStr}\nMean: {meanStr}"
+                self.showMessage("Details", content + statsStr)
             action = menu.addAction("Show details")
-            action.triggered.connect(lambda: self.showMessage("Details", content))
+            action.triggered.connect(showDetails)
         elif meta['type'] == 'overlay':
             content = f"{meta['queryInfos'][0]}\n{meta['queryInfos'][1]}"
+            def showDetails():
+                maxStr, minStr, meanStr = computeColumnStats()
+                statsStr = f"\n\nStats:\nMax: {maxStr}\nMin: {minStr}\nMean: {meanStr}"
+                self.showMessage("Details", content + statsStr)
             action = menu.addAction("Show details")
-            action.triggered.connect(lambda: self.showMessage("Details", content))
-
+            action.triggered.connect(showDetails)
+        
         menu.exec(header.mapToGlobal(pos))
-
         if Config.debug:
             Logic.logMessage("DEBUG", "showHeaderContextMenu: Displayed menu for column {}, type {}".format(col, meta['type']))
 
