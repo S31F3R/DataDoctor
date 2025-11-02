@@ -813,6 +813,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     databases = [item[2] for item in queryItems]
     lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
     data = []
+    
     for r in range(len(timestamps)):
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
