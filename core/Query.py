@@ -874,7 +874,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     'type': 'normal',
                     'dataIds': mergedDataIds[col], 
                     'dbs': db, 
-                    'queryInfos': mergedQueryInfos[col],  
+                    'queryInfos': [mergedQueryInfos[col]],  # Changed to list for consistency in uiDetails
                     'lookupId': lookupId  
                 }
                 mainWindow.columnMetadata.append(metadata)

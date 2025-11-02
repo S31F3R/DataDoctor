@@ -128,7 +128,7 @@ class uiDetails(QWidget):
         """Internal method to populate for normal header metadata."""
         
         # Add query info
-        self._addRow("Query Info", meta.get('queryInfos', ['N/A'])[0])
+        self._addRow("Query Info", meta.get('queryInfos', 'N/A'))
         
         # Add stats (computed as in original)
         maxStr, minStr, meanStr = self._computeColumnStats(meta['col'])  # Assuming col in meta
@@ -198,7 +198,7 @@ class uiDetails(QWidget):
             return
         
         # Find the matching TimeSeriesPoint (assuming Points is list of dicts)
-        point = next((p for p in response.get('Points', []) if self._parseDateTime(p['Timestamp']['DateTimeOffset']) == timestamp), None)
+        point = next((p for p in response.get('Points', []) if self._parseDateTime(p['Timestamp']) == timestamp), None)
         if not point:
             Logic.logMessage("WARN", f"No matching point found for timestamp {timestampStr}")
             return
@@ -212,7 +212,7 @@ class uiDetails(QWidget):
         value = point['Value']
         numeric = value.get('Numeric', 'N/A')
         display = value.get('Display', 'N/A') if not Config.rawData else Logic.valuePrecision(numeric)
-        self._addRow("Value", f"{display} ({numeric})", point['Timestamp']['DateTimeOffset'], "")
+        self._addRow("Value", f"{display} ({numeric})", point['Timestamp'], "")
         
         # 3-9: Arrays with time-range filtering
         self._addArrayRows("Approval", response.get('Approvals', []), timestamp, 
@@ -268,11 +268,11 @@ class uiDetails(QWidget):
         """Parse string to datetime, assuming common formats (e.g., ISO)."""
         if not dtStr:
             raise ValueError("Empty datetime string")
-        # Try ISO with Z or offset, plus your row header format
-        formats = ['%Y-%m-%dT%H:%M:%SZ', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%d %H:%M:%S']
+        # Try row header format first (2-digit year)
+        formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%d %H:%M:%S']
         for fmt in formats:
             try:
-                return datetime.strptime(dtStr, fmt)
+                return datetime.strptime(dtStr.split('.')[0].rstrip('Z+-:0123456789') if 'T' in dtStr else dtStr, fmt)
             except ValueError:
                 pass
         raise ValueError(f"Unsupported datetime format: {dtStr}")
