@@ -13,3 +13,4 @@ appRoot = ""
 deltaChecked = False
 overlayChecked = False
 systemTextColor = ""
+enableSQL = False
