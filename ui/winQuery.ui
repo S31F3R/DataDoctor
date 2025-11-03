@@ -210,7 +210,7 @@
      <rect>
       <x>20</x>
       <y>560</y>
-      <width>131</width>
+      <width>128</width>
       <height>31</height>
      </rect>
     </property>
@@ -252,7 +252,7 @@
      <rect>
       <x>20</x>
       <y>520</y>
-      <width>131</width>
+      <width>128</width>
       <height>30</height>
      </rect>
     </property>
@@ -266,9 +266,9 @@
    <widget class="QPushButton" name="btnClearQuery">
     <property name="geometry">
      <rect>
-      <x>160</x>
+      <x>155</x>
       <y>520</y>
-      <width>131</width>
+      <width>136</width>
       <height>31</height>
      </rect>
     </property>
@@ -718,9 +718,9 @@
    <widget class="QPushButton" name="btnDeleteQuickLook">
     <property name="geometry">
      <rect>
-      <x>160</x>
+      <x>155</x>
       <y>560</y>
-      <width>131</width>
+      <width>136</width>
       <height>31</height>
      </rect>
     </property>
