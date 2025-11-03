@@ -1,23 +1,5 @@
 # DataDoctor.py
 
-import sys
-import os
-import csv
-import json
-from datetime import datetime
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, 
-                             QSizePolicy, QMessageBox, QFileDialog, QMenu, QLabel, QVBoxLayout)
-from PyQt6.QtCore import Qt, QPoint
-from PyQt6.QtGui import QPalette, QFontMetrics, QPixmap
-from PyQt6 import uic
-from core import Logic, Query, Utils, Config
-from ui.uiAbout import uiAbout
-from ui.uiDataDictionary import uiDataDictionary
-from ui.uiOptions import uiOptions
-from ui.uiQuery import uiQuery
-from ui.uiQuickLook import uiQuickLook
-from ui.uiDetails import uiDetails
-
 class uiMain(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -40,8 +22,8 @@ class uiMain(QMainWindow):
         self.lastStartDate = None
         self.lastEndDate = None
         self.columnMetadata = []
-        self.seriesResponses = {}  # Dict to store {seriesLabel: response_dict} post-query
-        self.currentQueryType = ""  # str: "AQUARIUS", etc., set post-query
+        self.seriesResponses = {} # Dict to store {seriesLabel: response_dict} post-query
+        self.currentQueryType = "" # str: "AQUARIUS", etc., set post-query
 
         # Set button style
         for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
@@ -128,7 +110,6 @@ class uiMain(QMainWindow):
         
         if Config.debug:
             Logic.logMessage("DEBUG", f"Stored query data: {len(normalizedResponses)} series, type {queryType}, keys={[repr(k) for k in normalizedResponses.keys()]}")
-
 
     def btnPublicQueryPressed(self):
         if self.winQuery:
@@ -246,23 +227,24 @@ class uiMain(QMainWindow):
         """Show context menu for header right-click to display full query info using uiDetails."""
         header = self.mainTable.horizontalHeader()
         col = header.logicalIndexAt(pos)
+
         if col < 0 or col >= len(self.columnMetadata):
             if Config.debug:
                 Logic.logMessage("DEBUG", "showHeaderContextMenu: Invalid column {} clicked".format(col))
             return
         meta = self.columnMetadata[col]
-        meta['col'] = col  # Add col for stats computation
+        meta['col'] = col # Add col for stats computation
         menu = QMenu(self)
         
         if meta['type'] == 'normal':
             action = menu.addAction("Show Query Info")
-            action.triggered.connect(lambda: self.showHeaderDetails("header_normal", meta))
+            action.triggered.connect(lambda: self.showHeaderDetails("headerNormal", meta))
         elif meta['type'] == 'delta':
             action = menu.addAction("Show details")
-            action.triggered.connect(lambda: self.showHeaderDetails("header_delta", meta))
+            action.triggered.connect(lambda: self.showHeaderDetails("headerDelta", meta))
         elif meta['type'] == 'overlay':
             action = menu.addAction("Show details")
-            action.triggered.connect(lambda: self.showHeaderDetails("header_overlay", meta))
+            action.triggered.connect(lambda: self.showHeaderDetails("headerOverlay", meta))
         
         menu.exec(header.mapToGlobal(pos))
         if Config.debug:
@@ -310,11 +292,13 @@ class uiMain(QMainWindow):
         
         # Add metadata details if internal query, non-overlay, and response is dict (for Aquarius metadata)
         isOverlay = col < len(self.columnMetadata) and self.columnMetadata[col].get('type') == 'overlay'
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"showCellContextMenu: Condition check - internal={self.currentQueryType == 'internal'}, not overlay={not isOverlay}, response dict={isinstance(response, dict)}")
         if self.currentQueryType == 'internal' and not isOverlay and isinstance(response, dict):
             detailsAction = menu.addAction("Show details")
             detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response))
+
             if Config.debug:
                 Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' action")
         
@@ -323,7 +307,7 @@ class uiMain(QMainWindow):
             overlayAction = menu.addAction("Overlay details")
             overlayAction.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
         
-        if menu.actions():  # Only show if actions added
+        if menu.actions(): # Only show if actions added
             menu.exec(self.mainTable.viewport().mapToGlobal(pos))
             
             if Config.debug:
