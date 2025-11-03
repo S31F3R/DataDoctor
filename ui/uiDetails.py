@@ -217,13 +217,11 @@ class uiDetails(QWidget):
         value = point['Value']
         numeric = value.get('Numeric', 'N/A')
         display = Logic.valuePrecision(numeric) if not Config.rawData and numeric != 'N/A' else str(numeric)
-        self.addRow("Value", display, point['Timestamp'], "")
+        self.addRow("Value", display)
         
         # 3-9: Arrays with time-range filtering
         self.addArrayRows("Approval", response.get('Approvals', []), timestamp, 
-                           lambda item: f"Level: {item.get('ApprovalLevel', 'N/A')} ({item.get('LevelDescription', 'N/A')}) | User: {item.get('User', 'N/A')} | Applied: {item.get('DateAppliedUtc', 'N/A')}")
-        
-        self.addArrayRows("Approval Comment", response.get('Approvals', []), timestamp, lambda item: f"{item.get('Comment', 'N/A')}")                    
+                           lambda item: f"Level: {item.get('ApprovalLevel', 'N/A')} ({item.get('LevelDescription', 'N/A')}) \nUser: {item.get('User', 'N/A')} \nApplied: {item.get('DateAppliedUtc', 'N/A')} \nComment: {item.get('Comment', 'N/A')}")                   
 
         self.addArrayRows("Qualifier", response.get('Qualifiers', []), timestamp, 
                            lambda item: f"Identifier: {item.get('Identifier', 'N/A')} | User: {item.get('User', 'N/A')} | Applied: {item.get('DateApplied', 'N/A')}")
@@ -291,7 +289,7 @@ class uiDetails(QWidget):
             raise ValueError("Empty datetime string")
         
         # Preprocess: remove microseconds and colon in tz offset
-        dtStr = dtStr.split('.')[0]  # Remove microseconds
+        dtStr = dtStr.split('.')[0] # Remove microseconds
         if dtStr[-3] == ':': # Remove colon in +HH:MM to +HHMM
             dtStr = dtStr[:-3] + dtStr[-2:]
 
