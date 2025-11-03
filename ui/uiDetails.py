@@ -298,4 +298,13 @@ class uiDetails(QWidget):
                 return dt.replace(tzinfo=None) # Return naive datetime for comparison
             except ValueError:
                 pass
+        # Fallback: remove all ':' in time part
+        dtStr = dtStr.replace(':', '')
+        formats_no_colon = ['%m/%d/%y %H%M00', '%Y-%m-%dT%H%M%S%z', '%Y-%m-%dT%H%M%S', '%Y-%m-%d %H%M%S']
+        for fmt in formats_no_colon:
+            try:
+                dt = datetime.strptime(dtStr, fmt)
+                return dt.replace(tzinfo=None)  # Return naive datetime for comparison
+            except ValueError:
+                pass
         raise ValueError(f"Unsupported datetime format: {dtStr}")
