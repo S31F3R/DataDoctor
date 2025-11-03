@@ -1,301 +1,188 @@
-# uiDetails.py - Details window for displaying cell metadata or overlay info
-
-import os
-import sys
-from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QAbstractItemView
-from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import Qt
-from PyQt6 import uic
-from datetime import datetime
-from core import Logic, Config
-
-class uiDetails(QWidget):
-    """Details window: Displays metadata or overlay info for a specific timeseries cell."""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        
-        # Load the UI file
-        uic.loadUi(Logic.resourcePath('ui/winDetails.ui'), self)
-        
-        # Set window flags to stay on top of parent
-        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
-        
-        # Set icon
-        self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/Info.png')))
-        
-        # Initialize table with no rows yet (column count set dynamically in populate)
-        self.detailsTable.setSortingEnabled(True)
-        self.detailsTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers) # Read-only
-        self.detailsTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows) # Select whole rows
-        self.detailsTable.verticalHeader().setVisible(False) # Hide row numbers to reduce extra space
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", "uiDetails initialized")
-    
-    def populateDetails(self, queryType, seriesLabel, timestampStr, response):
-        """
-        Populate the table with metadata or overlay info for the given cell.
-        - queryType: str (e.g., "AQUARIUS", "USGS", "USBR", "overlay", "headerNormal", "headerDelta", "headerOverlay") for handling different modes.
-        - seriesLabel: str (header label for the series/column).
-        - timestampStr: str (timestamp from vertical header, e.g., "2023-01-01T00:00:00Z") or empty for headers.
-        - response: dict (full API response for metadata, cell data for overlay, meta dict for headers).
-        """
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Populating details for queryType: {queryType}, series: {seriesLabel}, timestamp: {timestampStr}")
-        
-        # Set title using first line of seriesLabel only (no timestamp for headers)
-        titleLabel = seriesLabel.split('\n')[0] if '\n' in seriesLabel else seriesLabel
-        if timestampStr:
-            self.lblTitle.setText(f"Details for {timestampStr} - {titleLabel}")
-        else:
-            self.lblTitle.setText(f"Details for {titleLabel}")
-        
-        # Clear existing rows and set columns dynamically
-        self.detailsTable.setRowCount(0)
-        
-        if queryType in ["overlay", "headerNormal", "headerDelta", "headerOverlay"]:
-            self.detailsTable.setColumnCount(2)
-            self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details"])
-        else:
-            self.detailsTable.setColumnCount(4)
-            self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
-        
-        self.detailsTable.horizontalHeader().setStretchLastSection(True)
-        
-        # Handler dictionary for database-specific metadata (easy to add USBR/USGS)
-        metadataHandlers = {
-            "AQUARIUS": self.populateAquarius,
-            "USGS": self.populateUSGS,  # TODO: Implement for USGS
-            "USBR": self.populateUSBR,  # TODO: Implement for USBR
-        }
-        
-        if queryType == "overlay":
-            self.populateOverlay(timestampStr, response)
-        elif queryType == "headerNormal":
-            self.populateHeaderNormal(response)
-        elif queryType == "headerDelta":
-            self.populateHeaderDelta(response)
-        elif queryType == "headerOverlay":
-            self.populateHeaderOverlay(response)
-        elif queryType in metadataHandlers:
-            metadataHandlers[queryType](timestampStr, response)
-        else:
-            Logic.logMessage("WARN", f"Unknown queryType: {queryType} - No details populated")
-            return
-        
-        # Resize table to contents
-        self.detailsTable.resizeColumnsToContents()
-        self.detailsTable.resizeRowsToContents()
-        
-        # Manually calculate and set window size to fit content exactly (no scroll bars)
-        self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
-        self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
-        width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding for borders/margins
-        height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding, account for frames
-        self.resize(width, height)
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Populated {self.detailsTable.rowCount()} rows")
-    
-    def populateOverlay(self, timestampStr, data):
-        """Internal method to populate for overlay cell data."""
-        
-        # Handle missing keys safely
-        primaryVal = data.get('primaryVal', 'N/A') if data.get('primaryVal') is not None else 'N/A'
-        secondaryVal = data.get('secondaryVal', 'N/A') if data.get('secondaryVal') is not None else 'N/A'
-        delta = data.get('delta', 'N/A') if data.get('delta') is not None else 'N/A'
-        
-        # Respect Config.rawData for value formatting if needed (e.g., if vals are numeric)
-        if not Config.rawData:
-            try:
-                primaryVal = Logic.valuePrecision(float(primaryVal)) if primaryVal != 'N/A' else 'N/A'
-                secondaryVal = Logic.valuePrecision(float(secondaryVal)) if secondaryVal != 'N/A' else 'N/A'
-                delta = Logic.valuePrecision(float(delta)) if delta != 'N/A' else 'N/A'
-            except ValueError:
-                pass # Keep as string if not numeric
-        
-        # Add rows for overlay specifics (broken out per user request)
-        self.addRow("Primary Info", data.get('dataId1', 'N/A'))
-        self.addRow("Primary Value", str(primaryVal))
-        self.addRow("Primary Database", data.get('db1', 'N/A'))
-        self.addRow("Secondary Info", data.get('dataId2', 'N/A'))
-        self.addRow("Secondary Value", str(secondaryVal))
-        self.addRow("Secondary Database", data.get('db2', 'N/A'))
-        self.addRow("Delta", str(delta))
-    
-    def populateHeaderNormal(self, meta):
-        """Internal method to populate for normal header metadata."""
-        
-        # Add query info
-        query_infos = meta.get('queryInfos', 'N/A')
-        query_str = query_infos[0] if isinstance(query_infos, list) else str(query_infos)
-        self.addRow("Query Info", query_str)
-        
-        # Add stats (computed as in original)
-        maxStr, minStr, meanStr = self.computeColumnStats(meta['col']) # Assuming col in meta
-        self.addRow("Max", maxStr)
-        self.addRow("Min", minStr)
-        self.addRow("Mean", meanStr)
-    
-    def populateHeaderDelta(self, meta):
-        """Internal method to populate for delta header metadata."""
-        
-        # Add details (changed to "Calculation" per user suggestion)
-        self.addRow("Calculation", f"{meta.get('dataIds', ['N/A', 'N/A'])[0]} - {meta.get('dataIds', ['N/A', 'N/A'])[1]}")
-        
-        # Add stats
-        maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
-        self.addRow("Max", maxStr)
-        self.addRow("Min", minStr)
-        self.addRow("Mean", meanStr)
-    
-    def populateHeaderOverlay(self, meta):
-        """Internal method to populate for overlay header metadata."""
-        
-        # Add primary/secondary (tweaked per user request)
-        self.addRow("Primary", meta.get('queryInfos', ['N/A', 'N/A'])[0])
-        self.addRow("Secondary", meta.get('queryInfos', ['N/A', 'N/A'])[1])
-        
-        # Add stats
-        maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
-        self.addRow("Max", maxStr)
-        self.addRow("Min", minStr)
-        self.addRow("Mean", meanStr)
-    
-    def computeColumnStats(self, col):
-        """Compute stats for a column (mirrors original logic)."""
-        values = []
-        for row in range(self.parent().mainTable.rowCount()):
-            item = self.parent().mainTable.item(row, col)
-            if item and item.text().strip():
-                try:
-                    values.append(float(item.text()))
-                except ValueError:
-                    pass
-        if not values:
-            return "N/A", "N/A", "N/A"
-        maxVal = max(values)
-        minVal = min(values)
-        meanVal = sum(values) / len(values)
-        
-        # Use valuePrecision for formatting, handles rawData internally
-        maxStr = Logic.valuePrecision(maxVal)
-        minStr = Logic.valuePrecision(minVal)
-        meanStr = Logic.valuePrecision(meanVal)
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Computed stats for column {col}: Max {maxStr}, Min {minStr}, Mean {meanStr}")
-        
-        return maxStr, minStr, meanStr
-    
-    def populateAquarius(self, timestampStr, response):
-        """Internal method to populate for AQUARIUS response."""
-        
-        # Parse timestamp to datetime for comparisons
-        try:
-            timestamp = self.parseDateTime(timestampStr)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"populateDetails: Parsed timestamp {timestampStr} to {timestamp}")
-        except ValueError as e:
-            Logic.logMessage("ERROR", f"Failed to parse timestamp {timestampStr}: {e}")
-            return
-        
-        # Find the matching TimeSeriesPoint (assuming Points is list of dicts)
-        point = next((p for p in response.get('Points', []) if self.parseDateTime(p['Timestamp']) == timestamp), None)
-        if not point:
-            Logic.logMessage("WARN", f"No matching point found for timestamp {timestampStr}")
-            return
-        
-        # Add rows for selected metadata (per list 1-10)
-        
-        # 1. Parameter/Label/Unit (series-level)
-        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')} ({response.get('Label', 'N/A')})", "", response.get('Unit', 'N/A'))
-        
-        # 2. Timestamp/Value (point-level, respect Config.rawData for formatting)
-        value = point['Value']
-        numeric = value.get('Numeric', 'N/A')
-        display = Logic.valuePrecision(numeric) if not Config.rawData and numeric != 'N/A' else str(numeric)
-        self.addRow("Value", display, point['Timestamp'], "")
-        
-        # 3-9: Arrays with time-range filtering
-        self.addArrayRows("Approval", response.get('Approvals', []), timestamp, 
-                           lambda item: f"Level: {item.get('ApprovalLevel', 'N/A')} | Description: {item.get('LevelDescription', 'N/A')} | Comment: {item.get('Comment', 'N/A')} | User: {item.get('User', 'N/A')} | Applied: {item.get('DateAppliedUtc', 'N/A')}")
-        
-        self.addArrayRows("Qualifier", response.get('Qualifiers', []), timestamp, 
-                           lambda item: f"Identifier: {item.get('Identifier', 'N/A')} | User: {item.get('User', 'N/A')} | Applied: {item.get('DateApplied', 'N/A')}")
-        
-        self.addArrayRows("Method", response.get('Methods', []), timestamp, 
-                           lambda item: f"Code: {item.get('MethodCode', 'N/A')}")
-        
-        self.addArrayRows("Grade", response.get('Grades', []), timestamp, 
-                           lambda item: f"Code: {item.get('GradeCode', 'N/A')}")
-        
-        self.addArrayRows("Gap Tolerance", response.get('GapTolerances', []), timestamp, 
-                           lambda item: f"Tolerance (min): {item.get('ToleranceInMinutes', 'N/A')}")
-        
-        self.addArrayRows("Interpolation Type", response.get('InterpolationTypes', []), timestamp, 
-                           lambda item: f"Type: {item.get('Type', 'N/A')}")
-        
-        self.addArrayRows("Note", response.get('Notes', []), timestamp, 
-                           lambda item: f"Text: {item.get('NoteText', 'N/A')}")
-    
-    def populateUSGS(self, timestampStr, response):
-        """Placeholder for USGS metadata population."""
-        # TODO: Implement based on USGS API response structure
-        # Example: self.addRow("Parameter Code", response.get('parameterCd', 'N/A'))
-        # self.addRow("Value", response.get('value', 'N/A'), response.get('dateTime', 'N/A'), "")
-        # Add array rows for qualifiers, etc.
-        self.addRow("Note", "USGS metadata not implemented yet")
-    
-    def populateUSBR(self, timestampStr, response):
-        """Placeholder for USBR metadata population."""
-        # TODO: Implement based on USBR API response structure
-        # Example: self.addRow("Site ID", response.get('siteId', 'N/A'))
-        # self.addRow("Value", response.get('value', 'N/A'), response.get('timestamp', 'N/A'), "")
-        # Add any array-like metadata if applicable
-        self.addRow("Note", "USBR metadata not implemented yet")
-    
-    def addRow(self, metaType, details, startTime="", endTime=""):
-        """Add a single row to the table (defaults for 2-column modes)."""
-        row = self.detailsTable.rowCount()
-        self.detailsTable.insertRow(row)
-        self.detailsTable.setItem(row, 0, QTableWidgetItem(metaType))
-        self.detailsTable.setItem(row, 1, QTableWidgetItem(details))
-        if self.detailsTable.columnCount() > 2:
-            self.detailsTable.setItem(row, 2, QTableWidgetItem(startTime))
-            self.detailsTable.setItem(row, 3, QTableWidgetItem(endTime))
-    
-    def addArrayRows(self, metaType, items, timestamp, detailFormatter):
-        """Add rows for array items matching the timestamp range."""
-        added = False
-        for item in items:
-            try:
-                start = self.parseDateTime(item.get('StartTime'))
-                end = self.parseDateTime(item.get('EndTime'))
-                if start <= timestamp <= end:
-                    self.addRow(metaType, detailFormatter(item), item.get('StartTime', 'N/A'), item.get('EndTime', 'N/A'))
-                    added = True
-            except (ValueError, TypeError) as e:
-                Logic.logMessage("WARN", f"Skipping invalid array item in {metaType}: {e}")
-        if not added:
-            self.addRow(metaType, "N/A")
-    
-    def parseDateTime(self, dtStr):
-        """Parse string to datetime, assuming common formats (e.g., ISO)."""
-        if not dtStr:
-            raise ValueError("Empty datetime string")
-        # Preprocess: remove microseconds and colon in tz offset
-        dtStr = dtStr.split('.')[0]  # Remove microseconds
-        if dtStr[-3] == ':':  # Remove colon in +HH:MM to +HHMM
-            dtStr = dtStr[:-3] + dtStr[-2:]
-        # Try formats
-        formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']
-        for fmt in formats:
-            try:
-                dt = datetime.strptime(dtStr, fmt)
-                return dt.replace(tzinfo=None) # Return naive datetime for comparison
-            except ValueError:
-                pass
-        raise ValueError(f"Unsupported datetime format: {dtStr}")
+2025-11-03 08:56:30,961 [DEBUG] Globals reloaded from user.config, enableSQL=False
+2025-11-03 08:56:30,963 [DEBUG] Removed tabSQL at index 1 on startup
+2025-11-03 08:56:30,963 [DEBUG] Removed tabMain at index 0 on startup
+2025-11-03 08:56:30,963 [DEBUG] uiMain initialized with header context menu, Config.rawData: False
+2025-11-03 08:56:30,963 [DEBUG] Loading UI file: C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\winQuery.ui
+2025-11-03 08:56:30,982 [DEBUG] initializeQueryWindow: Setting initial state
+2025-11-03 08:56:30,983 [DEBUG] initializeQueryWindow: Set default dates and radio button
+2025-11-03 08:56:30,991 [DEBUG] uiQuery initialized
+2025-11-03 08:56:30,999 [DEBUG] uiDataDictionary initialized with btnDeleteRow
+2025-11-03 08:56:31,004 [DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName
+2025-11-03 08:56:31,015 [DEBUG] uiOptions initialized
+2025-11-03 08:56:31,049 [WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
+2025-11-03 08:56:31,061 [DEBUG] No config.ini found or user.config exists, skipping conversion
+2025-11-03 08:56:31,062 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp/Exports', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': False, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC Primary vs Secondary', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': False, 'hourTimestampMethod': 'EOP'}
+2025-11-03 08:56:31,063 [DEBUG] utcOffset loaded as: UTC-07:00 | Mountain Time (US & Canada)/Arizona
+2025-11-03 08:56:31,064 [DEBUG] Loaded settings from user.config: {'lastExportPath': 'C:/Temp/Exports', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': False, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC Primary vs Secondary', 'enableSQL': False}
+2025-11-03 08:56:31,119 [DEBUG] Cleared retro scroll bar styles from mainTable
+2025-11-03 08:56:31,119 [DEBUG] Reverted to base stylesheet
+2025-11-03 08:56:32,010 [DEBUG] Built DataDictionary with 29304 rows, 11 columns
+2025-11-03 08:56:32,015 [DEBUG] loadAllQuickLooks: Found user Quick Look: BIBLC Primary vs Secondary.json
+2025-11-03 08:56:32,015 [DEBUG] loadAllQuickLooks: Found user Quick Look: FMTC2.json
+2025-11-03 08:56:32,015 [DEBUG] loadAllQuickLooks: Found user Quick Look: Lake Mohave Validation (HR).json
+2025-11-03 08:56:32,015 [DEBUG] loadAllQuickLooks: Found user Quick Look: Lake Mohave Validation.json
+2025-11-03 08:56:32,015 [DEBUG] loadAllQuickLooks: Found user Quick Look: Published HDTB Check.json
+2025-11-03 08:56:32,015 [DEBUG] loadAllQuickLooks: Found user Quick Look: Published PDTB Check.json
+2025-11-03 08:56:32,015 [DEBUG] loadAllQuickLooks: Found user Quick Look: SCADA Check.json
+2025-11-03 08:56:32,015 [DEBUG] loadAllQuickLooks: Found user Quick Look: USGS Method ID Example.json
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (AQUARIUS).txt
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & AQUARIUS).txt
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & USGS).txt
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added example Quick Look: MRID TEST.txt
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added example Quick Look: USGS Example.txt
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added BIBLC Primary vs Secondary to cbQuickLook
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added Data Check (AQUARIUS) to cbQuickLook
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & AQUARIUS) to cbQuickLook
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & USGS) to cbQuickLook
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added FMTC2 to cbQuickLook
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added Lake Mohave Validation to cbQuickLook
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added Lake Mohave Validation (HR) to cbQuickLook
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added MRID TEST to cbQuickLook
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added Published HDTB Check to cbQuickLook
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added Published PDTB Check to cbQuickLook
+2025-11-03 08:56:32,016 [DEBUG] loadAllQuickLooks: Added SCADA Check to cbQuickLook
+2025-11-03 08:56:32,017 [DEBUG] loadAllQuickLooks: Added USGS Example to cbQuickLook
+2025-11-03 08:56:32,017 [DEBUG] loadAllQuickLooks: Added USGS Method ID Example to cbQuickLook
+2025-11-03 08:56:36,376 [DEBUG] uiQuery showEvent: queryType=internal
+2025-11-03 08:56:36,376 [DEBUG] centerWindowToParent: Centered winInternalQuery at 560,196
+2025-11-03 08:56:36,377 [DEBUG] Loaded config for quick look: BIBLC Primary vs Secondary
+2025-11-03 08:56:36,378 [DEBUG] Set cbQuickLook to index 0: BIBLC Primary vs Secondary
+2025-11-03 08:56:36,378 [DEBUG] Populating cbDatabase
+2025-11-03 08:56:36,378 [DEBUG] Populated cbDatabase with 10 items
+2025-11-03 08:56:36,382 [DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png and title to Internal Query
+2025-11-03 08:56:36,388 [DEBUG] btnInternalQueryPressed: Opened uiQuery as internal
+2025-11-03 08:56:38,996 [DEBUG] loadQuickLook: Added item 5c367ac1a2f240f6b84bb9f61955b8d9|HOUR|AQUARIUS
+2025-11-03 08:56:38,996 [DEBUG] loadQuickLook: Added item b6a81578a92b4b8db46e1d7d08c87cf2|HOUR|AQUARIUS
+2025-11-03 08:56:38,996 [DEBUG] loadQuickLook: Loaded 'BIBLC Primary vs Secondary' with 2 items
+2025-11-03 08:56:38,997 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp/Exports', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': False, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC Primary vs Secondary', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': False, 'hourTimestampMethod': 'EOP'}
+2025-11-03 08:56:38,999 [DEBUG] Loaded quick look: BIBLC Primary vs Secondary
+2025-11-03 08:56:39,816 [DEBUG] btnQueryPressed: Starting query process, queryType=internal
+2025-11-03 08:56:39,817 [DEBUG] Item text: '5c367ac1a2f240f6b84bb9f61955b8d9|HOUR|AQUARIUS', parts: ['5c367ac1a2f240f6b84bb9f61955b8d9', 'HOUR', 'AQUARIUS'], len: 3
+2025-11-03 08:56:39,817 [DEBUG] Added queryItem: ('5c367ac1a2f240f6b84bb9f61955b8d9', 'HOUR', 'AQUARIUS', '0', 0)
+2025-11-03 08:56:39,817 [DEBUG] Item text: 'b6a81578a92b4b8db46e1d7d08c87cf2|HOUR|AQUARIUS', parts: ['b6a81578a92b4b8db46e1d7d08c87cf2', 'HOUR', 'AQUARIUS'], len: 3
+2025-11-03 08:56:39,817 [DEBUG] Added queryItem: ('b6a81578a92b4b8db46e1d7d08c87cf2', 'HOUR', 'AQUARIUS', '0', 1)
+2025-11-03 08:56:39,817 [DEBUG] Stored last query as internal
+2025-11-03 08:56:39,817 [DEBUG] executeQuery: isInternal=True, items=2, deltaChecked=False, overlayChecked=False
+2025-11-03 08:56:39,818 [DEBUG] executeQuery: Filtered AQUARIUS for public query, remaining items=2
+2025-11-03 08:56:39,833 [DEBUG] executeQuery: Initialized and showed progress dialog
+2025-11-03 08:56:39,841 [DEBUG] executeQuery: Ensured dates are datetime for rounding: start=2025-11-02 01:00:00, end=2025-11-03 08:56:00
+2025-11-03 08:56:39,841 [DEBUG] Rounded down 2025-11-02 01:00:00 to HOUR
+2025-11-03 08:56:39,841 [DEBUG] buildTimestamps called with start: 2025-11-02 01:00, end: 2025-11-03 08:56, interval: HOUR
+2025-11-03 08:56:39,841 [DEBUG] Generated 32 timestamps, sample first 3: ['11/02/25 01:00:00', '11/02/25 02:00:00', '11/02/25 03:00:00']
+2025-11-03 08:56:39,845 [DEBUG] executeQuery: Setup complete, progress at 20%
+2025-11-03 08:56:39,846 [DEBUG] Starting 1 threads for 1 groups in background
+2025-11-03 08:56:39,846 [DEBUG] Started background worker 0 for group ('AQUARIUS', None, None)
+2025-11-03 08:56:39,848 [DEBUG] Aquarius.apiRead called with dataIDs: ['5c367ac1a2f240f6b84bb9f61955b8d9', 'b6a81578a92b4b8db46e1d7d08c87cf2'], interval: HOUR, start: 2025-11-02 01:00, end: 2025-11-03 08:56
+2025-11-03 08:56:39,848 [DEBUG] executeQuery: Started timer for progress updates
+2025-11-03 08:56:39,848 [DEBUG] getUtcOffsetInt: Parsed 'UTC-07:00 | Mountain Time (US & Canada)/Arizona' to -7.0 hours
+2025-11-03 08:56:40,980 [DEBUG] SSL error with verify=True: HTTPSConnectionPool(host='ibrmazap013.bor.doi.net', port=443): Max retries exceeded with url: /AQUARIUS/Provisioning/v1/session (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1032)')))
+2025-11-03 08:56:40,980 [DEBUG] No certificate found at 'C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\certs\aquarius.pem', skipping to unverified.
+2025-11-03 08:56:41,421 [DEBUG] Authentication succeeded with verify=False
+2025-11-03 08:56:41,421 [WARNING] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.
+2025-11-03 08:56:41,421 [DEBUG] Estimated 32 points, splitting into 1 chunks of ~500 points each
+2025-11-03 08:56:41,422 [DEBUG] Generated 1 sub-ranges: [('2025-11-02 08:00', '2025-11-03 15:57')]
+2025-11-03 08:56:41,422 [DEBUG] Created 2 tasks for 2 UIDs across 1 sub-ranges, using 2 threads
+2025-11-03 08:56:41,424 [DEBUG] Thread 0 processing task for UID 5c367ac1a2f240f6b84bb9f61955b8d9, range 2025-11-02 08:00 to 2025-11-03 15:57
+2025-11-03 08:56:41,424 [DEBUG] Started thread 0 for task processing
+2025-11-03 08:56:41,425 [DEBUG] Thread 1 processing task for UID b6a81578a92b4b8db46e1d7d08c87cf2, range 2025-11-02 08:00 to 2025-11-03 15:57
+2025-11-03 08:56:41,425 [DEBUG] Started thread 1 for task processing
+2025-11-03 08:56:41,929 [DEBUG] Thread 1 fetched 32 points for UID 'b6a81578a92b4b8db46e1d7d08c87cf2', range 2025-11-02 08:00 to 2025-11-03 15:57
+2025-11-03 08:56:41,929 [DEBUG] Thread 0 fetched 32 points for UID '5c367ac1a2f240f6b84bb9f61955b8d9', range 2025-11-02 08:00 to 2025-11-03 15:57
+2025-11-03 08:56:41,930 [DEBUG] Thread 1 completed task for UID b6a81578a92b4b8db46e1d7d08c87cf2 with 32 points
+2025-11-03 08:56:41,930 [DEBUG] Thread 0 completed task for UID 5c367ac1a2f240f6b84bb9f61955b8d9 with 32 points
+2025-11-03 08:56:41,930 [DEBUG] Thread 1 found no more tasks
+2025-11-03 08:56:41,930 [DEBUG] Thread 0 found no more tasks
+2025-11-03 08:56:41,933 [DEBUG] Thread 0 joined
+2025-11-03 08:56:41,933 [DEBUG] Thread 1 joined
+2025-11-03 08:56:41,935 [DEBUG] Combined results from 2 tasks with 2 UIDs
+2025-11-03 08:56:41,935 [DEBUG] Returning result dict with 2 UIDs
+2025-11-03 08:56:41,935 [DEBUG] queryWorker: Aquarius result for SDIDs ['5c367ac1a2f240f6b84bb9f61955b8d9', 'b6a81578a92b4b8db46e1d7d08c87cf2']: {'b6a81578a92b4b8db46e1d7d08c87cf2': {'data': ['11/02/25 01:00:00,247.5564', '11/02/25 02:00:00,247.5759', '11/02/25 03:00:00,247.5602', '11/02/25 04:00:00,247.5085', '11/02/25 05:00:00,247.4237', '11/02/25 06:00:00,247.3132', '11/02/25 07:00:00,247.1911', '11/02/25 08:00:00,247.0625', '11/02/25 09:00:00,246.9427', '11/02/25 10:00:00,246.8426', '11/02/25 11:00:00,246.7694', '11/02/25 12:00:00,246.7288', '11/02/25 13:00:00,246.7168', '11/02/25 14:00:00,246.7187', '11/02/25 15:00:00,246.7216', '11/02/25 16:00:00,246.7197', '11/02/25 17:00:00,246.7089', '11/02/25 18:00:00,246.6937', '11/02/25 19:00:00,246.6823', '11/02/25 20:00:00,246.6864', '11/02/25 21:00:00,246.7161', '11/02/25 22:00:00,246.7693', '11/02/25 23:00:00,246.8431', '11/03/25 00:00:00,246.9227', '11/03/25 01:00:00,246.9876', '11/03/25 02:00:00,247.0323', '11/03/25 03:00:00,247.0424', '11/03/25 04:00:00,247.0647', '11/03/25 05:00:00,247.1351', '11/03/25 06:00:00,247.0909', '11/03/25 07:00:00,246.9313', '11/03/25 08:00:00,246.745'], 'label': 'BIBLC.PRO | Stage | Corrected \nBIBLC', 'rawResponse': {'UniqueId': 'b6a81578a92b4b8db46e1d7d08c87cf2', 'Parameter': 'Stage', 'Label': 'BIBLC.PRO | Stage | Corrected', 'LocationIdentifier': 'BIBLC', 'NumPoints': 32, 'Unit': 'ft', 'Approvals': [{'ApprovalLevel': 900, 'DateAppliedUtc': '2017-05-04T12:28:08.4753422Z', 'User': 'rodneysmith', 'LevelDescription': 'Working', 'Comment': '', 'StartTime': '2025-02-06T11:01:00.0000000-07:00', 'EndTime': '9999-12-31T23:59:59.9999999+00:00'}], 'Qualifiers': [], 'Methods': [{'MethodCode': 'HGCOMP', 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'Grades': [{'GradeCode': '0', 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'GapTolerances': [{'ToleranceInMinutes': 60, 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'InterpolationTypes': [{'Type': 'InstantaneousValues', 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'Notes': [], 'TimeRange': {'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:00:00.0000000-07:00'}, 'Points': [{'Timestamp': '2025-11-02T01:00:00.0000000-07:00', 'Value': {'Numeric': 247.5564}}, {'Timestamp': '2025-11-02T02:00:00.0000000-07:00', 'Value': {'Numeric': 247.5759}}, {'Timestamp': '2025-11-02T03:00:00.0000000-07:00', 'Value': {'Numeric': 247.5602}}, {'Timestamp': '2025-11-02T04:00:00.0000000-07:00', 'Value': {'Numeric': 247.5085}}, {'Timestamp': '2025-11-02T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.4237}}, {'Timestamp': '2025-11-02T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.3132}}, {'Timestamp': '2025-11-02T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.1911}}, {'Timestamp': '2025-11-02T08:00:00.0000000-07:00', 'Value': {'Numeric': 247.0625}}, {'Timestamp': '2025-11-02T09:00:00.0000000-07:00', 'Value': {'Numeric': 246.9427}}, {'Timestamp': '2025-11-02T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.8426}}, {'Timestamp': '2025-11-02T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.7694}}, {'Timestamp': '2025-11-02T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.7288}}, {'Timestamp': '2025-11-02T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.7168}}, {'Timestamp': '2025-11-02T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.7187}}, {'Timestamp': '2025-11-02T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.7216}}, {'Timestamp': '2025-11-02T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.7197}}, {'Timestamp': '2025-11-02T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.7089}}, {'Timestamp': '2025-11-02T18:00:00.0000000-07:00', 'Value': {'Numeric': 246.6937}}, {'Timestamp': '2025-11-02T19:00:00.0000000-07:00', 'Value': {'Numeric': 246.6823}}, {'Timestamp': '2025-11-02T20:00:00.0000000-07:00', 'Value': {'Numeric': 246.6864}}, {'Timestamp': '2025-11-02T21:00:00.0000000-07:00', 'Value': {'Numeric': 246.7161}}, {'Timestamp': '2025-11-02T22:00:00.0000000-07:00', 'Value': {'Numeric': 246.7693}}, {'Timestamp': '2025-11-02T23:00:00.0000000-07:00', 'Value': {'Numeric': 246.8431}}, {'Timestamp': '2025-11-03T00:00:00.0000000-07:00', 'Value': {'Numeric': 246.9227}}, {'Timestamp': '2025-11-03T01:00:00.0000000-07:00', 'Value': {'Numeric': 246.9876}}, {'Timestamp': '2025-11-03T02:00:00.0000000-07:00', 'Value': {'Numeric': 247.0323}}, {'Timestamp': '2025-11-03T03:00:00.0000000-07:00', 'Value': {'Numeric': 247.0424}}, {'Timestamp': '2025-11-03T04:00:00.0000000-07:00', 'Value': {'Numeric': 247.0647}}, {'Timestamp': '2025-11-03T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.1351}}, {'Timestamp': '2025-11-03T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.0909}}, {'Timestamp': '2025-11-03T07:00:00.0000000-07:00', 'Value': {'Numeric': 246.9313}}, {'Timestamp': '2025-11-03T08:00:00.0000000-07:00', 'Value': {'Numeric': 246.745}}], 'ResponseVersion': 1, 'ResponseTime': '2025-11-03T15:56:41.7820395+00:00', 'Summary': 'Produced by AQUARIUS Time-Series Software.\r\nThe accuracy and reliability of this data is not guaranteed.  Aquatic Informatics Inc. accepts no liability for its use in any way.'}}, '5c367ac1a2f240f6b84bb9f61955b8d9': {'data': ['11/02/25 01:00:00,247.6307', '11/02/25 02:00:00,247.65', '11/02/25 03:00:00,247.6352', '11/02/25 04:00:00,247.584', '11/02/25 05:00:00,247.4991', '11/02/25 06:00:00,247.3891', '11/02/25 07:00:00,247.266', '11/02/25 08:00:00,247.1388', '11/02/25 09:00:00,247.0181', '11/02/25 10:00:00,246.9178', '11/02/25 11:00:00,246.8437', '11/02/25 12:00:00,246.8037', '11/02/25 13:00:00,246.7915', '11/02/25 14:00:00,246.7927', '11/02/25 15:00:00,246.7952', '11/02/25 16:00:00,246.7935', '11/02/25 17:00:00,246.7819', '11/02/25 18:00:00,246.7667', '11/02/25 19:00:00,246.7557', '11/02/25 20:00:00,246.7599', '11/02/25 21:00:00,246.7884', '11/02/25 22:00:00,246.8423', '11/02/25 23:00:00,246.9172', '11/03/25 00:00:00,246.9962', '11/03/25 01:00:00,247.0612', '11/03/25 02:00:00,247.1066', '11/03/25 03:00:00,247.1167', '11/03/25 04:00:00,247.1395', '11/03/25 05:00:00,247.2098', '11/03/25 06:00:00,247.1653', '11/03/25 07:00:00,247.0059', '11/03/25 08:00:00,246.8209'], 'label': 'BIBLC.ENC | Stage | Corrected \nBIBLC', 'rawResponse': {'UniqueId': '5c367ac1a2f240f6b84bb9f61955b8d9', 'Parameter': 'Stage', 'Label': 'BIBLC.ENC | Stage | Corrected', 'LocationIdentifier': 'BIBLC', 'NumPoints': 32, 'Unit': 'ft', 'Approvals': [{'ApprovalLevel': 900, 'DateAppliedUtc': '2017-05-04T12:27:37.1948314Z', 'User': 'rodneysmith', 'LevelDescription': 'Working', 'Comment': '', 'StartTime': '2025-02-06T11:01:00.0000000-07:00', 'EndTime': '9999-12-31T23:59:59.9999999+00:00'}], 'Qualifiers': [], 'Methods': [{'MethodCode': 'HGCOMP', 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'Grades': [{'GradeCode': '0', 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'GapTolerances': [{'ToleranceInMinutes': 60, 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'InterpolationTypes': [{'Type': 'InstantaneousValues', 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'Notes': [], 'TimeRange': {'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:00:00.0000000-07:00'}, 'Points': [{'Timestamp': '2025-11-02T01:00:00.0000000-07:00', 'Value': {'Numeric': 247.6307}}, {'Timestamp': '2025-11-02T02:00:00.0000000-07:00', 'Value': {'Numeric': 247.65}}, {'Timestamp': '2025-11-02T03:00:00.0000000-07:00', 'Value': {'Numeric': 247.6352}}, {'Timestamp': '2025-11-02T04:00:00.0000000-07:00', 'Value': {'Numeric': 247.584}}, {'Timestamp': '2025-11-02T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.4991}}, {'Timestamp': '2025-11-02T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.3891}}, {'Timestamp': '2025-11-02T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.266}}, {'Timestamp': '2025-11-02T08:00:00.0000000-07:00', 'Value': {'Numeric': 247.1388}}, {'Timestamp': '2025-11-02T09:00:00.0000000-07:00', 'Value': {'Numeric': 247.0181}}, {'Timestamp': '2025-11-02T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.9178}}, {'Timestamp': '2025-11-02T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.8437}}, {'Timestamp': '2025-11-02T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.8037}}, {'Timestamp': '2025-11-02T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.7915}}, {'Timestamp': '2025-11-02T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.7927}}, {'Timestamp': '2025-11-02T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.7952}}, {'Timestamp': '2025-11-02T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.7935}}, {'Timestamp': '2025-11-02T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.7819}}, {'Timestamp': '2025-11-02T18:00:00.0000000-07:00', 'Value': {'Numeric': 246.7667}}, {'Timestamp': '2025-11-02T19:00:00.0000000-07:00', 'Value': {'Numeric': 246.7557}}, {'Timestamp': '2025-11-02T20:00:00.0000000-07:00', 'Value': {'Numeric': 246.7599}}, {'Timestamp': '2025-11-02T21:00:00.0000000-07:00', 'Value': {'Numeric': 246.7884}}, {'Timestamp': '2025-11-02T22:00:00.0000000-07:00', 'Value': {'Numeric': 246.8423}}, {'Timestamp': '2025-11-02T23:00:00.0000000-07:00', 'Value': {'Numeric': 246.9172}}, {'Timestamp': '2025-11-03T00:00:00.0000000-07:00', 'Value': {'Numeric': 246.9962}}, {'Timestamp': '2025-11-03T01:00:00.0000000-07:00', 'Value': {'Numeric': 247.0612}}, {'Timestamp': '2025-11-03T02:00:00.0000000-07:00', 'Value': {'Numeric': 247.1066}}, {'Timestamp': '2025-11-03T03:00:00.0000000-07:00', 'Value': {'Numeric': 247.1167}}, {'Timestamp': '2025-11-03T04:00:00.0000000-07:00', 'Value': {'Numeric': 247.1395}}, {'Timestamp': '2025-11-03T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.2098}}, {'Timestamp': '2025-11-03T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.1653}}, {'Timestamp': '2025-11-03T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.0059}}, {'Timestamp': '2025-11-03T08:00:00.0000000-07:00', 'Value': {'Numeric': 246.8209}}], 'ResponseVersion': 1, 'ResponseTime': '2025-11-03T15:56:41.7820395+00:00', 'Summary': 'Produced by AQUARIUS Time-Series Software.\r\nThe accuracy and reliability of this data is not guaranteed.  Aquatic Informatics Inc. accepts no liability for its use in any way.'}}}
+2025-11-03 08:56:41,935 [DEBUG] queryWorker: Aquarius label for 5c367ac1a2f240f6b84bb9f61955b8d9: BIBLC.ENC | Stage | Corrected 
+BIBLC
+2025-11-03 08:56:41,936 [DEBUG] gapCheck for dataID '5c367ac1a2f240f6b84bb9f61955b8d9': timestamps len=32, data len=32
+2025-11-03 08:56:41,939 [DEBUG] Post-gapCheck len=32, sample first 3: ['11/02/25 01:00:00,247.6307', '11/02/25 02:00:00,247.65', '11/02/25 03:00:00,247.6352']
+2025-11-03 08:56:41,940 [DEBUG] queryWorker: Aquarius label for b6a81578a92b4b8db46e1d7d08c87cf2: BIBLC.PRO | Stage | Corrected 
+BIBLC
+2025-11-03 08:56:41,940 [DEBUG] gapCheck for dataID 'b6a81578a92b4b8db46e1d7d08c87cf2': timestamps len=32, data len=32
+2025-11-03 08:56:41,940 [DEBUG] Post-gapCheck len=32, sample first 3: ['11/02/25 01:00:00,247.5564', '11/02/25 02:00:00,247.5759', '11/02/25 03:00:00,247.5602']
+2025-11-03 08:56:41,940 [DEBUG] queryWorker: Completed group ('AQUARIUS', None, None) with 2 items
+2025-11-03 08:56:41,954 [DEBUG] executeQuery: Signal received for group ('AQUARIUS', None, None)
+2025-11-03 08:56:41,954 [DEBUG] executeQuery: Updated labelsDict with ['5c367ac1a2f240f6b84bb9f61955b8d9', 'b6a81578a92b4b8db46e1d7d08c87cf2']
+2025-11-03 08:56:41,954 [DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, None) with 2 items (1/1)
+2025-11-03 08:56:41,956 [DEBUG] executeQuery: Retrieved result from queue: ('AQUARIUS', None, None)
+2025-11-03 08:56:41,956 [DEBUG] executeQuery: Duplicate group ('AQUARIUS', None, None), skipping
+2025-11-03 08:56:41,956 [DEBUG] executeQuery: Timer stopped, wait loop ended, final collected 1/1, queue size 0, active threads 0
+2025-11-03 08:56:41,956 [DEBUG] executeQuery: All 1 groups merged
+2025-11-03 08:56:41,957 [DEBUG] executeQuery: Building row 0/32
+2025-11-03 08:56:41,958 [DEBUG] executeQuery: Building row 1/32
+2025-11-03 08:56:41,958 [DEBUG] executeQuery: Building row 2/32
+2025-11-03 08:56:41,958 [DEBUG] executeQuery: Building row 3/32
+2025-11-03 08:56:41,958 [DEBUG] executeQuery: Building row 4/32
+2025-11-03 08:56:41,958 [DEBUG] executeQuery: Building row 5/32
+2025-11-03 08:56:41,958 [DEBUG] executeQuery: Building row 6/32
+2025-11-03 08:56:41,958 [DEBUG] executeQuery: Building row 7/32
+2025-11-03 08:56:41,958 [DEBUG] executeQuery: Building row 8/32
+2025-11-03 08:56:41,958 [DEBUG] executeQuery: Building row 9/32
+2025-11-03 08:56:41,959 [DEBUG] executeQuery: Building row 10/32
+2025-11-03 08:56:41,959 [DEBUG] executeQuery: Building row 11/32
+2025-11-03 08:56:41,959 [DEBUG] executeQuery: Building row 12/32
+2025-11-03 08:56:41,959 [DEBUG] executeQuery: Building row 13/32
+2025-11-03 08:56:41,959 [DEBUG] executeQuery: Building row 14/32
+2025-11-03 08:56:41,959 [DEBUG] executeQuery: Building row 15/32
+2025-11-03 08:56:41,959 [DEBUG] executeQuery: Building row 16/32
+2025-11-03 08:56:41,959 [DEBUG] executeQuery: Building row 17/32
+2025-11-03 08:56:41,959 [DEBUG] executeQuery: Building row 18/32
+2025-11-03 08:56:41,959 [DEBUG] executeQuery: Building row 19/32
+2025-11-03 08:56:41,960 [DEBUG] executeQuery: Building row 20/32
+2025-11-03 08:56:41,960 [DEBUG] executeQuery: Building row 21/32
+2025-11-03 08:56:41,960 [DEBUG] executeQuery: Building row 22/32
+2025-11-03 08:56:41,960 [DEBUG] executeQuery: Building row 23/32
+2025-11-03 08:56:41,960 [DEBUG] executeQuery: Building row 24/32
+2025-11-03 08:56:41,960 [DEBUG] executeQuery: Building row 25/32
+2025-11-03 08:56:41,961 [DEBUG] executeQuery: Building row 26/32
+2025-11-03 08:56:41,961 [DEBUG] executeQuery: Building row 27/32
+2025-11-03 08:56:41,961 [DEBUG] executeQuery: Building row 28/32
+2025-11-03 08:56:41,961 [DEBUG] executeQuery: Building row 29/32
+2025-11-03 08:56:41,962 [DEBUG] executeQuery: Building row 30/32
+2025-11-03 08:56:41,962 [DEBUG] executeQuery: Building row 31/32
+2025-11-03 08:56:41,962 [DEBUG] executeQuery: Built 32 rows for table
+2025-11-03 08:56:41,965 [DEBUG] buildTable: Starting with 32 rows, 2 headers
+2025-11-03 08:56:42,002 [DEBUG] buildTable: Aquarius not in dict, header 0: BIBLC.ENC | Stage | Corrected 
+BIBLC
+2025-11-03 08:56:42,032 [DEBUG] buildTable: Aquarius not in dict, header 1: BIBLC.PRO | Stage | Corrected 
+BIBLC
+2025-11-03 08:56:42,032 [DEBUG] buildTable: Setting table to 32 rows, 2 columns
+2025-11-03 08:56:42,037 [DEBUG] buildTable: Sampling 32 rows for column widths
+2025-11-03 08:56:42,038 [DEBUG] buildTable col 0: maxCellWidth=68, headerWidth=216
+2025-11-03 08:56:42,038 [DEBUG] buildTable col 1: maxCellWidth=68, headerWidth=217
+2025-11-03 08:56:42,038 [DEBUG] buildTable: Disabled table updates for population
+2025-11-03 08:56:42,039 [DEBUG] buildTable: Re-enabled table updates after population
+2025-11-03 08:56:42,039 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
+2025-11-03 08:56:42,039 [DEBUG] buildTable: Set column 0 width to 226
+2025-11-03 08:56:42,040 [DEBUG] buildTable: Set column 1 width to 227
+2025-11-03 08:56:42,040 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
+2025-11-03 08:56:42,040 [DEBUG] buildTable: Set default row height to 29
+2025-11-03 08:56:42,040 [DEBUG] buildTable: Custom resized 2 columns. Text width for col 1: 264, Visible width: 227, Row height: 29
+2025-11-03 08:56:42,040 [DEBUG] qaqc: Processing column 0 for lookupId 5c367ac1a2f240f6b84bb9f61955b8d9
+2025-11-03 08:56:42,073 [DEBUG] qaqc: Processed column 0 for lookupId 5c367ac1a2f240f6b84bb9f61955b8d9
+2025-11-03 08:56:42,073 [DEBUG] qaqc: Processing column 1 for lookupId b6a81578a92b4b8db46e1d7d08c87cf2
+2025-11-03 08:56:42,103 [DEBUG] qaqc: Processed column 1 for lookupId b6a81578a92b4b8db46e1d7d08c87cf2
+2025-11-03 08:56:42,103 [DEBUG] Stored query data: 2 series, type internal, keys=["'BIBLC.ENC | Stage | Corrected \\nBIBLC'", "'BIBLC.PRO | Stage | Corrected \\nBIBLC'"]
+2025-11-03 08:56:42,103 [DEBUG] Stored 2 rawResponses for Aquarius
+2025-11-03 08:56:42,103 [DEBUG] Set columnMetadata with lookupId: [{'type': 'normal', 'dataIds': ['5c367ac1a2f240f6b84bb9f61955b8d9'], 'dbs': 'AQUARIUS', 'queryInfos': ['5c367ac1a2f240f6b84bb9f61955b8d9|HOUR|AQUARIUS'], 'lookupId': 'BIBLC.ENC | Stage | Corrected \nBIBLC'}, {'type': 'normal', 'dataIds': ['b6a81578a92b4b8db46e1d7d08c87cf2'], 'dbs': 'AQUARIUS', 'queryInfos': ['b6a81578a92b4b8db46e1d7d08c87cf2|HOUR|AQUARIUS'], 'lookupId': 'BIBLC.PRO | Stage | Corrected \nBIBLC'}]
+2025-11-03 08:56:42,114 [DEBUG] executeQuery: Table built, progress dialog completed
+2025-11-03 08:56:42,115 [DEBUG] Query executed and table updated.
+2025-11-03 08:56:42,115 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
+2025-11-03 08:56:42,121 [DEBUG] Query window closed after query.
+2025-11-03 08:56:43,089 [DEBUG] showCellContextMenu: columnMetadata=[{'type': 'normal', 'dataIds': ['5c367ac1a2f240f6b84bb9f61955b8d9'], 'dbs': 'AQUARIUS', 'queryInfos': ['5c367ac1a2f240f6b84bb9f61955b8d9|HOUR|AQUARIUS'], 'lookupId': 'BIBLC.ENC | Stage | Corrected \nBIBLC'}, {'type': 'normal', 'dataIds': ['b6a81578a92b4b8db46e1d7d08c87cf2'], 'dbs': 'AQUARIUS', 'queryInfos': ['b6a81578a92b4b8db46e1d7d08c87cf2|HOUR|AQUARIUS'], 'lookupId': 'BIBLC.PRO | Stage | Corrected \nBIBLC'}], col=0, lookupId='BIBLC.ENC | Stage | Corrected \nBIBLC'
+2025-11-03 08:56:43,089 [DEBUG] showCellContextMenu: seriesLabel='BIBLC.ENC | Stage | Corrected \nBIBLC', response type=dict, response={'UniqueId': '5c367ac1a2f240f6b84bb9f61955b8d9', 'Parameter': 'Stage', 'Label': 'BIBLC.ENC | Stage | Corrected', 'LocationIdentifier': 'BIBLC', 'NumPoints': 32, 'Unit': 'ft', 'Approvals': [{'ApprovalLevel': 900, 'DateAppliedUtc': '2017-05-04T12:27:37.1948314Z', 'User': 'rodneysmith', 'LevelDescription': 'Working', 'Comment': '', 'StartTime': '2025-02-06T11:01:00.0000000-07:00', 'EndTime': '9999-12-31T23:59:59.9999999+00:00'}], 'Qualifiers': [], 'Methods': [{'MethodCode': 'HGCOMP', 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'Grades': [{'GradeCode': '0', 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'GapTolerances': [{'ToleranceInMinutes': 60, 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'InterpolationTypes': [{'Type': 'InstantaneousValues', 'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:57:00.0000001-07:00'}], 'Notes': [], 'TimeRange': {'StartTime': '2025-11-02T01:00:00.0000000-07:00', 'EndTime': '2025-11-03T08:00:00.0000000-07:00'}, 'Points': [{'Timestamp': '2025-11-02T01:00:00.0000000-07:00', 'Value': {'Numeric': 247.6307}}, {'Timestamp': '2025-11-02T02:00:00.0000000-07:00', 'Value': {'Numeric': 247.65}}, {'Timestamp': '2025-11-02T03:00:00.0000000-07:00', 'Value': {'Numeric': 247.6352}}, {'Timestamp': '2025-11-02T04:00:00.0000000-07:00', 'Value': {'Numeric': 247.584}}, {'Timestamp': '2025-11-02T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.4991}}, {'Timestamp': '2025-11-02T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.3891}}, {'Timestamp': '2025-11-02T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.266}}, {'Timestamp': '2025-11-02T08:00:00.0000000-07:00', 'Value': {'Numeric': 247.1388}}, {'Timestamp': '2025-11-02T09:00:00.0000000-07:00', 'Value': {'Numeric': 247.0181}}, {'Timestamp': '2025-11-02T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.9178}}, {'Timestamp': '2025-11-02T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.8437}}, {'Timestamp': '2025-11-02T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.8037}}, {'Timestamp': '2025-11-02T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.7915}}, {'Timestamp': '2025-11-02T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.7927}}, {'Timestamp': '2025-11-02T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.7952}}, {'Timestamp': '2025-11-02T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.7935}}, {'Timestamp': '2025-11-02T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.7819}}, {'Timestamp': '2025-11-02T18:00:00.0000000-07:00', 'Value': {'Numeric': 246.7667}}, {'Timestamp': '2025-11-02T19:00:00.0000000-07:00', 'Value': {'Numeric': 246.7557}}, {'Timestamp': '2025-11-02T20:00:00.0000000-07:00', 'Value': {'Numeric': 246.7599}}, {'Timestamp': '2025-11-02T21:00:00.0000000-07:00', 'Value': {'Numeric': 246.7884}}, {'Timestamp': '2025-11-02T22:00:00.0000000-07:00', 'Value': {'Numeric': 246.8423}}, {'Timestamp': '2025-11-02T23:00:00.0000000-07:00', 'Value': {'Numeric': 246.9172}}, {'Timestamp': '2025-11-03T00:00:00.0000000-07:00', 'Value': {'Numeric': 246.9962}}, {'Timestamp': '2025-11-03T01:00:00.0000000-07:00', 'Value': {'Numeric': 247.0612}}, {'Timestamp': '2025-11-03T02:00:00.0000000-07:00', 'Value': {'Numeric': 247.1066}}, {'Timestamp': '2025-11-03T03:00:00.0000000-07:00', 'Value': {'Numeric': 247.1167}}, {'Timestamp': '2025-11-03T04:00:00.0000000-07:00', 'Value': {'Numeric': 247.1395}}, {'Timestamp': '2025-11-03T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.2098}}, {'Timestamp': '2025-11-03T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.1653}}, {'Timestamp': '2025-11-03T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.0059}}, {'Timestamp': '2025-11-03T08:00:00.0000000-07:00', 'Value': {'Numeric': 246.8209}}], 'ResponseVersion': 1, 'ResponseTime': '2025-11-03T15:56:41.7820395+00:00', 'Summary': 'Produced by AQUARIUS Time-Series Software.\r\nThe accuracy and reliability of this data is not guaranteed.  Aquatic Informatics Inc. accepts no liability for its use in any way.'}, currentQueryType=internal, seriesResponses keys=["'BIBLC.ENC | Stage | Corrected \\nBIBLC'", "'BIBLC.PRO | Stage | Corrected \\nBIBLC'"]
+2025-11-03 08:56:43,090 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response dict=True
+2025-11-03 08:56:43,090 [DEBUG] showCellContextMenu: Added 'Show details' action
+2025-11-03 08:56:43,720 [DEBUG] uiDetails initialized
+2025-11-03 08:56:43,720 [DEBUG] Populating details for queryType: AQUARIUS, series: BIBLC.ENC | Stage | Corrected 
+BIBLC, timestamp: 11/02/25 06:00:00
+2025-11-03 08:56:43,727 [ERROR] Failed to parse timestamp 11/02/25 06:00:00: Unsupported datetime format: 11/02/25 06:0000
+2025-11-03 08:56:43,728 [DEBUG] Populated 0 rows
+2025-11-03 08:56:43,742 [DEBUG] showMetadataDetails: Opened details for 11/02/25 06:00:00 - BIBLC.ENC | Stage | Corrected 
+BIBLC
+2025-11-03 08:56:43,743 [DEBUG] showCellContextMenu: Displayed menu for cell (5, 0)
