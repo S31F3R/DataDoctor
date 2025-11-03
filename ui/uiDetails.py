@@ -269,9 +269,9 @@ class uiDetails(QWidget):
         """Parse string to datetime, assuming common formats (e.g., ISO)."""
         if not dtStr:
             raise ValueError("Empty datetime string")
-        # Preprocess: remove microseconds and colon in tz offset
+        # Preprocess: remove microseconds and colon in tz offset only if tz present
         dtStr = dtStr.split('.')[0]  # Remove microseconds
-        if dtStr[-3] == ':':  # Remove colon in +HH:MM to +HHMM
+        if len(dtStr) > 19 and dtStr[-6] in '+-' and dtStr[-3] == ':':
             dtStr = dtStr[:-3] + dtStr[-2:]
         # Try formats
         formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']
