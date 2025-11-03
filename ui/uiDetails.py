@@ -1,5 +1,7 @@
 # uiDetails.py - Details window for displaying cell metadata or overlay info
 
+import os
+import sys
 from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QAbstractItemView
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
@@ -8,7 +10,8 @@ from datetime import datetime
 from core import Logic, Config
 
 class uiDetails(QWidget):
-    """Details window: Displays metadata or overlay info for a specific timeseries cell."""    
+    """Details window: Displays metadata or overlay info for a specific timeseries cell."""
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         
@@ -131,7 +134,7 @@ class uiDetails(QWidget):
         self.addRow("Query Info", query_str)
         
         # Add stats (computed as in original)
-        maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
+        maxStr, minStr, meanStr = self.computeColumnStats(meta['col']) # Assuming col in meta
         self.addRow("Max", maxStr)
         self.addRow("Min", minStr)
         self.addRow("Mean", meanStr)
@@ -151,7 +154,7 @@ class uiDetails(QWidget):
     def populateHeaderOverlay(self, meta):
         """Internal method to populate for overlay header metadata."""
         
-        # Add primary/secondary
+        # Add primary/secondary (tweaked per user request)
         self.addRow("Primary", meta.get('queryInfos', ['N/A', 'N/A'])[0])
         self.addRow("Secondary", meta.get('queryInfos', ['N/A', 'N/A'])[1])
         
@@ -164,10 +167,8 @@ class uiDetails(QWidget):
     def computeColumnStats(self, col):
         """Compute stats for a column (mirrors original logic)."""
         values = []
-
         for row in range(self.parent().mainTable.rowCount()):
             item = self.parent().mainTable.item(row, col)
-
             if item and item.text().strip():
                 try:
                     values.append(float(item.text()))
@@ -205,8 +206,10 @@ class uiDetails(QWidget):
         point = next((p for p in response.get('Points', []) if self.parseDateTime(p['Timestamp']) == timestamp), None)
         if not point:
             Logic.logMessage("WARN", f"No matching point found for timestamp {timestampStr}")
-            return      
- 
+            return
+        
+        # Add rows for selected metadata (per list 1-10)
+        
         # 1. Parameter/Label/Unit (series-level)
         self.addRow("Parameter", f"{response.get('Parameter', 'N/A')} ({response.get('Label', 'N/A')})", "", response.get('Unit', 'N/A'))
         
@@ -237,14 +240,14 @@ class uiDetails(QWidget):
         
         self.addArrayRows("Note", response.get('Notes', []), timestamp, 
                            lambda item: f"Text: {item.get('NoteText', 'N/A')}")
-
+    
     def populateUSGS(self, timestampStr, response):
         """Placeholder for USGS metadata population."""
         # TODO: Implement based on USGS API response structure
         # Example: self.addRow("Parameter Code", response.get('parameterCd', 'N/A'))
         # self.addRow("Value", response.get('value', 'N/A'), response.get('dateTime', 'N/A'), "")
         # Add array rows for qualifiers, etc.
-        pass
+        self.addRow("Note", "USGS metadata not implemented yet")
     
     def populateUSBR(self, timestampStr, response):
         """Placeholder for USBR metadata population."""
@@ -252,7 +255,7 @@ class uiDetails(QWidget):
         # Example: self.addRow("Site ID", response.get('siteId', 'N/A'))
         # self.addRow("Value", response.get('value', 'N/A'), response.get('timestamp', 'N/A'), "")
         # Add any array-like metadata if applicable
-        pass
+        self.addRow("Note", "USBR metadata not implemented yet")
     
     def addRow(self, metaType, details, startTime="", endTime=""):
         """Add a single row to the table (defaults for 2-column modes)."""
@@ -260,7 +263,6 @@ class uiDetails(QWidget):
         self.detailsTable.insertRow(row)
         self.detailsTable.setItem(row, 0, QTableWidgetItem(metaType))
         self.detailsTable.setItem(row, 1, QTableWidgetItem(details))
-
         if self.detailsTable.columnCount() > 2:
             self.detailsTable.setItem(row, 2, QTableWidgetItem(startTime))
             self.detailsTable.setItem(row, 3, QTableWidgetItem(endTime))
@@ -268,7 +270,6 @@ class uiDetails(QWidget):
     def addArrayRows(self, metaType, items, timestamp, detailFormatter):
         """Add rows for array items matching the timestamp range."""
         added = False
-
         for item in items:
             try:
                 start = self.parseDateTime(item.get('StartTime'))
@@ -285,16 +286,12 @@ class uiDetails(QWidget):
         """Parse string to datetime, assuming common formats (e.g., ISO)."""
         if not dtStr:
             raise ValueError("Empty datetime string")
-
         # Preprocess: remove microseconds and colon in tz offset
-        dtStr = dtStr.split('.')[0] # Remove microseconds
-
-        if dtStr[-3] == ':': # Remove colon in +HH:MM to +HHMM
+        dtStr = dtStr.split('.')[0]  # Remove microseconds
+        if dtStr[-3] == ':':  # Remove colon in +HH:MM to +HHMM
             dtStr = dtStr[:-3] + dtStr[-2:]
-
         # Try formats
         formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']
-
         for fmt in formats:
             try:
                 dt = datetime.strptime(dtStr, fmt)
