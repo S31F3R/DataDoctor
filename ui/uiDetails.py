@@ -193,6 +193,8 @@ class uiDetails(QWidget):
         # Parse timestamp to datetime for comparisons
         try:
             timestamp = self._parseDateTime(timestampStr)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"populateDetails: Parsed timestamp {timestampStr} to {timestamp}")
         except ValueError as e:
             Logic.logMessage("ERROR", f"Failed to parse timestamp {timestampStr}: {e}")
             return
@@ -211,8 +213,8 @@ class uiDetails(QWidget):
         # 2. Timestamp/Value (point-level, respect Config.rawData for formatting)
         value = point['Value']
         numeric = value.get('Numeric', 'N/A')
-        display = value.get('Display', 'N/A') if not Config.rawData else Logic.valuePrecision(numeric)
-        self._addRow("Value", f"{display} ({numeric})", point['Timestamp'], "")
+        display = Logic.valuePrecision(numeric) if not Config.rawData and numeric != 'N/A' else str(numeric)
+        self._addRow("Value", display, point['Timestamp'], "")
         
         # 3-9: Arrays with time-range filtering
         self._addArrayRows("Approval", response.get('Approvals', []), timestamp, 
@@ -268,11 +270,16 @@ class uiDetails(QWidget):
         """Parse string to datetime, assuming common formats (e.g., ISO)."""
         if not dtStr:
             raise ValueError("Empty datetime string")
-        # Try row header format first (2-digit year)
-        formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%d %H:%M:%S']
+        # Preprocess: remove microseconds and colon in tz offset
+        dtStr = dtStr.split('.')[0]  # Remove microseconds
+        if dtStr[-3] == ':':  # Remove colon in +HH:MM to +HHMM
+            dtStr = dtStr[:-3] + dtStr[-2:]
+        # Try formats
+        formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']
         for fmt in formats:
             try:
-                return datetime.strptime(dtStr.split('.')[0].rstrip('Z+-:0123456789') if 'T' in dtStr else dtStr, fmt)
+                dt = datetime.strptime(dtStr, fmt)
+                return dt.replace(tzinfo=None)  # Return naive datetime for comparison
             except ValueError:
                 pass
         raise ValueError(f"Unsupported datetime format: {dtStr}")
