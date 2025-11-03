@@ -64,6 +64,13 @@ class uiDetails(QWidget):
         
         self.detailsTable.horizontalHeader().setStretchLastSection(True)
         
+        # Handler dictionary for database-specific metadata (easy to add USBR/USGS)
+        metadataHandlers = {
+            "AQUARIUS": self.populateAquarius,
+            "USGS": self.populateUSGS,  # TODO: Implement for USGS
+            "USBR": self.populateUSBR,  # TODO: Implement for USBR
+        }
+        
         if queryType == "overlay":
             self.populateOverlay(timestampStr, response)
         elif queryType == "headerNormal":
@@ -72,14 +79,8 @@ class uiDetails(QWidget):
             self.populateHeaderDelta(response)
         elif queryType == "headerOverlay":
             self.populateHeaderOverlay(response)
-        elif queryType == "AQUARIUS":
-            self.populateAquarius(timestampStr, response)
-        elif queryType == "USGS":
-            # TODO: Populate for USGS metadata (similar structure, adjust fields)
-            pass
-        elif queryType == "USBR":
-            # TODO: Populate for USBR metadata (similar structure, adjust fields)
-            pass
+        elif queryType in metadataHandlers:
+            metadataHandlers[queryType](timestampStr, response)
         else:
             Logic.logMessage("WARN", f"Unknown queryType: {queryType} - No details populated")
             return
@@ -133,7 +134,7 @@ class uiDetails(QWidget):
         self.addRow("Query Info", query_str)
         
         # Add stats (computed as in original)
-        maxStr, minStr, meanStr = self.computeColumnStats(meta['col']) # Assuming col in meta
+        maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
         self.addRow("Max", maxStr)
         self.addRow("Min", minStr)
         self.addRow("Mean", meanStr)
@@ -166,8 +167,10 @@ class uiDetails(QWidget):
     def computeColumnStats(self, col):
         """Compute stats for a column (mirrors original logic)."""
         values = []
+
         for row in range(self.parent().mainTable.rowCount()):
             item = self.parent().mainTable.item(row, col)
+
             if item and item.text().strip():
                 try:
                     values.append(float(item.text()))
@@ -246,6 +249,7 @@ class uiDetails(QWidget):
         self.detailsTable.insertRow(row)
         self.detailsTable.setItem(row, 0, QTableWidgetItem(metaType))
         self.detailsTable.setItem(row, 1, QTableWidgetItem(details))
+
         if self.detailsTable.columnCount() > 2:
             self.detailsTable.setItem(row, 2, QTableWidgetItem(startTime))
             self.detailsTable.setItem(row, 3, QTableWidgetItem(endTime))
@@ -253,6 +257,7 @@ class uiDetails(QWidget):
     def addArrayRows(self, metaType, items, timestamp, detailFormatter):
         """Add rows for array items matching the timestamp range."""
         added = False
+
         for item in items:
             try:
                 start = self.parseDateTime(item.get('StartTime'))
@@ -269,12 +274,16 @@ class uiDetails(QWidget):
         """Parse string to datetime, assuming common formats (e.g., ISO)."""
         if not dtStr:
             raise ValueError("Empty datetime string")
-        # Preprocess: remove microseconds and colon in tz offset only if tz present
-        dtStr = dtStr.split('.')[0]  # Remove microseconds
-        if len(dtStr) > 19 and dtStr[-6] in '+-' and dtStr[-3] == ':':
+
+        # Preprocess: remove microseconds and colon in tz offset
+        dtStr = dtStr.split('.')[0] # Remove microseconds
+
+        if dtStr[-3] == ':': # Remove colon in +HH:MM to +HHMM
             dtStr = dtStr[:-3] + dtStr[-2:]
+
         # Try formats
         formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']
+
         for fmt in formats:
             try:
                 dt = datetime.strptime(dtStr, fmt)
