@@ -208,13 +208,13 @@ class uiOptions(QDialog):
 
         if self.qleAQPassword.echoMode() == QLineEdit.EchoMode.Password:
             self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
+            self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "AQ password shown via button")
         else:
             self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)
-            self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
+            self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "AQ password masked via button")
@@ -225,13 +225,13 @@ class uiOptions(QDialog):
 
         if self.qleUSGSAPIKey.echoMode() == QLineEdit.EchoMode.Password:
             self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
+            self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "USGS API key shown via button")
         else:
             self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Password)
-            self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
+            self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "USGS API key masked via button")
@@ -242,13 +242,13 @@ class uiOptions(QDialog):
 
         if self.qleOraclePassword.echoMode() == QLineEdit.EchoMode.Password:
             self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.btnShowOraclePassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
+            self.btnShowOraclePassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "Oracle password shown via button")
         else:
             self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Password)
-            self.btnShowOraclePassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
+            self.btnShowOraclePassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "Oracle password masked via button")
