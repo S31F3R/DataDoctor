@@ -91,8 +91,8 @@ class uiDetails(QWidget):
         # Manually calculate and set window size to fit content exactly (no scroll bars)
         self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
         self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
-        width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding for borders/margins
-        height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding, account for frames
+        width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding for borders/margins
+        height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding, account for frames
         self.resize(width, height)
         
         if Config.debug:
@@ -166,10 +166,8 @@ class uiDetails(QWidget):
     def computeColumnStats(self, col):
         """Compute stats for a column (mirrors original logic)."""
         values = []
-
         for row in range(self.parent().mainTable.rowCount()):
             item = self.parent().mainTable.item(row, col)
-
             if item and item.text().strip():
                 try:
                     values.append(float(item.text()))
@@ -205,11 +203,12 @@ class uiDetails(QWidget):
         
         # Find the matching TimeSeriesPoint (assuming Points is list of dicts)
         point = next((p for p in response.get('Points', []) if self.parseDateTime(p['Timestamp']) == timestamp), None)
-
         if not point:
             Logic.logMessage("WARN", f"No matching point found for timestamp {timestampStr}")
             return
-                
+        
+        # Add rows for selected metadata (per list 1-10)
+        
         # 1. Parameter/Label/Unit (series-level)
         self.addRow("Parameter", f"{response.get('Parameter', 'N/A')} ({response.get('Label', 'N/A')})", "", response.get('Unit', 'N/A'))
         
@@ -247,7 +246,6 @@ class uiDetails(QWidget):
         self.detailsTable.insertRow(row)
         self.detailsTable.setItem(row, 0, QTableWidgetItem(metaType))
         self.detailsTable.setItem(row, 1, QTableWidgetItem(details))
-
         if self.detailsTable.columnCount() > 2:
             self.detailsTable.setItem(row, 2, QTableWidgetItem(startTime))
             self.detailsTable.setItem(row, 3, QTableWidgetItem(endTime))
@@ -255,12 +253,10 @@ class uiDetails(QWidget):
     def addArrayRows(self, metaType, items, timestamp, detailFormatter):
         """Add rows for array items matching the timestamp range."""
         added = False
-
         for item in items:
             try:
                 start = self.parseDateTime(item.get('StartTime'))
                 end = self.parseDateTime(item.get('EndTime'))
-
                 if start <= timestamp <= end:
                     self.addRow(metaType, detailFormatter(item), item.get('StartTime', 'N/A'), item.get('EndTime', 'N/A'))
                     added = True
@@ -273,11 +269,9 @@ class uiDetails(QWidget):
         """Parse string to datetime, assuming common formats (e.g., ISO)."""
         if not dtStr:
             raise ValueError("Empty datetime string")
-
         # Preprocess: remove microseconds and colon in tz offset
-        dtStr = dtStr.split('.')[0] # Remove microseconds
-
-        if dtStr[-3] == ':': # Remove colon in +HH:MM to +HHMM
+        dtStr = dtStr.split('.')[0]  # Remove microseconds
+        if dtStr[-3] == ':':  # Remove colon in +HH:MM to +HHMM
             dtStr = dtStr[:-3] + dtStr[-2:]
         # Try formats
         formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']
