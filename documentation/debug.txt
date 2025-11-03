@@ -1,209 +1,197 @@
-2025-11-02 17:14:33,572 [DEBUG] uiMain initialized with header context menu, Config.rawData: False
-2025-11-02 17:14:33,572 [DEBUG] Loading UI file: C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\winQuery.ui
-2025-11-02 17:14:33,595 [DEBUG] initializeQueryWindow: Setting initial state
-2025-11-02 17:14:33,595 [DEBUG] initializeQueryWindow: Set default dates and radio button
-2025-11-02 17:14:34,211 [DEBUG] uiQuery initialized
-2025-11-02 17:14:34,218 [DEBUG] uiDataDictionary initialized with btnDeleteRow
-2025-11-02 17:14:34,221 [DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName
-2025-11-02 17:14:34,231 [DEBUG] uiOptions initialized
-2025-11-02 17:14:34,259 [WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
-2025-11-02 17:14:35,136 [DEBUG] Built DataDictionary with 29304 rows, 11 columns
-2025-11-02 17:14:35,139 [DEBUG] loadAllQuickLooks: Found user Quick Look: BIBLC TEST.json
-2025-11-02 17:14:35,139 [DEBUG] loadAllQuickLooks: Found user Quick Look: TEST.json
-2025-11-02 17:14:35,139 [DEBUG] loadAllQuickLooks: Found user Quick Look: USGS TESTING.json
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (AQUARIUS).txt
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & AQUARIUS).txt
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & USGS).txt
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added example Quick Look: MRID TEST.txt
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added example Quick Look: USGS Example.txt
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added BIBLC TEST to cbQuickLook
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added Data Check (AQUARIUS) to cbQuickLook
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & AQUARIUS) to cbQuickLook
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & USGS) to cbQuickLook
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added MRID TEST to cbQuickLook
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added TEST to cbQuickLook
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added USGS Example to cbQuickLook
-2025-11-02 17:14:35,140 [DEBUG] loadAllQuickLooks: Added USGS TESTING to cbQuickLook
-2025-11-02 17:14:36,471 [DEBUG] uiQuery showEvent: queryType=internal
-2025-11-02 17:14:36,473 [DEBUG] Loaded config for quick look: BIBLC TEST
-2025-11-02 17:14:36,473 [DEBUG] Set cbQuickLook to index 0: BIBLC TEST
-2025-11-02 17:14:36,478 [DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png and title to Internal Query
-2025-11-02 17:14:36,484 [DEBUG] btnInternalQueryPressed: Opened uiQuery as internal
-2025-11-02 17:14:39,509 [DEBUG] loadQuickLook: Added item a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS
-2025-11-02 17:14:39,510 [DEBUG] loadQuickLook: Added item 20181|HOUR|USBR-LCHDB
-2025-11-02 17:14:39,510 [DEBUG] loadQuickLook: Loaded 'BIBLC TEST' with 2 items
-2025-11-02 17:14:39,510 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin'}
-2025-11-02 17:14:39,512 [DEBUG] Loaded quick look: BIBLC TEST
-2025-11-02 17:14:40,107 [DEBUG] btnQueryPressed: Starting query process, queryType=internal
-2025-11-02 17:14:40,108 [DEBUG] Item text: 'a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS', parts: ['a3456c1764b846779ea76ce5b1c8c277', 'HOUR', 'AQUARIUS'], len: 3
-2025-11-02 17:14:40,108 [DEBUG] Added queryItem: ('a3456c1764b846779ea76ce5b1c8c277', 'HOUR', 'AQUARIUS', '0', 0)
-2025-11-02 17:14:40,108 [DEBUG] Item text: '20181|HOUR|USBR-LCHDB', parts: ['20181', 'HOUR', 'USBR-LCHDB'], len: 3
-2025-11-02 17:14:40,108 [DEBUG] Added queryItem: ('20181', 'HOUR', 'USBR-LCHDB', '0', 1)
-2025-11-02 17:14:40,108 [DEBUG] Stored last query as internal
-2025-11-02 17:14:40,108 [DEBUG] executeQuery: isInternal=True, items=2, deltaChecked=False, overlayChecked=False
-2025-11-02 17:14:40,108 [DEBUG] executeQuery: Filtered AQUARIUS for public query, remaining items=2
-2025-11-02 17:14:40,119 [DEBUG] executeQuery: Initialized and showed progress dialog
-2025-11-02 17:14:40,125 [DEBUG] executeQuery: Ensured dates are datetime for rounding: start=2025-11-01 01:00:00, end=2025-11-02 17:14:00
-2025-11-02 17:14:40,125 [DEBUG] Rounded down 2025-11-01 01:00:00 to HOUR
-2025-11-02 17:14:40,125 [DEBUG] buildTimestamps called with start: 2025-11-01 01:00, end: 2025-11-02 17:14, interval: HOUR
-2025-11-02 17:14:40,125 [DEBUG] Generated 41 timestamps, sample first 3: ['11/01/25 01:00:00', '11/01/25 02:00:00', '11/01/25 03:00:00']
-2025-11-02 17:14:40,128 [DEBUG] executeQuery: Setup complete, progress at 20%
-2025-11-02 17:14:40,129 [DEBUG] Starting 2 threads for 2 groups in background
-2025-11-02 17:14:40,129 [DEBUG] Started background worker 0 for group ('AQUARIUS', None, None)
-2025-11-02 17:14:40,129 [DEBUG] Started background worker 1 for group ('USBR', None, None)
-2025-11-02 17:14:40,131 [DEBUG] Aquarius.apiRead called with dataIDs: ['a3456c1764b846779ea76ce5b1c8c277'], interval: HOUR, start: 2025-11-01 01:00, end: 2025-11-02 17:14
-2025-11-02 17:14:40,131 [DEBUG] USBR.apiRead called with svr: lchdb, SDIDs: ['20181'], interval: HOUR, start: 2025-11-01 01:00, end: 2025-11-02 17:14, mrid: 0, table='R'
-2025-11-02 17:14:40,131 [DEBUG] executeQuery: Started timer for progress updates
-2025-11-02 17:14:40,131 [DEBUG] getUtcOffsetInt: Parsed 'UTC-07:00 | Mountain Time (US & Canada)/Arizona' to -7.0 hours
-2025-11-02 17:14:40,131 [DEBUG] buildTimestamps called with start: 2025-11-01 01:00, end: 2025-11-02 17:14, interval: HOUR
-2025-11-02 17:14:40,132 [DEBUG] Generated 41 timestamps, sample first 3: ['11/01/25 01:00:00', '11/01/25 02:00:00', '11/01/25 03:00:00']
-2025-11-02 17:14:40,132 [DEBUG] Fetching USBR URL: https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr=lchdb&SDI=20181&tstp=HR&t1=2025-11-01T00:00&t2=2025-11-02T17:14&table=R&mrid=0&format=json
-2025-11-02 17:14:41,060 [DEBUG] SSL error with verify=True: HTTPSConnectionPool(host='ibrmazap013.bor.doi.net', port=443): Max retries exceeded with url: /AQUARIUS/Provisioning/v1/session (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1032)')))
-2025-11-02 17:14:41,060 [DEBUG] No certificate found at 'C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\certs\aquarius.pem', skipping to unverified.
-2025-11-02 17:14:41,418 [DEBUG] Authentication succeeded with verify=False
-2025-11-02 17:14:41,418 [WARNING] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.
-2025-11-02 17:14:41,418 [DEBUG] Estimated 41 points, splitting into 1 chunks of ~500 points each
-2025-11-02 17:14:41,419 [DEBUG] Generated 1 sub-ranges: [('2025-11-01 08:00', '2025-11-03 00:15')]
-2025-11-02 17:14:41,419 [DEBUG] Created 1 tasks for 1 UIDs across 1 sub-ranges, using 1 threads
-2025-11-02 17:14:41,419 [DEBUG] Thread 0 processing task for UID a3456c1764b846779ea76ce5b1c8c277, range 2025-11-01 08:00 to 2025-11-03 00:15
-2025-11-02 17:14:41,419 [DEBUG] Started thread 0 for task processing
-2025-11-02 17:14:41,597 [DEBUG] Fetched 1 series entries.
-2025-11-02 17:14:41,597 [DEBUG] Found series for '20181': 42 points.
-2025-11-02 17:14:41,597 [DEBUG] queryWorker: USBR result for SDIDs ['20181']: {'20181': ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513', '11/01/25 04:00:00,246.7397', '11/01/25 05:00:00,246.6843', '11/01/25 06:00:00,246.5908', '11/01/25 07:00:00,246.4715', '11/01/25 08:00:00,246.3479', '11/01/25 09:00:00,246.2508', '11/01/25 10:00:00,246.1937', '11/01/25 11:00:00,246.1945', '11/01/25 12:00:00,246.2570', '11/01/25 13:00:00,246.3749', '11/01/25 14:00:00,246.5287', '11/01/25 15:00:00,246.6958', '11/01/25 16:00:00,246.8531', '11/01/25 17:00:00,246.9873', '11/01/25 18:00:00,247.0917', '11/01/25 19:00:00,247.1801', '11/01/25 20:00:00,247.2676', '11/01/25 21:00:00,247.3523', '11/01/25 22:00:00,247.4383', '11/01/25 23:00:00,247.5170', '11/02/25 00:00:00,247.5812', '11/02/25 01:00:00,247.6307', '11/02/25 02:00:00,247.65', '11/02/25 03:00:00,247.6352', '11/02/25 04:00:00,247.5840', '11/02/25 05:00:00,247.4991', '11/02/25 06:00:00,247.3891', '11/02/25 07:00:00,247.2660', '11/02/25 08:00:00,247.1388', '11/02/25 09:00:00,247.0181', '11/02/25 10:00:00,246.9178', '11/02/25 11:00:00,246.8437', '11/02/25 12:00:00,246.8037', '11/02/25 13:00:00,246.7915', '11/02/25 14:00:00,246.7927', '11/02/25 15:00:00,246.7952', '11/02/25 16:00:00,246.7935', '11/02/25 17:00:00,246.7819', '11/02/25 18:00:00,']}
-2025-11-02 17:14:41,597 [DEBUG] gapCheck for dataID '20181': timestamps len=41, data len=42
-2025-11-02 17:14:41,601 [DEBUG] Removed 1 extra/mismatched rows from '20181': ts ['11/02/25 18:00:00']
-2025-11-02 17:14:41,601 [DEBUG] Post-gapCheck len=41, sample first 3: ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513']
-2025-11-02 17:14:41,601 [DEBUG] queryWorker: Completed group ('USBR', None, None) with 1 items
-2025-11-02 17:14:41,605 [DEBUG] executeQuery: Signal received for group ('USBR', None, None)
-2025-11-02 17:14:41,605 [DEBUG] executeQuery: Collected results for group ('USBR', None, None) with 1 items (1/2)
-2025-11-02 17:14:41,606 [DEBUG] executeQuery: Retrieved result from queue: ('USBR', None, None)
-2025-11-02 17:14:41,606 [DEBUG] executeQuery: Duplicate group ('USBR', None, None), skipping
-2025-11-02 17:14:41,730 [DEBUG] Thread 0 fetched 41 points for UID 'a3456c1764b846779ea76ce5b1c8c277', range 2025-11-01 08:00 to 2025-11-03 00:15
-2025-11-02 17:14:41,731 [DEBUG] Thread 0 completed task for UID a3456c1764b846779ea76ce5b1c8c277 with 41 points
-2025-11-02 17:14:41,731 [DEBUG] Thread 0 found no more tasks
-2025-11-02 17:14:41,733 [DEBUG] Thread 0 joined
-2025-11-02 17:14:41,734 [DEBUG] Combined results from 1 tasks with 1 UIDs
-2025-11-02 17:14:41,734 [DEBUG] Returning result dict with 1 UIDs
-2025-11-02 17:14:41,734 [DEBUG] queryWorker: Aquarius result for SDIDs ['a3456c1764b846779ea76ce5b1c8c277']: {'a3456c1764b846779ea76ce5b1c8c277': {'data': ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513', '11/01/25 04:00:00,246.7397', '11/01/25 05:00:00,246.6843', '11/01/25 06:00:00,246.5908', '11/01/25 07:00:00,246.4715', '11/01/25 08:00:00,246.3479', '11/01/25 09:00:00,246.2508', '11/01/25 10:00:00,246.1937', '11/01/25 11:00:00,246.1945', '11/01/25 12:00:00,246.257', '11/01/25 13:00:00,246.3749', '11/01/25 14:00:00,246.5287', '11/01/25 15:00:00,246.6958', '11/01/25 16:00:00,246.8531', '11/01/25 17:00:00,246.9873', '11/01/25 18:00:00,247.0917', '11/01/25 19:00:00,247.1801', '11/01/25 20:00:00,247.2676', '11/01/25 21:00:00,247.3523', '11/01/25 22:00:00,247.4383', '11/01/25 23:00:00,247.517', '11/02/25 00:00:00,247.5812', '11/02/25 01:00:00,247.6307', '11/02/25 02:00:00,247.65', '11/02/25 03:00:00,247.6352', '11/02/25 04:00:00,247.584', '11/02/25 05:00:00,247.4991', '11/02/25 06:00:00,247.3891', '11/02/25 07:00:00,247.266', '11/02/25 08:00:00,247.1388', '11/02/25 09:00:00,247.0181', '11/02/25 10:00:00,246.9178', '11/02/25 11:00:00,246.8437', '11/02/25 12:00:00,246.8037', '11/02/25 13:00:00,246.7915', '11/02/25 14:00:00,246.7927', '11/02/25 15:00:00,246.7952', '11/02/25 16:00:00,246.7935', '11/02/25 17:00:00,246.7819'], 'label': 'BIBLC-EH-Corrected \nSystem', 'rawResponse': {'UniqueId': 'a3456c1764b846779ea76ce5b1c8c277', 'Parameter': 'Stage', 'Label': 'BIBLC-EH-Corrected', 'LocationIdentifier': 'System', 'NumPoints': 41, 'Unit': 'ft', 'Approvals': [{'ApprovalLevel': 900, 'DateAppliedUtc': '2020-10-23T19:10:07.6119152Z', 'User': 'admin', 'LevelDescription': 'Working', 'Comment': '', 'StartTime': '0001-01-01T00:00:00.0000000+00:00', 'EndTime': '9999-12-31T23:59:59.9999999+00:00'}], 'Qualifiers': [], 'Methods': [{'MethodCode': 'HGCOMP', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:15:00.0000001-07:00'}], 'Grades': [{'GradeCode': '0', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:15:00.0000001-07:00'}], 'GapTolerances': [{'ToleranceInMinutes': 60, 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:15:00.0000001-07:00'}], 'InterpolationTypes': [{'Type': 'InstantaneousValues', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:15:00.0000001-07:00'}], 'Notes': [], 'TimeRange': {'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:00:00.0000000-07:00'}, 'Points': [{'Timestamp': '2025-11-01T01:00:00.0000000-07:00', 'Value': {'Numeric': 246.6255}}, {'Timestamp': '2025-11-01T02:00:00.0000000-07:00', 'Value': {'Numeric': 246.7121}}, {'Timestamp': '2025-11-01T03:00:00.0000000-07:00', 'Value': {'Numeric': 246.7513}}, {'Timestamp': '2025-11-01T04:00:00.0000000-07:00', 'Value': {'Numeric': 246.7397}}, {'Timestamp': '2025-11-01T05:00:00.0000000-07:00', 'Value': {'Numeric': 246.6843}}, {'Timestamp': '2025-11-01T06:00:00.0000000-07:00', 'Value': {'Numeric': 246.5908}}, {'Timestamp': '2025-11-01T07:00:00.0000000-07:00', 'Value': {'Numeric': 246.4715}}, {'Timestamp': '2025-11-01T08:00:00.0000000-07:00', 'Value': {'Numeric': 246.3479}}, {'Timestamp': '2025-11-01T09:00:00.0000000-07:00', 'Value': {'Numeric': 246.2508}}, {'Timestamp': '2025-11-01T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.1937}}, {'Timestamp': '2025-11-01T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.1945}}, {'Timestamp': '2025-11-01T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.257}}, {'Timestamp': '2025-11-01T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.3749}}, {'Timestamp': '2025-11-01T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.5287}}, {'Timestamp': '2025-11-01T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.6958}}, {'Timestamp': '2025-11-01T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.8531}}, {'Timestamp': '2025-11-01T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.9873}}, {'Timestamp': '2025-11-01T18:00:00.0000000-07:00', 'Value': {'Numeric': 247.0917}}, {'Timestamp': '2025-11-01T19:00:00.0000000-07:00', 'Value': {'Numeric': 247.1801}}, {'Timestamp': '2025-11-01T20:00:00.0000000-07:00', 'Value': {'Numeric': 247.2676}}, {'Timestamp': '2025-11-01T21:00:00.0000000-07:00', 'Value': {'Numeric': 247.3523}}, {'Timestamp': '2025-11-01T22:00:00.0000000-07:00', 'Value': {'Numeric': 247.4383}}, {'Timestamp': '2025-11-01T23:00:00.0000000-07:00', 'Value': {'Numeric': 247.517}}, {'Timestamp': '2025-11-02T00:00:00.0000000-07:00', 'Value': {'Numeric': 247.5812}}, {'Timestamp': '2025-11-02T01:00:00.0000000-07:00', 'Value': {'Numeric': 247.6307}}, {'Timestamp': '2025-11-02T02:00:00.0000000-07:00', 'Value': {'Numeric': 247.65}}, {'Timestamp': '2025-11-02T03:00:00.0000000-07:00', 'Value': {'Numeric': 247.6352}}, {'Timestamp': '2025-11-02T04:00:00.0000000-07:00', 'Value': {'Numeric': 247.584}}, {'Timestamp': '2025-11-02T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.4991}}, {'Timestamp': '2025-11-02T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.3891}}, {'Timestamp': '2025-11-02T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.266}}, {'Timestamp': '2025-11-02T08:00:00.0000000-07:00', 'Value': {'Numeric': 247.1388}}, {'Timestamp': '2025-11-02T09:00:00.0000000-07:00', 'Value': {'Numeric': 247.0181}}, {'Timestamp': '2025-11-02T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.9178}}, {'Timestamp': '2025-11-02T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.8437}}, {'Timestamp': '2025-11-02T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.8037}}, {'Timestamp': '2025-11-02T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.7915}}, {'Timestamp': '2025-11-02T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.7927}}, {'Timestamp': '2025-11-02T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.7952}}, {'Timestamp': '2025-11-02T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.7935}}, {'Timestamp': '2025-11-02T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.7819}}], 'ResponseVersion': 1, 'ResponseTime': '2025-11-03T00:14:41.8824448+00:00', 'Summary': 'Produced by AQUARIUS Time-Series Software.\r\nThe accuracy and reliability of this data is not guaranteed.  Aquatic Informatics Inc. accepts no liability for its use in any way.'}}}
-2025-11-02 17:14:41,734 [DEBUG] queryWorker: Aquarius label for a3456c1764b846779ea76ce5b1c8c277: BIBLC-EH-Corrected 
+2025-11-02 17:24:53,474 [DEBUG] uiMain initialized with header context menu, Config.rawData: False
+2025-11-02 17:24:53,474 [DEBUG] Loading UI file: C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\winQuery.ui
+2025-11-02 17:24:53,503 [DEBUG] initializeQueryWindow: Setting initial state
+2025-11-02 17:24:53,504 [DEBUG] initializeQueryWindow: Set default dates and radio button
+2025-11-02 17:24:54,596 [DEBUG] uiQuery initialized
+2025-11-02 17:24:54,756 [DEBUG] uiDataDictionary initialized with btnDeleteRow
+2025-11-02 17:24:54,776 [DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName
+2025-11-02 17:24:54,804 [DEBUG] uiOptions initialized
+2025-11-02 17:24:54,877 [WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
+2025-11-02 17:24:55,915 [DEBUG] Built DataDictionary with 29304 rows, 11 columns
+2025-11-02 17:24:55,919 [DEBUG] loadAllQuickLooks: Found user Quick Look: BIBLC TEST.json
+2025-11-02 17:24:55,919 [DEBUG] loadAllQuickLooks: Found user Quick Look: TEST.json
+2025-11-02 17:24:55,919 [DEBUG] loadAllQuickLooks: Found user Quick Look: USGS TESTING.json
+2025-11-02 17:24:55,919 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (AQUARIUS).txt
+2025-11-02 17:24:55,919 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & AQUARIUS).txt
+2025-11-02 17:24:55,919 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & USGS).txt
+2025-11-02 17:24:55,919 [DEBUG] loadAllQuickLooks: Added example Quick Look: MRID TEST.txt
+2025-11-02 17:24:55,919 [DEBUG] loadAllQuickLooks: Added example Quick Look: USGS Example.txt
+2025-11-02 17:24:55,920 [DEBUG] loadAllQuickLooks: Added BIBLC TEST to cbQuickLook
+2025-11-02 17:24:55,920 [DEBUG] loadAllQuickLooks: Added Data Check (AQUARIUS) to cbQuickLook
+2025-11-02 17:24:55,920 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & AQUARIUS) to cbQuickLook
+2025-11-02 17:24:55,920 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & USGS) to cbQuickLook
+2025-11-02 17:24:55,920 [DEBUG] loadAllQuickLooks: Added MRID TEST to cbQuickLook
+2025-11-02 17:24:55,920 [DEBUG] loadAllQuickLooks: Added TEST to cbQuickLook
+2025-11-02 17:24:55,920 [DEBUG] loadAllQuickLooks: Added USGS Example to cbQuickLook
+2025-11-02 17:24:55,920 [DEBUG] loadAllQuickLooks: Added USGS TESTING to cbQuickLook
+2025-11-02 17:24:59,697 [DEBUG] uiQuery showEvent: queryType=internal
+2025-11-02 17:24:59,700 [DEBUG] Loaded config for quick look: BIBLC TEST
+2025-11-02 17:24:59,700 [DEBUG] Set cbQuickLook to index 0: BIBLC TEST
+2025-11-02 17:24:59,706 [DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png and title to Internal Query
+2025-11-02 17:24:59,712 [DEBUG] btnInternalQueryPressed: Opened uiQuery as internal
+2025-11-02 17:25:01,258 [DEBUG] loadQuickLook: Added item a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS
+2025-11-02 17:25:01,258 [DEBUG] loadQuickLook: Added item 20181|HOUR|USBR-LCHDB
+2025-11-02 17:25:01,258 [DEBUG] loadQuickLook: Loaded 'BIBLC TEST' with 2 items
+2025-11-02 17:25:01,258 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin'}
+2025-11-02 17:25:01,260 [DEBUG] Loaded quick look: BIBLC TEST
+2025-11-02 17:25:02,400 [DEBUG] btnQueryPressed: Starting query process, queryType=internal
+2025-11-02 17:25:02,401 [DEBUG] Item text: 'a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS', parts: ['a3456c1764b846779ea76ce5b1c8c277', 'HOUR', 'AQUARIUS'], len: 3
+2025-11-02 17:25:02,401 [DEBUG] Added queryItem: ('a3456c1764b846779ea76ce5b1c8c277', 'HOUR', 'AQUARIUS', '0', 0)
+2025-11-02 17:25:02,401 [DEBUG] Item text: '20181|HOUR|USBR-LCHDB', parts: ['20181', 'HOUR', 'USBR-LCHDB'], len: 3
+2025-11-02 17:25:02,401 [DEBUG] Added queryItem: ('20181', 'HOUR', 'USBR-LCHDB', '0', 1)
+2025-11-02 17:25:02,401 [DEBUG] Stored last query as internal
+2025-11-02 17:25:02,401 [DEBUG] executeQuery: isInternal=True, items=2, deltaChecked=False, overlayChecked=False
+2025-11-02 17:25:02,401 [DEBUG] executeQuery: Filtered AQUARIUS for public query, remaining items=2
+2025-11-02 17:25:02,410 [DEBUG] executeQuery: Initialized and showed progress dialog
+2025-11-02 17:25:02,416 [DEBUG] executeQuery: Ensured dates are datetime for rounding: start=2025-11-01 01:00:00, end=2025-11-02 17:25:00
+2025-11-02 17:25:02,417 [DEBUG] Rounded down 2025-11-01 01:00:00 to HOUR
+2025-11-02 17:25:02,417 [DEBUG] buildTimestamps called with start: 2025-11-01 01:00, end: 2025-11-02 17:25, interval: HOUR
+2025-11-02 17:25:02,417 [DEBUG] Generated 41 timestamps, sample first 3: ['11/01/25 01:00:00', '11/01/25 02:00:00', '11/01/25 03:00:00']
+2025-11-02 17:25:02,420 [DEBUG] executeQuery: Setup complete, progress at 20%
+2025-11-02 17:25:02,421 [DEBUG] Starting 2 threads for 2 groups in background
+2025-11-02 17:25:02,421 [DEBUG] Started background worker 0 for group ('AQUARIUS', None, None)
+2025-11-02 17:25:02,421 [DEBUG] Started background worker 1 for group ('USBR', None, None)
+2025-11-02 17:25:02,423 [DEBUG] Aquarius.apiRead called with dataIDs: ['a3456c1764b846779ea76ce5b1c8c277'], interval: HOUR, start: 2025-11-01 01:00, end: 2025-11-02 17:25
+2025-11-02 17:25:02,423 [DEBUG] getUtcOffsetInt: Parsed 'UTC-07:00 | Mountain Time (US & Canada)/Arizona' to -7.0 hours
+2025-11-02 17:25:02,423 [DEBUG] USBR.apiRead called with svr: lchdb, SDIDs: ['20181'], interval: HOUR, start: 2025-11-01 01:00, end: 2025-11-02 17:25, mrid: 0, table='R'
+2025-11-02 17:25:02,423 [DEBUG] executeQuery: Started timer for progress updates
+2025-11-02 17:25:02,424 [DEBUG] buildTimestamps called with start: 2025-11-01 01:00, end: 2025-11-02 17:25, interval: HOUR
+2025-11-02 17:25:02,424 [DEBUG] Generated 41 timestamps, sample first 3: ['11/01/25 01:00:00', '11/01/25 02:00:00', '11/01/25 03:00:00']
+2025-11-02 17:25:02,425 [DEBUG] Fetching USBR URL: https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr=lchdb&SDI=20181&tstp=HR&t1=2025-11-01T00:00&t2=2025-11-02T17:25&table=R&mrid=0&format=json
+2025-11-02 17:25:03,503 [DEBUG] SSL error with verify=True: HTTPSConnectionPool(host='ibrmazap013.bor.doi.net', port=443): Max retries exceeded with url: /AQUARIUS/Provisioning/v1/session (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1032)')))
+2025-11-02 17:25:03,503 [DEBUG] No certificate found at 'C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\certs\aquarius.pem', skipping to unverified.
+2025-11-02 17:25:03,779 [DEBUG] Fetched 1 series entries.
+2025-11-02 17:25:03,779 [DEBUG] Found series for '20181': 42 points.
+2025-11-02 17:25:03,779 [DEBUG] queryWorker: USBR result for SDIDs ['20181']: {'20181': ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513', '11/01/25 04:00:00,246.7397', '11/01/25 05:00:00,246.6843', '11/01/25 06:00:00,246.5908', '11/01/25 07:00:00,246.4715', '11/01/25 08:00:00,246.3479', '11/01/25 09:00:00,246.2508', '11/01/25 10:00:00,246.1937', '11/01/25 11:00:00,246.1945', '11/01/25 12:00:00,246.2570', '11/01/25 13:00:00,246.3749', '11/01/25 14:00:00,246.5287', '11/01/25 15:00:00,246.6958', '11/01/25 16:00:00,246.8531', '11/01/25 17:00:00,246.9873', '11/01/25 18:00:00,247.0917', '11/01/25 19:00:00,247.1801', '11/01/25 20:00:00,247.2676', '11/01/25 21:00:00,247.3523', '11/01/25 22:00:00,247.4383', '11/01/25 23:00:00,247.5170', '11/02/25 00:00:00,247.5812', '11/02/25 01:00:00,247.6307', '11/02/25 02:00:00,247.65', '11/02/25 03:00:00,247.6352', '11/02/25 04:00:00,247.5840', '11/02/25 05:00:00,247.4991', '11/02/25 06:00:00,247.3891', '11/02/25 07:00:00,247.2660', '11/02/25 08:00:00,247.1388', '11/02/25 09:00:00,247.0181', '11/02/25 10:00:00,246.9178', '11/02/25 11:00:00,246.8437', '11/02/25 12:00:00,246.8037', '11/02/25 13:00:00,246.7915', '11/02/25 14:00:00,246.7927', '11/02/25 15:00:00,246.7952', '11/02/25 16:00:00,246.7935', '11/02/25 17:00:00,246.7819', '11/02/25 18:00:00,']}
+2025-11-02 17:25:03,779 [DEBUG] gapCheck for dataID '20181': timestamps len=41, data len=42
+2025-11-02 17:25:03,783 [DEBUG] Removed 1 extra/mismatched rows from '20181': ts ['11/02/25 18:00:00']
+2025-11-02 17:25:03,783 [DEBUG] Post-gapCheck len=41, sample first 3: ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513']
+2025-11-02 17:25:03,784 [DEBUG] queryWorker: Completed group ('USBR', None, None) with 1 items
+2025-11-02 17:25:03,795 [DEBUG] executeQuery: Signal received for group ('USBR', None, None)
+2025-11-02 17:25:03,795 [DEBUG] executeQuery: Collected results for group ('USBR', None, None) with 1 items (1/2)
+2025-11-02 17:25:03,857 [DEBUG] Authentication succeeded with verify=False
+2025-11-02 17:25:03,857 [WARNING] SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.
+2025-11-02 17:25:03,858 [DEBUG] Estimated 41 points, splitting into 1 chunks of ~500 points each
+2025-11-02 17:25:03,858 [DEBUG] Generated 1 sub-ranges: [('2025-11-01 08:00', '2025-11-03 00:26')]
+2025-11-02 17:25:03,858 [DEBUG] Created 1 tasks for 1 UIDs across 1 sub-ranges, using 1 threads
+2025-11-02 17:25:03,858 [DEBUG] Thread 0 processing task for UID a3456c1764b846779ea76ce5b1c8c277, range 2025-11-01 08:00 to 2025-11-03 00:26
+2025-11-02 17:25:03,858 [DEBUG] Started thread 0 for task processing
+2025-11-02 17:25:03,897 [DEBUG] executeQuery: Retrieved result from queue: ('USBR', None, None)
+2025-11-02 17:25:03,897 [DEBUG] executeQuery: Duplicate group ('USBR', None, None), skipping
+2025-11-02 17:25:04,242 [DEBUG] Thread 0 fetched 41 points for UID 'a3456c1764b846779ea76ce5b1c8c277', range 2025-11-01 08:00 to 2025-11-03 00:26
+2025-11-02 17:25:04,242 [DEBUG] Thread 0 completed task for UID a3456c1764b846779ea76ce5b1c8c277 with 41 points
+2025-11-02 17:25:04,242 [DEBUG] Thread 0 found no more tasks
+2025-11-02 17:25:04,246 [DEBUG] Thread 0 joined
+2025-11-02 17:25:04,247 [DEBUG] Combined results from 1 tasks with 1 UIDs
+2025-11-02 17:25:04,247 [DEBUG] Returning result dict with 1 UIDs
+2025-11-02 17:25:04,247 [DEBUG] queryWorker: Aquarius result for SDIDs ['a3456c1764b846779ea76ce5b1c8c277']: {'a3456c1764b846779ea76ce5b1c8c277': {'data': ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513', '11/01/25 04:00:00,246.7397', '11/01/25 05:00:00,246.6843', '11/01/25 06:00:00,246.5908', '11/01/25 07:00:00,246.4715', '11/01/25 08:00:00,246.3479', '11/01/25 09:00:00,246.2508', '11/01/25 10:00:00,246.1937', '11/01/25 11:00:00,246.1945', '11/01/25 12:00:00,246.257', '11/01/25 13:00:00,246.3749', '11/01/25 14:00:00,246.5287', '11/01/25 15:00:00,246.6958', '11/01/25 16:00:00,246.8531', '11/01/25 17:00:00,246.9873', '11/01/25 18:00:00,247.0917', '11/01/25 19:00:00,247.1801', '11/01/25 20:00:00,247.2676', '11/01/25 21:00:00,247.3523', '11/01/25 22:00:00,247.4383', '11/01/25 23:00:00,247.517', '11/02/25 00:00:00,247.5812', '11/02/25 01:00:00,247.6307', '11/02/25 02:00:00,247.65', '11/02/25 03:00:00,247.6352', '11/02/25 04:00:00,247.584', '11/02/25 05:00:00,247.4991', '11/02/25 06:00:00,247.3891', '11/02/25 07:00:00,247.266', '11/02/25 08:00:00,247.1388', '11/02/25 09:00:00,247.0181', '11/02/25 10:00:00,246.9178', '11/02/25 11:00:00,246.8437', '11/02/25 12:00:00,246.8037', '11/02/25 13:00:00,246.7915', '11/02/25 14:00:00,246.7927', '11/02/25 15:00:00,246.7952', '11/02/25 16:00:00,246.7935', '11/02/25 17:00:00,246.7819'], 'label': 'BIBLC-EH-Corrected \nSystem', 'rawResponse': {'UniqueId': 'a3456c1764b846779ea76ce5b1c8c277', 'Parameter': 'Stage', 'Label': 'BIBLC-EH-Corrected', 'LocationIdentifier': 'System', 'NumPoints': 41, 'Unit': 'ft', 'Approvals': [{'ApprovalLevel': 900, 'DateAppliedUtc': '2020-10-23T19:10:07.6119152Z', 'User': 'admin', 'LevelDescription': 'Working', 'Comment': '', 'StartTime': '0001-01-01T00:00:00.0000000+00:00', 'EndTime': '9999-12-31T23:59:59.9999999+00:00'}], 'Qualifiers': [], 'Methods': [{'MethodCode': 'HGCOMP', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:26:00.0000001-07:00'}], 'Grades': [{'GradeCode': '0', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:26:00.0000001-07:00'}], 'GapTolerances': [{'ToleranceInMinutes': 60, 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:26:00.0000001-07:00'}], 'InterpolationTypes': [{'Type': 'InstantaneousValues', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:26:00.0000001-07:00'}], 'Notes': [], 'TimeRange': {'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:00:00.0000000-07:00'}, 'Points': [{'Timestamp': '2025-11-01T01:00:00.0000000-07:00', 'Value': {'Numeric': 246.6255}}, {'Timestamp': '2025-11-01T02:00:00.0000000-07:00', 'Value': {'Numeric': 246.7121}}, {'Timestamp': '2025-11-01T03:00:00.0000000-07:00', 'Value': {'Numeric': 246.7513}}, {'Timestamp': '2025-11-01T04:00:00.0000000-07:00', 'Value': {'Numeric': 246.7397}}, {'Timestamp': '2025-11-01T05:00:00.0000000-07:00', 'Value': {'Numeric': 246.6843}}, {'Timestamp': '2025-11-01T06:00:00.0000000-07:00', 'Value': {'Numeric': 246.5908}}, {'Timestamp': '2025-11-01T07:00:00.0000000-07:00', 'Value': {'Numeric': 246.4715}}, {'Timestamp': '2025-11-01T08:00:00.0000000-07:00', 'Value': {'Numeric': 246.3479}}, {'Timestamp': '2025-11-01T09:00:00.0000000-07:00', 'Value': {'Numeric': 246.2508}}, {'Timestamp': '2025-11-01T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.1937}}, {'Timestamp': '2025-11-01T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.1945}}, {'Timestamp': '2025-11-01T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.257}}, {'Timestamp': '2025-11-01T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.3749}}, {'Timestamp': '2025-11-01T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.5287}}, {'Timestamp': '2025-11-01T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.6958}}, {'Timestamp': '2025-11-01T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.8531}}, {'Timestamp': '2025-11-01T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.9873}}, {'Timestamp': '2025-11-01T18:00:00.0000000-07:00', 'Value': {'Numeric': 247.0917}}, {'Timestamp': '2025-11-01T19:00:00.0000000-07:00', 'Value': {'Numeric': 247.1801}}, {'Timestamp': '2025-11-01T20:00:00.0000000-07:00', 'Value': {'Numeric': 247.2676}}, {'Timestamp': '2025-11-01T21:00:00.0000000-07:00', 'Value': {'Numeric': 247.3523}}, {'Timestamp': '2025-11-01T22:00:00.0000000-07:00', 'Value': {'Numeric': 247.4383}}, {'Timestamp': '2025-11-01T23:00:00.0000000-07:00', 'Value': {'Numeric': 247.517}}, {'Timestamp': '2025-11-02T00:00:00.0000000-07:00', 'Value': {'Numeric': 247.5812}}, {'Timestamp': '2025-11-02T01:00:00.0000000-07:00', 'Value': {'Numeric': 247.6307}}, {'Timestamp': '2025-11-02T02:00:00.0000000-07:00', 'Value': {'Numeric': 247.65}}, {'Timestamp': '2025-11-02T03:00:00.0000000-07:00', 'Value': {'Numeric': 247.6352}}, {'Timestamp': '2025-11-02T04:00:00.0000000-07:00', 'Value': {'Numeric': 247.584}}, {'Timestamp': '2025-11-02T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.4991}}, {'Timestamp': '2025-11-02T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.3891}}, {'Timestamp': '2025-11-02T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.266}}, {'Timestamp': '2025-11-02T08:00:00.0000000-07:00', 'Value': {'Numeric': 247.1388}}, {'Timestamp': '2025-11-02T09:00:00.0000000-07:00', 'Value': {'Numeric': 247.0181}}, {'Timestamp': '2025-11-02T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.9178}}, {'Timestamp': '2025-11-02T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.8437}}, {'Timestamp': '2025-11-02T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.8037}}, {'Timestamp': '2025-11-02T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.7915}}, {'Timestamp': '2025-11-02T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.7927}}, {'Timestamp': '2025-11-02T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.7952}}, {'Timestamp': '2025-11-02T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.7935}}, {'Timestamp': '2025-11-02T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.7819}}], 'ResponseVersion': 1, 'ResponseTime': '2025-11-03T00:25:04.3798639+00:00', 'Summary': 'Produced by AQUARIUS Time-Series Software.\r\nThe accuracy and reliability of this data is not guaranteed.  Aquatic Informatics Inc. accepts no liability for its use in any way.'}}}
+2025-11-02 17:25:04,247 [DEBUG] queryWorker: Aquarius label for a3456c1764b846779ea76ce5b1c8c277: BIBLC-EH-Corrected 
 System
-2025-11-02 17:14:41,734 [DEBUG] gapCheck for dataID 'a3456c1764b846779ea76ce5b1c8c277': timestamps len=41, data len=41
-2025-11-02 17:14:41,734 [DEBUG] Post-gapCheck len=41, sample first 3: ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513']
-2025-11-02 17:14:41,734 [DEBUG] queryWorker: Completed group ('AQUARIUS', None, None) with 1 items
-2025-11-02 17:14:41,759 [DEBUG] executeQuery: Signal received for group ('AQUARIUS', None, None)
-2025-11-02 17:14:41,760 [DEBUG] executeQuery: Updated labelsDict with ['a3456c1764b846779ea76ce5b1c8c277']
-2025-11-02 17:14:41,760 [DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, None) with 1 items (2/2)
-2025-11-02 17:14:41,812 [DEBUG] executeQuery: Retrieved result from queue: ('AQUARIUS', None, None)
-2025-11-02 17:14:41,812 [DEBUG] executeQuery: Duplicate group ('AQUARIUS', None, None), skipping
-2025-11-02 17:14:41,812 [DEBUG] executeQuery: Timer stopped, wait loop ended, final collected 2/2, queue size 0, active threads 0
-2025-11-02 17:14:41,813 [DEBUG] executeQuery: All 2 groups merged
-2025-11-02 17:14:41,814 [DEBUG] executeQuery: Building row 0/41
-2025-11-02 17:14:41,814 [DEBUG] executeQuery: Building row 1/41
-2025-11-02 17:14:41,814 [DEBUG] executeQuery: Building row 2/41
-2025-11-02 17:14:41,814 [DEBUG] executeQuery: Building row 3/41
-2025-11-02 17:14:41,814 [DEBUG] executeQuery: Building row 4/41
-2025-11-02 17:14:41,814 [DEBUG] executeQuery: Building row 5/41
-2025-11-02 17:14:41,814 [DEBUG] executeQuery: Building row 6/41
-2025-11-02 17:14:41,814 [DEBUG] executeQuery: Building row 7/41
-2025-11-02 17:14:41,814 [DEBUG] executeQuery: Building row 8/41
-2025-11-02 17:14:41,814 [DEBUG] executeQuery: Building row 9/41
-2025-11-02 17:14:41,815 [DEBUG] executeQuery: Building row 10/41
-2025-11-02 17:14:41,815 [DEBUG] executeQuery: Building row 11/41
-2025-11-02 17:14:41,815 [DEBUG] executeQuery: Building row 12/41
-2025-11-02 17:14:41,815 [DEBUG] executeQuery: Building row 13/41
-2025-11-02 17:14:41,815 [DEBUG] executeQuery: Building row 14/41
-2025-11-02 17:14:41,815 [DEBUG] executeQuery: Building row 15/41
-2025-11-02 17:14:41,815 [DEBUG] executeQuery: Building row 16/41
-2025-11-02 17:14:41,815 [DEBUG] executeQuery: Building row 17/41
-2025-11-02 17:14:41,815 [DEBUG] executeQuery: Building row 18/41
-2025-11-02 17:14:41,815 [DEBUG] executeQuery: Building row 19/41
-2025-11-02 17:14:41,816 [DEBUG] executeQuery: Building row 20/41
-2025-11-02 17:14:41,816 [DEBUG] executeQuery: Building row 21/41
-2025-11-02 17:14:41,816 [DEBUG] executeQuery: Building row 22/41
-2025-11-02 17:14:41,816 [DEBUG] executeQuery: Building row 23/41
-2025-11-02 17:14:41,816 [DEBUG] executeQuery: Building row 24/41
-2025-11-02 17:14:41,816 [DEBUG] executeQuery: Building row 25/41
-2025-11-02 17:14:41,816 [DEBUG] executeQuery: Building row 26/41
-2025-11-02 17:14:41,816 [DEBUG] executeQuery: Building row 27/41
-2025-11-02 17:14:41,816 [DEBUG] executeQuery: Building row 28/41
-2025-11-02 17:14:41,816 [DEBUG] executeQuery: Building row 29/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 30/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 31/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 32/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 33/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 34/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 35/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 36/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 37/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 38/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 39/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Building row 40/41
-2025-11-02 17:14:41,817 [DEBUG] executeQuery: Built 41 rows for table
-2025-11-02 17:14:41,820 [DEBUG] buildTable: Starting with 41 rows, 2 headers
-2025-11-02 17:14:41,850 [DEBUG] buildTable: Aquarius not in dict, header 0: BIBLC-EH-Corrected 
+2025-11-02 17:25:04,248 [DEBUG] gapCheck for dataID 'a3456c1764b846779ea76ce5b1c8c277': timestamps len=41, data len=41
+2025-11-02 17:25:04,249 [DEBUG] Post-gapCheck len=41, sample first 3: ['11/01/25 01:00:00,246.6255', '11/01/25 02:00:00,246.7121', '11/01/25 03:00:00,246.7513']
+2025-11-02 17:25:04,249 [DEBUG] queryWorker: Completed group ('AQUARIUS', None, None) with 1 items
+2025-11-02 17:25:04,294 [DEBUG] executeQuery: Signal received for group ('AQUARIUS', None, None)
+2025-11-02 17:25:04,294 [DEBUG] executeQuery: Updated labelsDict with ['a3456c1764b846779ea76ce5b1c8c277']
+2025-11-02 17:25:04,294 [DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, None) with 1 items (2/2)
+2025-11-02 17:25:04,345 [DEBUG] executeQuery: Retrieved result from queue: ('AQUARIUS', None, None)
+2025-11-02 17:25:04,346 [DEBUG] executeQuery: Duplicate group ('AQUARIUS', None, None), skipping
+2025-11-02 17:25:04,347 [DEBUG] executeQuery: Timer stopped, wait loop ended, final collected 2/2, queue size 0, active threads 0
+2025-11-02 17:25:04,347 [DEBUG] executeQuery: All 2 groups merged
+2025-11-02 17:25:04,348 [DEBUG] executeQuery: Building row 0/41
+2025-11-02 17:25:04,348 [DEBUG] executeQuery: Building row 1/41
+2025-11-02 17:25:04,348 [DEBUG] executeQuery: Building row 2/41
+2025-11-02 17:25:04,348 [DEBUG] executeQuery: Building row 3/41
+2025-11-02 17:25:04,348 [DEBUG] executeQuery: Building row 4/41
+2025-11-02 17:25:04,348 [DEBUG] executeQuery: Building row 5/41
+2025-11-02 17:25:04,348 [DEBUG] executeQuery: Building row 6/41
+2025-11-02 17:25:04,348 [DEBUG] executeQuery: Building row 7/41
+2025-11-02 17:25:04,348 [DEBUG] executeQuery: Building row 8/41
+2025-11-02 17:25:04,348 [DEBUG] executeQuery: Building row 9/41
+2025-11-02 17:25:04,349 [DEBUG] executeQuery: Building row 10/41
+2025-11-02 17:25:04,349 [DEBUG] executeQuery: Building row 11/41
+2025-11-02 17:25:04,349 [DEBUG] executeQuery: Building row 12/41
+2025-11-02 17:25:04,349 [DEBUG] executeQuery: Building row 13/41
+2025-11-02 17:25:04,349 [DEBUG] executeQuery: Building row 14/41
+2025-11-02 17:25:04,349 [DEBUG] executeQuery: Building row 15/41
+2025-11-02 17:25:04,349 [DEBUG] executeQuery: Building row 16/41
+2025-11-02 17:25:04,349 [DEBUG] executeQuery: Building row 17/41
+2025-11-02 17:25:04,349 [DEBUG] executeQuery: Building row 18/41
+2025-11-02 17:25:04,349 [DEBUG] executeQuery: Building row 19/41
+2025-11-02 17:25:04,350 [DEBUG] executeQuery: Building row 20/41
+2025-11-02 17:25:04,350 [DEBUG] executeQuery: Building row 21/41
+2025-11-02 17:25:04,350 [DEBUG] executeQuery: Building row 22/41
+2025-11-02 17:25:04,350 [DEBUG] executeQuery: Building row 23/41
+2025-11-02 17:25:04,350 [DEBUG] executeQuery: Building row 24/41
+2025-11-02 17:25:04,350 [DEBUG] executeQuery: Building row 25/41
+2025-11-02 17:25:04,350 [DEBUG] executeQuery: Building row 26/41
+2025-11-02 17:25:04,350 [DEBUG] executeQuery: Building row 27/41
+2025-11-02 17:25:04,351 [DEBUG] executeQuery: Building row 28/41
+2025-11-02 17:25:04,351 [DEBUG] executeQuery: Building row 29/41
+2025-11-02 17:25:04,351 [DEBUG] executeQuery: Building row 30/41
+2025-11-02 17:25:04,351 [DEBUG] executeQuery: Building row 31/41
+2025-11-02 17:25:04,351 [DEBUG] executeQuery: Building row 32/41
+2025-11-02 17:25:04,351 [DEBUG] executeQuery: Building row 33/41
+2025-11-02 17:25:04,352 [DEBUG] executeQuery: Building row 34/41
+2025-11-02 17:25:04,352 [DEBUG] executeQuery: Building row 35/41
+2025-11-02 17:25:04,352 [DEBUG] executeQuery: Building row 36/41
+2025-11-02 17:25:04,352 [DEBUG] executeQuery: Building row 37/41
+2025-11-02 17:25:04,352 [DEBUG] executeQuery: Building row 38/41
+2025-11-02 17:25:04,352 [DEBUG] executeQuery: Building row 39/41
+2025-11-02 17:25:04,352 [DEBUG] executeQuery: Building row 40/41
+2025-11-02 17:25:04,352 [DEBUG] executeQuery: Built 41 rows for table
+2025-11-02 17:25:04,355 [DEBUG] buildTable: Starting with 41 rows, 2 headers
+2025-11-02 17:25:04,387 [DEBUG] buildTable: Aquarius not in dict, header 0: BIBLC-EH-Corrected 
 System
-2025-11-02 17:14:41,866 [DEBUG] buildTable: USBR in dict, header 1: BIBLC 
+2025-11-02 17:25:04,405 [DEBUG] buildTable: USBR in dict, header 1: BIBLC 
 20181
-2025-11-02 17:14:41,866 [DEBUG] buildTable: Setting table to 41 rows, 2 columns
-2025-11-02 17:14:41,870 [DEBUG] buildTable: Sampling 41 rows for column widths
-2025-11-02 17:14:41,870 [DEBUG] buildTable col 0: maxCellWidth=68, headerWidth=141
-2025-11-02 17:14:41,871 [DEBUG] buildTable col 1: maxCellWidth=68, headerWidth=45
-2025-11-02 17:14:41,871 [DEBUG] buildTable: Disabled table updates for population
-2025-11-02 17:14:41,871 [DEBUG] buildTable: Re-enabled table updates after population
-2025-11-02 17:14:41,871 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
-2025-11-02 17:14:41,872 [DEBUG] buildTable: Set column 0 width to 151
-2025-11-02 17:14:41,872 [DEBUG] buildTable: Set column 1 width to 88
-2025-11-02 17:14:41,872 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
-2025-11-02 17:14:41,872 [DEBUG] buildTable: Set default row height to 29
-2025-11-02 17:14:41,872 [DEBUG] buildTable: Custom resized 2 columns. Text width for col 1: 92, Visible width: 88, Row height: 29
-2025-11-02 17:14:41,872 [DEBUG] qaqc: Processing column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
-2025-11-02 17:14:41,896 [DEBUG] qaqc: Processed column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
-2025-11-02 17:14:41,896 [DEBUG] qaqc: Processing column 1 for lookupId 20181
-2025-11-02 17:14:41,911 [DEBUG] qaqc: Processed column 1 for lookupId 20181
-2025-11-02 17:14:41,911 [DEBUG] Stored query data: 1 series, type internal, keys=["'BIBLC-EH-Corrected \\nSystem'"]
-2025-11-02 17:14:41,911 [DEBUG] Stored 1 rawResponses for Aquarius
-2025-11-02 17:14:41,911 [DEBUG] Set columnMetadata with lookupId: [{'type': 'normal', 'dataIds': ['a3456c1764b846779ea76ce5b1c8c277'], 'dbs': 'AQUARIUS', 'queryInfos': ['a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS'], 'lookupId': 'BIBLC-EH-Corrected \nSystem'}, {'type': 'normal', 'dataIds': ['20181'], 'dbs': 'USBR-LCHDB', 'queryInfos': ['20181|HOUR|USBR-LCHDB'], 'lookupId': '20181'}]
-2025-11-02 17:14:41,921 [DEBUG] executeQuery: Table built, progress dialog completed
-2025-11-02 17:14:41,921 [DEBUG] Query executed and table updated.
-2025-11-02 17:14:41,921 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
-2025-11-02 17:14:41,931 [DEBUG] Query window closed after query.
-2025-11-02 17:14:42,663 [DEBUG] showCellContextMenu: columnMetadata=[{'type': 'normal', 'dataIds': ['a3456c1764b846779ea76ce5b1c8c277'], 'dbs': 'AQUARIUS', 'queryInfos': ['a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS'], 'lookupId': 'BIBLC-EH-Corrected \nSystem'}, {'type': 'normal', 'dataIds': ['20181'], 'dbs': 'USBR-LCHDB', 'queryInfos': ['20181|HOUR|USBR-LCHDB'], 'lookupId': '20181'}], col=0, lookupId='BIBLC-EH-Corrected \nSystem'
-2025-11-02 17:14:42,663 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', response type=dict, response={'UniqueId': 'a3456c1764b846779ea76ce5b1c8c277', 'Parameter': 'Stage', 'Label': 'BIBLC-EH-Corrected', 'LocationIdentifier': 'System', 'NumPoints': 41, 'Unit': 'ft', 'Approvals': [{'ApprovalLevel': 900, 'DateAppliedUtc': '2020-10-23T19:10:07.6119152Z', 'User': 'admin', 'LevelDescription': 'Working', 'Comment': '', 'StartTime': '0001-01-01T00:00:00.0000000+00:00', 'EndTime': '9999-12-31T23:59:59.9999999+00:00'}], 'Qualifiers': [], 'Methods': [{'MethodCode': 'HGCOMP', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:15:00.0000001-07:00'}], 'Grades': [{'GradeCode': '0', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:15:00.0000001-07:00'}], 'GapTolerances': [{'ToleranceInMinutes': 60, 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:15:00.0000001-07:00'}], 'InterpolationTypes': [{'Type': 'InstantaneousValues', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:15:00.0000001-07:00'}], 'Notes': [], 'TimeRange': {'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:00:00.0000000-07:00'}, 'Points': [{'Timestamp': '2025-11-01T01:00:00.0000000-07:00', 'Value': {'Numeric': 246.6255}}, {'Timestamp': '2025-11-01T02:00:00.0000000-07:00', 'Value': {'Numeric': 246.7121}}, {'Timestamp': '2025-11-01T03:00:00.0000000-07:00', 'Value': {'Numeric': 246.7513}}, {'Timestamp': '2025-11-01T04:00:00.0000000-07:00', 'Value': {'Numeric': 246.7397}}, {'Timestamp': '2025-11-01T05:00:00.0000000-07:00', 'Value': {'Numeric': 246.6843}}, {'Timestamp': '2025-11-01T06:00:00.0000000-07:00', 'Value': {'Numeric': 246.5908}}, {'Timestamp': '2025-11-01T07:00:00.0000000-07:00', 'Value': {'Numeric': 246.4715}}, {'Timestamp': '2025-11-01T08:00:00.0000000-07:00', 'Value': {'Numeric': 246.3479}}, {'Timestamp': '2025-11-01T09:00:00.0000000-07:00', 'Value': {'Numeric': 246.2508}}, {'Timestamp': '2025-11-01T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.1937}}, {'Timestamp': '2025-11-01T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.1945}}, {'Timestamp': '2025-11-01T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.257}}, {'Timestamp': '2025-11-01T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.3749}}, {'Timestamp': '2025-11-01T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.5287}}, {'Timestamp': '2025-11-01T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.6958}}, {'Timestamp': '2025-11-01T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.8531}}, {'Timestamp': '2025-11-01T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.9873}}, {'Timestamp': '2025-11-01T18:00:00.0000000-07:00', 'Value': {'Numeric': 247.0917}}, {'Timestamp': '2025-11-01T19:00:00.0000000-07:00', 'Value': {'Numeric': 247.1801}}, {'Timestamp': '2025-11-01T20:00:00.0000000-07:00', 'Value': {'Numeric': 247.2676}}, {'Timestamp': '2025-11-01T21:00:00.0000000-07:00', 'Value': {'Numeric': 247.3523}}, {'Timestamp': '2025-11-01T22:00:00.0000000-07:00', 'Value': {'Numeric': 247.4383}}, {'Timestamp': '2025-11-01T23:00:00.0000000-07:00', 'Value': {'Numeric': 247.517}}, {'Timestamp': '2025-11-02T00:00:00.0000000-07:00', 'Value': {'Numeric': 247.5812}}, {'Timestamp': '2025-11-02T01:00:00.0000000-07:00', 'Value': {'Numeric': 247.6307}}, {'Timestamp': '2025-11-02T02:00:00.0000000-07:00', 'Value': {'Numeric': 247.65}}, {'Timestamp': '2025-11-02T03:00:00.0000000-07:00', 'Value': {'Numeric': 247.6352}}, {'Timestamp': '2025-11-02T04:00:00.0000000-07:00', 'Value': {'Numeric': 247.584}}, {'Timestamp': '2025-11-02T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.4991}}, {'Timestamp': '2025-11-02T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.3891}}, {'Timestamp': '2025-11-02T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.266}}, {'Timestamp': '2025-11-02T08:00:00.0000000-07:00', 'Value': {'Numeric': 247.1388}}, {'Timestamp': '2025-11-02T09:00:00.0000000-07:00', 'Value': {'Numeric': 247.0181}}, {'Timestamp': '2025-11-02T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.9178}}, {'Timestamp': '2025-11-02T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.8437}}, {'Timestamp': '2025-11-02T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.8037}}, {'Timestamp': '2025-11-02T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.7915}}, {'Timestamp': '2025-11-02T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.7927}}, {'Timestamp': '2025-11-02T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.7952}}, {'Timestamp': '2025-11-02T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.7935}}, {'Timestamp': '2025-11-02T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.7819}}], 'ResponseVersion': 1, 'ResponseTime': '2025-11-03T00:14:41.8824448+00:00', 'Summary': 'Produced by AQUARIUS Time-Series Software.\r\nThe accuracy and reliability of this data is not guaranteed.  Aquatic Informatics Inc. accepts no liability for its use in any way.'}, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected \\nSystem'"]
-2025-11-02 17:14:42,663 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response dict=True
-2025-11-02 17:14:42,663 [DEBUG] showCellContextMenu: Added 'Show details' action
-2025-11-02 17:14:43,620 [DEBUG] uiDetails initialized
-2025-11-02 17:14:43,620 [DEBUG] Populating details for queryType: AQUARIUS, series: BIBLC-EH-Corrected 
-System, timestamp: 11/01/25 06:00:00
-2025-11-02 17:14:43,625 [ERROR] Failed to parse timestamp 11/01/25 06:00:00: Unsupported datetime format: 11/01/25 06:0000
-2025-11-02 17:14:43,626 [DEBUG] Populated 0 rows
-2025-11-02 17:14:43,636 [DEBUG] showMetadataDetails: Opened details for 11/01/25 06:00:00 - BIBLC-EH-Corrected 
+2025-11-02 17:25:04,405 [DEBUG] buildTable: Setting table to 41 rows, 2 columns
+2025-11-02 17:25:04,412 [DEBUG] buildTable: Sampling 41 rows for column widths
+2025-11-02 17:25:04,412 [DEBUG] buildTable col 0: maxCellWidth=68, headerWidth=141
+2025-11-02 17:25:04,413 [DEBUG] buildTable col 1: maxCellWidth=68, headerWidth=45
+2025-11-02 17:25:04,413 [DEBUG] buildTable: Disabled table updates for population
+2025-11-02 17:25:04,414 [DEBUG] buildTable: Re-enabled table updates after population
+2025-11-02 17:25:04,414 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
+2025-11-02 17:25:04,415 [DEBUG] buildTable: Set column 0 width to 151
+2025-11-02 17:25:04,415 [DEBUG] buildTable: Set column 1 width to 88
+2025-11-02 17:25:04,415 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
+2025-11-02 17:25:04,415 [DEBUG] buildTable: Set default row height to 29
+2025-11-02 17:25:04,415 [DEBUG] buildTable: Custom resized 2 columns. Text width for col 1: 92, Visible width: 88, Row height: 29
+2025-11-02 17:25:04,415 [DEBUG] qaqc: Processing column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
+2025-11-02 17:25:04,440 [DEBUG] qaqc: Processed column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
+2025-11-02 17:25:04,440 [DEBUG] qaqc: Processing column 1 for lookupId 20181
+2025-11-02 17:25:04,457 [DEBUG] qaqc: Processed column 1 for lookupId 20181
+2025-11-02 17:25:04,457 [DEBUG] Stored query data: 1 series, type internal, keys=["'BIBLC-EH-Corrected \\nSystem'"]
+2025-11-02 17:25:04,457 [DEBUG] Stored 1 rawResponses for Aquarius
+2025-11-02 17:25:04,457 [DEBUG] Set columnMetadata with lookupId: [{'type': 'normal', 'dataIds': ['a3456c1764b846779ea76ce5b1c8c277'], 'dbs': 'AQUARIUS', 'queryInfos': ['a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS'], 'lookupId': 'BIBLC-EH-Corrected \nSystem'}, {'type': 'normal', 'dataIds': ['20181'], 'dbs': 'USBR-LCHDB', 'queryInfos': ['20181|HOUR|USBR-LCHDB'], 'lookupId': '20181'}]
+2025-11-02 17:25:04,472 [DEBUG] executeQuery: Table built, progress dialog completed
+2025-11-02 17:25:04,472 [DEBUG] Query executed and table updated.
+2025-11-02 17:25:04,472 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
+2025-11-02 17:25:04,480 [DEBUG] Query window closed after query.
+2025-11-02 17:25:05,774 [DEBUG] showCellContextMenu: columnMetadata=[{'type': 'normal', 'dataIds': ['a3456c1764b846779ea76ce5b1c8c277'], 'dbs': 'AQUARIUS', 'queryInfos': ['a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS'], 'lookupId': 'BIBLC-EH-Corrected \nSystem'}, {'type': 'normal', 'dataIds': ['20181'], 'dbs': 'USBR-LCHDB', 'queryInfos': ['20181|HOUR|USBR-LCHDB'], 'lookupId': '20181'}], col=0, lookupId='BIBLC-EH-Corrected \nSystem'
+2025-11-02 17:25:05,774 [DEBUG] showCellContextMenu: seriesLabel='BIBLC-EH-Corrected \nSystem', response type=dict, response={'UniqueId': 'a3456c1764b846779ea76ce5b1c8c277', 'Parameter': 'Stage', 'Label': 'BIBLC-EH-Corrected', 'LocationIdentifier': 'System', 'NumPoints': 41, 'Unit': 'ft', 'Approvals': [{'ApprovalLevel': 900, 'DateAppliedUtc': '2020-10-23T19:10:07.6119152Z', 'User': 'admin', 'LevelDescription': 'Working', 'Comment': '', 'StartTime': '0001-01-01T00:00:00.0000000+00:00', 'EndTime': '9999-12-31T23:59:59.9999999+00:00'}], 'Qualifiers': [], 'Methods': [{'MethodCode': 'HGCOMP', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:26:00.0000001-07:00'}], 'Grades': [{'GradeCode': '0', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:26:00.0000001-07:00'}], 'GapTolerances': [{'ToleranceInMinutes': 60, 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:26:00.0000001-07:00'}], 'InterpolationTypes': [{'Type': 'InstantaneousValues', 'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:26:00.0000001-07:00'}], 'Notes': [], 'TimeRange': {'StartTime': '2025-11-01T01:00:00.0000000-07:00', 'EndTime': '2025-11-02T17:00:00.0000000-07:00'}, 'Points': [{'Timestamp': '2025-11-01T01:00:00.0000000-07:00', 'Value': {'Numeric': 246.6255}}, {'Timestamp': '2025-11-01T02:00:00.0000000-07:00', 'Value': {'Numeric': 246.7121}}, {'Timestamp': '2025-11-01T03:00:00.0000000-07:00', 'Value': {'Numeric': 246.7513}}, {'Timestamp': '2025-11-01T04:00:00.0000000-07:00', 'Value': {'Numeric': 246.7397}}, {'Timestamp': '2025-11-01T05:00:00.0000000-07:00', 'Value': {'Numeric': 246.6843}}, {'Timestamp': '2025-11-01T06:00:00.0000000-07:00', 'Value': {'Numeric': 246.5908}}, {'Timestamp': '2025-11-01T07:00:00.0000000-07:00', 'Value': {'Numeric': 246.4715}}, {'Timestamp': '2025-11-01T08:00:00.0000000-07:00', 'Value': {'Numeric': 246.3479}}, {'Timestamp': '2025-11-01T09:00:00.0000000-07:00', 'Value': {'Numeric': 246.2508}}, {'Timestamp': '2025-11-01T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.1937}}, {'Timestamp': '2025-11-01T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.1945}}, {'Timestamp': '2025-11-01T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.257}}, {'Timestamp': '2025-11-01T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.3749}}, {'Timestamp': '2025-11-01T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.5287}}, {'Timestamp': '2025-11-01T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.6958}}, {'Timestamp': '2025-11-01T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.8531}}, {'Timestamp': '2025-11-01T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.9873}}, {'Timestamp': '2025-11-01T18:00:00.0000000-07:00', 'Value': {'Numeric': 247.0917}}, {'Timestamp': '2025-11-01T19:00:00.0000000-07:00', 'Value': {'Numeric': 247.1801}}, {'Timestamp': '2025-11-01T20:00:00.0000000-07:00', 'Value': {'Numeric': 247.2676}}, {'Timestamp': '2025-11-01T21:00:00.0000000-07:00', 'Value': {'Numeric': 247.3523}}, {'Timestamp': '2025-11-01T22:00:00.0000000-07:00', 'Value': {'Numeric': 247.4383}}, {'Timestamp': '2025-11-01T23:00:00.0000000-07:00', 'Value': {'Numeric': 247.517}}, {'Timestamp': '2025-11-02T00:00:00.0000000-07:00', 'Value': {'Numeric': 247.5812}}, {'Timestamp': '2025-11-02T01:00:00.0000000-07:00', 'Value': {'Numeric': 247.6307}}, {'Timestamp': '2025-11-02T02:00:00.0000000-07:00', 'Value': {'Numeric': 247.65}}, {'Timestamp': '2025-11-02T03:00:00.0000000-07:00', 'Value': {'Numeric': 247.6352}}, {'Timestamp': '2025-11-02T04:00:00.0000000-07:00', 'Value': {'Numeric': 247.584}}, {'Timestamp': '2025-11-02T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.4991}}, {'Timestamp': '2025-11-02T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.3891}}, {'Timestamp': '2025-11-02T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.266}}, {'Timestamp': '2025-11-02T08:00:00.0000000-07:00', 'Value': {'Numeric': 247.1388}}, {'Timestamp': '2025-11-02T09:00:00.0000000-07:00', 'Value': {'Numeric': 247.0181}}, {'Timestamp': '2025-11-02T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.9178}}, {'Timestamp': '2025-11-02T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.8437}}, {'Timestamp': '2025-11-02T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.8037}}, {'Timestamp': '2025-11-02T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.7915}}, {'Timestamp': '2025-11-02T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.7927}}, {'Timestamp': '2025-11-02T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.7952}}, {'Timestamp': '2025-11-02T16:00:00.0000000-07:00', 'Value': {'Numeric': 246.7935}}, {'Timestamp': '2025-11-02T17:00:00.0000000-07:00', 'Value': {'Numeric': 246.7819}}], 'ResponseVersion': 1, 'ResponseTime': '2025-11-03T00:25:04.3798639+00:00', 'Summary': 'Produced by AQUARIUS Time-Series Software.\r\nThe accuracy and reliability of this data is not guaranteed.  Aquatic Informatics Inc. accepts no liability for its use in any way.'}, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected \\nSystem'"]
+2025-11-02 17:25:05,775 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response dict=True
+2025-11-02 17:25:05,775 [DEBUG] showCellContextMenu: Added 'Show details' action
+2025-11-02 17:25:06,326 [DEBUG] uiDetails initialized
+2025-11-02 17:25:06,326 [DEBUG] Populating details for queryType: AQUARIUS, series: BIBLC-EH-Corrected 
+System, timestamp: 11/01/25 05:00:00
+2025-11-02 17:25:06,335 [ERROR] Failed to parse timestamp 11/01/25 05:00:00: Unsupported datetime format: 11/01/25 05:0000
+2025-11-02 17:25:06,336 [DEBUG] Populated 0 rows
+2025-11-02 17:25:06,346 [DEBUG] showMetadataDetails: Opened details for 11/01/25 05:00:00 - BIBLC-EH-Corrected 
 System
-2025-11-02 17:14:43,637 [DEBUG] showCellContextMenu: Displayed menu for cell (5, 0)
-2025-11-02 17:14:45,626 [DEBUG] showCellContextMenu: columnMetadata=[{'type': 'normal', 'dataIds': ['a3456c1764b846779ea76ce5b1c8c277'], 'dbs': 'AQUARIUS', 'queryInfos': ['a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS'], 'lookupId': 'BIBLC-EH-Corrected \nSystem'}, {'type': 'normal', 'dataIds': ['20181'], 'dbs': 'USBR-LCHDB', 'queryInfos': ['20181|HOUR|USBR-LCHDB'], 'lookupId': '20181'}], col=1, lookupId='20181'
-2025-11-02 17:14:45,626 [DEBUG] showCellContextMenu: seriesLabel='BIBLC \n20181', response type=None, response=None, currentQueryType=internal, seriesResponses keys=["'BIBLC-EH-Corrected \\nSystem'"]
-2025-11-02 17:14:45,627 [DEBUG] showCellContextMenu: Condition check - internal=True, not overlay=True, response dict=False
-2025-11-02 17:14:45,627 [DEBUG] showCellContextMenu: No actions for cell (2, 1)
-2025-11-02 17:14:48,046 [DEBUG] uiDetails initialized
-2025-11-02 17:14:48,046 [DEBUG] Populating details for queryType: header_normal, series: BIBLC-EH-Corrected 
-[ERROR] Failed to parse timestamp 11/01/25 06:00:00: Unsupported datetime format: 11/01/25 06:0000
-Traceback (most recent call last):
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\DataDoctor.py", line 259, in <lambda>
-    action.triggered.connect(lambda: self.showHeaderDetails("header_normal", meta))
-                                     ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\DataDoctor.py", line 275, in showHeaderDetails
-    detailsWin.populateDetails(queryType, seriesLabel, "", meta)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\uiDetails.py", line 70, in populateDetails
-    self._populateHeaderNormal(response)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\uiDetails.py", line 131, in _populateHeaderNormal
-    self._addRow("Query Info", meta.get('queryInfos', 'N/A'))
-    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\uiDetails.py", line 249, in _addRow
-    self.detailsTable.setItem(row, 1, QTableWidgetItem(details))
-                                      ~~~~~~~~~~~~~~~~^^^^^^^^^
-TypeError: arguments did not match any overloaded call:
-  QTableWidgetItem(type: int = QTableWidgetItem.Type): argument 1 has unexpected type 'list'
-  QTableWidgetItem(text: Optional[str], type: int = QTableWidgetItem.Type): argument 1 has unexpected type 'list'
-  QTableWidgetItem(icon: QIcon, text: Optional[str], type: int = QTableWidgetItem.Type): argument 1 has unexpected type 'list'
-  QTableWidgetItem(other: QTableWidgetItem): argument 1 has unexpected type 'list'
+2025-11-02 17:25:06,347 [DEBUG] showCellContextMenu: Displayed menu for cell (4, 0)
+2025-11-02 17:25:09,315 [DEBUG] uiDetails initialized
+2025-11-02 17:25:09,315 [DEBUG] Populating details for queryType: header_normal, series: BIBLC-EH-Corrected 
+System, timestamp: 
+2025-11-02 17:25:09,315 [DEBUG] Computed stats for column 0: Max 247.65, Min 246.19, Mean 246.93
+2025-11-02 17:25:09,316 [DEBUG] Populated 4 rows
+2025-11-02 17:25:09,327 [DEBUG] showHeaderDetails: Opened details for BIBLC-EH-Corrected 
+System
+2025-11-02 17:25:09,328 [DEBUG] showHeaderContextMenu: Displayed menu for column 0, type normal
+2025-11-02 17:25:13,996 [DEBUG] uiDetails initialized
+2025-11-02 17:25:13,996 [DEBUG] Populating details for queryType: header_normal, series: BIBLC 
+20181, timestamp: 
+2025-11-02 17:25:13,997 [DEBUG] Computed stats for column 1: Max 247.65, Min 246.19, Mean 246.93
+2025-11-02 17:25:13,997 [DEBUG] Populated 4 rows
+2025-11-02 17:25:14,008 [DEBUG] showHeaderDetails: Opened details for BIBLC 
+20181
+2025-11-02 17:25:14,009 [DEBUG] showHeaderContextMenu: Displayed menu for column 1, type normal
