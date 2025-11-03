@@ -1,7 +1,5 @@
 # uiDetails.py - Details window for displaying cell metadata or overlay info
 
-import os
-import sys
 from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QAbstractItemView
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
@@ -10,8 +8,7 @@ from datetime import datetime
 from core import Logic, Config
 
 class uiDetails(QWidget):
-    """Details window: Displays metadata or overlay info for a specific timeseries cell."""
-    
+    """Details window: Displays metadata or overlay info for a specific timeseries cell."""    
     def __init__(self, parent=None):
         super().__init__(parent)
         
@@ -154,7 +151,7 @@ class uiDetails(QWidget):
     def populateHeaderOverlay(self, meta):
         """Internal method to populate for overlay header metadata."""
         
-        # Add primary/secondary (tweaked per user request)
+        # Add primary/secondary
         self.addRow("Primary", meta.get('queryInfos', ['N/A', 'N/A'])[0])
         self.addRow("Secondary", meta.get('queryInfos', ['N/A', 'N/A'])[1])
         
