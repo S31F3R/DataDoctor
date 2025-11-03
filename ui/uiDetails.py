@@ -1,7 +1,5 @@
 # uiDetails.py - Details window for displaying cell metadata or overlay info
 
-import os
-import sys
 from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QAbstractItemView
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
@@ -67,8 +65,8 @@ class uiDetails(QWidget):
         # Handler dictionary for database-specific metadata (easy to add USBR/USGS)
         metadataHandlers = {
             "AQUARIUS": self.populateAquarius,
-            "USGS": self.populateUSGS,  # TODO: Implement for USGS
-            "USBR": self.populateUSBR,  # TODO: Implement for USBR
+            "USGS": self.populateUSGS, # TODO: Implement for USGS
+            "USBR": self.populateUSBR, # TODO: Implement for USBR
         }
         
         if queryType == "overlay":
@@ -169,6 +167,7 @@ class uiDetails(QWidget):
         values = []
         for row in range(self.parent().mainTable.rowCount()):
             item = self.parent().mainTable.item(row, col)
+
             if item and item.text().strip():
                 try:
                     values.append(float(item.text()))
@@ -204,6 +203,7 @@ class uiDetails(QWidget):
         
         # Find the matching TimeSeriesPoint (assuming Points is list of dicts)
         point = next((p for p in response.get('Points', []) if self.parseDateTime(p['Timestamp']) == timestamp), None)
+
         if not point:
             Logic.logMessage("WARN", f"No matching point found for timestamp {timestampStr}")
             return
@@ -263,6 +263,7 @@ class uiDetails(QWidget):
         self.detailsTable.insertRow(row)
         self.detailsTable.setItem(row, 0, QTableWidgetItem(metaType))
         self.detailsTable.setItem(row, 1, QTableWidgetItem(details))
+
         if self.detailsTable.columnCount() > 2:
             self.detailsTable.setItem(row, 2, QTableWidgetItem(startTime))
             self.detailsTable.setItem(row, 3, QTableWidgetItem(endTime))
@@ -286,10 +287,12 @@ class uiDetails(QWidget):
         """Parse string to datetime, assuming common formats (e.g., ISO)."""
         if not dtStr:
             raise ValueError("Empty datetime string")
+        
         # Preprocess: remove microseconds and colon in tz offset
         dtStr = dtStr.split('.')[0]  # Remove microseconds
-        if dtStr[-3] == ':':  # Remove colon in +HH:MM to +HHMM
+        if dtStr[-3] == ':': # Remove colon in +HH:MM to +HHMM
             dtStr = dtStr[:-3] + dtStr[-2:]
+
         # Try formats
         formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']
         for fmt in formats:
@@ -298,13 +301,14 @@ class uiDetails(QWidget):
                 return dt.replace(tzinfo=None) # Return naive datetime for comparison
             except ValueError:
                 pass
+
         # Fallback: remove all ':' in time part
         dtStr = dtStr.replace(':', '')
         formats_no_colon = ['%m/%d/%y %H%M00', '%Y-%m-%dT%H%M%S%z', '%Y-%m-%dT%H%M%S', '%Y-%m-%d %H%M%S']
         for fmt in formats_no_colon:
             try:
                 dt = datetime.strptime(dtStr, fmt)
-                return dt.replace(tzinfo=None)  # Return naive datetime for comparison
+                return dt.replace(tzinfo=None) # Return naive datetime for comparison
             except ValueError:
                 pass
         raise ValueError(f"Unsupported datetime format: {dtStr}")

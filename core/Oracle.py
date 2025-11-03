@@ -10,7 +10,6 @@ import time
 import re
 from pathlib import Path
 from typing import List, Any, Optional
-from datetime import datetime
 from core import Logic, Config
 
 class oracleConnection:
@@ -137,7 +136,7 @@ class oracleConnection:
         if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Query '{query[:100]}' has bind vars: {hasBindVars}")
 
         if not params and hasBindVars:
-            if Config.debug: pLogic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
+            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
             raise ValueError("Bind variables found in query but params not provided. Use parameterized input to prevent SQL injection.")
 
         if params and not isinstance(params, (list, tuple)):

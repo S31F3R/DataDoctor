@@ -6,9 +6,9 @@ import csv
 import json
 from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, 
-                             QSizePolicy, QMessageBox, QFileDialog, QMenu, QLabel, QVBoxLayout, QComboBox)
-from PyQt6.QtCore import Qt, QPoint
-from PyQt6.QtGui import QPalette, QFontMetrics, QPixmap
+                             QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox)
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPalette
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
 from ui.uiAbout import uiAbout

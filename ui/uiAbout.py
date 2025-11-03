@@ -5,7 +5,7 @@ from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QPixmap, QFont, QFontDatabase
 from PyQt6.QtMultimedia import QSoundEffect
 from PyQt6 import uic
-from core import Logic, Config, Utils
+from core import Logic, Utils
 
 class uiAbout(QDialog):
     """About dialog: Retro PNG bg with transparent info overlay and looping sound."""
