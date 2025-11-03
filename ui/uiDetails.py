@@ -208,10 +208,8 @@ class uiDetails(QWidget):
         point = next((p for p in response.get('Points', []) if self.parseDateTime(p['Timestamp']) == timestamp), None)
         if not point:
             Logic.logMessage("WARN", f"No matching point found for timestamp {timestampStr}")
-            return
-        
-        # Add rows for selected metadata (per list 1-10)
-        
+            return      
+ 
         # 1. Parameter/Label/Unit (series-level)
         self.addRow("Parameter", f"{response.get('Parameter', 'N/A')} ({response.get('Label', 'N/A')})", "", response.get('Unit', 'N/A'))
         
@@ -242,6 +240,22 @@ class uiDetails(QWidget):
         
         self.addArrayRows("Note", response.get('Notes', []), timestamp, 
                            lambda item: f"Text: {item.get('NoteText', 'N/A')}")
+
+    def populateUSGS(self, timestampStr, response):
+        """Placeholder for USGS metadata population."""
+        # TODO: Implement based on USGS API response structure
+        # Example: self.addRow("Parameter Code", response.get('parameterCd', 'N/A'))
+        # self.addRow("Value", response.get('value', 'N/A'), response.get('dateTime', 'N/A'), "")
+        # Add array rows for qualifiers, etc.
+        pass
+    
+    def populateUSBR(self, timestampStr, response):
+        """Placeholder for USBR metadata population."""
+        # TODO: Implement based on USBR API response structure
+        # Example: self.addRow("Site ID", response.get('siteId', 'N/A'))
+        # self.addRow("Value", response.get('value', 'N/A'), response.get('timestamp', 'N/A'), "")
+        # Add any array-like metadata if applicable
+        pass
     
     def addRow(self, metaType, details, startTime="", endTime=""):
         """Add a single row to the table (defaults for 2-column modes)."""
