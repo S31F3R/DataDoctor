@@ -1,5 +1,23 @@
 # DataDoctor.py
 
+import sys
+import os
+import csv
+import json
+from datetime import datetime
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, 
+                             QSizePolicy, QMessageBox, QFileDialog, QMenu, QLabel, QVBoxLayout)
+from PyQt6.QtCore import Qt, QPoint
+from PyQt6.QtGui import QPalette, QFontMetrics, QPixmap
+from PyQt6 import uic
+from core import Logic, Query, Utils, Config
+from ui.uiAbout import uiAbout
+from ui.uiDataDictionary import uiDataDictionary
+from ui.uiOptions import uiOptions
+from ui.uiQuery import uiQuery
+from ui.uiQuickLook import uiQuickLook
+from ui.uiDetails import uiDetails
+
 class uiMain(QMainWindow):
     def __init__(self):
         super().__init__()
