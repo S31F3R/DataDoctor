@@ -80,7 +80,7 @@ class uiQuery(QMainWindow):
 
         # Set button style
         for btn in [self.btnDataIdInfo, self.btnIntervalInfo, self.btnUpMax, self.btnUp15,
-                    self.btnUp5, self.btnUp1, self.btnDownMax, self.btnDown15,
+                    self.btnUp5, self.btnUp1, self.btnDownMax, self.btnDown15, self.btnRemoveQuery,
                     self.btnDown5, self.btnDown1, self.btnSearch, self.btnQueryOptionsInfo]:
             if btn:
                 Utils.buttonStyle(btn)
