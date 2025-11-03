@@ -211,7 +211,7 @@ class uiDetails(QWidget):
         # Add rows for selected metadata (per list 1-10)
         
         # 1. Parameter/Label/Unit (series-level)
-        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')} ({response.get('Label', 'N/A')})", "", response.get('Unit', 'N/A'))
+        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}")
         
         # 2. Timestamp/Value (point-level, respect Config.rawData for formatting)
         value = point['Value']
@@ -221,8 +221,10 @@ class uiDetails(QWidget):
         
         # 3-9: Arrays with time-range filtering
         self.addArrayRows("Approval", response.get('Approvals', []), timestamp, 
-                           lambda item: f"Level: {item.get('ApprovalLevel', 'N/A')} | Description: {item.get('LevelDescription', 'N/A')} | Comment: {item.get('Comment', 'N/A')} | User: {item.get('User', 'N/A')} | Applied: {item.get('DateAppliedUtc', 'N/A')}")
+                           lambda item: f"Level: {item.get('ApprovalLevel', 'N/A')} ({item.get('LevelDescription', 'N/A')}) | User: {item.get('User', 'N/A')} | Applied: {item.get('DateAppliedUtc', 'N/A')}")
         
+        self.addArrayRows("Approval Comment", response.get('Approvals', []), timestamp, lambda item: f"{item.get('Comment', 'N/A')}")                    
+
         self.addArrayRows("Qualifier", response.get('Qualifiers', []), timestamp, 
                            lambda item: f"Identifier: {item.get('Identifier', 'N/A')} | User: {item.get('User', 'N/A')} | Applied: {item.get('DateApplied', 'N/A')}")
         
