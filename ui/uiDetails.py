@@ -21,14 +21,14 @@ class uiDetails(QWidget):
         # Set window flags to stay on top of parent
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
         
-        # Set icon (assuming icons/Info.png exists)
-        self.setWindowIcon(QIcon(Logic.resourcePath('icons/Info.png')))
+        # Set icon
+        self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/Info.png')))
         
         # Initialize table with no rows yet (column count set dynamically in populate)
-        self.detailsTable.setSortingEnabled(True)  # Already set in .ui, but confirm
-        self.detailsTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)  # Read-only
-        self.detailsTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)  # Select whole rows
-        self.detailsTable.verticalHeader().setVisible(False)  # Hide row numbers to reduce extra space
+        self.detailsTable.setSortingEnabled(True)
+        self.detailsTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers) # Read-only
+        self.detailsTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows) # Select whole rows
+        self.detailsTable.verticalHeader().setVisible(False) # Hide row numbers to reduce extra space
         
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDetails initialized")
@@ -89,8 +89,8 @@ class uiDetails(QWidget):
         self.detailsTable.resizeRowsToContents()
         
         # Manually calculate and set window size to fit content exactly (no scroll bars)
-        self.detailsTable.setMinimumHeight(0)  # Prevent over-allocation for empty space
-        self.detailsTable.verticalScrollBar().setVisible(False)  # Suppress any latent scrollbar
+        self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
+        self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
         width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding for borders/margins
         height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding, account for frames
         self.resize(width, height)
@@ -113,7 +113,7 @@ class uiDetails(QWidget):
                 secondaryVal = Logic.valuePrecision(float(secondaryVal)) if secondaryVal != 'N/A' else 'N/A'
                 delta = Logic.valuePrecision(float(delta)) if delta != 'N/A' else 'N/A'
             except ValueError:
-                pass  # Keep as string if not numeric
+                pass # Keep as string if not numeric
         
         # Add rows for overlay specifics (broken out per user request)
         self._addRow("Primary Info", data.get('dataId1', 'N/A'))
@@ -128,10 +128,12 @@ class uiDetails(QWidget):
         """Internal method to populate for normal header metadata."""
         
         # Add query info
-        self._addRow("Query Info", meta.get('queryInfos', 'N/A'))
+        query_infos = meta.get('queryInfos', 'N/A')
+        query_str = query_infos[0] if isinstance(query_infos, list) else str(query_infos)
+        self._addRow("Query Info", query_str)
         
         # Add stats (computed as in original)
-        maxStr, minStr, meanStr = self._computeColumnStats(meta['col'])  # Assuming col in meta
+        maxStr, minStr, meanStr = self._computeColumnStats(meta['col']) # Assuming col in meta
         self._addRow("Max", maxStr)
         self._addRow("Min", minStr)
         self._addRow("Mean", meanStr)
@@ -279,7 +281,7 @@ class uiDetails(QWidget):
         for fmt in formats:
             try:
                 dt = datetime.strptime(dtStr, fmt)
-                return dt.replace(tzinfo=None)  # Return naive datetime for comparison
+                return dt.replace(tzinfo=None) # Return naive datetime for comparison
             except ValueError:
                 pass
         raise ValueError(f"Unsupported datetime format: {dtStr}")
