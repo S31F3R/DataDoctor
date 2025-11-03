@@ -26,7 +26,7 @@ def applyStylesAndFonts(app, mainTable, queryList):
             retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
             app.setFont(retroFontObj)
             if Config.debug:
-                print("[DEBUG] Applied retro font at startup")
+                Logic.logMessage("DEBUG", "Applied retro font at startup")
         setRetroStyles(app, True, mainTable, queryList)
     else:
         setRetroStyles(app, False, mainTable, queryList)
@@ -43,7 +43,7 @@ def loadDatabase(comboBox, queryType=None):
     """Populate the database combo box with static databases."""
     if comboBox:
         if Config.debug:
-            print("[DEBUG] Populating cbDatabase")
+            Logic.logMessage("DEBUG", "Populating cbDatabase")
         comboBox.clear()
 
         # Populate database combobox
@@ -59,10 +59,10 @@ def loadDatabase(comboBox, queryType=None):
         comboBox.addItem('USGS-NWIS')
 
         if Config.debug:
-            print(f"[DEBUG] Populated cbDatabase with {comboBox.count()} items")
+            Logic.logMessage("DEBUG", f"Populated cbDatabase with {comboBox.count()} items")
     else:
         if Config.debug:
-            print("[ERROR] cbDatabase is None, cannot populate")
+            Logic.logMessage("ERROR", "cbDatabase is None, cannot populate")
 
 def buttonStyle(button):
     """Apply flat, borderless style to a QPushButton with no hover/press effects."""
@@ -112,7 +112,7 @@ def centerWindowToParent(ui):
     ui.move(rect.topLeft())
 
     if Config.debug:
-        print(f"[DEBUG] centerWindowToParent: Centered {ui.objectName()} at {rect.topLeft().x()},{rect.topLeft().y()}")
+        Logic.logMessage("DEBUG", f"centerWindowToParent: Centered {ui.objectName()} at {rect.topLeft().x()},{rect.topLeft().y()}")
 
 def applyRetroFont(widget, pointSize=10):
     if Config.retroMode:
@@ -128,17 +128,17 @@ def applyRetroFont(widget, pointSize=10):
             for child in widget.findChildren(QWidget):
                 child.setFont(retroFontObj)
             if Config.debug:
-                print("[DEBUG] Applied retro font to widget: {}".format(widget.objectName()))
+                Logic.logMessage("DEBUG", f"Applied retro font to widget: {widget.objectName()}")
         else:
             if Config.debug:
-                print("[ERROR] Failed to load retro font from {}".format(fontPath))
+                Logic.logMessage("ERROR", f"Failed to load retro font from {fontPath}")
     else:
         widget.setFont(QFont())
 
         for child in widget.findChildren(QWidget):
             child.setFont(QFont())
         if Config.debug:
-            print("[DEBUG] Reverted widget {} to system font".format(widget.objectName()))
+            Logic.logMessage("DEBUG", f"Reverted widget {widget.objectName()} to system font")
 
 def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQueryList=None):
     """Apply or remove retro mode styles (e.g., scroll bars) dynamically."""
@@ -160,11 +160,11 @@ def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQuery
                 widget.setStyleSheet(retroStyles)
 
                 if Config.debug:
-                    print("[DEBUG] Applied retro scroll bar styles to {}".format(widget.objectName()))
+                    Logic.logMessage("DEBUG", f"Applied retro scroll bar styles to {widget.objectName()}")
         app.setStyleSheet(app.styleSheet() + retroStyles)
 
         if Config.debug:
-            print("[DEBUG] Applied retro scroll bar styles globally")
+            Logic.logMessage("DEBUG", "Applied retro scroll bar styles globally")
     else:
         # Reset to base stylesheet
         with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
@@ -174,9 +174,9 @@ def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQuery
                 widget.setStyleSheet("")
 
                 if Config.debug:
-                    print("[DEBUG] Cleared retro scroll bar styles from {}".format(widget.objectName()))
+                    Logic.logMessage("DEBUG", f"Cleared retro scroll bar styles from {widget.objectName()}")
         if Config.debug:
-            print("[DEBUG] Reverted to base stylesheet")
+            Logic.logMessage("DEBUG", "Reverted to base stylesheet")
 
 def loadConfig():
     convertConfigToJson()
@@ -189,7 +189,8 @@ def loadConfig():
         'retroMode': True,
         'qaqc': True,
         'rawData': False,
-        'lastQuickLook': ''
+        'lastQuickLook': '',
+        'enableSQL': False
     }
 
     if os.path.exists(configPath):
@@ -197,13 +198,13 @@ def loadConfig():
             with open(configPath, 'r', encoding='utf-8') as configFile:
                 config = json.load(configFile)
             if Config.debug:
-                print("[DEBUG] Loaded config: {}".format(config))
+                Logic.logMessage("DEBUG", f"Loaded config: {config}")
 
             # Migrate integer utcOffset and retroFont
             utcOffset = config.get('utcOffset', settings['utcOffset'])
             if isinstance(utcOffset, (int, float)):
                 if Config.debug:
-                    print("[DEBUG] Migrating integer utcOffset {} to full string".format(utcOffset))
+                    Logic.logMessage("DEBUG", f"Migrating integer utcOffset {utcOffset} to full string")
                 offsetMap = {
                     -12: "UTC-12:00 | Baker Island",
                     -11: "UTC-11:00 | American Samoa",
@@ -247,16 +248,16 @@ def loadConfig():
                 utcOffset = offsetMap.get(utcOffset, settings['utcOffset'])
                 config['utcOffset'] = utcOffset
                 if Config.debug:
-                    print("[DEBUG] Migrated utcOffset to: {}".format(utcOffset))
+                    Logic.logMessage("DEBUG", f"Migrated utcOffset to: {utcOffset}")
             if 'retroFont' in config:
                 if Config.debug:
-                    print("[DEBUG] Migrating retroFont to retroMode")
+                    Logic.logMessage("DEBUG", "Migrating retroFont to retroMode")
                 config['retroMode'] = config.pop('retroFont')
                 if Config.debug:
-                    print("[DEBUG] Migrated retroMode to: {}".format(config['retroMode']))
+                    Logic.logMessage("DEBUG", f"Migrated retroMode to: {config['retroMode']}")
             if 'colorMode' in config:
                 if Config.debug:
-                    print("[DEBUG] Removing obsolete colorMode")
+                    Logic.logMessage("DEBUG", "Removing obsolete colorMode")
                 config.pop('colorMode')
 
             # Check os env for existing TNS_ADMIN
@@ -276,23 +277,24 @@ def loadConfig():
             settings['utcOffset'] = utcOffset
 
             if Config.debug:
-                print("[DEBUG] utcOffset loaded as: {}".format(settings['utcOffset']))
+                Logic.logMessage("DEBUG", f"utcOffset loaded as: {settings['utcOffset']}")
             settings['periodOffset'] = config.get('hourTimestampMethod', 'EOP') == 'EOP'
             settings['retroMode'] = config.get('retroMode', settings['retroMode'])
             settings['qaqc'] = config.get('qaqc', settings['qaqc'])
             settings['rawData'] = config.get('rawData', settings['rawData'])
             settings['lastQuickLook'] = config.get('lastQuickLook', settings['lastQuickLook'])
+            settings['enableSQL'] = config.get('enableSQL', settings['enableSQL'])
 
             if Config.debug:
-                print("[DEBUG] Loaded settings from user.config: {}".format(settings))
+                Logic.logMessage("DEBUG", f"Loaded settings from user.config: {settings}")
         except Exception as e:
             if Config.debug:
-                print("[ERROR] Failed to load user.config: {}".format(e))
+                Logic.logMessage("ERROR", f"Failed to load user.config: {e}")
     else:
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(settings, configFile, indent=2)
         if Config.debug:
-            print("[DEBUG] Created default user.config with settings: {}".format(settings))
+            Logic.logMessage("DEBUG", f"Created default user.config with settings: {settings}")
     return settings
 
 def getConfigPath():
@@ -310,12 +312,12 @@ def getQuickLookDir():
         os.makedirs(quickLookDir)
 
         if Config.debug:
-            print("[DEBUG] getQuickLookDir: Created quickLook directory: {}".format(quickLookDir))
+            Logic.logMessage("DEBUG", f"getQuickLookDir: Created quickLook directory: {quickLookDir}")
     if not os.path.exists(queryDir):        
         os.makedirs(queryDir)
 
         if Config.debug:
-            print("[DEBUG] getQuickLookDir: Created query subfolder: {}".format(queryDir))
+            Logic.logMessage("DEBUG", f"getQuickLookDir: Created query subfolder: {queryDir}")
 
     # Migrate existing .txt files from quickLook root to query subfolder
     for file in os.listdir(quickLookDir):
@@ -327,13 +329,13 @@ def getQuickLookDir():
                 try:
                     os.rename(srcPath, dstPath)
                     if Config.debug:
-                        print("[DEBUG] getQuickLookDir: Moved {} to {}".format(srcPath, dstPath))
+                        Logic.logMessage("DEBUG", f"getQuickLookDir: Moved {srcPath} to {dstPath}")
                 except Exception as e:
                     if Config.debug:
-                        print("[ERROR] getQuickLookDir: Failed to move {} to {}: {}".format(srcPath, dstPath, e))
+                        Logic.logMessage("ERROR", f"getQuickLookDir: Failed to move {srcPath} to {dstPath}: {e}")
             elif os.path.exists(dstPath):
                 if Config.debug:
-                    print("[DEBUG] getQuickLookDir: Skipped moving {} as it already exists in {}".format(srcPath, queryDir))
+                    Logic.logMessage("DEBUG", f"getQuickLookDir: Skipped moving {srcPath} as it already exists in {queryDir}")
     return queryDir
 
 def getExampleQuickLookDir():
@@ -348,7 +350,7 @@ def convertConfigToJson():
         config.read(oldConfigPath)
 
         if Config.debug:
-            print("[DEBUG] Found config.ini, converting to user.config")
+            Logic.logMessage("DEBUG", "Found config.ini, converting to user.config")
         settings = {
             'utcOffset': "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
             'retroFont': True,
@@ -365,50 +367,50 @@ def convertConfigToJson():
         if 'Settings' in config:
             settings['utcOffset'] = config['Settings'].get('utcOffset', settings['utcOffset'])
             if Config.debug:
-                print(f"[DEBUG] Converted utcOffset: {settings['utcOffset']}")
+                Logic.logMessage("DEBUG", f"Converted utcOffset: {settings['utcOffset']}")
 
             settings['retroFont'] = config['Settings'].getboolean('retroFont', settings['retroFont'])
             if Config.debug:
-                print(f"[DEBUG] Converted retroFont: {settings['retroFont']}")
+                Logic.logMessage("DEBUG", f"Converted retroFont: {settings['retroFont']}")
 
             settings['qaqc'] = config['Settings'].getboolean('qaqc', settings['qaqc'])
             if Config.debug:
-                print(f"[DEBUG] Converted qaqc: {settings['qaqc']}")
+                Logic.logMessage("DEBUG", f"Converted qaqc: {settings['qaqc']}")
 
             settings['rawData'] = config['Settings'].getboolean('rawData', settings['rawData'])
             if Config.debug:
-                print(f"[DEBUG] Converted rawData: {settings['rawData']}")
+                Logic.logMessage("DEBUG", f"Converted rawData: {settings['rawData']}")
 
             settings['debugMode'] = config['Settings'].getboolean('debugMode', settings['debugMode'])
             if Config.debug:
-                print(f"[DEBUG] Converted debugMode: {settings['debugMode']}")
+                Logic.logMessage("DEBUG", f"Converted debugMode: {settings['debugMode']}")
 
             settings['tnsNamesLocation'] = config['Settings'].get('tnsNamesLocation', settings['tnsNamesLocation'])
             if Config.debug:
-                print(f"[DEBUG] Converted tnsNamesLocation: {settings['tnsNamesLocation']}")
+                Logic.logMessage("DEBUG", f"Converted tnsNamesLocation: {settings['tnsNamesLocation']}")
 
             settings['hourTimestampMethod'] = config['Settings'].get('hourTimestampMethod', settings['hourTimestampMethod'])
             if Config.debug:
-                print(f"[DEBUG] Converted hourTimestampMethod: {settings['hourTimestampMethod']}")
+                Logic.logMessage("DEBUG", f"Converted hourTimestampMethod: {settings['hourTimestampMethod']}")
 
             settings['lastQuickLook'] = config['Settings'].get('lastQuickLook', settings['lastQuickLook'])
             if Config.debug:
-                print(f"[DEBUG] Converted lastQuickLook: {settings['lastQuickLook']}")
+                Logic.logMessage("DEBUG", f"Converted lastQuickLook: {settings['lastQuickLook']}")
 
             settings['colorMode'] = config['Settings'].get('colorMode', settings['colorMode'])
             if Config.debug:
-                print(f"[DEBUG] Converted colorMode: {settings['colorMode']}")
+                Logic.logMessage("DEBUG", f"Converted colorMode: {settings['colorMode']}")
 
             settings['lastExportPath'] = config['Settings'].get('lastExportPath', settings['lastExportPath'])
             if Config.debug:
-                print(f"[DEBUG] Converted lastExportPath: {settings['lastExportPath']}")
+                Logic.logMessage("DEBUG", f"Converted lastExportPath: {settings['lastExportPath']}")
 
         with open(newConfigPath, 'w', encoding='utf-8') as configFile:
             json.dump(settings, configFile, indent=2)
         if Config.debug:
-            print("[DEBUG] Converted config.ini to user.config")
+            Logic.logMessage("DEBUG", "Converted config.ini to user.config")
     elif Config.debug:
-        print("[DEBUG] No config.ini found or user.config exists, skipping conversion")
+        Logic.logMessage("DEBUG", "No config.ini found or user.config exists, skipping conversion")
 
 def reloadGlobals():
     settings = loadConfig()
@@ -418,9 +420,10 @@ def reloadGlobals():
     Config.retroMode = settings['retroMode']
     Config.qaqcEnabled = settings['qaqc']
     Config.rawData = settings['rawData']
+    Config.enableSQL = settings['enableSQL']
 
     if Config.debug:
-        print("[DEBUG] Globals reloaded from user.config")
+        Logic.logMessage("DEBUG", f"Globals reloaded from user.config, enableSQL={Config.enableSQL}")
 
 def getConfigDir():
     configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)

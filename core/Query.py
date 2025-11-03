@@ -895,12 +895,21 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
     if Config.debug:
         Logic.logMessage("DEBUG", "Query executed and table updated.")
+
     # Store last delta and overlay states for refresh using globals
     Config.lastDeltaChecked = deltaChecked
     Config.lastOverlayChecked = overlayChecked
     if Config.debug:
         Logic.logMessage("DEBUG", f"executeQuery: Stored lastDeltaChecked={deltaChecked}, lastOverlayChecked={overlayChecked}")
     progressDialog.cancel()
+
+    # Show Data Query tab at index 0 if not already present
+    if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
+        mainWindow.tabWidget.insertTab(0, mainWindow.tabMain, mainWindow.dataQueryTitle)
+        mainWindow.tabWidget.setCurrentIndex(0)
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", "Added tabMain at index 0 after query")
     QCoreApplication.processEvents()
 
 def roundDownToInterval(dt, interval):

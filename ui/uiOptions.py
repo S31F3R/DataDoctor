@@ -1,14 +1,14 @@
 # uiOptions.py
 
-from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox, QPushButton, QTabWidget, QMessageBox
-from PyQt6.QtCore import QTimer, QEvent
-from PyQt6.QtGui import QIcon
-from PyQt6 import uic
-from core import Logic, Utils, Config
 import os
 import sys
 import json
 import keyring
+from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox, QPushButton, QTabWidget, QMessageBox, QWidget
+from PyQt6.QtCore import QTimer, QEvent
+from PyQt6.QtGui import QIcon
+from PyQt6 import uic
+from core import Logic, Utils, Config
 
 class uiOptions(QDialog):
     """Options editor: Stores database connection information and application settings."""
@@ -37,6 +37,7 @@ class uiOptions(QDialog):
         self.qleOracleUser = self.findChild(QLineEdit, 'qleOracleUser')
         self.qleOraclePassword = self.findChild(QLineEdit, 'qleOraclePassword')
         self.btnShowOraclePassword = self.findChild(QPushButton, 'btnShowOraclePassword')
+        self.chkbEnableSQL = self.findChild(QCheckBox, 'chkbEnableSQL')
 
         # Set button style
         Utils.buttonStyle(self.btnShowPassword)
@@ -295,6 +296,10 @@ class uiOptions(QDialog):
         if Config.debug:
             Logic.logMessage("DEBUG", "Set chkbDebug to: {}".format(self.chkbDebug.isChecked()))
 
+        self.chkbEnableSQL.setChecked(bool(config.get('enableSQL', False)))
+        if Config.debug:
+            Logic.logMessage("DEBUG", "Set chkbEnableSQL to: {}".format(self.chkbEnableSQL.isChecked()))
+
         tnsPath = config.get('tnsNamesLocation', '')
 
         if tnsPath.startswith(Config.appRoot):
@@ -354,7 +359,9 @@ class uiOptions(QDialog):
                 Logic.logMessage("ERROR", "Failed to load user.config for save: {}".format(e))
 
         previousRetro = config.get('retroMode', True)
+        previousEnableSQL = config.get('enableSQL', False)
         newRetro = self.chkbRetroMode.isChecked()
+        newEnableSQL = self.chkbEnableSQL.isChecked()
         tnsPath = self.qleTNSNames.text()
 
         if '%AppRoot%' in tnsPath:
@@ -365,6 +372,7 @@ class uiOptions(QDialog):
             'qaqc': self.chkbQAQC.isChecked(),
             'rawData': self.chkbRawData.isChecked(),
             'debugMode': self.chkbDebug.isChecked(),
+            'enableSQL': newEnableSQL,
             'tnsNamesLocation': tnsPath,
             'hourTimestampMethod': 'EOP' if self.rbEOP.isChecked() else 'BOP',
             'lastExportPath': config.get('lastExportPath', '')
@@ -373,7 +381,7 @@ class uiOptions(QDialog):
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(config, configFile, indent=2)
         if Config.debug:
-            Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}, qaqc: {}, rawData: {}".format(newRetro, self.chkbQAQC.isChecked(), self.chkbRawData.isChecked()))
+            Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}, qaqc: {}, rawData: {}, enableSQL: {}".format(newRetro, self.chkbQAQC.isChecked(), self.chkbRawData.isChecked(), newEnableSQL))
         Utils.reloadGlobals()
 
         if newRetro != previousRetro:
@@ -396,6 +404,25 @@ class uiOptions(QDialog):
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", "Reverted retro mode to {}".format(previousRetro))
+
+        # Dynamically show/hide SQL tab if enableSQL changed
+        if newEnableSQL != previousEnableSQL:
+            sqlTab = self.winMain.findChild(QWidget, 'tabSQL')
+            if sqlTab:
+                if newEnableSQL:
+                    sqlIndex = self.winMain.tabWidget.indexOf(sqlTab)
+                    if sqlIndex == -1:
+                        insertIndex = 1 if self.winMain.tabWidget.indexOf(self.winMain.tabMain) != -1 else 0
+                        self.winMain.tabWidget.insertTab(insertIndex, sqlTab, self.winMain.sqlTitle)
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"Added tabSQL at index {insertIndex} after enableSQL change")
+                else:
+                    sqlIndex = self.winMain.tabWidget.indexOf(sqlTab)
+                    if sqlIndex != -1:
+                        self.winMain.tabWidget.removeTab(sqlIndex)
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", "Removed tabSQL after enableSQL change")
+
         credentials = [
             ("aqServer", self.qleAQServer.text()),
             ("aqUser", self.qleAQUser.text()),

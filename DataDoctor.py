@@ -6,7 +6,7 @@ import csv
 import json
 from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, 
-                             QSizePolicy, QMessageBox, QFileDialog, QMenu, QLabel, QVBoxLayout)
+                             QSizePolicy, QMessageBox, QFileDialog, QMenu, QLabel, QVBoxLayout, QComboBox)
 from PyQt6.QtCore import Qt, QPoint
 from PyQt6.QtGui import QPalette, QFontMetrics, QPixmap
 from PyQt6 import uic
@@ -42,11 +42,14 @@ class uiMain(QMainWindow):
         self.columnMetadata = []
         self.seriesResponses = {} # Dict to store {seriesLabel: response_dict} post-query
         self.currentQueryType = "" # str: "AQUARIUS", etc., set post-query
+        self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
+        self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
+        self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
 
         # Set button style
         for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
-                    self.btnOptions, self.btnInfo, self.btnInternalQuery,
-                    self.btnUndo, self.btnRefresh]:
+                    self.btnOptions, self.btnInfo, self.btnInternalQuery, self.btnUndo, 
+                    self.btnRefresh, self.btnRunQuery, self.btnSaveSnippet]:
             if btn:
                 Utils.buttonStyle(btn)
 
@@ -57,6 +60,9 @@ class uiMain(QMainWindow):
             centralLayout.setRowStretch(0, 0)
             centralLayout.setRowStretch(1, 1)
             centralLayout.setColumnStretch(0, 1)
+
+        # Populate combobox item (Currently only USBR will work)
+        self.cbDatabase.addItem('USBR')
 
         # Create events
         self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)
@@ -91,27 +97,45 @@ class uiMain(QMainWindow):
             self.mainTable.setGeometry(0, 0, 0, 0)
             self.mainTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Hide tabs on startup
-        if self.tabWidget:
-            dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
-
-            if dataQueryIndex != -1:
-                self.tabWidget.removeTab(dataQueryIndex)
-
-            sqlTab = self.findChild(QWidget, 'tabSQL')
-            sqlIndex = self.tabWidget.indexOf(sqlTab)
-
-            if sqlIndex != -1:
-                self.tabWidget.removeTab(sqlIndex)
-
         # Center window
         Utils.centerWindowToParent(self)
 
         # Initialize globals
         Utils.reloadGlobals()
 
+        # Hide tabs on startup
+        if self.tabWidget:
+            sqlTab = self.findChild(QWidget, 'tabSQL')
+            sqlIndex = self.tabWidget.indexOf(sqlTab)
+            if sqlIndex != -1:
+                self.tabWidget.removeTab(sqlIndex)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Removed tabSQL at index {sqlIndex} on startup")
+            else:
+                if Config.debug:
+                    Logic.logMessage("WARN", "tabSQL not found in tabWidget on startup")
+
+            dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
+            if dataQueryIndex != -1:
+                self.tabWidget.removeTab(dataQueryIndex)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Removed tabMain at index {dataQueryIndex} on startup")
+            else:
+                if Config.debug:
+                    Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
+
+            # Store titles after removal (in case .ui changes)
+            self.dataQueryTitle = "Data Query"  # Hardcode if not found; or from .ui if needed
+            self.sqlTitle = "SQL Query Builder"
+
+            # Add back SQL tab if enabled
+            if Config.enableSQL and sqlTab:
+                self.tabWidget.addTab(sqlTab, self.sqlTitle)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")
+
         if Config.debug:
-            Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))  
+            Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""

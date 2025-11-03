@@ -15,7 +15,7 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>icons/Options.png</normaloff>icons/Options.png</iconset>
+    <normaloff>../home/seifer/Documents/Python Projects/DataDoctor/ui/icons/Options.png</normaloff>../home/seifer/Documents/Python Projects/DataDoctor/ui/icons/Options.png</iconset>
   </property>
   <widget class="QDialogButtonBox" name="btnbOptions">
    <property name="geometry">
@@ -179,6 +179,32 @@
       <string>Retro Mode:</string>
      </property>
     </widget>
+    <widget class="QLabel" name="lblSQL">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>180</y>
+       <width>151</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>SQL Query Builder:</string>
+     </property>
+    </widget>
+    <widget class="QCheckBox" name="chkbEnableSQL">
+     <property name="geometry">
+      <rect>
+       <x>150</x>
+       <y>180</y>
+       <width>21</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
     <zorder>lblRawData</zorder>
     <zorder>lbUTCOffset</zorder>
     <zorder>cbUTCOffset</zorder>
@@ -189,6 +215,8 @@
     <zorder>lblQc</zorder>
     <zorder>lblRetroMode</zorder>
     <zorder>lblDebug</zorder>
+    <zorder>lblSQL</zorder>
+    <zorder>chkbEnableSQL</zorder>
    </widget>
    <widget class="QWidget" name="tabAquarius">
     <attribute name="title">
@@ -450,7 +478,7 @@
      </property>
      <property name="icon">
       <iconset>
-       <normaloff>icons/Visible.png</normaloff>icons/Visible.png</iconset>
+       <normaloff>../home/seifer/Documents/Python Projects/DataDoctor/ui/icons/Visible.png</normaloff>../home/seifer/Documents/Python Projects/DataDoctor/ui/icons/Visible.png</iconset>
      </property>
      <property name="iconSize">
       <size>
