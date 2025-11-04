@@ -49,7 +49,7 @@ class uiMain(QMainWindow):
         self.pteSQL = self.findChild(QPlainTextEdit, 'pteSQL')
         self.listSnippets = self.findChild(QListWidget, 'listSnippets')
         self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
-        self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')
+        self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')        
 
         # Set button style
         for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
@@ -60,6 +60,7 @@ class uiMain(QMainWindow):
 
         # Set up layout
         centralLayout = self.centralWidget().layout()
+
         if isinstance(centralLayout, QGridLayout):
             centralLayout.setContentsMargins(0, 0, 0, 0)
             centralLayout.setRowStretch(0, 0)
@@ -81,33 +82,24 @@ class uiMain(QMainWindow):
         self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
-
-        # SQL tab events
-        if self.btnRunQuery:
-            self.btnRunQuery.clicked.connect(self.runCustomQuery)
-        if self.btnSaveSnippet:
-            self.btnSaveSnippet.clicked.connect(self.saveSnippet)
-        if self.listSnippets:
-            self.listSnippets.doubleClicked.connect(self.loadSnippet)
-        if self.btnDeleteSnippet:
-            self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
+        self.btnRunQuery.clicked.connect(self.runCustomQuery)
+        self.btnSaveSnippet.clicked.connect(self.saveSnippet)
+        self.listSnippets.doubleClicked.connect(self.loadSnippet)
+        self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)            
 
         # Ensure tab widget expands
         self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Set up Data Query tab
-        if self.tabMain:
-            self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-            if not self.tabMain.layout():
-                layout = QGridLayout(self.tabMain)
-                layout.addWidget(self.mainTable)
-                layout.setContentsMargins(0, 0, 0, 0)
-                layout.setSpacing(0)
-
-        if self.mainTable:
-            self.mainTable.setGeometry(0, 0, 0, 0)
-            self.mainTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        if not self.tabMain.layout():
+            layout = QGridLayout(self.tabMain)
+            layout.addWidget(self.mainTable)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+        self.mainTable.setGeometry(0, 0, 0, 0)
+        self.mainTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Center window
         Utils.centerWindowToParent(self)
@@ -116,73 +108,48 @@ class uiMain(QMainWindow):
         Utils.reloadGlobals()
 
         # Hide tabs on startup
-        if self.tabWidget:
-            sqlTab = self.findChild(QWidget, 'tabSQL')
-            sqlIndex = self.tabWidget.indexOf(sqlTab)
-            if sqlIndex != -1:
-                self.tabWidget.removeTab(sqlIndex)
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Removed tabSQL at index {sqlIndex} on startup")
-            else:
-                if Config.debug:
-                    Logic.logMessage("WARN", "tabSQL not found in tabWidget on startup")
+        sqlTab = self.findChild(QWidget, 'tabSQL')
+        sqlIndex = self.tabWidget.indexOf(sqlTab)
 
-            dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
-            if dataQueryIndex != -1:
-                self.tabWidget.removeTab(dataQueryIndex)
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Removed tabMain at index {dataQueryIndex} on startup")
-            else:
-                if Config.debug:
-                    Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
+        # Store titles after removal (in case .ui changes)
+        self.dataQueryTitle = "Data Query"
+        self.sqlTitle = "SQL Query Builder"
 
-            # Store titles after removal (in case .ui changes)
-            self.dataQueryTitle = "Data Query"  # Hardcode if not found; or from .ui if needed
-            self.sqlTitle = "SQL Query Builder"
+        if sqlIndex != -1:
+            self.tabWidget.removeTab(sqlIndex)
 
-            # Add back SQL tab if enabled
-            if Config.enableSQL and sqlTab:
-                self.tabWidget.addTab(sqlTab, self.sqlTitle)
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Removed tabSQL at index {sqlIndex} on startup")
+        else:
+            if Config.debug:
+                Logic.logMessage("WARN", "tabSQL not found in tabWidget on startup")
+        dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
 
-                # Re-find SQL controls after adding tab
-                self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
-                self.pteSQL = self.findChild(QPlainTextEdit, 'pteSQL')
-                self.listSnippets = self.findChild(QListWidget, 'listSnippets')
-                self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
-                self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
-                self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
-                self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')
+        if dataQueryIndex != -1:
+            self.tabWidget.removeTab(dataQueryIndex)
 
-                if Config.debug:
-                    found = {
-                        'cbDatabase': bool(self.cbDatabase),
-                        'pteSQL': bool(self.pteSQL),
-                        'listSnippets': bool(self.listSnippets),
-                        'sqlTable': bool(self.sqlTable),
-                        'btnRunQuery': bool(self.btnRunQuery),
-                        'btnSaveSnippet': bool(self.btnSaveSnippet),
-                        'btnDeleteSnippet': bool(self.btnDeleteSnippet)
-                    }
-                    Logic.logMessage("DEBUG", f"Re-found SQL controls after adding tab: {found}")
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Removed tabMain at index {dataQueryIndex} on startup")
+        else:
+            if Config.debug:
+                Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
 
-                # Re-connect events if controls found
-                if self.btnRunQuery:
-                    self.btnRunQuery.clicked.connect(self.runCustomQuery)
-                if self.btnSaveSnippet:
-                    self.btnSaveSnippet.clicked.connect(self.saveSnippet)
-                if self.listSnippets:
-                    self.listSnippets.doubleClicked.connect(self.loadSnippet)
-                if self.btnDeleteSnippet:
-                    self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
+        # Add back SQL tab if enabled
+        if Config.enableSQL and sqlTab:
+            self.tabWidget.addTab(sqlTab, self.sqlTitle)
 
-            # Populate cbDatabase and load snippets if controls found
-            if Config.enableSQL and self.cbDatabase:
-                Utils.loadDatabase(self.cbDatabase, 'sql')
-            if Config.enableSQL and self.listSnippets:
-                self.loadSnippets()
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")  
 
+        # Add dummy items to controls. This fixes issues with Qt6 quirks
+        self.cbDatabase.addItem("")    
+        self.listSnippets.addItem("")        
+
+        # Populate cbDatabase and load snippets if controls found
+        if Config.enableSQL and self.cbDatabase:
+            Utils.loadDatabase(self.cbDatabase, 'sql')
+        if Config.enableSQL and self.listSnippets:
+            self.loadSnippets()
         if Config.debug:
             Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
 
