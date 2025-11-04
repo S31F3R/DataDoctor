@@ -438,3 +438,14 @@ def getLogDir():
 
 def getLogPath(filename):
     return os.path.join(Utils.getLogDir(), filename)
+
+def getSqlSnippetDir():
+    quickLookDir = os.path.join(getConfigDir(), "quickLook")
+    sqlDir = os.path.join(quickLookDir, "sql")
+
+    if not os.path.exists(sqlDir):
+        os.makedirs(sqlDir)
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"getSqlSnippetDir: Created sql directory: {sqlDir}")
+
+    return sqlDir
