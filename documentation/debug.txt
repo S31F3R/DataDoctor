@@ -147,7 +147,16 @@ class uiMain(QMainWindow):
             topLayout.addSpacing(20)
             topLayout.addWidget(self.lblDatabase)
             topLayout.addSpacing(5)
-            topLayout.addWidget(self.cbDatabase)
+
+            # Wrap cbDatabase with spacing above to push it down
+            comboWidget = QWidget(sqlTab)
+            comboLayout = QVBoxLayout(comboWidget)
+            comboLayout.setContentsMargins(0, 0, 0, 0)
+            comboLayout.setSpacing(0)
+            comboLayout.addSpacing(4)
+            comboLayout.addWidget(self.cbDatabase)
+            topLayout.addWidget(comboWidget)
+
             topLayout.addStretch()
 
             # Vertical splitter for pteSQL (top) and sqlTable (bottom)
