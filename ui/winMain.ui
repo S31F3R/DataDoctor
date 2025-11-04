@@ -305,7 +305,7 @@
          </rect>
         </property>
        </widget>
-       <widget class="QListWidget" name="listWidget">
+       <widget class="QListWidget" name="listSnippets">
         <property name="geometry">
          <rect>
           <x>1310</x>
@@ -392,7 +392,7 @@
        <widget class="QComboBox" name="cbDatabase">
         <property name="geometry">
          <rect>
-          <x>190</x>
+          <x>220</x>
           <y>10</y>
           <width>171</width>
           <height>30</height>
@@ -405,7 +405,7 @@
        <widget class="QLabel" name="lblDatabase">
         <property name="geometry">
          <rect>
-          <x>90</x>
+          <x>120</x>
           <y>10</y>
           <width>91</width>
           <height>31</height>
@@ -416,6 +416,32 @@
         </property>
         <property name="alignment">
          <set>Qt::AlignmentFlag::AlignRight|Qt::AlignmentFlag::AlignTrailing|Qt::AlignmentFlag::AlignVCenter</set>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="btnDeleteSnippet">
+        <property name="geometry">
+         <rect>
+          <x>90</x>
+          <y>10</y>
+          <width>32</width>
+          <height>32</height>
+         </rect>
+        </property>
+        <property name="toolTip">
+         <string>Information</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset>
+          <normaloff>icons/StarMinus.png</normaloff>icons/StarMinus.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
         </property>
        </widget>
       </widget>
