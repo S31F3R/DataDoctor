@@ -137,55 +137,24 @@ class uiMain(QMainWindow):
                     Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
 
             # Store titles after removal (in case .ui changes)
-            self.dataQueryTitle = "Data Query"  # Hardcode if not found; or from .ui if needed
+            self.dataQueryTitle = "Data Query"
             self.sqlTitle = "SQL Query Builder"
 
-            # Add back SQL tab if enabled, then re-find its children recursively on main window
+            # Add back SQL tab if enabled
             if Config.enableSQL and sqlTab:
                 self.tabWidget.addTab(sqlTab, self.sqlTitle)
                 if Config.debug:
                     Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")
 
-                # Re-find controls recursively on self (main window)
-                self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
-                self.listSnippets = self.findChild(QListWidget, 'listSnippets')
-                self.pteSQL = self.findChild(QPlainTextEdit, 'pteSQL')
-                self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
-                self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
-                self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
-                self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')
-
-                if Config.debug:
-                    found = {
-                        'cbDatabase': bool(self.cbDatabase),
-                        'listSnippets': bool(self.listSnippets),
-                        'pteSQL': bool(self.pteSQL),
-                        'sqlTable': bool(self.sqlTable),
-                        'btnRunQuery': bool(self.btnRunQuery),
-                        'btnSaveSnippet': bool(self.btnSaveSnippet),
-                        'btnDeleteSnippet': bool(self.btnDeleteSnippet)
-                    }
-                    Logic.logMessage("DEBUG", f"Re-found SQL controls after adding tab: {found}")
-
-                # Re-connect events (in case needed)
-                if self.btnRunQuery:
-                    self.btnRunQuery.clicked.connect(self.runCustomQuery)
-                if self.btnSaveSnippet:
-                    self.btnSaveSnippet.clicked.connect(self.saveSnippet)
-                if self.listSnippets:
-                    self.listSnippets.doubleClicked.connect(self.loadSnippet)
-                if self.btnDeleteSnippet:
-                    self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
-
-                # Load/populate now that controls are found
-                if self.cbDatabase:
-                    Utils.loadDatabase(self.cbDatabase, 'sql')
-                if self.listSnippets:
-                    self.loadSnippets()
+                # No need to re-find controls or re-connect events; initial references remain valid after re-adding the tab
 
             # Populate cbDatabase for SQL tab if enabled and control found
             if Config.enableSQL and self.cbDatabase:
                 Utils.loadDatabase(self.cbDatabase, 'sql')
+
+            # Load snippets if control found
+            if Config.enableSQL and self.listSnippets:
+                self.loadSnippets()
 
         if Config.debug:
             Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
@@ -193,8 +162,10 @@ class uiMain(QMainWindow):
     def loadSnippets(self):
         """Load SQL snippets from quickLook/sql into listSnippets."""
         sqlDir = Utils.getSqlSnippetDir()
+
         if self.listSnippets:
             self.listSnippets.clear()
+
             for file in sorted(os.listdir(sqlDir)):
                 if file.endswith(".sql"):
                     self.listSnippets.addItem(file[:-4]) # Add name without .sql
@@ -211,19 +182,22 @@ class uiMain(QMainWindow):
                 Logic.logMessage("WARN", "pteSQL not found, skipping saveSnippet")
             return
         sqlText = self.pteSQL.toPlainText().strip()
+
         if not sqlText:
             QMessageBox.warning(self, "Save Snippet", "No SQL query to save.")
             if Config.debug:
                 Logic.logMessage("DEBUG", "saveSnippet: No SQL text to save")
             return
-
         name, ok = QInputDialog.getText(self, "Save Snippet", "Snippet name:")
+
         if ok and name:
             sqlDir = Utils.getSqlSnippetDir()
             filePath = os.path.join(sqlDir, f"{name}.sql")
+
             with open(filePath, 'w', encoding='utf-8') as f:
                 f.write(sqlText)
-            self.loadSnippets()  # Reload list to show new snippet immediately
+            self.loadSnippets() # Reload list to show new snippet immediately
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"saveSnippet: Saved snippet {name} to {filePath} and reloaded list")
 
@@ -289,7 +263,8 @@ class uiMain(QMainWindow):
             return
 
         db = self.cbDatabase.currentText()
-        dsn = db.split('-')[1].lower() if '-' in db else db.lower()  # e.g., 'USBR-LCHDB' -> 'lchdb'
+        dsn = db.split('-')[1].lower() if '-' in db else db.lower() # e.g., 'USBR-LCHDB' -> 'lchdb'
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query")
 

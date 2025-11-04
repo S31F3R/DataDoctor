@@ -12,20 +12,6 @@ from pathlib import Path
 from typing import List, Any, Optional
 from core import Logic, Config, Utils
 
-# Oracle.py
-
-import oracledb
-import platform
-import os
-import tempfile
-import shutil
-import keyring
-import time
-import re
-from pathlib import Path
-from typing import List, Any, Optional
-from core import Logic, Config, Utils
-
 class oracleConnection:
     def __init__(self, dsn: str):
         self.dsn = dsn
@@ -66,15 +52,28 @@ class oracleConnection:
         oracledb.init_oracle_client(lib_dir=str(clientDir))
         if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
 
-        # Setup TNS_ADMIN 
+        # Setup TNS_ADMIN with program's sqlnet.ora always, and tnsnames.ora from env if exists (copy to temp)
+        self.tnsDir = tempfile.mkdtemp()
+        programAdmin = Logic.resourcePath('oracle/network/admin')
+        shutil.copy(os.path.join(programAdmin, 'sqlnet.ora'), self.tnsDir)
+        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Copied program's sqlnet.ora to temp {self.tnsDir}")
+
         envTns = os.environ.get('TNS_ADMIN')
+        tnsFile = 'tnsnames.ora'
         if envTns:
-            os.environ['TNS_ADMIN'] = envTns
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Using env TNS_ADMIN: {envTns} (no copy/temp)")
+            userTnsPath = os.path.join(envTns, tnsFile)
+            if os.path.exists(userTnsPath):
+                shutil.copy(userTnsPath, self.tnsDir)
+                if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Copied user's tnsnames.ora from {envTns} to temp {self.tnsDir}")
+            else:
+                shutil.copy(os.path.join(programAdmin, tnsFile), self.tnsDir)
+                if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: User tnsnames.ora not found, copied program's to temp {self.tnsDir}")
         else:
-            resourceAdmin = Logic.resourcePath('oracle/network/admin')
-            os.environ['TNS_ADMIN'] = resourceAdmin
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Set TNS_ADMIN to resource path: {resourceAdmin} (no copy/temp)")
+            shutil.copy(os.path.join(programAdmin, tnsFile), self.tnsDir)
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: No env TNS_ADMIN, copied program's tnsnames.ora to temp {self.tnsDir}")
+
+        os.environ['TNS_ADMIN'] = self.tnsDir
+        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Set TNS_ADMIN to temp {self.tnsDir}")
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""
