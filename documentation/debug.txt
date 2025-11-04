@@ -1,0 +1,88 @@
+2025-11-04 07:18:20,978 [DEBUG] Globals reloaded from user.config, enableSQL=True
+2025-11-04 07:18:20,980 [DEBUG] Removed tabSQL at index 1 on startup
+2025-11-04 07:18:20,980 [DEBUG] Removed tabMain at index 0 on startup
+2025-11-04 07:18:20,980 [DEBUG] Added tabSQL on startup since enabled
+2025-11-04 07:18:20,981 [DEBUG] Populating cbDatabase
+2025-11-04 07:18:20,981 [DEBUG] Populated cbDatabase with 6 items
+2025-11-04 07:18:20,981 [DEBUG] Loaded 1 SQL snippets
+2025-11-04 07:18:20,981 [DEBUG] uiMain initialized with header context menu, Config.rawData: False
+2025-11-04 07:18:20,981 [DEBUG] Loading UI file: C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\winQuery.ui
+2025-11-04 07:18:21,005 [DEBUG] initializeQueryWindow: Setting initial state
+2025-11-04 07:18:21,005 [DEBUG] initializeQueryWindow: Set default dates and radio button
+2025-11-04 07:18:21,016 [DEBUG] uiQuery initialized
+2025-11-04 07:18:21,025 [DEBUG] uiDataDictionary initialized with btnDeleteRow
+2025-11-04 07:18:21,030 [DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName
+2025-11-04 07:18:21,043 [DEBUG] uiOptions initialized
+2025-11-04 07:18:21,085 [WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
+2025-11-04 07:18:21,100 [DEBUG] No config.ini found or user.config exists, skipping conversion
+2025-11-04 07:18:21,102 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp/Exports', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC Primary vs Secondary', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP'}
+2025-11-04 07:18:21,103 [DEBUG] utcOffset loaded as: UTC-07:00 | Mountain Time (US & Canada)/Arizona
+2025-11-04 07:18:21,103 [DEBUG] Loaded settings from user.config: {'lastExportPath': 'C:/Temp/Exports', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC Primary vs Secondary', 'enableSQL': True}
+2025-11-04 07:18:21,105 [DEBUG] Applied retro font at startup
+2025-11-04 07:18:21,108 [DEBUG] Applied retro scroll bar styles to mainTable
+2025-11-04 07:18:21,167 [DEBUG] Applied retro scroll bar styles globally
+2025-11-04 07:18:22,244 [DEBUG] Built DataDictionary with 29304 rows, 11 columns
+2025-11-04 07:18:22,248 [DEBUG] loadAllQuickLooks: Found user Quick Look: BIBLC Primary vs Secondary.json
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Found user Quick Look: FMTC2.json
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Found user Quick Look: Lake Mohave Validation (HR).json
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Found user Quick Look: Lake Mohave Validation.json
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Found user Quick Look: Published HDTB Check.json
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Found user Quick Look: Published PDTB Check.json
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Found user Quick Look: SCADA Check.json
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Found user Quick Look: USGS Method ID Example.json
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (AQUARIUS).txt
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & AQUARIUS).txt
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & USGS).txt
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Added example Quick Look: MRID TEST.txt
+2025-11-04 07:18:22,249 [DEBUG] loadAllQuickLooks: Added example Quick Look: USGS Example.txt
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added BIBLC Primary vs Secondary to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added Data Check (AQUARIUS) to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & AQUARIUS) to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & USGS) to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added FMTC2 to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added Lake Mohave Validation to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added Lake Mohave Validation (HR) to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added MRID TEST to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added Published HDTB Check to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added Published PDTB Check to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added SCADA Check to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added USGS Example to cbQuickLook
+2025-11-04 07:18:22,250 [DEBUG] loadAllQuickLooks: Added USGS Method ID Example to cbQuickLook
+2025-11-04 07:18:41,864 [DEBUG] runCustomQuery: Using DSN lchdb for query
+2025-11-04 07:18:41,865 [DEBUG] oracleConnection._setup: Checking for platform-specific files in C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client: ['oci.dll']
+2025-11-04 07:18:41,866 [DEBUG] oracleConnection._setup: Validated Instant Client files for windows
+2025-11-04 07:18:44,311 [DEBUG] oracleConnection._setup: Initialized oracledb with clientDir C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client
+2025-11-04 07:18:44,318 [DEBUG] oracleConnection._setup: Copied program's sqlnet.ora to temp C:\Users\RODNEY~1\AppData\Local\Temp\1\tmp_j4hva90
+2025-11-04 07:18:44,337 [DEBUG] oracleConnection._setup: Copied user's tnsnames.ora from C:\Program Files\Oracle\Network\Admin to temp C:\Users\RODNEY~1\AppData\Local\Temp\1\tmp_j4hva90
+2025-11-04 07:18:44,338 [DEBUG] oracleConnection._setup: Set TNS_ADMIN to temp C:\Users\RODNEY~1\AppData\Local\Temp\1\tmp_j4hva90
+2025-11-04 07:18:57,269 [DEBUG] oracleConnection.connect: Connection established to lchdb
+2025-11-04 07:18:57,270 [DEBUG] OracleConnection.executeCustomQuery: Query 'SELECT 
+  site_datatype_id AS SDID, 
+  TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME,' has bind vars: False
+2025-11-04 07:18:57,271 [DEBUG] OracleConnection.executeCustomQuery: Validating query: SELECT 
+  site_datatype_id AS SDID, 
+  TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME,
+  TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
+  value,
+  validation,
+  overwrite_flag,
+  method_id,
+  agen_id,
+  collection_system_id,
+  computation_id,
+  data_flags
+FROM LCHDBA.r_base@lchdb
+WHERE site_datatype_id in(20179) --add SDID by using , between SDID
+  AND end_date_time BETWEEN TO_DATE('2025-09-18 01:00:00', 'YYYY-MM-DD HH24:MI:SS') 
+  AND TO_DATE('2025-09-18 13:00:00', 'YYYY-MM-DD HH24:MI:SS')   
+ORDER BY SDID ASC
+2025-11-04 07:18:57,639 [DEBUG] OracleConnection.executeCustomQuery: Executed query: SELECT 
+  site_datatype_id AS SDID, 
+  TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME, with params None
+2025-11-04 07:18:57,640 [DEBUG] OracleConnection.executeCustomQuery: Query executed in 0.369 seconds
+2025-11-04 07:18:57,640 [DEBUG] OracleConnection.executeCustomQuery: Fetched 13 rows
+2025-11-04 07:18:57,640 [DEBUG] OracleConnection.executeCustomQuery: Found columns: ['SDID', 'DATE_TIME', 'DATE_TIME_LOADED', 'VALUE', 'VALIDATION', 'OVERWRITE_FLAG', 'METHOD_ID', 'AGEN_ID', 'COLLECTION_SYSTEM_ID', 'COMPUTATION_ID', 'DATA_FLAGS']
+2025-11-04 07:18:57,640 [DEBUG] OracleConnection.executeCustomQuery: Cursor closed
+2025-11-04 07:18:57,823 [DEBUG] oracleConnection.close: Connection closed.
+2025-11-04 07:18:57,826 [DEBUG] oracleConnection.close: Cleaned up TNS_ADMIN directory
+2025-11-04 07:18:57,830 [DEBUG] runCustomQuery: Populated sqlTable with 13 rows, 11 columns
