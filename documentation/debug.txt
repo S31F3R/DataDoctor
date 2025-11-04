@@ -140,13 +140,13 @@ class uiMain(QMainWindow):
             topLayout = QHBoxLayout()
             topLayout.setSpacing(0)
             topLayout.addWidget(self.btnRunQuery)
-            topLayout.addSpacing(20)
+            topLayout.addSpacing(10)
             topLayout.addWidget(self.btnSaveSnippet)
-            topLayout.addSpacing(20)
+            topLayout.addSpacing(10)
             topLayout.addWidget(self.btnDeleteSnippet)
             topLayout.addSpacing(20)
             topLayout.addWidget(self.lblDatabase)
-            topLayout.addSpacing(5)
+            topLayout.addSpacing(0)
 
             # Wrap cbDatabase with spacing above to push it down
             comboWidget = QWidget(sqlTab)
@@ -164,6 +164,8 @@ class uiMain(QMainWindow):
             sqlSplitter.setObjectName('sqlSplitter')
             sqlSplitter.addWidget(self.pteSQL)
             sqlSplitter.addWidget(self.sqlTable)
+            self.sqlTable.horizontalHeader().setStretchLastSection(False)
+
             # Set initial sizes based on .ui
             sqlSplitter.setSizes([231, 291])
 
@@ -179,47 +181,40 @@ class uiMain(QMainWindow):
             mainSplitter.setObjectName('mainSplitter')
             mainSplitter.addWidget(leftWidget)
             mainSplitter.addWidget(self.listSnippets)
+
             # Set initial sizes based on .ui
             mainSplitter.setSizes([1281, 256])
 
             # Main layout for tabSQL
             if sqlTab.layout():
                 oldLayout = sqlTab.layout()
+
                 while oldLayout.count():
                     item = oldLayout.takeAt(0)
+                    
                     if item.widget():
                         item.widget().deleteLater()
             mainLayout = QVBoxLayout(sqlTab)
             mainLayout.addWidget(mainSplitter)
             mainLayout.setContentsMargins(0, 0, 0, 0)
 
-            # Load saved splitter sizes from config
+            # Load saved splitter sizes from config (delayed for Qt initialization)
             config = Utils.loadConfig()
-            if 'sqlVerticalSizes' in config:
-                sqlSplitter.setSizes(config['sqlVerticalSizes'])
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Restored sqlVerticalSizes: {config['sqlVerticalSizes']}")
-            if 'sqlHorizontalSizes' in config:
-                mainSplitter.setSizes(config['sqlHorizontalSizes'])
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Restored sqlHorizontalSizes: {config['sqlHorizontalSizes']}")
+
+            if 'sqlVerticalSizes' in config or 'sqlHorizontalSizes' in config:
+                def applySizes():
+                    if 'sqlVerticalSizes' in config:
+                        sqlSplitter.setSizes(config['sqlVerticalSizes'])
+
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"Restored sqlVerticalSizes: {config['sqlVerticalSizes']}")
+                    if 'sqlHorizontalSizes' in config:
+                        mainSplitter.setSizes(config['sqlHorizontalSizes'])
+
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"Restored sqlHorizontalSizes: {config['sqlHorizontalSizes']}")
+
+                QTimer.singleShot(0, applySizes)
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "Set up splitters and layout for tabSQL to handle resizing")
-
-    def closeEvent(self, event):
-        """Override closeEvent to save splitter sizes if SQL tab is enabled and present."""
-        sqlTab = self.findChild(QWidget, 'tabSQL')
-        if Config.enableSQL and sqlTab and self.tabWidget.indexOf(sqlTab) != -1:
-            config = Utils.loadConfig()
-            config['sqlVerticalSizes'] = self.findChild(QSplitter, 'sqlSplitter').sizes()
-            config['sqlHorizontalSizes'] = self.findChild(QSplitter, 'mainSplitter').sizes()
-            try:
-                with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
-                    json.dump(config, configFile, indent=2)
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Saved splitter sizes to config: vertical={config['sqlVerticalSizes']}, horizontal={config['sqlHorizontalSizes']}")
-            except Exception as e:
-                if Config.debug:
-                    Logic.logMessage("ERROR", f"Failed to save splitter sizes: {e}")
-        super().closeEvent(event)
