@@ -137,7 +137,7 @@ class uiMain(QMainWindow):
                     Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
 
             # Store titles after removal (in case .ui changes)
-            self.dataQueryTitle = "Data Query"
+            self.dataQueryTitle = "Data Query"  # Hardcode if not found; or from .ui if needed
             self.sqlTitle = "SQL Query Builder"
 
             # Add back SQL tab if enabled
@@ -146,13 +146,40 @@ class uiMain(QMainWindow):
                 if Config.debug:
                     Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")
 
-                # No need to re-find controls or re-connect events; initial references remain valid after re-adding the tab
+                # Re-find SQL controls after adding tab
+                self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
+                self.pteSQL = self.findChild(QPlainTextEdit, 'pteSQL')
+                self.listSnippets = self.findChild(QListWidget, 'listSnippets')
+                self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
+                self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
+                self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
+                self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')
 
-            # Populate cbDatabase for SQL tab if enabled and control found
+                if Config.debug:
+                    found = {
+                        'cbDatabase': bool(self.cbDatabase),
+                        'pteSQL': bool(self.pteSQL),
+                        'listSnippets': bool(self.listSnippets),
+                        'sqlTable': bool(self.sqlTable),
+                        'btnRunQuery': bool(self.btnRunQuery),
+                        'btnSaveSnippet': bool(self.btnSaveSnippet),
+                        'btnDeleteSnippet': bool(self.btnDeleteSnippet)
+                    }
+                    Logic.logMessage("DEBUG", f"Re-found SQL controls after adding tab: {found}")
+
+                # Re-connect events if controls found
+                if self.btnRunQuery:
+                    self.btnRunQuery.clicked.connect(self.runCustomQuery)
+                if self.btnSaveSnippet:
+                    self.btnSaveSnippet.clicked.connect(self.saveSnippet)
+                if self.listSnippets:
+                    self.listSnippets.doubleClicked.connect(self.loadSnippet)
+                if self.btnDeleteSnippet:
+                    self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
+
+            # Populate cbDatabase and load snippets if controls found
             if Config.enableSQL and self.cbDatabase:
                 Utils.loadDatabase(self.cbDatabase, 'sql')
-
-            # Load snippets if control found
             if Config.enableSQL and self.listSnippets:
                 self.loadSnippets()
 
