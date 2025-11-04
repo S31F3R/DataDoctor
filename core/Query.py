@@ -617,6 +617,7 @@ def timestampSortTable(table, dataDictionaryTable):
 def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable, deltaChecked=False, overlayChecked=False):
     Config.deltaChecked = deltaChecked
     Config.overlayChecked = overlayChecked
+
     if Config.debug:
         Logic.logMessage("DEBUG", "executeQuery: isInternal={}, items={}, deltaChecked={}, overlayChecked={}".format(isInternal, len(queryItems), deltaChecked, overlayChecked))
     if not isInternal:
@@ -637,8 +638,10 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     progressDialog.show()
     progressDialog.setValue(10)
     progressDialog.repaint()
+
     if Config.debug:
         Logic.logMessage("DEBUG", "executeQuery: Initialized and showed progress dialog")
+
     # Convert to datetime for rounding if necessary
     if not isinstance(startDate, datetime):
         startDate = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
@@ -649,6 +652,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     queryItems.sort(key=lambda x: x[4])
     firstInterval = queryItems[0][1]
     firstDb = queryItems[0][2]
+
     if firstInterval == 'INSTANT':
         if firstDb.startswith('USBR-'):
             firstInterval = 'INSTANT:60'
@@ -656,12 +660,15 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             firstInterval = 'INSTANT:15'
         elif firstDb == 'AQUARIUS':
             firstInterval = 'INSTANT:1'
+
     # Round down startDate to nearest firstInterval
     startDate = roundDownToInterval(startDate, firstInterval)
+
     # Convert back to str for buildTimestamps
     startDateStr = startDate.strftime('%Y-%m-%d %H:%M')
     endDateStr = endDate.strftime('%Y-%m-%d %H:%M')
     timestamps = buildTimestamps(startDateStr, endDateStr, firstInterval)
+
     if not timestamps:
         progressDialog.cancel()
         QMessageBox.warning(mainWindow, "Date Error", "Invalid dates or interval.")
@@ -669,11 +676,13 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     progressDialog.setValue(20)
     progressDialog.repaint()
     QCoreApplication.processEvents()
+
     if Config.debug:
         Logic.logMessage("DEBUG", "executeQuery: Setup complete, progress at 20%")
     defaultBlanks = [''] * len(timestamps)
     labelsDict = {} if isInternal else None
     groups = defaultdict(list)
+
     for dataID, interval, db, mrid, origIndex in queryItems:
         if interval == 'INSTANT':
             if db.startswith('USBR-'):
@@ -690,6 +699,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     maxDbThreads = 3
     numGroups = len(groups)
     numThreads = min(maxDbThreads, numGroups)
+
     if Config.debug:
         Logic.logMessage("DEBUG", f"Starting {numThreads} threads for {numGroups} groups in background")
     threadsStarted = 0
@@ -697,14 +707,17 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     rawResponses = {}
     collected = 0
     processedGroups = set()
+
     def handleResult(result):
         nonlocal collected
         groupKey, groupResult, groupLabels, groupRawResponses = result
+
         if groupKey in processedGroups:
             if Config.debug:
                 Logic.logMessage("DEBUG", f"executeQuery: Duplicate group {groupKey}, skipping")
             return
         processedGroups.add(groupKey)
+
         if all(all(v == '' for v in values) for values in groupResult.values()):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"executeQuery: Skipping empty group {groupKey}, no data")
@@ -716,6 +729,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 QCoreApplication.processEvents()
             return
         valueDict.update(groupResult)
+
         if groupLabels and labelsDict is not None:
             labelsDict.update(groupLabels)
             if Config.debug:
@@ -723,6 +737,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         if groupRawResponses:
             rawResponses.update(groupRawResponses)
         collected += 1
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"executeQuery: Collected results for group {groupKey} with {len(groupResult)} items ({collected}/{numGroups})")
         if not progressDialog.wasCanceled():
@@ -732,11 +747,13 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             QCoreApplication.processEvents()
     for i, groupKey in enumerate(groups.keys()):
         signals = queryWorkerSignals()
+
         # Pass str dates to queryWorker if it expects str; assuming it does based on original
         worker = queryWorker(groupKey, groups[groupKey], signals, startDateStr, endDateStr, isInternal, timestamps, defaultBlanks)
         signals.resultSignal.connect(lambda result, i=i: [Logic.logMessage("DEBUG", f"executeQuery: Signal received for group {result[0]}") if Config.debug else None, resultQueue.put(result), handleResult(result)][-1])
         pool.start(worker)
         threadsStarted += 1
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"Started background worker {i} for group {groupKey}")
     if not progressDialog.wasCanceled():
@@ -746,11 +763,14 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     startTime = time.time()
     timer = QTimer()
     timer.setSingleShot(False)
+
     def checkQueueAndProgress():
         nonlocal collected
         elapsed = time.time() - startTime
+
         if collected >= numGroups and resultQueue.empty() and pool.activeThreadCount() == 0 or elapsed > timeoutSeconds:
             timer.stop()
+
             if elapsed > timeoutSeconds:
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")
@@ -772,6 +792,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             QCoreApplication.processEvents()
     timer.timeout.connect(checkQueueAndProgress)
     timer.start(100)
+
     if Config.debug:
         Logic.logMessage("DEBUG", "executeQuery: Started timer for progress updates")
     while (collected < numGroups or not resultQueue.empty() or pool.activeThreadCount() > 0) and not progressDialog.wasCanceled():
@@ -781,6 +802,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         while not resultQueue.empty():
             try:
                 result = resultQueue.get_nowait()
+
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"executeQuery: Processed extra queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
                 handleResult(result)
@@ -788,6 +810,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 break
         maxRetries = 5
         retryCount = 0
+
         while not resultQueue.empty() and retryCount < maxRetries:
             try:
                 result = resultQueue.get_nowait()
@@ -815,6 +838,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     progressDialog.setValue(70)
     progressDialog.repaint()
     QCoreApplication.processEvents()
+
     for dataID, _, _, _, _ in queryItems:
         if dataID not in valueDict:
             valueDict[dataID] = defaultBlanks
@@ -825,10 +849,11 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     databases = [item[2] for item in queryItems]
     lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
     data = []
+
     for r in range(len(timestamps)):
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
-        if r % 100 == 0 or r % 10 == 0:  # Update more frequently for small tables
+        if r % 100 == 0 or r % 10 == 0: # Update more frequently for small tables
             progressDialog.setLabelText(f"Building rows... ({r}/{len(timestamps)} rows)")
             progressDialog.setValue(70 + int(20 * r / len(timestamps)))  # Adjusted to 70-90 for rows
             progressDialog.repaint()
@@ -844,28 +869,35 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         QCoreApplication.processEvents()
         mainWindow.mainTable.clear()
         mainWindow.mainTable.setRowCount(0)
-        mainWindow.mainTable.setColumnCount(0)  # Fully reset table to prevent freeze on column count change
-        QCoreApplication.processEvents()  # Ensure UI refresh after reset
+        mainWindow.mainTable.setColumnCount(0) # Fully reset table to prevent freeze on column count change
+        QCoreApplication.processEvents() # Ensure UI refresh after reset
+
         # Add tab before building table
         if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
             mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
+
         # Build the table
         buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
+
         # Remap rawResponses keys to fullLabel
         rawResponses = {labelsDict.get(k, k): v for k, v in rawResponses.items()}
+
         # Store rawResponses for Aquarius
         mainWindow.storeQueryData(rawResponses, 'internal' if isInternal else 'public')
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"Stored {len(rawResponses)} rawResponses for Aquarius")
+
         # Modify table if query tools are checked
         if deltaChecked or overlayChecked:
             QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, originalIntervals, lookupIds, mainWindow=mainWindow)   
         else:    
             mainWindow.columnMetadata = []
-            mergedDataIds = [[id] for id in originalDataIds]  # Derived from originalDataIds
-            mergedDbs = databases  # From databases list
-            mergedQueryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]  # Constructed from queryItems
-            mergedHeaders = originalDataIds  # Or processedHeaders if set earlier
+            mergedDataIds = [[id] for id in originalDataIds] # Derived from originalDataIds
+            mergedDbs = databases # From databases list
+            mergedQueryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems] # Constructed from queryItems
+            mergedHeaders = originalDataIds # Or processedHeaders if set earlier
+            
             for col in range(len(mergedHeaders)):  
                 dataId = mergedDataIds[col][0] if mergedDataIds[col] else None
                 db = mergedDbs[col]
