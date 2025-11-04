@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QTableWidgetItem,
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
-                             QVBoxLayout, QHBoxLayout, QSplitter)
+                             QVBoxLayout, QHBoxLayout, QSplitter, QLabel)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPalette
 from PyQt6 import uic
@@ -153,6 +153,69 @@ class uiMain(QMainWindow):
             self.loadSnippets()
         if Config.debug:
             Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
+
+        # Set up splitters and layout for tabSQL to enable resizing
+        if Config.enableSQL and sqlTab:
+            self.lblDatabase = self.findChild(QLabel, 'lblDatabase')
+
+            # Top controls layout (horizontal, packed on left)
+            topLayout = QHBoxLayout()
+            topLayout.setSpacing(0)
+            topLayout.addWidget(self.btnRunQuery)
+            topLayout.addSpacing(20)
+            topLayout.addWidget(self.btnSaveSnippet)
+            topLayout.addSpacing(20)
+            topLayout.addWidget(self.btnDeleteSnippet)
+            topLayout.addSpacing(20)
+            topLayout.addWidget(self.lblDatabase)
+            topLayout.addSpacing(5)
+
+            # Wrap cbDatabase with spacing above to push it down
+            comboWidget = QWidget(sqlTab)
+            comboLayout = QVBoxLayout(comboWidget)
+            comboLayout.setContentsMargins(0, 0, 0, 0)
+            comboLayout.setSpacing(0)
+            comboLayout.addSpacing(4)
+            comboLayout.addWidget(self.cbDatabase)
+            topLayout.addWidget(comboWidget)
+            topLayout.addStretch()
+
+            # Vertical splitter for pteSQL (top) and sqlTable (bottom)
+            sqlSplitter = QSplitter(Qt.Orientation.Vertical, sqlTab)
+            sqlSplitter.addWidget(self.pteSQL)
+            sqlSplitter.addWidget(self.sqlTable)
+
+            # Set initial sizes based on .ui
+            sqlSplitter.setSizes([231, 291])
+
+            # Left widget: top layout + sqlSplitter
+            leftWidget = QWidget(sqlTab)
+            leftLayout = QVBoxLayout(leftWidget)
+            leftLayout.setContentsMargins(0, 0, 0, 0)
+            leftLayout.addLayout(topLayout)
+            leftLayout.addWidget(sqlSplitter)
+
+            # Horizontal splitter for left (editor/table) and right (snippets)
+            mainSplitter = QSplitter(Qt.Orientation.Horizontal, sqlTab)
+            mainSplitter.addWidget(leftWidget)
+            mainSplitter.addWidget(self.listSnippets)
+
+            # Set initial sizes based on .ui
+            mainSplitter.setSizes([1281, 256])
+
+            # Main layout for tabSQL
+            if sqlTab.layout():
+                oldLayout = sqlTab.layout()
+                while oldLayout.count():
+                    item = oldLayout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+            mainLayout = QVBoxLayout(sqlTab)
+            mainLayout.addWidget(mainSplitter)
+            mainLayout.setContentsMargins(0, 0, 0, 0)
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Set up splitters and layout for tabSQL to handle resizing")
 
     def loadSnippets(self):
         """Load SQL snippets from quickLook/sql into listSnippets."""
