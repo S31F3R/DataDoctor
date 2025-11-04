@@ -1,0 +1,47 @@
+########### INTERVAL Query ###########
+SELECT 
+  site_datatype_id AS SDID, 
+  TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME,
+  TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
+  value,
+  validation,
+  overwrite_flag,
+  method_id,
+  derivation_flags
+FROM LCHDBA.r_hour@lchdb
+WHERE site_datatype_id in(20179) --add SDID by using , between SDID
+  AND end_date_time BETWEEN TO_DATE('2025-09-18 01:00:00', 'YYYY-MM-DD HH24:MI:SS') 
+  AND TO_DATE('2025-09-18 13:00:00', 'YYYY-MM-DD HH24:MI:SS')   
+ORDER BY SDID ASC
+
+########### BASE Query ###########
+SELECT 
+  site_datatype_id AS SDID, 
+  TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME,
+  TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
+  value,
+  validation,
+  overwrite_flag,
+  method_id,
+  agen_id,
+  collection_system_id,
+  computation_id,
+  data_flags
+FROM LCHDBA.r_base@lchdb
+WHERE site_datatype_id in(20179) --add SDID by using , between SDID
+  AND end_date_time BETWEEN TO_DATE('2025-09-18 01:00:00', 'YYYY-MM-DD HH24:MI:SS') 
+  AND TO_DATE('2025-09-18 13:00:00', 'YYYY-MM-DD HH24:MI:SS')   
+ORDER BY SDID ASC
+
+########### CP COUNT STATUS Query ###########
+SELECT
+  site_datatype_id AS SDID,
+  interval,
+  loading_application_id,
+  count(*) tasks, min(START_DATE_TIME) mindt,
+  max(START_DATE_TIME) maxdt,
+  min(date_time_loaded) minload
+FROM LCHDBA.cp_comp_tasklist@lchdb 
+GROUP BY site_datatype_id,
+  interval, 
+  loading_application_id
