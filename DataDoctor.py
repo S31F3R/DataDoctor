@@ -66,12 +66,7 @@ class uiMain(QMainWindow):
             centralLayout.setColumnStretch(0, 1)
 
         # Populate combobox item (Currently only USBR will work)
-        self.cbDatabase.addItem('USBR-LCHDB')
-        self.cbDatabase.addItem('USBR-YAOHDB')
-        self.cbDatabase.addItem('USBR-UCHDB2')
-        self.cbDatabase.addItem('USBR-ECOHDB')
-        self.cbDatabase.addItem('USBR-LBOHDB')
-        self.cbDatabase.addItem('USBR-KBOHDB')
+        self.cbDatabase.addItem('USBR')
 
         # Create events
         self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)
@@ -151,8 +146,8 @@ class uiMain(QMainWindow):
                 if Config.debug:
                     Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")
 
-            # Load snippets if SQL enabled
-            if Config.enableSQL:
+            # Load snippets if SQL enabled and controls found
+            if Config.enableSQL and self.listSnippets:
                 self.loadSnippets()
 
         if Config.debug:
@@ -160,21 +155,24 @@ class uiMain(QMainWindow):
 
     def loadSnippets(self):
         """Load SQL snippets from quickLook/sql into listSnippets."""
-        sqlDir = os.path.join(Utils.getQuickLookDir(), 'sql')
-        if not os.path.exists(sqlDir):
-            os.makedirs(sqlDir)
+        sqlDir = Utils.getSqlSnippetDir()
+        if self.listSnippets:
+            self.listSnippets.clear()
+            for file in sorted(os.listdir(sqlDir)):
+                if file.endswith(".sql"):
+                    self.listSnippets.addItem(file[:-4]) # Add name without .sql
             if Config.debug:
-                Logic.logMessage("DEBUG", f"Created SQL snippets directory: {sqlDir}")
-
-        self.listSnippets.clear()
-        for file in sorted(os.listdir(sqlDir)):
-            if file.endswith(".sql"):
-                self.listSnippets.addItem(file[:-4]) # Add name without .sql
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Loaded {self.listSnippets.count()} SQL snippets")
+                Logic.logMessage("DEBUG", f"Loaded {self.listSnippets.count()} SQL snippets")
+        else:
+            if Config.debug:
+                Logic.logMessage("WARN", "listSnippets not found, skipping loadSnippets")
 
     def saveSnippet(self):
         """Save current pteSQL content as .sql snippet."""
+        if not self.pteSQL:
+            if Config.debug:
+                Logic.logMessage("WARN", "pteSQL not found, skipping saveSnippet")
+            return
         sqlText = self.pteSQL.toPlainText().strip()
         if not sqlText:
             QMessageBox.warning(self, "Save Snippet", "No SQL query to save.")
@@ -184,22 +182,26 @@ class uiMain(QMainWindow):
 
         name, ok = QInputDialog.getText(self, "Save Snippet", "Snippet name:")
         if ok and name:
-            sqlDir = os.path.join(Utils.getQuickLookDir(), 'sql')
+            sqlDir = Utils.getSqlSnippetDir()
             filePath = os.path.join(sqlDir, f"{name}.sql")
             with open(filePath, 'w', encoding='utf-8') as f:
                 f.write(sqlText)
-            self.listSnippets.addItem(name)
+            if self.listSnippets:
+                self.listSnippets.addItem(name)
             if Config.debug:
                 Logic.logMessage("DEBUG", f"saveSnippet: Saved snippet {name} to {filePath}")
 
     def loadSnippet(self, index):
         """Load selected snippet into pteSQL on double-click."""
+        if not self.listSnippets or not self.pteSQL:
+            if Config.debug:
+                Logic.logMessage("WARN", "listSnippets or pteSQL not found, skipping loadSnippet")
+            return
         item = self.listSnippets.itemFromIndex(index)
         if item:
             name = item.text()
-            sqlDir = os.path.join(Utils.getQuickLookDir(), 'sql')
+            sqlDir = Utils.getSqlSnippetDir()
             filePath = os.path.join(sqlDir, f"{name}.sql")
-
             if os.path.exists(filePath):
                 with open(filePath, 'r', encoding='utf-8') as f:
                     sqlText = f.read()
@@ -212,8 +214,11 @@ class uiMain(QMainWindow):
 
     def runCustomQuery(self):
         """Run custom SQL from pteSQL and display in sqlTable."""
+        if not self.pteSQL or not self.sqlTable:
+            if Config.debug:
+                Logic.logMessage("WARN", "pteSQL or sqlTable not found, skipping runCustomQuery")
+            return
         sqlText = self.pteSQL.toPlainText().strip()
-
         if not sqlText:
             QMessageBox.warning(self, "Run Query", "No SQL query to run.")
             if Config.debug:
@@ -222,7 +227,6 @@ class uiMain(QMainWindow):
 
         db = self.cbDatabase.currentText()
         dsn = db.replace('USBR-', '').lower() # e.g., 'lchdb'
-
         if Config.debug:
             Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query")
 
