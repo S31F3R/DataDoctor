@@ -1,94 +1,48 @@
-2025-11-04 05:04:57,519 [DEBUG] Globals reloaded from user.config, enableSQL=True
-2025-11-04 05:04:57,520 [DEBUG] Removed tabSQL at index 1 on startup
-2025-11-04 05:04:57,520 [DEBUG] Removed tabMain at index 0 on startup
-2025-11-04 05:04:57,520 [DEBUG] Added tabSQL on startup since enabled
-2025-11-04 05:04:57,521 [DEBUG] Re-found SQL controls after adding tab: {'cbDatabase': False, 'listSnippets': False, 'pteSQL': True, 'sqlTable': True, 'btnRunQuery': True, 'btnSaveSnippet': True, 'btnDeleteSnippet': True}
-2025-11-04 05:04:57,521 [DEBUG] uiMain initialized with header context menu, Config.rawData: False
-2025-11-04 05:04:57,521 [DEBUG] Loading UI file: C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\winQuery.ui
-2025-11-04 05:04:57,666 [DEBUG] initializeQueryWindow: Setting initial state
-2025-11-04 05:04:57,666 [DEBUG] initializeQueryWindow: Set default dates and radio button
-2025-11-04 05:04:57,673 [DEBUG] uiQuery initialized
-2025-11-04 05:04:57,710 [DEBUG] uiDataDictionary initialized with btnDeleteRow
-2025-11-04 05:04:57,725 [DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName
-2025-11-04 05:04:57,754 [DEBUG] uiOptions initialized
-2025-11-04 05:04:57,812 [WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
-2025-11-04 05:04:57,834 [DEBUG] No config.ini found or user.config exists, skipping conversion
-2025-11-04 05:04:57,837 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP'}
-2025-11-04 05:04:57,839 [DEBUG] utcOffset loaded as: UTC-07:00 | Mountain Time (US & Canada)/Arizona
-2025-11-04 05:04:57,840 [DEBUG] Loaded settings from user.config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC TEST', 'enableSQL': True}
-2025-11-04 05:04:57,841 [DEBUG] Applied retro font at startup
-2025-11-04 05:04:57,845 [DEBUG] Applied retro scroll bar styles to mainTable
-2025-11-04 05:04:57,896 [DEBUG] Applied retro scroll bar styles globally
-2025-11-04 05:04:58,821 [DEBUG] Built DataDictionary with 29304 rows, 11 columns
-2025-11-04 05:04:58,824 [DEBUG] loadAllQuickLooks: Found user Quick Look: BIBLC TEST.json
-2025-11-04 05:04:58,824 [DEBUG] loadAllQuickLooks: Found user Quick Look: TEST.json
-2025-11-04 05:04:58,824 [DEBUG] loadAllQuickLooks: Found user Quick Look: USGS TESTING.json
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (AQUARIUS).txt
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & AQUARIUS).txt
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & USGS).txt
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added example Quick Look: MRID TEST.txt
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added example Quick Look: USGS Example.txt
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added BIBLC TEST to cbQuickLook
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added Data Check (AQUARIUS) to cbQuickLook
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & AQUARIUS) to cbQuickLook
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & USGS) to cbQuickLook
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added MRID TEST to cbQuickLook
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added TEST to cbQuickLook
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added USGS Example to cbQuickLook
-2025-11-04 05:04:58,825 [DEBUG] loadAllQuickLooks: Added USGS TESTING to cbQuickLook
-2025-11-04 05:05:33,214 [DEBUG] Globals reloaded from user.config, enableSQL=True
-2025-11-04 05:05:33,215 [DEBUG] Removed tabSQL at index 1 on startup
-2025-11-04 05:05:33,215 [DEBUG] Removed tabMain at index 0 on startup
-2025-11-04 05:05:33,216 [DEBUG] Added tabSQL on startup since enabled
-2025-11-04 05:05:33,217 [DEBUG] Re-found SQL controls after adding tab: {'cbDatabase': False, 'listSnippets': False, 'pteSQL': True, 'sqlTable': True, 'btnRunQuery': True, 'btnSaveSnippet': True, 'btnDeleteSnippet': True}
-2025-11-04 05:05:33,217 [DEBUG] uiMain initialized with header context menu, Config.rawData: False
-2025-11-04 05:05:33,217 [DEBUG] Loading UI file: C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\winQuery.ui
-2025-11-04 05:05:33,236 [DEBUG] initializeQueryWindow: Setting initial state
-2025-11-04 05:05:33,237 [DEBUG] initializeQueryWindow: Set default dates and radio button
-2025-11-04 05:05:33,243 [DEBUG] uiQuery initialized
-2025-11-04 05:05:33,250 [DEBUG] uiDataDictionary initialized with btnDeleteRow
-2025-11-04 05:05:33,254 [DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName
-2025-11-04 05:05:33,263 [DEBUG] uiOptions initialized
-2025-11-04 05:05:33,292 [WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
-2025-11-04 05:05:33,306 [DEBUG] No config.ini found or user.config exists, skipping conversion
-2025-11-04 05:05:33,307 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP'}
-2025-11-04 05:05:33,309 [DEBUG] utcOffset loaded as: UTC-07:00 | Mountain Time (US & Canada)/Arizona
-2025-11-04 05:05:33,309 [DEBUG] Loaded settings from user.config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC TEST', 'enableSQL': True}
-2025-11-04 05:05:33,310 [DEBUG] Applied retro font at startup
-2025-11-04 05:05:33,314 [DEBUG] Applied retro scroll bar styles to mainTable
-2025-11-04 05:05:33,381 [DEBUG] Applied retro scroll bar styles globally
-2025-11-04 05:05:34,222 [DEBUG] Built DataDictionary with 29304 rows, 11 columns
-2025-11-04 05:05:34,225 [DEBUG] loadAllQuickLooks: Found user Quick Look: BIBLC TEST.json
-2025-11-04 05:05:34,225 [DEBUG] loadAllQuickLooks: Found user Quick Look: TEST.json
-2025-11-04 05:05:34,225 [DEBUG] loadAllQuickLooks: Found user Quick Look: USGS TESTING.json
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (AQUARIUS).txt
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & AQUARIUS).txt
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & USGS).txt
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added example Quick Look: MRID TEST.txt
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added example Quick Look: USGS Example.txt
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added BIBLC TEST to cbQuickLook
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added Data Check (AQUARIUS) to cbQuickLook
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & AQUARIUS) to cbQuickLook
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & USGS) to cbQuickLook
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added MRID TEST to cbQuickLook
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added TEST to cbQuickLook
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added USGS Example to cbQuickLook
-2025-11-04 05:05:34,226 [DEBUG] loadAllQuickLooks: Added USGS TESTING to cbQuickLook
-2025-11-04 05:05:41,293 [DEBUG] runCustomQuery: Using DSN  for query
-2025-11-04 05:05:41,294 [DEBUG] oracleConnection._setup: Checking for platform-specific files in C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client: ['oci.dll']
-2025-11-04 05:05:41,295 [DEBUG] oracleConnection._setup: Validated Instant Client files for windows
-2025-11-04 05:05:42,996 [DEBUG] oracleConnection._setup: Initialized oracledb with clientDir C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client
-2025-11-04 05:05:42,997 [DEBUG] oracleConnection._setup: Using env TNS_ADMIN: C:\Program Files\Oracle\Network\Admin (no copy/temp)
-2025-11-04 05:05:43,497 [DEBUG] oracleConnection.connect: Error connecting to Oracle: ORA-12560: Database communication protocol error.
+2025-11-04 05:22:46,847 [DEBUG] Globals reloaded from user.config, enableSQL=True
+2025-11-04 05:22:46,848 [DEBUG] Removed tabSQL at index 1 on startup
+2025-11-04 05:22:46,848 [DEBUG] Removed tabMain at index 0 on startup
+2025-11-04 05:22:46,848 [DEBUG] Added tabSQL on startup since enabled
+2025-11-04 05:22:46,848 [DEBUG] uiMain initialized with header context menu, Config.rawData: False
+2025-11-04 05:22:46,849 [DEBUG] Loading UI file: C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\winQuery.ui
+2025-11-04 05:22:46,890 [DEBUG] initializeQueryWindow: Setting initial state
+2025-11-04 05:22:46,890 [DEBUG] initializeQueryWindow: Set default dates and radio button
+2025-11-04 05:22:46,897 [DEBUG] uiQuery initialized
+2025-11-04 05:22:46,926 [DEBUG] uiDataDictionary initialized with btnDeleteRow
+2025-11-04 05:22:46,944 [DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName
+2025-11-04 05:22:46,970 [DEBUG] uiOptions initialized
+2025-11-04 05:22:47,024 [WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
+2025-11-04 05:22:47,049 [DEBUG] No config.ini found or user.config exists, skipping conversion
+2025-11-04 05:22:47,050 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP'}
+2025-11-04 05:22:47,051 [DEBUG] utcOffset loaded as: UTC-07:00 | Mountain Time (US & Canada)/Arizona
+2025-11-04 05:22:47,052 [DEBUG] Loaded settings from user.config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'BIBLC TEST', 'enableSQL': True}
+2025-11-04 05:22:47,053 [DEBUG] Applied retro font at startup
+2025-11-04 05:22:47,055 [DEBUG] Applied retro scroll bar styles to mainTable
+2025-11-04 05:22:47,111 [DEBUG] Applied retro scroll bar styles globally
+2025-11-04 05:22:47,987 [DEBUG] Built DataDictionary with 29304 rows, 11 columns
+2025-11-04 05:22:47,990 [DEBUG] loadAllQuickLooks: Found user Quick Look: BIBLC TEST.json
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Found user Quick Look: TEST.json
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Found user Quick Look: USGS TESTING.json
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (AQUARIUS).txt
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & AQUARIUS).txt
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & USGS).txt
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added example Quick Look: MRID TEST.txt
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added example Quick Look: USGS Example.txt
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added BIBLC TEST to cbQuickLook
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added Data Check (AQUARIUS) to cbQuickLook
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & AQUARIUS) to cbQuickLook
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & USGS) to cbQuickLook
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added MRID TEST to cbQuickLook
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added TEST to cbQuickLook
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added USGS Example to cbQuickLook
+2025-11-04 05:22:47,991 [DEBUG] loadAllQuickLooks: Added USGS TESTING to cbQuickLook
+2025-11-04 05:22:55,913 [DEBUG] runCustomQuery: Using DSN  for query
+2025-11-04 05:22:55,913 [DEBUG] oracleConnection._setup: Checking for platform-specific files in C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client: ['oci.dll']
+2025-11-04 05:22:55,913 [DEBUG] oracleConnection._setup: Validated Instant Client files for windows
+2025-11-04 05:22:57,663 [DEBUG] oracleConnection._setup: Initialized oracledb with clientDir C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client
+2025-11-04 05:22:57,679 [DEBUG] oracleConnection._setup: Copied program's sqlnet.ora to temp C:\Users\RODNEY~1\AppData\Local\Temp\1\tmpfx_1eh8t
+2025-11-04 05:22:57,703 [DEBUG] oracleConnection._setup: Copied user's tnsnames.ora from C:\Program Files\Oracle\Network\Admin to temp C:\Users\RODNEY~1\AppData\Local\Temp\1\tmpfx_1eh8t
+2025-11-04 05:22:57,703 [DEBUG] oracleConnection._setup: Set TNS_ADMIN to temp C:\Users\RODNEY~1\AppData\Local\Temp\1\tmpfx_1eh8t
+2025-11-04 05:22:58,239 [DEBUG] oracleConnection.connect: Error connecting to Oracle: ORA-12560: Database communication protocol error.
 Help: https://docs.oracle.com/error-help/db/ora-12560/
-2025-11-04 05:05:45,054 [ERROR] runCustomQuery: Failed to execute: ORA-12560: Database communication protocol error.
-Help: https://docs.oracle.com/error-help/db/ora-12560/
-2025-11-04 05:05:45,055 [DEBUG] runCustomQuery: Using DSN  for query
-2025-11-04 05:05:45,055 [DEBUG] oracleConnection._setup: Checking for platform-specific files in C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client: ['oci.dll']
-2025-11-04 05:05:45,055 [DEBUG] oracleConnection._setup: Validated Instant Client files for windows
-2025-11-04 05:05:45,055 [DEBUG] oracleConnection._setup: Initialized oracledb with clientDir C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client
-2025-11-04 05:05:45,055 [DEBUG] oracleConnection._setup: Using env TNS_ADMIN: C:\Program Files\Oracle\Network\Admin (no copy/temp)
-2025-11-04 05:05:45,086 [DEBUG] oracleConnection.connect: Error connecting to Oracle: ORA-12560: Database communication protocol error.
-Help: https://docs.oracle.com/error-help/db/ora-12560/
-2025-11-04 05:05:46,294 [ERROR] runCustomQuery: Failed to execute: ORA-12560: Database communication protocol error.
+2025-11-04 05:22:59,580 [ERROR] runCustomQuery: Failed to execute: ORA-12560: Database communication protocol error.
 Help: https://docs.oracle.com/error-help/db/ora-12560/
