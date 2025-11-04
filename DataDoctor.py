@@ -266,54 +266,54 @@ class uiMain(QMainWindow):
                 if Config.debug:
                     Logic.logMessage("WARN", f"deleteSnippet: File not found: {filePath}")
 
-        def runCustomQuery(self):
-            """Run custom SQL from pteSQL and display in sqlTable."""
-            if not self.pteSQL or not self.sqlTable:
-                if Config.debug:
-                    Logic.logMessage("WARN", "pteSQL or sqlTable not found, skipping runCustomQuery")
-                return
-            sqlText = self.pteSQL.toPlainText().strip()
-            if not sqlText:
-                QMessageBox.warning(self, "Run Query", "No SQL query to run.")
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "runCustomQuery: No SQL text to run")
-                return
-
-            db = self.cbDatabase.currentText()
-            dsn = db.split('-')[1].lower() if '-' in db else db.lower()  # e.g., 'USBR-LCHDB' -> 'lchdb'
+    def runCustomQuery(self):
+        """Run custom SQL from pteSQL and display in sqlTable."""
+        if not self.pteSQL or not self.sqlTable:
             if Config.debug:
-                Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query")
+                Logic.logMessage("WARN", "pteSQL or sqlTable not found, skipping runCustomQuery")
+            return
+        sqlText = self.pteSQL.toPlainText().strip()
+        if not sqlText:
+            QMessageBox.warning(self, "Run Query", "No SQL query to run.")
+            if Config.debug:
+                Logic.logMessage("DEBUG", "runCustomQuery: No SQL text to run")
+            return
 
-            try:
-                conn = oracleConnection(dsn)
-                conn.connect()
-                results = conn.executeCustomQuery(sqlText)
-                conn.close()
+        db = self.cbDatabase.currentText()
+        dsn = db.split('-')[1].lower() if '-' in db else db.lower()  # e.g., 'USBR-LCHDB' -> 'lchdb'
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query")
 
-                if not results:
-                    QMessageBox.information(self, "Query Result", "No results returned.")
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", "runCustomQuery: No results from query")
-                    return
+        try:
+            conn = oracleConnection(dsn)
+            conn.connect()
+            results = conn.executeCustomQuery(sqlText)
+            conn.close()
 
-                # Build sqlTable from results (list of dicts)
-                columns = list(results[0].keys()) if results else []
-                self.sqlTable.setColumnCount(len(columns))
-                self.sqlTable.setHorizontalHeaderLabels(columns)
-                self.sqlTable.setRowCount(len(results))
-
-                for row, res in enumerate(results):
-                    for col, key in enumerate(columns):
-                        item = QTableWidgetItem(str(res.get(key, '')))
-                        self.sqlTable.setItem(row, col, item)
-
-                self.sqlTable.resizeColumnsToContents()
+            if not results:
+                QMessageBox.information(self, "Query Result", "No results returned.")
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"runCustomQuery: Populated sqlTable with {len(results)} rows, {len(columns)} columns")
-            except Exception as e:
-                QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
-                if Config.debug:
-                    Logic.logMessage("ERROR", f"runCustomQuery: Failed to execute: {e}")
+                    Logic.logMessage("DEBUG", "runCustomQuery: No results from query")
+                return
+
+            # Build sqlTable from results (list of dicts)
+            columns = list(results[0].keys()) if results else []
+            self.sqlTable.setColumnCount(len(columns))
+            self.sqlTable.setHorizontalHeaderLabels(columns)
+            self.sqlTable.setRowCount(len(results))
+
+            for row, res in enumerate(results):
+                for col, key in enumerate(columns):
+                    item = QTableWidgetItem(str(res.get(key, '')))
+                    self.sqlTable.setItem(row, col, item)
+
+            self.sqlTable.resizeColumnsToContents()
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"runCustomQuery: Populated sqlTable with {len(results)} rows, {len(columns)} columns")
+        except Exception as e:
+            QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
+            if Config.debug:
+                Logic.logMessage("ERROR", f"runCustomQuery: Failed to execute: {e}")
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
