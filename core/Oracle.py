@@ -189,66 +189,7 @@ class oracleConnection:
             raise
         finally:
             cursor.close()
-            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Cursor closed")
-
-    def executeCustomQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> Any:
-        if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
-
-        # Detect bind variables (e.g., :1, :name)
-        hasBindVars = bool(re.search(r':\d+|:[\w]+', query))
-
-        if not params and hasBindVars:
-            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
-            raise ValueError("Bind variables found in query but params not provided. Use parameterized input to prevent SQL injection.")
-
-        if params and not isinstance(params, (list, tuple)):
-            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Invalid params type, risking SQL injection")
-            raise ValueError("Params must be a list or tuple to prevent SQL injection")
-
-        if params and not hasBindVars:
-            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Params provided but no bind variables in query")
-            raise ValueError("Query has no bind variables but params were provided")
-
-        cursor = self.connection.cursor()
-        cursor.arraysize = 1000
-        cursor.prefetchrows = 2000
-        startTime = time.time()
-
-        try:
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
-
-            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Executed query: {query[:100]} with params {params}")
-            isSelect = cursor.description is not None
-            executionTime = time.time() - startTime
-            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds")
-
-            if isSelect:
-                if fetchAll:
-                    results = cursor.fetchall()
-                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Fetched {len(results)} rows")
-                else:
-                    results = cursor.fetchone()
-                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Fetched single row: {results}")
-                if cursor.description:
-                    columns = [desc[0] for desc in cursor.description]
-                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Found columns: {columns}")
-                    formattedResults = [dict(zip(columns, row)) for row in (results if isinstance(results, list) else [results] if results else [])]
-                    return formattedResults
-
-                return results if isinstance(results, list) else [results] if results else []
-            else:
-                rowCount = cursor.rowcount
-                if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Affected {rowCount} rows")
-                return rowCount
-        except oracledb.Error as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Oracle error: {e}")
-            raise
-        finally:
-            cursor.close()
-            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Cursor closed")            
+            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Cursor closed")         
 
     def callStoredProcedure(self, procedureName: str, params: Optional[List[Any]] = None) -> List[Any]:
         """Call an Oracle stored procedure and return output values."""

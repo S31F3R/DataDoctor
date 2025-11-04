@@ -6,7 +6,7 @@ import csv
 import json
 from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, 
-                             QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox)
+                             QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPalette
 from PyQt6 import uic
@@ -17,6 +17,7 @@ from ui.uiOptions import uiOptions
 from ui.uiQuery import uiQuery
 from ui.uiQuickLook import uiQuickLook
 from ui.uiDetails import uiDetails
+from core.Oracle import oracleConnection
 
 class uiMain(QMainWindow):
     def __init__(self):
@@ -45,6 +46,9 @@ class uiMain(QMainWindow):
         self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
         self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
         self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
+        self.pteSQL = self.findChild(QPlainTextEdit, 'pteSQL')
+        self.listSnippets = self.findChild(QListWidget, 'listSnippets')
+        self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
 
         # Set button style
         for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
@@ -62,7 +66,12 @@ class uiMain(QMainWindow):
             centralLayout.setColumnStretch(0, 1)
 
         # Populate combobox item (Currently only USBR will work)
-        self.cbDatabase.addItem('USBR')
+        self.cbDatabase.addItem('USBR-LCHDB')
+        self.cbDatabase.addItem('USBR-YAOHDB')
+        self.cbDatabase.addItem('USBR-UCHDB2')
+        self.cbDatabase.addItem('USBR-ECOHDB')
+        self.cbDatabase.addItem('USBR-LBOHDB')
+        self.cbDatabase.addItem('USBR-KBOHDB')
 
         # Create events
         self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)
@@ -79,6 +88,14 @@ class uiMain(QMainWindow):
         self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
+
+        # SQL tab events
+        if self.btnRunQuery:
+            self.btnRunQuery.clicked.connect(self.runCustomQuery)
+        if self.btnSaveSnippet:
+            self.btnSaveSnippet.clicked.connect(self.saveSnippet)
+        if self.listSnippets:
+            self.listSnippets.doubleClicked.connect(self.loadSnippet)
 
         # Ensure tab widget expands
         self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -125,7 +142,7 @@ class uiMain(QMainWindow):
                     Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
 
             # Store titles after removal (in case .ui changes)
-            self.dataQueryTitle = "Data Query"  # Hardcode if not found; or from .ui if needed
+            self.dataQueryTitle = "Data Query" # Hardcode if not found; or from .ui if needed
             self.sqlTitle = "SQL Query Builder"
 
             # Add back SQL tab if enabled
@@ -134,8 +151,111 @@ class uiMain(QMainWindow):
                 if Config.debug:
                     Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")
 
+            # Load snippets if SQL enabled
+            if Config.enableSQL:
+                self.loadSnippets()
+
         if Config.debug:
             Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
+
+    def loadSnippets(self):
+        """Load SQL snippets from quickLook/sql into listSnippets."""
+        sqlDir = os.path.join(Utils.getQuickLookDir(), 'sql')
+        if not os.path.exists(sqlDir):
+            os.makedirs(sqlDir)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Created SQL snippets directory: {sqlDir}")
+
+        self.listSnippets.clear()
+        for file in sorted(os.listdir(sqlDir)):
+            if file.endswith(".sql"):
+                self.listSnippets.addItem(file[:-4]) # Add name without .sql
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Loaded {self.listSnippets.count()} SQL snippets")
+
+    def saveSnippet(self):
+        """Save current pteSQL content as .sql snippet."""
+        sqlText = self.pteSQL.toPlainText().strip()
+        if not sqlText:
+            QMessageBox.warning(self, "Save Snippet", "No SQL query to save.")
+            if Config.debug:
+                Logic.logMessage("DEBUG", "saveSnippet: No SQL text to save")
+            return
+
+        name, ok = QInputDialog.getText(self, "Save Snippet", "Snippet name:")
+        if ok and name:
+            sqlDir = os.path.join(Utils.getQuickLookDir(), 'sql')
+            filePath = os.path.join(sqlDir, f"{name}.sql")
+            with open(filePath, 'w', encoding='utf-8') as f:
+                f.write(sqlText)
+            self.listSnippets.addItem(name)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"saveSnippet: Saved snippet {name} to {filePath}")
+
+    def loadSnippet(self, index):
+        """Load selected snippet into pteSQL on double-click."""
+        item = self.listSnippets.itemFromIndex(index)
+        if item:
+            name = item.text()
+            sqlDir = os.path.join(Utils.getQuickLookDir(), 'sql')
+            filePath = os.path.join(sqlDir, f"{name}.sql")
+
+            if os.path.exists(filePath):
+                with open(filePath, 'r', encoding='utf-8') as f:
+                    sqlText = f.read()
+                self.pteSQL.setPlainText(sqlText)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"loadSnippet: Loaded {name} into pteSQL")
+            else:
+                if Config.debug:
+                    Logic.logMessage("WARN", f"loadSnippet: Snippet file not found: {filePath}")
+
+    def runCustomQuery(self):
+        """Run custom SQL from pteSQL and display in sqlTable."""
+        sqlText = self.pteSQL.toPlainText().strip()
+
+        if not sqlText:
+            QMessageBox.warning(self, "Run Query", "No SQL query to run.")
+            if Config.debug:
+                Logic.logMessage("DEBUG", "runCustomQuery: No SQL text to run")
+            return
+
+        db = self.cbDatabase.currentText()
+        dsn = db.replace('USBR-', '').lower() # e.g., 'lchdb'
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query")
+
+        try:
+            conn = oracleConnection(dsn)
+            conn.connect()
+            results = conn.executeCustomQuery(sqlText)
+            conn.close()
+
+            if not results:
+                QMessageBox.information(self, "Query Result", "No results returned.")
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "runCustomQuery: No results from query")
+                return
+
+            # Build sqlTable from results (list of dicts)
+            columns = list(results[0].keys()) if results else []
+            self.sqlTable.setColumnCount(len(columns))
+            self.sqlTable.setHorizontalHeaderLabels(columns)
+            self.sqlTable.setRowCount(len(results))
+
+            for row, res in enumerate(results):
+                for col, key in enumerate(columns):
+                    item = QTableWidgetItem(str(res.get(key, '')))
+                    self.sqlTable.setItem(row, col, item)
+
+            self.sqlTable.resizeColumnsToContents()
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"runCustomQuery: Populated sqlTable with {len(results)} rows, {len(columns)} columns")
+        except Exception as e:
+            QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
+            if Config.debug:
+                Logic.logMessage("ERROR", f"runCustomQuery: Failed to execute: {e}")
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
