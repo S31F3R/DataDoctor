@@ -138,11 +138,17 @@ class uiMain(QMainWindow):
 
             # Top controls layout (horizontal, packed on left)
             topLayout = QHBoxLayout()
+            topLayout.setSpacing(0)
             topLayout.addWidget(self.btnRunQuery)
+            topLayout.addSpacing(20)
             topLayout.addWidget(self.btnSaveSnippet)
+            topLayout.addSpacing(20)
             topLayout.addWidget(self.btnDeleteSnippet)
+            topLayout.addSpacing(20)
             topLayout.addWidget(self.lblDatabase)
+            topLayout.addSpacing(5)
             topLayout.addWidget(self.cbDatabase)
+            topLayout.addStretch()
 
             # Vertical splitter for pteSQL (top) and sqlTable (bottom)
             sqlSplitter = QSplitter(Qt.Orientation.Vertical, sqlTab)
