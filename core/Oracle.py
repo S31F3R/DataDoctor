@@ -10,7 +10,7 @@ import time
 import re
 from pathlib import Path
 from typing import List, Any, Optional
-from core import Logic, Config
+from core import Logic, Config, Utils
 
 class oracleConnection:
     def __init__(self, dsn: str):
@@ -53,7 +53,7 @@ class oracleConnection:
         if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
 
         # Setup TNS_ADMIN 
-        config = Logic.loadConfig()
+        config = Utils.loadConfig()
         tnsAdmin = config.get('tnsNamesLocation')
         if not tnsAdmin: tnsAdmin = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin'))
         if tnsAdmin.startswith('%AppRoot%'): tnsAdmin = tnsAdmin.replace('%AppRoot%', Logic.appRoot)
