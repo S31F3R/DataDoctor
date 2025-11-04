@@ -134,50 +134,45 @@ class uiMain(QMainWindow):
 
         # Set up splitters and layout for tabSQL to enable resizing
         if Config.enableSQL and sqlTab:
-            # Top bar for cbDatabase and btnRunQuery
-            topBar = QHBoxLayout()
-            topBar.addWidget(self.cbDatabase)
-            topBar.addStretch()
-            topBar.addWidget(self.btnRunQuery)
+            self.lblDatabase = self.findChild(QLabel, 'lblDatabase')
 
-            # Snippets area with buttons above listSnippets
-            snippetsWidget = QWidget(sqlTab)
-            snippetsLayout = QVBoxLayout(snippetsWidget)
-            snippetsLayout.setContentsMargins(0, 0, 0, 0)
-            snippetsButtons = QHBoxLayout()
-            snippetsButtons.addWidget(self.btnSaveSnippet)
-            snippetsButtons.addWidget(self.btnDeleteSnippet)
-            snippetsLayout.addLayout(snippetsButtons)
-            snippetsLayout.addWidget(self.listSnippets)
+            # Top controls layout (horizontal, packed on left)
+            topLayout = QHBoxLayout()
+            topLayout.addWidget(self.btnRunQuery)
+            topLayout.addWidget(self.btnSaveSnippet)
+            topLayout.addWidget(self.btnDeleteSnippet)
+            topLayout.addWidget(self.lblDatabase)
+            topLayout.addWidget(self.cbDatabase)
 
             # Vertical splitter for pteSQL (top) and sqlTable (bottom)
             sqlSplitter = QSplitter(Qt.Orientation.Vertical, sqlTab)
             sqlSplitter.addWidget(self.pteSQL)
             sqlSplitter.addWidget(self.sqlTable)
-            # Preserve approximate initial heights from .ui if available, or set defaults
-            pteHeight = self.pteSQL.height() if self.pteSQL.height() > 0 else 150
-            tableHeight = self.sqlTable.height() if self.sqlTable.height() > 0 else 400
-            sqlSplitter.setSizes([pteHeight, tableHeight])
+            # Set initial sizes based on .ui
+            sqlSplitter.setSizes([231, 291])
 
-            # Horizontal splitter for sql area (left) and snippets (right)
+            # Left widget: top layout + sqlSplitter
+            leftWidget = QWidget(sqlTab)
+            leftLayout = QVBoxLayout(leftWidget)
+            leftLayout.setContentsMargins(0, 0, 0, 0)
+            leftLayout.addLayout(topLayout)
+            leftLayout.addWidget(sqlSplitter)
+
+            # Horizontal splitter for left (editor/table) and right (snippets)
             mainSplitter = QSplitter(Qt.Orientation.Horizontal, sqlTab)
-            mainSplitter.addWidget(sqlSplitter)
-            mainSplitter.addWidget(snippetsWidget)
-            # Preserve approximate initial widths from .ui if available, or set defaults
-            sqlWidth = self.pteSQL.width() if self.pteSQL.width() > 0 else 800
-            snippetsWidth = self.listSnippets.width() if self.listSnippets.width() > 0 else 200
-            mainSplitter.setSizes([sqlWidth, snippetsWidth])
+            mainSplitter.addWidget(leftWidget)
+            mainSplitter.addWidget(self.listSnippets)
+            # Set initial sizes based on .ui
+            mainSplitter.setSizes([1281, 256])
 
             # Main layout for tabSQL
             if sqlTab.layout():
-                # If .ui already has a layout, replace it (rare, but for safety)
                 oldLayout = sqlTab.layout()
                 while oldLayout.count():
                     item = oldLayout.takeAt(0)
                     if item.widget():
                         item.widget().deleteLater()
             mainLayout = QVBoxLayout(sqlTab)
-            mainLayout.addLayout(topBar)
             mainLayout.addWidget(mainSplitter)
             mainLayout.setContentsMargins(0, 0, 0, 0)
 
