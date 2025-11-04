@@ -18,6 +18,7 @@ class uiDetails(QWidget):
         
         # Set window flags to stay on top of parent
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowMaximizeButtonHint)  
         
         # Set icon
         self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/Info.png')))

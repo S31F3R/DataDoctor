@@ -162,13 +162,13 @@ class uiMain(QMainWindow):
             topLayout = QHBoxLayout()
             topLayout.setSpacing(0)
             topLayout.addWidget(self.btnRunQuery)
-            topLayout.addSpacing(20)
+            topLayout.addSpacing(10)
             topLayout.addWidget(self.btnSaveSnippet)
-            topLayout.addSpacing(20)
+            topLayout.addSpacing(10)
             topLayout.addWidget(self.btnDeleteSnippet)
             topLayout.addSpacing(20)
             topLayout.addWidget(self.lblDatabase)
-            topLayout.addSpacing(5)
+            topLayout.addSpacing(0)
 
             # Wrap cbDatabase with spacing above to push it down
             comboWidget = QWidget(sqlTab)
@@ -178,12 +178,15 @@ class uiMain(QMainWindow):
             comboLayout.addSpacing(4)
             comboLayout.addWidget(self.cbDatabase)
             topLayout.addWidget(comboWidget)
+
             topLayout.addStretch()
 
             # Vertical splitter for pteSQL (top) and sqlTable (bottom)
             sqlSplitter = QSplitter(Qt.Orientation.Vertical, sqlTab)
+            sqlSplitter.setObjectName('sqlSplitter')
             sqlSplitter.addWidget(self.pteSQL)
             sqlSplitter.addWidget(self.sqlTable)
+            self.sqlTable.horizontalHeader().setStretchLastSection(False)
 
             # Set initial sizes based on .ui
             sqlSplitter.setSizes([231, 291])
@@ -197,6 +200,7 @@ class uiMain(QMainWindow):
 
             # Horizontal splitter for left (editor/table) and right (snippets)
             mainSplitter = QSplitter(Qt.Orientation.Horizontal, sqlTab)
+            mainSplitter.setObjectName('mainSplitter')
             mainSplitter.addWidget(leftWidget)
             mainSplitter.addWidget(self.listSnippets)
 
@@ -206,16 +210,51 @@ class uiMain(QMainWindow):
             # Main layout for tabSQL
             if sqlTab.layout():
                 oldLayout = sqlTab.layout()
+
                 while oldLayout.count():
                     item = oldLayout.takeAt(0)
+                    
                     if item.widget():
                         item.widget().deleteLater()
             mainLayout = QVBoxLayout(sqlTab)
             mainLayout.addWidget(mainSplitter)
             mainLayout.setContentsMargins(0, 0, 0, 0)
 
+            # Load saved splitter sizes from config
+            config = Utils.loadConfig()
+
+            if 'sqlVerticalSizes' in config:
+                sqlSplitter.setSizes(config['sqlVerticalSizes'])
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Restored sqlVerticalSizes: {config['sqlVerticalSizes']}")
+            if 'sqlHorizontalSizes' in config:
+                mainSplitter.setSizes(config['sqlHorizontalSizes'])
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Restored sqlHorizontalSizes: {config['sqlHorizontalSizes']}")
+
             if Config.debug:
                 Logic.logMessage("DEBUG", "Set up splitters and layout for tabSQL to handle resizing")
+
+    def closeEvent(self, event):
+        """Override closeEvent to save splitter sizes if SQL tab is enabled and present."""
+        sqlTab = self.findChild(QWidget, 'tabSQL')
+
+        if Config.enableSQL and sqlTab and self.tabWidget.indexOf(sqlTab) != -1:
+            config = Utils.loadConfig()
+            config['sqlVerticalSizes'] = self.findChild(QSplitter, 'sqlSplitter').sizes()
+            config['sqlHorizontalSizes'] = self.findChild(QSplitter, 'mainSplitter').sizes()
+
+            try:
+                with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
+                    json.dump(config, configFile, indent=2)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Saved splitter sizes to config: vertical={config['sqlVerticalSizes']}, horizontal={config['sqlHorizontalSizes']}")
+            except Exception as e:
+                if Config.debug:
+                    Logic.logMessage("ERROR", f"Failed to save splitter sizes: {e}")
+        super().closeEvent(event)
 
     def loadSnippets(self):
         """Load SQL snippets from quickLook/sql into listSnippets."""
@@ -243,6 +282,7 @@ class uiMain(QMainWindow):
 
         if not sqlText:
             QMessageBox.warning(self, "Save Snippet", "No SQL query to save.")
+
             if Config.debug:
                 Logic.logMessage("DEBUG", "saveSnippet: No SQL text to save")
             return
@@ -270,10 +310,12 @@ class uiMain(QMainWindow):
             name = item.text()
             sqlDir = Utils.getSqlSnippetDir()
             filePath = os.path.join(sqlDir, f"{name}.sql")
+
             if os.path.exists(filePath):
                 with open(filePath, 'r', encoding='utf-8') as f:
                     sqlText = f.read()
                 self.pteSQL.setPlainText(sqlText)
+
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"loadSnippet: Loaded {name} into pteSQL")
             else:
@@ -287,6 +329,7 @@ class uiMain(QMainWindow):
                 Logic.logMessage("WARN", "listSnippets not found, skipping deleteSnippet")
             return
         selected = self.listSnippets.currentItem()
+
         if not selected:
             QMessageBox.warning(self, "Delete Snippet", "No snippet selected.")
             if Config.debug:
@@ -295,12 +338,15 @@ class uiMain(QMainWindow):
 
         name = selected.text()
         reply = QMessageBox.question(self, "Delete Snippet", f"Delete '{name}'?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+
         if reply == QMessageBox.StandardButton.Yes:
             sqlDir = Utils.getSqlSnippetDir()
             filePath = os.path.join(sqlDir, f"{name}.sql")
+
             if os.path.exists(filePath):
                 os.remove(filePath)
                 self.listSnippets.takeItem(self.listSnippets.row(selected))
+
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"deleteSnippet: Deleted {name} from {filePath} and removed from list")
             else:
@@ -314,6 +360,7 @@ class uiMain(QMainWindow):
                 Logic.logMessage("WARN", "pteSQL or sqlTable not found, skipping runCustomQuery")
             return
         sqlText = self.pteSQL.toPlainText().strip()
+
         if not sqlText:
             QMessageBox.warning(self, "Run Query", "No SQL query to run.")
             if Config.debug:
@@ -343,13 +390,14 @@ class uiMain(QMainWindow):
             self.sqlTable.setColumnCount(len(columns))
             self.sqlTable.setHorizontalHeaderLabels(columns)
             self.sqlTable.setRowCount(len(results))
+            self.sqlTable.horizontalHeader().setStretchLastSection(False)
 
             for row, res in enumerate(results):
                 for col, key in enumerate(columns):
                     item = QTableWidgetItem(str(res.get(key, '')))
                     self.sqlTable.setItem(row, col, item)
-
             self.sqlTable.resizeColumnsToContents()
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"runCustomQuery: Populated sqlTable with {len(results)} rows, {len(columns)} columns")
         except Exception as e:
@@ -360,6 +408,7 @@ class uiMain(QMainWindow):
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
         normalizedResponses = {}
+
         for k, v in responses.items():
             key = str(k).strip()
             if isinstance(v, dict) and 'label' in v:
