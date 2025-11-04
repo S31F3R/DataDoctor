@@ -12,6 +12,20 @@ from pathlib import Path
 from typing import List, Any, Optional
 from core import Logic, Config, Utils
 
+# Oracle.py
+
+import oracledb
+import platform
+import os
+import tempfile
+import shutil
+import keyring
+import time
+import re
+from pathlib import Path
+from typing import List, Any, Optional
+from core import Logic, Config, Utils
+
 class oracleConnection:
     def __init__(self, dsn: str):
         self.dsn = dsn
@@ -53,54 +67,14 @@ class oracleConnection:
         if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
 
         # Setup TNS_ADMIN 
-        config = Utils.loadConfig()
-        tnsAdmin = config.get('tnsNamesLocation')
-        if not tnsAdmin: tnsAdmin = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin'))
-        if tnsAdmin.startswith('%AppRoot%'): tnsAdmin = tnsAdmin.replace('%AppRoot%', Logic.appRoot)
-        srcAdminDir = Path(tnsAdmin)
-
-        if not srcAdminDir.exists():
-            srcAdminDir = Path(Logic.resourcePath('oracle/network/admin'))
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: tnsNamesLocation {tnsAdmin} not found, falling back to {srcAdminDir}")
-
-        self.tnsDir = Path(tempfile.mkdtemp())
-        tnsPath = self.tnsDir / "tnsnames.ora"
-        sqlnetPath = self.tnsDir / "sqlnet.ora"
-
-        if (srcAdminDir / "tnsnames.ora").exists():
-            shutil.copy(srcAdminDir / "tnsnames.ora", tnsPath)
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Copied tnsnames.ora to {tnsPath}")
+        envTns = os.environ.get('TNS_ADMIN')
+        if envTns:
+            os.environ['TNS_ADMIN'] = envTns
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Using env TNS_ADMIN: {envTns} (no copy/temp)")
         else:
-            tnsPath.write_text("")
-            if Config.debug: Logic.logMessage("DEBUG", "oracleConnection._setup: Created empty tnsnames.ora")
-        if (srcAdminDir / "sqlnet.ora").exists():
-            sqlnetContent = (srcAdminDir / "sqlnet.ora").read_text()
-            srcWalletDir = srcAdminDir / "wallet"
-
-            if srcWalletDir.exists():
-                walletDir = self.tnsDir / "wallet"
-                shutil.copytree(srcWalletDir, walletDir)
-
-                if "(METHOD_DATA = (DIRECTORY = " not in sqlnetContent:
-                    sqlnetContent = sqlnetContent.replace(
-                        "(METHOD = MCS)",
-                        f"(METHOD = MCS)(METHOD_DATA = (DIRECTORY = {walletDir}))"
-                    )
-                else:
-                    sqlnetContent = sqlnetContent.replace(
-                        r"(METHOD_DATA = \(DIRECTORY = [^)]+\))",
-                        f"(METHOD_DATA = (DIRECTORY = {walletDir}))"
-                    )
-
-                if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Updated sqlnet.ora WALLET_LOCATION to {walletDir}")
-
-            sqlnetPath.write_text(sqlnetContent)
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Copied/updated sqlnet.ora to {sqlnetPath}")
-        else:
-            raise FileNotFoundError("sqlnet.ora not found for PIV/MCS configuration.")
-        
-        os.environ['TNS_ADMIN'] = str(self.tnsDir)
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Set TNS_ADMIN to {self.tnsDir}")
+            resourceAdmin = Logic.resourcePath('oracle/network/admin')
+            os.environ['TNS_ADMIN'] = resourceAdmin
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Set TNS_ADMIN to resource path: {resourceAdmin} (no copy/temp)")
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""

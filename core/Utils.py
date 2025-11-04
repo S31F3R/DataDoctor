@@ -46,17 +46,21 @@ def loadDatabase(comboBox, queryType=None):
             Logic.logMessage("DEBUG", "Populating cbDatabase")
         comboBox.clear()
 
-        # Populate database combobox
-        if queryType == 'internal': comboBox.addItem('AQUARIUS')
+        # Populate database combobox        
         comboBox.addItem('USBR-LCHDB')
         comboBox.addItem('USBR-YAOHDB')
         comboBox.addItem('USBR-UCHDB2')
         comboBox.addItem('USBR-ECOHDB')
         comboBox.addItem('USBR-LBOHDB')
         comboBox.addItem('USBR-KBOHDB')
-        comboBox.addItem('USBR-PNHYD')
-        comboBox.addItem('USBR-GPHYD')
-        comboBox.addItem('USGS-NWIS')
+
+        if queryType == 'internal' and queryType != 'sql': 
+            comboBox.addItem('AQUARIUS')
+
+        if queryType != 'sql':
+            comboBox.addItem('USGS-NWIS')
+            comboBox.addItem('USBR-PNHYD')
+            comboBox.addItem('USBR-GPHYD')
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"Populated cbDatabase with {comboBox.count()} items")

@@ -49,11 +49,12 @@ class uiMain(QMainWindow):
         self.pteSQL = self.findChild(QPlainTextEdit, 'pteSQL')
         self.listSnippets = self.findChild(QListWidget, 'listSnippets')
         self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
+        self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')
 
         # Set button style
         for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
                     self.btnOptions, self.btnInfo, self.btnInternalQuery, self.btnUndo, 
-                    self.btnRefresh, self.btnRunQuery, self.btnSaveSnippet]:
+                    self.btnRefresh, self.btnRunQuery, self.btnSaveSnippet, self.btnDeleteSnippet]:
             if btn:
                 Utils.buttonStyle(btn)
 
@@ -64,9 +65,6 @@ class uiMain(QMainWindow):
             centralLayout.setRowStretch(0, 0)
             centralLayout.setRowStretch(1, 1)
             centralLayout.setColumnStretch(0, 1)
-
-        # Populate combobox item (Currently only USBR will work)
-        self.cbDatabase.addItem('USBR')
 
         # Create events
         self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)
@@ -91,6 +89,8 @@ class uiMain(QMainWindow):
             self.btnSaveSnippet.clicked.connect(self.saveSnippet)
         if self.listSnippets:
             self.listSnippets.doubleClicked.connect(self.loadSnippet)
+        if self.btnDeleteSnippet:
+            self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
 
         # Ensure tab widget expands
         self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -150,6 +150,10 @@ class uiMain(QMainWindow):
             if Config.enableSQL and self.listSnippets:
                 self.loadSnippets()
 
+            # Populate cbDatabase for SQL tab if enabled and control found
+            if Config.enableSQL and self.cbDatabase:
+                Utils.loadDatabase(self.cbDatabase, 'sql')
+
         if Config.debug:
             Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
 
@@ -186,10 +190,9 @@ class uiMain(QMainWindow):
             filePath = os.path.join(sqlDir, f"{name}.sql")
             with open(filePath, 'w', encoding='utf-8') as f:
                 f.write(sqlText)
-            if self.listSnippets:
-                self.listSnippets.addItem(name)
+            self.loadSnippets()  # Reload list to show new snippet immediately
             if Config.debug:
-                Logic.logMessage("DEBUG", f"saveSnippet: Saved snippet {name} to {filePath}")
+                Logic.logMessage("DEBUG", f"saveSnippet: Saved snippet {name} to {filePath} and reloaded list")
 
     def loadSnippet(self, index):
         """Load selected snippet into pteSQL on double-click."""
@@ -211,6 +214,33 @@ class uiMain(QMainWindow):
             else:
                 if Config.debug:
                     Logic.logMessage("WARN", f"loadSnippet: Snippet file not found: {filePath}")
+
+    def deleteSnippet(self):
+        """Delete selected snippet file and remove from listSnippets."""
+        if not self.listSnippets:
+            if Config.debug:
+                Logic.logMessage("WARN", "listSnippets not found, skipping deleteSnippet")
+            return
+        selected = self.listSnippets.currentItem()
+        if not selected:
+            QMessageBox.warning(self, "Delete Snippet", "No snippet selected.")
+            if Config.debug:
+                Logic.logMessage("DEBUG", "deleteSnippet: No item selected")
+            return
+
+        name = selected.text()
+        reply = QMessageBox.question(self, "Delete Snippet", f"Delete '{name}'?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            sqlDir = Utils.getSqlSnippetDir()
+            filePath = os.path.join(sqlDir, f"{name}.sql")
+            if os.path.exists(filePath):
+                os.remove(filePath)
+                self.listSnippets.takeItem(self.listSnippets.row(selected))
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"deleteSnippet: Deleted {name} from {filePath} and removed from list")
+            else:
+                if Config.debug:
+                    Logic.logMessage("WARN", f"deleteSnippet: File not found: {filePath}")
 
     def runCustomQuery(self):
         """Run custom SQL from pteSQL and display in sqlTable."""
