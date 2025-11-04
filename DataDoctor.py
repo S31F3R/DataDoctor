@@ -5,7 +5,7 @@ import os
 import csv
 import json
 from datetime import datetime
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, 
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QTableWidgetItem,
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPalette
