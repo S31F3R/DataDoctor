@@ -185,7 +185,7 @@ def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQuery
 def loadConfig():
     convertConfigToJson()
     configPath = getConfigPath()
-    settings = {
+    defaults = {
         'lastExportPath': '',
         'debugMode': False,
         'utcOffset': 'UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London',
@@ -205,7 +205,7 @@ def loadConfig():
                 Logic.logMessage("DEBUG", f"Loaded config: {config}")
 
             # Migrate integer utcOffset and retroFont
-            utcOffset = config.get('utcOffset', settings['utcOffset'])
+            utcOffset = config.get('utcOffset', defaults['utcOffset'])
             if isinstance(utcOffset, (int, float)):
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Migrating integer utcOffset {utcOffset} to full string")
@@ -249,7 +249,7 @@ def loadConfig():
                     13: "UTC+13:00 | Samoa",
                     14: "UTC+14:00 | Kiritimati"
                 }
-                utcOffset = offsetMap.get(utcOffset, settings['utcOffset'])
+                utcOffset = offsetMap.get(utcOffset, defaults['utcOffset'])
                 config['utcOffset'] = utcOffset
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Migrated utcOffset to: {utcOffset}")
@@ -271,35 +271,23 @@ def loadConfig():
             if envTns:
                 config['tnsNamesLocation'] = envTns
 
-            # Write updated config back to file
+            # Write updated config back to file if migrations occurred
             with open(configPath, 'w', encoding='utf-8') as configFile:
                 json.dump(config, configFile, indent=2)
 
-            # Update settings in program
-            settings['lastExportPath'] = config.get('lastExportPath', settings['lastExportPath'])
-            settings['debugMode'] = config.get('debugMode', settings['debugMode'])
-            settings['utcOffset'] = utcOffset
-
             if Config.debug:
-                Logic.logMessage("DEBUG", f"utcOffset loaded as: {settings['utcOffset']}")
-            settings['periodOffset'] = config.get('hourTimestampMethod', 'EOP') == 'EOP'
-            settings['retroMode'] = config.get('retroMode', settings['retroMode'])
-            settings['qaqc'] = config.get('qaqc', settings['qaqc'])
-            settings['rawData'] = config.get('rawData', settings['rawData'])
-            settings['lastQuickLook'] = config.get('lastQuickLook', settings['lastQuickLook'])
-            settings['enableSQL'] = config.get('enableSQL', settings['enableSQL'])
+                Logic.logMessage("DEBUG", f"Loaded full config: {config}")
 
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Loaded settings from user.config: {settings}")
+            return config
         except Exception as e:
             if Config.debug:
                 Logic.logMessage("ERROR", f"Failed to load user.config: {e}")
     else:
         with open(configPath, 'w', encoding='utf-8') as configFile:
-            json.dump(settings, configFile, indent=2)
+            json.dump(defaults, configFile, indent=2)
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Created default user.config with settings: {settings}")
-    return settings
+            Logic.logMessage("DEBUG", f"Created default user.config with defaults: {defaults}")
+        return defaults
 
 def getConfigPath():
     configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
