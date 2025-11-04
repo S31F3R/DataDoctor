@@ -140,23 +140,32 @@ class uiMain(QMainWindow):
             self.dataQueryTitle = "Data Query"  # Hardcode if not found; or from .ui if needed
             self.sqlTitle = "SQL Query Builder"
 
-            # Add back SQL tab if enabled, then re-find its children
+            # Add back SQL tab if enabled, then re-find its children recursively on main window
             if Config.enableSQL and sqlTab:
                 self.tabWidget.addTab(sqlTab, self.sqlTitle)
                 if Config.debug:
                     Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")
 
-                # Re-find controls inside sqlTab after adding
-                self.cbDatabase = sqlTab.findChild(QComboBox, 'cbDatabase')
-                self.listSnippets = sqlTab.findChild(QListWidget, 'listSnippets')
-                self.pteSQL = sqlTab.findChild(QPlainTextEdit, 'pteSQL')
-                self.sqlTable = sqlTab.findChild(QTableWidget, 'sqlTable')
-                self.btnRunQuery = sqlTab.findChild(QPushButton, 'btnRunQuery')
-                self.btnSaveSnippet = sqlTab.findChild(QPushButton, 'btnSaveSnippet')
-                self.btnDeleteSnippet = sqlTab.findChild(QPushButton, 'btnDeleteSnippet')
+                # Re-find controls recursively on self (main window)
+                self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
+                self.listSnippets = self.findChild(QListWidget, 'listSnippets')
+                self.pteSQL = self.findChild(QPlainTextEdit, 'pteSQL')
+                self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
+                self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
+                self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
+                self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')
 
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"Re-found SQL controls after adding tab: cbDatabase={bool(self.cbDatabase)}, listSnippets={bool(self.listSnippets)}")
+                    found = {
+                        'cbDatabase': bool(self.cbDatabase),
+                        'listSnippets': bool(self.listSnippets),
+                        'pteSQL': bool(self.pteSQL),
+                        'sqlTable': bool(self.sqlTable),
+                        'btnRunQuery': bool(self.btnRunQuery),
+                        'btnSaveSnippet': bool(self.btnSaveSnippet),
+                        'btnDeleteSnippet': bool(self.btnDeleteSnippet)
+                    }
+                    Logic.logMessage("DEBUG", f"Re-found SQL controls after adding tab: {found}")
 
                 # Re-connect events (in case needed)
                 if self.btnRunQuery:
