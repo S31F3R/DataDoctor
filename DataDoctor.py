@@ -137,18 +137,42 @@ class uiMain(QMainWindow):
                     Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
 
             # Store titles after removal (in case .ui changes)
-            self.dataQueryTitle = "Data Query" # Hardcode if not found; or from .ui if needed
+            self.dataQueryTitle = "Data Query"  # Hardcode if not found; or from .ui if needed
             self.sqlTitle = "SQL Query Builder"
 
-            # Add back SQL tab if enabled
+            # Add back SQL tab if enabled, then re-find its children
             if Config.enableSQL and sqlTab:
                 self.tabWidget.addTab(sqlTab, self.sqlTitle)
                 if Config.debug:
                     Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")
 
-            # Load snippets if SQL enabled and controls found
-            if Config.enableSQL and self.listSnippets:
-                self.loadSnippets()
+                # Re-find controls inside sqlTab after adding
+                self.cbDatabase = sqlTab.findChild(QComboBox, 'cbDatabase')
+                self.listSnippets = sqlTab.findChild(QListWidget, 'listSnippets')
+                self.pteSQL = sqlTab.findChild(QPlainTextEdit, 'pteSQL')
+                self.sqlTable = sqlTab.findChild(QTableWidget, 'sqlTable')
+                self.btnRunQuery = sqlTab.findChild(QPushButton, 'btnRunQuery')
+                self.btnSaveSnippet = sqlTab.findChild(QPushButton, 'btnSaveSnippet')
+                self.btnDeleteSnippet = sqlTab.findChild(QPushButton, 'btnDeleteSnippet')
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Re-found SQL controls after adding tab: cbDatabase={bool(self.cbDatabase)}, listSnippets={bool(self.listSnippets)}")
+
+                # Re-connect events (in case needed)
+                if self.btnRunQuery:
+                    self.btnRunQuery.clicked.connect(self.runCustomQuery)
+                if self.btnSaveSnippet:
+                    self.btnSaveSnippet.clicked.connect(self.saveSnippet)
+                if self.listSnippets:
+                    self.listSnippets.doubleClicked.connect(self.loadSnippet)
+                if self.btnDeleteSnippet:
+                    self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
+
+                # Load/populate now that controls are found
+                if self.cbDatabase:
+                    Utils.loadDatabase(self.cbDatabase, 'sql')
+                if self.listSnippets:
+                    self.loadSnippets()
 
             # Populate cbDatabase for SQL tab if enabled and control found
             if Config.enableSQL and self.cbDatabase:
@@ -242,54 +266,54 @@ class uiMain(QMainWindow):
                 if Config.debug:
                     Logic.logMessage("WARN", f"deleteSnippet: File not found: {filePath}")
 
-    def runCustomQuery(self):
-        """Run custom SQL from pteSQL and display in sqlTable."""
-        if not self.pteSQL or not self.sqlTable:
-            if Config.debug:
-                Logic.logMessage("WARN", "pteSQL or sqlTable not found, skipping runCustomQuery")
-            return
-        sqlText = self.pteSQL.toPlainText().strip()
-        if not sqlText:
-            QMessageBox.warning(self, "Run Query", "No SQL query to run.")
-            if Config.debug:
-                Logic.logMessage("DEBUG", "runCustomQuery: No SQL text to run")
-            return
-
-        db = self.cbDatabase.currentText()
-        dsn = db.replace('USBR-', '').lower() # e.g., 'lchdb'
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query")
-
-        try:
-            conn = oracleConnection(dsn)
-            conn.connect()
-            results = conn.executeCustomQuery(sqlText)
-            conn.close()
-
-            if not results:
-                QMessageBox.information(self, "Query Result", "No results returned.")
+        def runCustomQuery(self):
+            """Run custom SQL from pteSQL and display in sqlTable."""
+            if not self.pteSQL or not self.sqlTable:
                 if Config.debug:
-                    Logic.logMessage("DEBUG", "runCustomQuery: No results from query")
+                    Logic.logMessage("WARN", "pteSQL or sqlTable not found, skipping runCustomQuery")
+                return
+            sqlText = self.pteSQL.toPlainText().strip()
+            if not sqlText:
+                QMessageBox.warning(self, "Run Query", "No SQL query to run.")
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "runCustomQuery: No SQL text to run")
                 return
 
-            # Build sqlTable from results (list of dicts)
-            columns = list(results[0].keys()) if results else []
-            self.sqlTable.setColumnCount(len(columns))
-            self.sqlTable.setHorizontalHeaderLabels(columns)
-            self.sqlTable.setRowCount(len(results))
-
-            for row, res in enumerate(results):
-                for col, key in enumerate(columns):
-                    item = QTableWidgetItem(str(res.get(key, '')))
-                    self.sqlTable.setItem(row, col, item)
-
-            self.sqlTable.resizeColumnsToContents()
+            db = self.cbDatabase.currentText()
+            dsn = db.split('-')[1].lower() if '-' in db else db.lower()  # e.g., 'USBR-LCHDB' -> 'lchdb'
             if Config.debug:
-                Logic.logMessage("DEBUG", f"runCustomQuery: Populated sqlTable with {len(results)} rows, {len(columns)} columns")
-        except Exception as e:
-            QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
-            if Config.debug:
-                Logic.logMessage("ERROR", f"runCustomQuery: Failed to execute: {e}")
+                Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query")
+
+            try:
+                conn = oracleConnection(dsn)
+                conn.connect()
+                results = conn.executeCustomQuery(sqlText)
+                conn.close()
+
+                if not results:
+                    QMessageBox.information(self, "Query Result", "No results returned.")
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "runCustomQuery: No results from query")
+                    return
+
+                # Build sqlTable from results (list of dicts)
+                columns = list(results[0].keys()) if results else []
+                self.sqlTable.setColumnCount(len(columns))
+                self.sqlTable.setHorizontalHeaderLabels(columns)
+                self.sqlTable.setRowCount(len(results))
+
+                for row, res in enumerate(results):
+                    for col, key in enumerate(columns):
+                        item = QTableWidgetItem(str(res.get(key, '')))
+                        self.sqlTable.setItem(row, col, item)
+
+                self.sqlTable.resizeColumnsToContents()
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"runCustomQuery: Populated sqlTable with {len(results)} rows, {len(columns)} columns")
+            except Exception as e:
+                QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
+                if Config.debug:
+                    Logic.logMessage("ERROR", f"runCustomQuery: Failed to execute: {e}")
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
