@@ -190,7 +190,7 @@ def loadConfig():
         'debugMode': False,
         'utcOffset': 'UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London',
         'periodOffset': True,
-        'retroMode': True,
+        'retroMode': False,
         'qaqc': True,
         'rawData': False,
         'lastQuickLook': '',
