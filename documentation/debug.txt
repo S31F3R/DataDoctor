@@ -1,193 +1,185 @@
-# Oracle.py
+class uiMain(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self)             
 
-import oracledb
-import platform
-import os
-import keyring
-import time
-import re
-from pathlib import Path
-from typing import List, Any, Optional
-from core import Logic, Config, Utils
+        # Define controls
+        self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
+        self.mainTable = self.findChild(QTableWidget, 'mainTable')
+        self.btnDataDictionary = self.findChild(QPushButton, 'btnDataDictionary')
+        self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')
+        self.btnOptions = self.findChild(QPushButton, 'btnOptions')
+        self.btnInfo = self.findChild(QPushButton, 'btnInfo')
+        self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
+        self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
+        self.btnUndo = self.findChild(QPushButton, 'btnUndo')
+        self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
+        self.tabMain = self.findChild(QWidget, 'tabMain')
+        self.lastQueryType = None
+        self.lastQueryItems = []
+        self.lastStartDate = None
+        self.lastEndDate = None
+        self.columnMetadata = []
+        self.seriesResponses = {} # Dict to store {seriesLabel: response_dict} post-query
+        self.currentQueryType = "" # str: "AQUARIUS", etc., set post-query
+        self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
+        self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
+        self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
+        self.pteSQL = self.findChild(QPlainTextEdit, 'pteSQL')
+        self.listSnippets = self.findChild(QListWidget, 'listSnippets')
+        self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
+        self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')        
 
-class oracleConnection:
-    def __init__(self, dsn: str):
-        self.dsn = dsn
-        self.connection = None
-        self._setup()
+        # Set button style
+        for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
+                    self.btnOptions, self.btnInfo, self.btnInternalQuery, self.btnUndo, 
+                    self.btnRefresh, self.btnRunQuery, self.btnSaveSnippet, self.btnDeleteSnippet]:
+            if btn:
+                Utils.buttonStyle(btn)
 
-    def _setup(self):
-        """Set up bundled Instant Client and TNS_ADMIN."""
-        system = platform.system().lower()
-        if platform.architecture()[0] != "64bit": raise RuntimeError("Only 64-bit platforms supported.")
-        clientDirPath = "oracle/client"
-        clientDir = Path(Logic.resourcePath(clientDirPath))
-        if not clientDir.exists(): raise FileNotFoundError(f"Oracle Instant Client directory not found: {clientDir}. Please download and unzip the Instant Client 23.9 for your platform into oracle/client.")
-        
-        # Validate platform-specific files
-        expectedFiles = {
-            "windows": ["oci.dll"],
-            "linux": ["libociei.so"],
-            "darwin": ["libociei.dylib"]
-        }
+        # Set up layout
+        centralLayout = self.centralWidget().layout()
 
-        requiredFiles = expectedFiles.get(system)
-        if not requiredFiles: raise RuntimeError(f"Unsupported platform: {system}")
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Checking for platform-specific files in {clientDir}: {requiredFiles}")
-        filesExist = all((clientDir / f).exists() for f in requiredFiles)
-        if not filesExist: raise FileNotFoundError(f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. Please download and unzip the correct Instant Client 23.9 for your platform into oracle/client.")
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Validated Instant Client files for {system}")
+        if isinstance(centralLayout, QGridLayout):
+            centralLayout.setContentsMargins(0, 0, 0, 0)
+            centralLayout.setRowStretch(0, 0)
+            centralLayout.setRowStretch(1, 1)
+            centralLayout.setColumnStretch(0, 1)
 
-        # Set platform-specific library path
-        if system == "windows":
-            os.environ['PATH'] = f"{clientDir};{os.environ.get('PATH', '')}"
-        elif system == "linux":
-            os.environ['LD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('LD_LIBRARY_PATH', '')}"
-        elif system == "darwin":
-            os.environ['DYLD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
+        # Create events
+        self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)
+        self.btnDataDictionary.clicked.connect(self.showDataDictionary)
+        self.btnExportCSV.clicked.connect(self.btnExportCSVPressed)
+        self.btnOptions.clicked.connect(self.btnOptionsPressed)
+        self.btnInfo.clicked.connect(self.btnInfoPressed)
+        self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
+        self.btnRefresh.clicked.connect(self.btnRefreshPressed)
+        self.btnUndo.clicked.connect(self.btnUndoPressed)
+        self.mainTable.horizontalHeader().sectionClicked.connect(lambda col: Query.customSortTable(self.mainTable, col, self.winDataDictionary.mainTable))
+        self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)
+        self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
+        self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
+        self.btnRunQuery.clicked.connect(self.runCustomQuery)
+        self.btnSaveSnippet.clicked.connect(self.saveSnippet)
+        self.listSnippets.doubleClicked.connect(self.loadSnippet)
+        self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)            
 
-        oracledb.init_oracle_client(lib_dir=str(clientDir))
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
+        # Ensure tab widget expands
+        self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Setup TNS_ADMIN: use env if exists (user's tnsnames and sqlnet if present), program's dir if not (no copy)
-        envTns = os.environ.get('TNS_ADMIN')
-        if envTns:
-            os.environ['TNS_ADMIN'] = envTns
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Using env TNS_ADMIN: {envTns} (no copy)")
+        # Set up Data Query tab
+        self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        if not self.tabMain.layout():
+            layout = QGridLayout(self.tabMain)
+            layout.addWidget(self.mainTable)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+        self.mainTable.setGeometry(0, 0, 0, 0)
+        self.mainTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        # Center window
+        Utils.centerWindowToParent(self)
+
+        # Initialize globals
+        Utils.reloadGlobals()
+
+        # Hide tabs on startup
+        sqlTab = self.findChild(QWidget, 'tabSQL')
+        sqlIndex = self.tabWidget.indexOf(sqlTab)
+
+        # Store titles after removal (in case .ui changes)
+        self.dataQueryTitle = "Data Query"
+        self.sqlTitle = "SQL Query Builder"
+
+        if sqlIndex != -1:
+            self.tabWidget.removeTab(sqlIndex)
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Removed tabSQL at index {sqlIndex} on startup")
         else:
-            resourceAdmin = Logic.resourcePath('oracle/network/admin')
-            os.environ['TNS_ADMIN'] = resourceAdmin
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Set TNS_ADMIN to program's path: {resourceAdmin} (no copy)")
+            if Config.debug:
+                Logic.logMessage("WARN", "tabSQL not found in tabWidget on startup")
+        dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
 
-    def connect(self) -> oracledb.Connection:
-        """Establish Oracle connection with PIV/MCS and user credentials."""
-        try:
-            user = keyring.get_password("DataDoctor", "oracleUser") or ''
-            password = keyring.get_password("DataDoctor", "oraclePassword") or ''
+        if dataQueryIndex != -1:
+            self.tabWidget.removeTab(dataQueryIndex)
 
-            if not user or not password:
-                if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.connect: Missing Oracle credentials")
-                raise ValueError("Oracle username or password not set in keyring")
-            
-            self.connection = oracledb.connect(user=user, password=password, dsn=self.dsn)
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Connection established to {self.dsn}")
-            user = None
-            password = None
-            return self.connection
-        except oracledb.Error as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Error connecting to Oracle: {e}")
-            user = None
-            password = None
-            raise
-        except Exception as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Unexpected error: {e}")
-            user = None
-            password = None
-            raise
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Removed tabMain at index {dataQueryIndex} on startup")
+        else:
+            if Config.debug:
+                Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
 
-    def executeCustomQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> Any:
-        if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
+        # Add back SQL tab if enabled
+        if Config.enableSQL and sqlTab:
+            self.tabWidget.addTab(sqlTab, self.sqlTitle)
 
-        # Detect bind variables (e.g., :1, :name) more precisely
-        hasBindVars = bool(re.search(r'(?<!\w):(\d+|[a-zA-Z]\w*)', query))
-        if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Query '{query[:100]}' has bind vars: {hasBindVars}")
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")  
 
-        if not params and hasBindVars:
-            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
-            raise ValueError("Bind variables found in query but params not provided. Use parameterized input to prevent SQL injection.")
+        # Add dummy items to controls. This fixes issues with Qt6 quirks
+        self.cbDatabase.addItem("")    
+        self.listSnippets.addItem("")        
 
-        if params and not isinstance(params, (list, tuple)):
-            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Invalid params type, risking SQL injection")
-            raise ValueError("Params must be a list or tuple to prevent SQL injection")
+        # Populate cbDatabase and load snippets if controls found
+        if Config.enableSQL and self.cbDatabase:
+            Utils.loadDatabase(self.cbDatabase, 'sql')
+        if Config.enableSQL and self.listSnippets:
+            self.loadSnippets()
+        if Config.debug:
+            Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
 
-        if params and not hasBindVars:
-            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Params provided but no bind variables in query")
-            raise ValueError("Query has no bind variables but params were provided")
+        # Set up splitters and layout for tabSQL to enable resizing
+        if Config.enableSQL and sqlTab:
+            # Top bar for cbDatabase and btnRunQuery
+            topBar = QHBoxLayout()
+            topBar.addWidget(self.cbDatabase)
+            topBar.addStretch()
+            topBar.addWidget(self.btnRunQuery)
 
-        cursor = self.connection.cursor()
-        cursor.arraysize = 1000
-        cursor.prefetchrows = 2000
-        startTime = time.time()
+            # Snippets area with buttons above listSnippets
+            snippetsWidget = QWidget(sqlTab)
+            snippetsLayout = QVBoxLayout(snippetsWidget)
+            snippetsLayout.setContentsMargins(0, 0, 0, 0)
+            snippetsButtons = QHBoxLayout()
+            snippetsButtons.addWidget(self.btnSaveSnippet)
+            snippetsButtons.addWidget(self.btnDeleteSnippet)
+            snippetsLayout.addLayout(snippetsButtons)
+            snippetsLayout.addWidget(self.listSnippets)
 
-        try:
-            exactQuery = query 
-            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Validating query: {exactQuery}")
+            # Vertical splitter for pteSQL (top) and sqlTable (bottom)
+            sqlSplitter = QSplitter(Qt.Orientation.Vertical, sqlTab)
+            sqlSplitter.addWidget(self.pteSQL)
+            sqlSplitter.addWidget(self.sqlTable)
+            # Preserve approximate initial heights from .ui if available, or set defaults
+            pteHeight = self.pteSQL.height() if self.pteSQL.height() > 0 else 150
+            tableHeight = self.sqlTable.height() if self.sqlTable.height() > 0 else 400
+            sqlSplitter.setSizes([pteHeight, tableHeight])
 
-            if params:
-                cursor.execute(exactQuery, params)
-            else:
-                cursor.execute(exactQuery)
+            # Horizontal splitter for sql area (left) and snippets (right)
+            mainSplitter = QSplitter(Qt.Orientation.Horizontal, sqlTab)
+            mainSplitter.addWidget(sqlSplitter)
+            mainSplitter.addWidget(snippetsWidget)
+            # Preserve approximate initial widths from .ui if available, or set defaults
+            sqlWidth = self.pteSQL.width() if self.pteSQL.width() > 0 else 800
+            snippetsWidth = self.listSnippets.width() if self.listSnippets.width() > 0 else 200
+            mainSplitter.setSizes([sqlWidth, snippetsWidth])
 
-            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Executed query: {exactQuery[:100]} with params {params}")
-            isSelect = cursor.description is not None
-            executionTime = time.time() - startTime
-            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds")
+            # Main layout for tabSQL
+            if sqlTab.layout():
+                # If .ui already has a layout, replace it (rare, but for safety)
+                oldLayout = sqlTab.layout()
+                while oldLayout.count():
+                    item = oldLayout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+            mainLayout = QVBoxLayout(sqlTab)
+            mainLayout.addLayout(topBar)
+            mainLayout.addWidget(mainSplitter)
+            mainLayout.setContentsMargins(0, 0, 0, 0)
 
-            if isSelect:
-                if fetchAll:
-                    results = cursor.fetchall()
-                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Fetched {len(results)} rows")
-                else:
-                    results = cursor.fetchone()
-                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Fetched single row: {results}")
-                if cursor.description:
-                    columns = [desc[0] for desc in cursor.description]
-                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Found columns: {columns}")
-                    formattedResults = [dict(zip(columns, row)) for row in (results if isinstance(results, list) else [results] if results else [])]
-                    return formattedResults
-
-                return results if isinstance(results, list) else [results] if results else []
-            else:
-                rowCount = cursor.rowcount
-                if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Affected {rowCount} rows")
-                return rowCount
-        except oracledb.Error as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Oracle error: {e}")
-            raise
-        finally:
-            cursor.close()
-            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Cursor closed")         
-
-    def callStoredProcedure(self, procedureName: str, params: Optional[List[Any]] = None) -> List[Any]:
-        """Call an Oracle stored procedure and return output values."""
-        if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
-        cursor = self.connection.cursor()
-
-        try:
-            output = cursor.callproc(procedureName, params or [])
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.callStoredProcedure: Called {procedureName} with params: {params}")
-            return output
-        except oracledb.Error as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.callStoredProcedure: Error calling procedure: {e}")
-            raise
-        finally:
-            cursor.close()
-            if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.callStoredProcedure: Cursor closed")
-
-    def close(self):
-        """Close connection and clean up TNS_ADMIN directory."""
-        try:
-            if self.connection:
-                self.connection.close()
-                if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.close: Connection closed.")
-        except oracledb.Error as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.close: Error closing connection: {e}")
-        finally:
-            pass  # No temp dir to clean
-
-    def testConnection(self):
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.testConnection: Testing connection to {self.dsn}")       
-
-        try:
-            self.connect()
-            result = self.executeCustomQuery("SELECT SYSDATE FROM DUAL", fetchAll=False)
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.testConnection: Query result: {result}")
-            if result: Logic.logMessage("INFO", f"Successfully connected to {self.dsn} and fetched SYSDATE: {result[0]}")
-            else: Logic.logMessage("WARN", f"Connected to {self.dsn} but no result from query")
-            return True
-        except Exception as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.testConnection: Failed to connect to {self.dsn}: {e}")
-            Logic.logMessage("ERROR", f"Connected test failed: {e}")
-            return False
-        finally: 
-            self.close()
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Set up splitters and layout for tabSQL to handle resizing")
