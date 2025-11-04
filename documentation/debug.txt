@@ -1,235 +1,443 @@
-class uiMain(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        uic.loadUi(Logic.resourcePath('ui/winMain.ui'), self)             
+# Utils.py
 
-        # Define controls
-        self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
-        self.mainTable = self.findChild(QTableWidget, 'mainTable')
-        self.btnDataDictionary = self.findChild(QPushButton, 'btnDataDictionary')
-        self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')
-        self.btnOptions = self.findChild(QPushButton, 'btnOptions')
-        self.btnInfo = self.findChild(QPushButton, 'btnInfo')
-        self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
-        self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
-        self.btnUndo = self.findChild(QPushButton, 'btnUndo')
-        self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
-        self.tabMain = self.findChild(QWidget, 'tabMain')
-        self.lastQueryType = None
-        self.lastQueryItems = []
-        self.lastStartDate = None
-        self.lastEndDate = None
-        self.columnMetadata = []
-        self.seriesResponses = {} # Dict to store {seriesLabel: response_dict} post-query
-        self.currentQueryType = "" # str: "AQUARIUS", etc., set post-query
-        self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
-        self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
-        self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
-        self.pteSQL = self.findChild(QPlainTextEdit, 'pteSQL')
-        self.listSnippets = self.findChild(QListWidget, 'listSnippets')
-        self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
-        self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')        
+import os
+import json
+import configparser
+from PyQt6.QtCore import QStandardPaths
+from PyQt6.QtWidgets import QWidget
+from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication
+from core import Logic, Config, Utils
 
-        # Set button style
-        for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
-                    self.btnOptions, self.btnInfo, self.btnInternalQuery, self.btnUndo, 
-                    self.btnRefresh, self.btnRunQuery, self.btnSaveSnippet, self.btnDeleteSnippet]:
-            if btn:
-                Utils.buttonStyle(btn)
-
-        # Set up layout
-        centralLayout = self.centralWidget().layout()
-
-        if isinstance(centralLayout, QGridLayout):
-            centralLayout.setContentsMargins(0, 0, 0, 0)
-            centralLayout.setRowStretch(0, 0)
-            centralLayout.setRowStretch(1, 1)
-            centralLayout.setColumnStretch(0, 1)
-
-        # Create events
-        self.btnPublicQuery.clicked.connect(self.btnPublicQueryPressed)
-        self.btnDataDictionary.clicked.connect(self.showDataDictionary)
-        self.btnExportCSV.clicked.connect(self.btnExportCSVPressed)
-        self.btnOptions.clicked.connect(self.btnOptionsPressed)
-        self.btnInfo.clicked.connect(self.btnInfoPressed)
-        self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
-        self.btnRefresh.clicked.connect(self.btnRefreshPressed)
-        self.btnUndo.clicked.connect(self.btnUndoPressed)
-        self.mainTable.horizontalHeader().sectionClicked.connect(lambda col: Query.customSortTable(self.mainTable, col, self.winDataDictionary.mainTable))
-        self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)
-        self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
-        self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
-        self.btnRunQuery.clicked.connect(self.runCustomQuery)
-        self.btnSaveSnippet.clicked.connect(self.saveSnippet)
-        self.listSnippets.doubleClicked.connect(self.loadSnippet)
-        self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)            
-
-        # Ensure tab widget expands
-        self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        # Set up Data Query tab
-        self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        if not self.tabMain.layout():
-            layout = QGridLayout(self.tabMain)
-            layout.addWidget(self.mainTable)
-            layout.setContentsMargins(0, 0, 0, 0)
-            layout.setSpacing(0)
-        self.mainTable.setGeometry(0, 0, 0, 0)
-        self.mainTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        # Center window
-        Utils.centerWindowToParent(self)
-
-        # Initialize globals
-        Utils.reloadGlobals()
-
-        # Hide tabs on startup
-        sqlTab = self.findChild(QWidget, 'tabSQL')
-        sqlIndex = self.tabWidget.indexOf(sqlTab)
-
-        # Store titles after removal (in case .ui changes)
-        self.dataQueryTitle = "Data Query"
-        self.sqlTitle = "SQL Query Builder"
-
-        if sqlIndex != -1:
-            self.tabWidget.removeTab(sqlIndex)
-
+def applyStylesAndFonts(app, mainTable, queryList):
+    """Apply stylesheet and retro font if enabled."""
+    with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
+        app.setStyleSheet(f.read())
+    config = loadConfig()
+    Config.debug = config['debugMode']
+    Config.utcOffset = config['utcOffset']
+    Config.periodOffset = config['periodOffset']
+    Config.retroMode = config.get('retroMode', True)
+    if Config.retroMode:
+        fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
+        fontId = QFontDatabase.addApplicationFont(fontPath)
+        if fontId != -1:
+            fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
+            retroFontObj = QFont(fontFamily, 10)
+            retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
+            app.setFont(retroFontObj)
             if Config.debug:
-                Logic.logMessage("DEBUG", f"Removed tabSQL at index {sqlIndex} on startup")
-        else:
-            if Config.debug:
-                Logic.logMessage("WARN", "tabSQL not found in tabWidget on startup")
-        dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
+                Logic.logMessage("DEBUG", "Applied retro font at startup")
+        setRetroStyles(app, True, mainTable, queryList)
+    else:
+        setRetroStyles(app, False, mainTable, queryList)
 
-        if dataQueryIndex != -1:
-            self.tabWidget.removeTab(dataQueryIndex)
+def loadDataDictionary(table):
+    """Load the data dictionary into the provided table."""
+    Logic.buildDataDictionary(table)
 
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Removed tabMain at index {dataQueryIndex} on startup")
-        else:
-            if Config.debug:
-                Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
+def loadQuickLooks(cbQuickLook):
+    """Load all Quick Looks into the provided combobox."""
+    Logic.loadAllQuickLooks(cbQuickLook)
 
-        # Add back SQL tab if enabled
-        if Config.enableSQL and sqlTab:
-            self.tabWidget.addTab(sqlTab, self.sqlTitle)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")  
-
-        # Add dummy items to controls. This fixes issues with Qt6 quirks
-        self.cbDatabase.addItem("")    
-        self.listSnippets.addItem("")        
-
-        # Populate cbDatabase and load snippets if controls found
-        if Config.enableSQL and self.cbDatabase:
-            Utils.loadDatabase(self.cbDatabase, 'sql')
-        if Config.enableSQL and self.listSnippets:
-            self.loadSnippets()
+def loadDatabase(comboBox, queryType=None):
+    """Populate the database combo box with static databases."""
+    if comboBox:
         if Config.debug:
-            Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
+            Logic.logMessage("DEBUG", "Populating cbDatabase")
+        comboBox.clear()
 
-        # Set up splitters and layout for tabSQL to enable resizing
-        if Config.enableSQL and sqlTab:
-            self.lblDatabase = self.findChild(QLabel, 'lblDatabase')
+        # Populate database combobox        
+        comboBox.addItem('USBR-LCHDB')
+        comboBox.addItem('USBR-YAOHDB')
+        comboBox.addItem('USBR-UCHDB2')
+        comboBox.addItem('USBR-ECOHDB')
+        comboBox.addItem('USBR-LBOHDB')
+        comboBox.addItem('USBR-KBOHDB')
 
-            # Top controls layout (horizontal, packed on left)
-            topLayout = QHBoxLayout()
-            topLayout.setSpacing(0)
-            topLayout.addWidget(self.btnRunQuery)
-            topLayout.addSpacing(10)
-            topLayout.addWidget(self.btnSaveSnippet)
-            topLayout.addSpacing(10)
-            topLayout.addWidget(self.btnDeleteSnippet)
-            topLayout.addSpacing(20)
-            topLayout.addWidget(self.lblDatabase)
-            topLayout.addSpacing(0)
+        if queryType == 'internal' and queryType != 'sql': 
+            comboBox.addItem('AQUARIUS')
 
-            # Wrap cbDatabase with spacing above to push it down
-            comboWidget = QWidget(sqlTab)
-            comboLayout = QVBoxLayout(comboWidget)
-            comboLayout.setContentsMargins(0, 0, 0, 0)
-            comboLayout.setSpacing(0)
-            comboLayout.addSpacing(4)
-            comboLayout.addWidget(self.cbDatabase)
-            topLayout.addWidget(comboWidget)
+        if queryType != 'sql':
+            comboBox.addItem('USGS-NWIS')
+            comboBox.addItem('USBR-PNHYD')
+            comboBox.addItem('USBR-GPHYD')
 
-            topLayout.addStretch()
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Populated cbDatabase with {comboBox.count()} items")
+    else:
+        if Config.debug:
+            Logic.logMessage("ERROR", "cbDatabase is None, cannot populate")
 
-            # Vertical splitter for pteSQL (top) and sqlTable (bottom)
-            sqlSplitter = QSplitter(Qt.Orientation.Vertical, sqlTab)
-            sqlSplitter.setObjectName('sqlSplitter')
-            sqlSplitter.addWidget(self.pteSQL)
-            sqlSplitter.addWidget(self.sqlTable)
-            self.sqlTable.horizontalHeader().setStretchLastSection(False)
+def buttonStyle(button):
+    """Apply flat, borderless style to a QPushButton with no hover/press effects."""
+    button.setStyleSheet("""
+        QPushButton {
+            border: none;
+            background: transparent;
+        }
+        QPushButton:hover {
+            background: transparent;
+        }
+        QPushButton:pressed {
+            background: transparent;
+            border: none;
+        }
+        QPushButton:focus {
+            outline: none;
+        }
+    """)
 
-            # Set initial sizes based on .ui
-            sqlSplitter.setSizes([231, 291])
+def centerWindowToParent(ui):
+    """Center a window relative to its parent (main window), robust for multi-monitor."""
+    parent = ui.parent()
+    if parent is None and hasattr(ui, 'winMain'):
+        parent = ui.winMain
+    if parent:
+        # Get parent's screen for centering (multi-monitor aware)
+        parentCenterPoint = parent.geometry().center()
+        parentScreen = QGuiApplication.screenAt(parentCenterPoint)
 
-            # Left widget: top layout + sqlSplitter
-            leftWidget = QWidget(sqlTab)
-            leftLayout = QVBoxLayout(leftWidget)
-            leftLayout.setContentsMargins(0, 0, 0, 0)
-            leftLayout.addLayout(topLayout)
-            leftLayout.addWidget(sqlSplitter)
+        # Use parent's frame center for precise relative positioning
+        parentCenter = parent.frameGeometry().center()
 
-            # Horizontal splitter for left (editor/table) and right (snippets)
-            mainSplitter = QSplitter(Qt.Orientation.Horizontal, sqlTab)
-            mainSplitter.setObjectName('mainSplitter')
-            mainSplitter.addWidget(leftWidget)
-            mainSplitter.addWidget(self.listSnippets)
+        # Fallback if null (invalid)
+        if parentCenter.isNull():
+            if parentScreen:
+                parentCenter = parentScreen.availableGeometry().center()
+            else:
+                parentCenter = QGuiApplication.primaryScreen().availableGeometry().center()
+    else:
+        # No parent: Center on primary
+        parentCenter = QGuiApplication.primaryScreen().availableGeometry().center()
 
-            # Set initial sizes based on .ui
-            mainSplitter.setSizes([1281, 256])
+    # Center child's frame on parent's center
+    rect = ui.frameGeometry()
+    rect.moveCenter(parentCenter)
+    ui.move(rect.topLeft())
 
-            # Main layout for tabSQL
-            if sqlTab.layout():
-                oldLayout = sqlTab.layout()
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"centerWindowToParent: Centered {ui.objectName()} at {rect.topLeft().x()},{rect.topLeft().y()}")
 
-                while oldLayout.count():
-                    item = oldLayout.takeAt(0)
-                    
-                    if item.widget():
-                        item.widget().deleteLater()
-            mainLayout = QVBoxLayout(sqlTab)
-            mainLayout.addWidget(mainSplitter)
-            mainLayout.setContentsMargins(0, 0, 0, 0)
+def applyRetroFont(widget, pointSize=10):
+    if Config.retroMode:
+        fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
+        fontId = QFontDatabase.addApplicationFont(fontPath)
 
-            # Load saved splitter states from config
-            config = Utils.loadConfig()
+        if fontId != -1:
+            fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
+            retroFontObj = QFont(fontFamily, pointSize)
+            retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
+            widget.setFont(retroFontObj)
 
-            if 'sqlVerticalState' in config:
-                sqlSplitter.restoreState(base64.b64decode(config['sqlVerticalState']))
+            for child in widget.findChildren(QWidget):
+                child.setFont(retroFontObj)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Applied retro font to widget: {widget.objectName()}")
+        else:
+            if Config.debug:
+                Logic.logMessage("ERROR", f"Failed to load retro font from {fontPath}")
+    else:
+        widget.setFont(QFont())
+
+        for child in widget.findChildren(QWidget):
+            child.setFont(QFont())
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Reverted widget {widget.objectName()} to system font")
+
+def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQueryList=None):
+    """Apply or remove retro mode styles (e.g., scroll bars) dynamically."""
+    retroStyles = """
+        QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+            background: #00FF00; /* Neon green handle */
+            border-radius: 4px;
+        }
+        QScrollBar:vertical, QScrollBar:horizontal {
+            background: #333333; /* Dark track for contrast */
+            width: 12px;
+            height: 12px;
+        }
+    """
+    if enable:
+        # Apply to specific widgets
+        for widget in [mainTable, webQueryList, internalQueryList]:
+            if widget:
+                widget.setStyleSheet(retroStyles)
 
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"Restored sqlVerticalState")
-            if 'sqlHorizontalState' in config:
-                mainSplitter.restoreState(base64.b64decode(config['sqlHorizontalState']))
+                    Logic.logMessage("DEBUG", f"Applied retro scroll bar styles to {widget.objectName()}")
+        app.setStyleSheet(app.styleSheet() + retroStyles)
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", "Applied retro scroll bar styles globally")
+    else:
+        # Reset to base stylesheet
+        with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
+            app.setStyleSheet(f.read())
+        for widget in [mainTable, webQueryList, internalQueryList]:
+            if widget:
+                widget.setStyleSheet("")
 
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"Restored sqlHorizontalState")
+                    Logic.logMessage("DEBUG", f"Cleared retro scroll bar styles from {widget.objectName()}")
+        if Config.debug:
+            Logic.logMessage("DEBUG", "Reverted to base stylesheet")
+
+def loadConfig():
+    convertConfigToJson()
+    configPath = getConfigPath()
+    defaults = {
+        'lastExportPath': '',
+        'debugMode': False,
+        'utcOffset': 'UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London',
+        'periodOffset': True,
+        'retroMode': False,
+        'qaqc': True,
+        'rawData': False,
+        'lastQuickLook': '',
+        'enableSQL': False
+    }
+
+    if os.path.exists(configPath):
+        try:
+            with open(configPath, 'r', encoding='utf-8') as configFile:
+                config = json.load(configFile)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Loaded config: {config}")
+
+            # Migrate integer utcOffset and retroFont
+            utcOffset = config.get('utcOffset', defaults['utcOffset'])
+            if isinstance(utcOffset, (int, float)):
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Migrating integer utcOffset {utcOffset} to full string")
+                offsetMap = {
+                    -12: "UTC-12:00 | Baker Island",
+                    -11: "UTC-11:00 | American Samoa",
+                    -10: "UTC-10:00 | Hawaii",
+                    -9.5: "UTC-09:30 | Marquesas Islands",
+                    -9: "UTC-09:00 | Alaska",
+                    -8: "UTC-08:00 | Pacific Time (US & Canada)",
+                    -7: "UTC-07:00 | Mountain Time (US & Canada)/Arizona",
+                    -6: "UTC-06:00 | Central Time (US & Canada)",
+                    -5: "UTC-05:00 | Eastern Time (US & Canada)",
+                    -4: "UTC-04:00 | Atlantic Time (Canada)",
+                    -3.5: "UTC-03:30 | Newfoundland",
+                    -3: "UTC-03:00 | Brasilia",
+                    -2: "UTC-02:00 | Mid-Atlantic",
+                    -1: "UTC-01:00 | Cape Verde Is.",
+                    0: "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
+                    1: "UTC+01:00 | Central European Time : Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna",
+                    2: "UTC+02:00 | Eastern European Time : Athens, Bucharest, Istanbul",
+                    3: "UTC+03:00 | Moscow, St. Petersburg, Volgograd",
+                    3.5: "UTC+03:30 | Tehran",
+                    4: "UTC+04:00 | Abu Dhabi, Muscat",
+                    4.5: "UTC+04:30 | Kabul",
+                    5: "UTC+05:00 | Islamabad, Karachi, Tashkent",
+                    5.5: "UTC+05:30 | Chennai, Kolkata, Mumbai, New Delhi",
+                    5.75: "UTC+05:45 | Kathmandu",
+                    6: "UTC+06:00 | Astana, Dhaka",
+                    6.5: "UTC+06:30 | Yangon (Rangoon)",
+                    7: "UTC+07:00 | Bangkok, Hanoi, Jakarta",
+                    8: "UTC+08:00 | Beijing, Chongqing, Hong Kong, Urumqi",
+                    8.75: "UTC+08:45 | Eucla",
+                    9: "UTC+09:00 | Osaka, Sapporo, Tokyo",
+                    9.5: "UTC+09:30 | Adelaide, Darwin",
+                    10: "UTC+10:00 | Brisbane, Canberra, Melbourne, Sydney",
+                    10.5: "UTC+10:30 | Lord Howe Island",
+                    11: "UTC+11:00 | Solomon Is., New Caledonia",
+                    12: "UTC+12:00 | Auckland, Wellington",
+                    12.75: "UTC+12:45 | Chatham Islands",
+                    13: "UTC+13:00 | Samoa",
+                    14: "UTC+14:00 | Kiritimati"
+                }
+                utcOffset = offsetMap.get(utcOffset, defaults['utcOffset'])
+                config['utcOffset'] = utcOffset
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Migrated utcOffset to: {utcOffset}")
+            if 'retroFont' in config:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "Migrating retroFont to retroMode")
+                config['retroMode'] = config.pop('retroFont')
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Migrated retroMode to: {config['retroMode']}")
+            if 'colorMode' in config:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "Removing obsolete colorMode")
+                config.pop('colorMode')
+
+            # Check os env for existing TNS_ADMIN
+            envTns = os.environ.get('TNS_ADMIN')
+
+            # If existing TNS_ADMIN, overwrite config TNS_ADMIN location
+            if envTns:
+                config['tnsNamesLocation'] = envTns
+
+            # Write updated config back to file if migrations occurred
+            with open(configPath, 'w', encoding='utf-8') as configFile:
+                json.dump(config, configFile, indent=2)
 
             if Config.debug:
-                Logic.logMessage("DEBUG", "Set up splitters and layout for tabSQL to handle resizing")
+                Logic.logMessage("DEBUG", f"Loaded full config: {config}")
 
-    def closeEvent(self, event):
-        """Override closeEvent to save splitter sizes if SQL tab is enabled and present."""
-        sqlTab = self.findChild(QWidget, 'tabSQL')
+            return config
+        except Exception as e:
+            if Config.debug:
+                Logic.logMessage("ERROR", f"Failed to load user.config: {e}")
+    else:
+        with open(configPath, 'w', encoding='utf-8') as configFile:
+            json.dump(defaults, configFile, indent=2)
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Created default user.config with defaults: {defaults}")
+        return defaults
 
-        if Config.enableSQL and sqlTab and self.tabWidget.indexOf(sqlTab) != -1:
-            config = Utils.loadConfig()
-            config['sqlVerticalState'] = base64.b64encode(self.findChild(QSplitter, 'sqlSplitter').saveState()).decode('utf-8')
-            config['sqlHorizontalState'] = base64.b64encode(self.findChild(QSplitter, 'mainSplitter').saveState()).decode('utf-8')
+def getConfigPath():
+    configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
 
-            try:
-                with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
-                    json.dump(config, configFile, indent=2)
+    if not os.path.exists(configDir):
+        os.makedirs(configDir)
+    return os.path.join(configDir, "user.config")
+
+def getQuickLookDir():
+    quickLookDir = os.path.join(getConfigDir(), "quickLook")
+    queryDir = os.path.join(quickLookDir, "query")
+
+    if not os.path.exists(quickLookDir):
+        os.makedirs(quickLookDir)
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"getQuickLookDir: Created quickLook directory: {quickLookDir}")
+    if not os.path.exists(queryDir):        
+        os.makedirs(queryDir)
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"getQuickLookDir: Created query subfolder: {queryDir}")
+
+    # Migrate existing .txt files from quickLook root to query subfolder
+    for file in os.listdir(quickLookDir):
+        if file.endswith(".txt"):
+            srcPath = os.path.join(quickLookDir, file)
+            dstPath = os.path.join(queryDir, file)
+
+            if os.path.isfile(srcPath) and not os.path.exists(dstPath):
+                try:
+                    os.rename(srcPath, dstPath)
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", f"getQuickLookDir: Moved {srcPath} to {dstPath}")
+                except Exception as e:
+                    if Config.debug:
+                        Logic.logMessage("ERROR", f"getQuickLookDir: Failed to move {srcPath} to {dstPath}: {e}")
+            elif os.path.exists(dstPath):
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"Saved splitter states to config")
-            except Exception as e:
-                if Config.debug:
-                    Logic.logMessage("ERROR", f"Failed to save splitter states: {e}")
-        super().closeEvent(event)
+                    Logic.logMessage("DEBUG", f"getQuickLookDir: Skipped moving {srcPath} as it already exists in {queryDir}")
+    return queryDir
+
+def getExampleQuickLookDir():
+    return Logic.resourcePath("quickLook")
+
+def convertConfigToJson():
+    oldConfigPath = os.path.join(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation), "config.ini")
+    newConfigPath = getConfigPath()
+
+    if os.path.exists(oldConfigPath) and not os.path.exists(newConfigPath):
+        config = configparser.ConfigParser()
+        config.read(oldConfigPath)
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", "Found config.ini, converting to user.config")
+        settings = {
+            'utcOffset': "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
+            'retroFont': True,
+            'qaqc': True,
+            'rawData': False,
+            'debugMode': False,
+            'tnsNamesLocation': '',
+            'hourTimestampMethod': 'EOP',
+            'lastQuickLook': '',
+            'colorMode': 'light',
+            'lastExportPath': ''
+        }
+
+        if 'Settings' in config:
+            settings['utcOffset'] = config['Settings'].get('utcOffset', settings['utcOffset'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted utcOffset: {settings['utcOffset']}")
+
+            settings['retroFont'] = config['Settings'].getboolean('retroFont', settings['retroFont'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted retroFont: {settings['retroFont']}")
+
+            settings['qaqc'] = config['Settings'].getboolean('qaqc', settings['qaqc'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted qaqc: {settings['qaqc']}")
+
+            settings['rawData'] = config['Settings'].getboolean('rawData', settings['rawData'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted rawData: {settings['rawData']}")
+
+            settings['debugMode'] = config['Settings'].getboolean('debugMode', settings['debugMode'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted debugMode: {settings['debugMode']}")
+
+            settings['tnsNamesLocation'] = config['Settings'].get('tnsNamesLocation', settings['tnsNamesLocation'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted tnsNamesLocation: {settings['tnsNamesLocation']}")
+
+            settings['hourTimestampMethod'] = config['Settings'].get('hourTimestampMethod', settings['hourTimestampMethod'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted hourTimestampMethod: {settings['hourTimestampMethod']}")
+
+            settings['lastQuickLook'] = config['Settings'].get('lastQuickLook', settings['lastQuickLook'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted lastQuickLook: {settings['lastQuickLook']}")
+
+            settings['colorMode'] = config['Settings'].get('colorMode', settings['colorMode'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted colorMode: {settings['colorMode']}")
+
+            settings['lastExportPath'] = config['Settings'].get('lastExportPath', settings['lastExportPath'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted lastExportPath: {settings['lastExportPath']}")
+
+        with open(newConfigPath, 'w', encoding='utf-8') as configFile:
+            json.dump(settings, configFile, indent=2)
+        if Config.debug:
+            Logic.logMessage("DEBUG", "Converted config.ini to user.config")
+    elif Config.debug:
+        Logic.logMessage("DEBUG", "No config.ini found or user.config exists, skipping conversion")
+
+def reloadGlobals():
+    config = loadConfig()
+    Config.debug = config['debugMode']
+    Config.utcOffset = config['utcOffset']
+    Config.periodOffset = config['periodOffset']
+    Config.retroMode = config['retroMode']
+    Config.qaqcEnabled = config['qaqc']
+    Config.rawData = config['rawData']
+    Config.enableSQL = config['enableSQL']
+
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"Globals reloaded from user.config, enableSQL={Config.enableSQL}")
+
+def getConfigDir():
+    configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
+    
+    if not os.path.exists(configDir):
+        os.makedirs(configDir)
+    return configDir
+
+def getLogDir():
+    userConfigDir = Utils.getConfigDir()
+    return os.path.join(userConfigDir, 'logs')
+
+def getLogPath(filename):
+    return os.path.join(Utils.getLogDir(), filename)
+
+def getSqlSnippetDir():
+    quickLookDir = os.path.join(getConfigDir(), "quickLook")
+    sqlDir = os.path.join(quickLookDir, "sql")
+
+    if not os.path.exists(sqlDir):
+        os.makedirs(sqlDir)
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"getSqlSnippetDir: Created sql directory: {sqlDir}")
+
+    return sqlDir
