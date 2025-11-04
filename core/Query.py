@@ -903,13 +903,20 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         Logic.logMessage("DEBUG", f"executeQuery: Stored lastDeltaChecked={deltaChecked}, lastOverlayChecked={overlayChecked}")
     progressDialog.cancel()
 
-    # Show Data Query tab at index 0 if not already present
-    if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
+    # Show Data Query tab at index 0, moving if necessary
+    index = mainWindow.tabWidget.indexOf(mainWindow.tabMain)
+    
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"tabMain index during executeQuery: {index}")
+    if index != 0:
+        if index != -1:
+            mainWindow.tabWidget.removeTab(index)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Removed tabMain from index {index} to move to 0")
         mainWindow.tabWidget.insertTab(0, mainWindow.tabMain, mainWindow.dataQueryTitle)
         mainWindow.tabWidget.setCurrentIndex(0)
-
         if Config.debug:
-            Logic.logMessage("DEBUG", "Added tabMain at index 0 after query")
+            Logic.logMessage("DEBUG", "Inserted tabMain at index 0 after query")
     QCoreApplication.processEvents()
 
 def roundDownToInterval(dt, interval):
