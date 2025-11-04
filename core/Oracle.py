@@ -225,7 +225,7 @@ class oracleConnection:
 
         try:
             self.connect()
-            result = self.executeQuery("SELECT SYSDATE FROM DUAL", fetchAll=False)
+            result = self.executeCustomQuery("SELECT SYSDATE FROM DUAL", fetchAll=False)
             if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.testConnection: Query result: {result}")
             if result: Logic.logMessage("INFO", f"Successfully connected to {self.dsn} and fetched SYSDATE: {result[0]}")
             else: Logic.logMessage("WARN", f"Connected to {self.dsn} but no result from query")
