@@ -1,6 +1,7 @@
 -Remove uiQuickLook.py and winQuickLook.ui. Replace with same method used for snippets save
 -Aquarius doesn't use label from data dict if one is set
 -[WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
+-Bug if SQL Query Builder was turned off and program restarted
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread

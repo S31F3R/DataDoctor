@@ -51,18 +51,26 @@ class queryWorker(QRunnable):
         groupLabels = {} if db == 'AQUARIUS' else None
         groupRawResponses = {} if db == 'AQUARIUS' else None
         usbrGroups = defaultdict(list)
+
         for origIndex, dataID, SDID, itemDb, interval, mrid in self.groupItems:
             usbrGroups[(itemDb, interval, mrid)].append((origIndex, dataID, SDID))
         try:
             for (itemDb, interval, mrid), items in usbrGroups.items():
                 SDIDs = [item[2] for item in items]
-                result = {}  # Initialize result here to avoid UnboundLocalError
+                result = {} # Initialize result here to avoid UnboundLocalError
+
                 if db.startswith('USBR'):
                     try:
                         svr = itemDb.split('-')[1].lower() if '-' in itemDb else 'lchdb'
                         table = 'M' if mrid != '0' else 'R'
                         apiInterval = interval
-                        result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
+
+                        # If internal, switch to sqlRead
+                        if self.isInternal:
+                            result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
+                        else: # External use apiRead
+                            result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
+                        
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: USBR result for SDIDs {SDIDs}: {result}")
                     except Exception as e:
@@ -72,6 +80,7 @@ class queryWorker(QRunnable):
                 elif db == 'AQUARIUS' and self.isInternal:
                     try:
                         result = Aquarius.apiRead(SDIDs, self.startDate, self.endDate, interval)
+                        
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
                         groupRawResponses = {SDID: result.get(SDID, {}).get('rawResponse', {}) for SDID in SDIDs}
@@ -82,6 +91,7 @@ class queryWorker(QRunnable):
                 elif db == 'USGS-NWIS':
                     try:
                         result = USGS.apiRead(SDIDs, interval, self.startDate, self.endDate)
+
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: USGS result for SDIDs {SDIDs}: {result}")
                     except Exception as e:

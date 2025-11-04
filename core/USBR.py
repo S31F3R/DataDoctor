@@ -123,13 +123,13 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     # Map interval to Oracle table suffix
     intervalMap = {
-        'HOUR': 'H',
-        'INSTANT:1': 'M',
-        'INSTANT:15': 'M',
-        'INSTANT:60': 'M',
-        'DAY': 'D',
-        'MONTH': 'M',
-        'YEAR': 'Y',
+        'HOUR': 'HOUR',
+        'INSTANT:1': 'INSTANT',
+        'INSTANT:15': 'INSTANT',
+        'INSTANT:60': 'INSTANT',
+        'DAY': 'DAY',
+        'MONTH': 'MONTH',
+        'YEAR': 'YEAR',
         'WATER YEAR': 'WY'
     }
 
