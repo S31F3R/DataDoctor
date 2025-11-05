@@ -121,6 +121,10 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     if Config.debug: Logic.logMessage("DEBUG", f"USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
 
+    # Parse svr to short lower if full format
+    if '-' in svr:
+        svr = svr.split('-')[1].lower()
+
     # Map interval to table suffix (consistent with apiRead)
     intervalMap = {
         'HOUR': 'HOUR',
@@ -276,7 +280,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                     valStr = str(value) if value is not None else ''
                     outputData.append(f'{formattedTs},{valStr}')
                 except ValueError as e:
-                    Logic.logMessage("WARN", f"sqlRead: Invalid date_time skipped for SDI {sdi}: {dateTimeStr} ({e})")
+                    Logic.logMessage("WARN", f"sqlRead: Invalid date_time skipped for SDID {sdi}: {dateTimeStr} ({e})")
                     continue
 
             # Metadata for this SDID (base rows)
@@ -287,7 +291,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                 mrow['SDID'] = sdiStr
                 mrow['INTERVAL'] = tableSuffix.lower()
 
-            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(metaRows)} meta rows for SDI {sdi}")
+            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(metaRows)} meta rows for SDID {sdi}")
 
             # Structure output with metadata
             resultDict[sdiStr] = {
@@ -310,7 +314,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
         if sdiStr in resultDict:
             resultDict[sdiStr]['data'] = Query.gapCheck(timestamps, resultDict[sdiStr]['data'], sdiStr)
-            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[sdiStr]['data'])} rows for SDI {sdi}")
+            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[sdiStr]['data'])} rows for SDID {sdi}")
 
     if not resultDict:
         Logic.logMessage("WARN", "sqlRead: No data after processing")
