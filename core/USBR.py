@@ -167,6 +167,12 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         return {}
     sdidPlaceholders = ','.join([f':{i+1}' for i in range(len(SDIDs))])
 
+    # Determine time_col for BETWEEN
+    if interval == 'HOUR' and Config.periodOffset:
+        timeCol = 'end_date_time'
+    else:
+        timeCol = 'start_date_time'
+
     # Data query (second SQL, add start_date_time for periodOffset=False on HOUR)
     dataQuery = f"""
         SELECT 
@@ -181,9 +187,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
           derivation_flags
         FROM {dataTable}
         WHERE site_datatype_id in ({sdidPlaceholders})
-          AND end_date_time BETWEEN TO_DATE(:{len(SDIDs)+1}, 'YYYY-MM-DD HH24:MI:SS') 
+          AND {timeCol} BETWEEN TO_DATE(:{len(SDIDs)+1}, 'YYYY-MM-DD HH24:MI:SS') 
           AND TO_DATE(:{len(SDIDs)+2}, 'YYYY-MM-DD HH24:MI:SS')
-        ORDER BY SDID ASC, end_date_time ASC
+        ORDER BY SDID ASC, {timeCol} ASC
     """
     dataParams = SDIDs + [startStr, endStr]
     if table == 'M' and mrid != '0':
@@ -210,10 +216,10 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
               data_flags
             FROM {baseTable}
             WHERE site_datatype_id in ({sdidPlaceholders})
-              AND end_date_time BETWEEN TO_DATE(:{len(SDIDs)+1}, 'YYYY-MM-DD HH24:MI:SS') 
+              AND {timeCol} BETWEEN TO_DATE(:{len(SDIDs)+1}, 'YYYY-MM-DD HH24:MI:SS') 
               AND TO_DATE(:{len(SDIDs)+2}, 'YYYY-MM-DD HH24:MI:SS') 
               AND interval = '{tableSuffix.lower()}'
-            ORDER BY SDID ASC, end_date_time ASC
+            ORDER BY SDID ASC, {timeCol} ASC
         """
         metaParams = SDIDs + [startStr, endStr]
 
@@ -256,14 +262,12 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
             for row in specificRows:
                 value = row.get('VALUE')
-                if interval == 'HOUR':
-                    dateTimeStr = row['END_DATE_TIME'] if Config.periodOffset else row['START_DATE_TIME']
-                else:
+                if interval == 'HOUR' and Config.periodOffset:
                     dateTimeStr = row['END_DATE_TIME']
+                else:
+                    dateTimeStr = row['START_DATE_TIME']
                 try:
                     dateTime = datetime.strptime(dateTimeStr, '%Y-%m-%d %H:%M:%S')
-                    if Config.periodOffset and interval == 'HOUR':
-                        dateTime = dateTime + timedelta(hours=1)
                     formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
                     valStr = str(value) if value is not None else ''
                     outputData.append(f'{formattedTs},{valStr}')
