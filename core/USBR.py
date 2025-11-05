@@ -220,18 +220,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     resultDict = {}
     oracleConn = None
     try:
-        # Map server to TNS alias
-        tnsMap = {
-            'lchdb': 'USBR-LCHDB',
-            'yaohdb': 'USBR-YAOHDB',
-            'uchdb2': 'USBR-UCHDB2',
-            'ecohdb': 'USBR-ECOHDB',
-            'lbohdb': 'USBR-LBOHDB',
-            'kbohdb': 'USBR-KBOHDB',
-            'pnhyd': 'USBR-PNHYD',
-            'gphyd': 'USBR-GPHYD'
-        }
-        dsn = tnsMap.get(svr.lower(), svr)
+        # Set dsn to short lower name
+        dsn = svr
+
         oracleConn = Oracle.oracleConnection(dsn)
         conn = oracleConn.connect()
 
@@ -297,6 +288,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     except Exception as e:
         Logic.logMessage("ERROR", f"sqlRead: Query failed: {e}")
+        resultDict = {}  # Reset resultDict on failure
         for SDID in SDIDs:
             resultDict[str(SDID)] = {'data': [], 'rawResponse': []}
     finally:
