@@ -1,443 +1,159 @@
-# Utils.py
-
-import os
-import json
-import configparser
-from PyQt6.QtCore import QStandardPaths
-from PyQt6.QtWidgets import QWidget
-from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication
-from core import Logic, Config, Utils
-
-def applyStylesAndFonts(app, mainTable, queryList):
-    """Apply stylesheet and retro font if enabled."""
-    with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
-        app.setStyleSheet(f.read())
-    config = loadConfig()
-    Config.debug = config['debugMode']
-    Config.utcOffset = config['utcOffset']
-    Config.periodOffset = config['periodOffset']
-    Config.retroMode = config.get('retroMode', True)
-    if Config.retroMode:
-        fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
-        fontId = QFontDatabase.addApplicationFont(fontPath)
-        if fontId != -1:
-            fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-            retroFontObj = QFont(fontFamily, 10)
-            retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
-            app.setFont(retroFontObj)
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Applied retro font at startup")
-        setRetroStyles(app, True, mainTable, queryList)
-    else:
-        setRetroStyles(app, False, mainTable, queryList)
-
-def loadDataDictionary(table):
-    """Load the data dictionary into the provided table."""
-    Logic.buildDataDictionary(table)
-
-def loadQuickLooks(cbQuickLook):
-    """Load all Quick Looks into the provided combobox."""
-    Logic.loadAllQuickLooks(cbQuickLook)
-
-def loadDatabase(comboBox, queryType=None):
-    """Populate the database combo box with static databases."""
-    if comboBox:
-        if Config.debug:
-            Logic.logMessage("DEBUG", "Populating cbDatabase")
-        comboBox.clear()
-
-        # Populate database combobox        
-        comboBox.addItem('USBR-LCHDB')
-        comboBox.addItem('USBR-YAOHDB')
-        comboBox.addItem('USBR-UCHDB2')
-        comboBox.addItem('USBR-ECOHDB')
-        comboBox.addItem('USBR-LBOHDB')
-        comboBox.addItem('USBR-KBOHDB')
-
-        if queryType == 'internal' and queryType != 'sql': 
-            comboBox.addItem('AQUARIUS')
-
-        if queryType != 'sql':
-            comboBox.addItem('USGS-NWIS')
-            comboBox.addItem('USBR-PNHYD')
-            comboBox.addItem('USBR-GPHYD')
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Populated cbDatabase with {comboBox.count()} items")
-    else:
-        if Config.debug:
-            Logic.logMessage("ERROR", "cbDatabase is None, cannot populate")
-
-def buttonStyle(button):
-    """Apply flat, borderless style to a QPushButton with no hover/press effects."""
-    button.setStyleSheet("""
-        QPushButton {
-            border: none;
-            background: transparent;
-        }
-        QPushButton:hover {
-            background: transparent;
-        }
-        QPushButton:pressed {
-            background: transparent;
-            border: none;
-        }
-        QPushButton:focus {
-            outline: none;
-        }
-    """)
-
-def centerWindowToParent(ui):
-    """Center a window relative to its parent (main window), robust for multi-monitor."""
-    parent = ui.parent()
-    if parent is None and hasattr(ui, 'winMain'):
-        parent = ui.winMain
-    if parent:
-        # Get parent's screen for centering (multi-monitor aware)
-        parentCenterPoint = parent.geometry().center()
-        parentScreen = QGuiApplication.screenAt(parentCenterPoint)
-
-        # Use parent's frame center for precise relative positioning
-        parentCenter = parent.frameGeometry().center()
-
-        # Fallback if null (invalid)
-        if parentCenter.isNull():
-            if parentScreen:
-                parentCenter = parentScreen.availableGeometry().center()
-            else:
-                parentCenter = QGuiApplication.primaryScreen().availableGeometry().center()
-    else:
-        # No parent: Center on primary
-        parentCenter = QGuiApplication.primaryScreen().availableGeometry().center()
-
-    # Center child's frame on parent's center
-    rect = ui.frameGeometry()
-    rect.moveCenter(parentCenter)
-    ui.move(rect.topLeft())
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"centerWindowToParent: Centered {ui.objectName()} at {rect.topLeft().x()},{rect.topLeft().y()}")
-
-def applyRetroFont(widget, pointSize=10):
-    if Config.retroMode:
-        fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
-        fontId = QFontDatabase.addApplicationFont(fontPath)
-
-        if fontId != -1:
-            fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-            retroFontObj = QFont(fontFamily, pointSize)
-            retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
-            widget.setFont(retroFontObj)
-
-            for child in widget.findChildren(QWidget):
-                child.setFont(retroFontObj)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Applied retro font to widget: {widget.objectName()}")
-        else:
-            if Config.debug:
-                Logic.logMessage("ERROR", f"Failed to load retro font from {fontPath}")
-    else:
-        widget.setFont(QFont())
-
-        for child in widget.findChildren(QWidget):
-            child.setFont(QFont())
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Reverted widget {widget.objectName()} to system font")
-
-def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQueryList=None):
-    """Apply or remove retro mode styles (e.g., scroll bars) dynamically."""
-    retroStyles = """
-        QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
-            background: #00FF00; /* Neon green handle */
-            border-radius: 4px;
-        }
-        QScrollBar:vertical, QScrollBar:horizontal {
-            background: #333333; /* Dark track for contrast */
-            width: 12px;
-            height: 12px;
-        }
-    """
-    if enable:
-        # Apply to specific widgets
-        for widget in [mainTable, webQueryList, internalQueryList]:
-            if widget:
-                widget.setStyleSheet(retroStyles)
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Applied retro scroll bar styles to {widget.objectName()}")
-        app.setStyleSheet(app.styleSheet() + retroStyles)
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", "Applied retro scroll bar styles globally")
-    else:
-        # Reset to base stylesheet
-        with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
-            app.setStyleSheet(f.read())
-        for widget in [mainTable, webQueryList, internalQueryList]:
-            if widget:
-                widget.setStyleSheet("")
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Cleared retro scroll bar styles from {widget.objectName()}")
-        if Config.debug:
-            Logic.logMessage("DEBUG", "Reverted to base stylesheet")
-
-def loadConfig():
-    convertConfigToJson()
-    configPath = getConfigPath()
-    defaults = {
-        'lastExportPath': '',
-        'debugMode': False,
-        'utcOffset': 'UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London',
-        'periodOffset': True,
-        'retroMode': False,
-        'qaqc': True,
-        'rawData': False,
-        'lastQuickLook': '',
-        'enableSQL': False
-    }
-
-    if os.path.exists(configPath):
-        try:
-            with open(configPath, 'r', encoding='utf-8') as configFile:
-                config = json.load(configFile)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Loaded config: {config}")
-
-            # Migrate integer utcOffset and retroFont
-            utcOffset = config.get('utcOffset', defaults['utcOffset'])
-            if isinstance(utcOffset, (int, float)):
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Migrating integer utcOffset {utcOffset} to full string")
-                offsetMap = {
-                    -12: "UTC-12:00 | Baker Island",
-                    -11: "UTC-11:00 | American Samoa",
-                    -10: "UTC-10:00 | Hawaii",
-                    -9.5: "UTC-09:30 | Marquesas Islands",
-                    -9: "UTC-09:00 | Alaska",
-                    -8: "UTC-08:00 | Pacific Time (US & Canada)",
-                    -7: "UTC-07:00 | Mountain Time (US & Canada)/Arizona",
-                    -6: "UTC-06:00 | Central Time (US & Canada)",
-                    -5: "UTC-05:00 | Eastern Time (US & Canada)",
-                    -4: "UTC-04:00 | Atlantic Time (Canada)",
-                    -3.5: "UTC-03:30 | Newfoundland",
-                    -3: "UTC-03:00 | Brasilia",
-                    -2: "UTC-02:00 | Mid-Atlantic",
-                    -1: "UTC-01:00 | Cape Verde Is.",
-                    0: "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
-                    1: "UTC+01:00 | Central European Time : Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna",
-                    2: "UTC+02:00 | Eastern European Time : Athens, Bucharest, Istanbul",
-                    3: "UTC+03:00 | Moscow, St. Petersburg, Volgograd",
-                    3.5: "UTC+03:30 | Tehran",
-                    4: "UTC+04:00 | Abu Dhabi, Muscat",
-                    4.5: "UTC+04:30 | Kabul",
-                    5: "UTC+05:00 | Islamabad, Karachi, Tashkent",
-                    5.5: "UTC+05:30 | Chennai, Kolkata, Mumbai, New Delhi",
-                    5.75: "UTC+05:45 | Kathmandu",
-                    6: "UTC+06:00 | Astana, Dhaka",
-                    6.5: "UTC+06:30 | Yangon (Rangoon)",
-                    7: "UTC+07:00 | Bangkok, Hanoi, Jakarta",
-                    8: "UTC+08:00 | Beijing, Chongqing, Hong Kong, Urumqi",
-                    8.75: "UTC+08:45 | Eucla",
-                    9: "UTC+09:00 | Osaka, Sapporo, Tokyo",
-                    9.5: "UTC+09:30 | Adelaide, Darwin",
-                    10: "UTC+10:00 | Brisbane, Canberra, Melbourne, Sydney",
-                    10.5: "UTC+10:30 | Lord Howe Island",
-                    11: "UTC+11:00 | Solomon Is., New Caledonia",
-                    12: "UTC+12:00 | Auckland, Wellington",
-                    12.75: "UTC+12:45 | Chatham Islands",
-                    13: "UTC+13:00 | Samoa",
-                    14: "UTC+14:00 | Kiritimati"
-                }
-                utcOffset = offsetMap.get(utcOffset, defaults['utcOffset'])
-                config['utcOffset'] = utcOffset
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Migrated utcOffset to: {utcOffset}")
-            if 'retroFont' in config:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "Migrating retroFont to retroMode")
-                config['retroMode'] = config.pop('retroFont')
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Migrated retroMode to: {config['retroMode']}")
-            if 'colorMode' in config:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "Removing obsolete colorMode")
-                config.pop('colorMode')
-
-            # Check os env for existing TNS_ADMIN
-            envTns = os.environ.get('TNS_ADMIN')
-
-            # If existing TNS_ADMIN, overwrite config TNS_ADMIN location
-            if envTns:
-                config['tnsNamesLocation'] = envTns
-
-            # Write updated config back to file if migrations occurred
-            with open(configPath, 'w', encoding='utf-8') as configFile:
-                json.dump(config, configFile, indent=2)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Loaded full config: {config}")
-
-            return config
-        except Exception as e:
-            if Config.debug:
-                Logic.logMessage("ERROR", f"Failed to load user.config: {e}")
-    else:
-        with open(configPath, 'w', encoding='utf-8') as configFile:
-            json.dump(defaults, configFile, indent=2)
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Created default user.config with defaults: {defaults}")
-        return defaults
-
-def getConfigPath():
-    configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
-
-    if not os.path.exists(configDir):
-        os.makedirs(configDir)
-    return os.path.join(configDir, "user.config")
-
-def getQuickLookDir():
-    quickLookDir = os.path.join(getConfigDir(), "quickLook")
-    queryDir = os.path.join(quickLookDir, "query")
-
-    if not os.path.exists(quickLookDir):
-        os.makedirs(quickLookDir)
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"getQuickLookDir: Created quickLook directory: {quickLookDir}")
-    if not os.path.exists(queryDir):        
-        os.makedirs(queryDir)
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"getQuickLookDir: Created query subfolder: {queryDir}")
-
-    # Migrate existing .txt files from quickLook root to query subfolder
-    for file in os.listdir(quickLookDir):
-        if file.endswith(".txt"):
-            srcPath = os.path.join(quickLookDir, file)
-            dstPath = os.path.join(queryDir, file)
-
-            if os.path.isfile(srcPath) and not os.path.exists(dstPath):
-                try:
-                    os.rename(srcPath, dstPath)
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", f"getQuickLookDir: Moved {srcPath} to {dstPath}")
-                except Exception as e:
-                    if Config.debug:
-                        Logic.logMessage("ERROR", f"getQuickLookDir: Failed to move {srcPath} to {dstPath}: {e}")
-            elif os.path.exists(dstPath):
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"getQuickLookDir: Skipped moving {srcPath} as it already exists in {queryDir}")
-    return queryDir
-
-def getExampleQuickLookDir():
-    return Logic.resourcePath("quickLook")
-
-def convertConfigToJson():
-    oldConfigPath = os.path.join(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation), "config.ini")
-    newConfigPath = getConfigPath()
-
-    if os.path.exists(oldConfigPath) and not os.path.exists(newConfigPath):
-        config = configparser.ConfigParser()
-        config.read(oldConfigPath)
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", "Found config.ini, converting to user.config")
-        settings = {
-            'utcOffset': "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
-            'retroFont': True,
-            'qaqc': True,
-            'rawData': False,
-            'debugMode': False,
-            'tnsNamesLocation': '',
-            'hourTimestampMethod': 'EOP',
-            'lastQuickLook': '',
-            'colorMode': 'light',
-            'lastExportPath': ''
-        }
-
-        if 'Settings' in config:
-            settings['utcOffset'] = config['Settings'].get('utcOffset', settings['utcOffset'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Converted utcOffset: {settings['utcOffset']}")
-
-            settings['retroFont'] = config['Settings'].getboolean('retroFont', settings['retroFont'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Converted retroFont: {settings['retroFont']}")
-
-            settings['qaqc'] = config['Settings'].getboolean('qaqc', settings['qaqc'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Converted qaqc: {settings['qaqc']}")
-
-            settings['rawData'] = config['Settings'].getboolean('rawData', settings['rawData'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Converted rawData: {settings['rawData']}")
-
-            settings['debugMode'] = config['Settings'].getboolean('debugMode', settings['debugMode'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Converted debugMode: {settings['debugMode']}")
-
-            settings['tnsNamesLocation'] = config['Settings'].get('tnsNamesLocation', settings['tnsNamesLocation'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Converted tnsNamesLocation: {settings['tnsNamesLocation']}")
-
-            settings['hourTimestampMethod'] = config['Settings'].get('hourTimestampMethod', settings['hourTimestampMethod'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Converted hourTimestampMethod: {settings['hourTimestampMethod']}")
-
-            settings['lastQuickLook'] = config['Settings'].get('lastQuickLook', settings['lastQuickLook'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Converted lastQuickLook: {settings['lastQuickLook']}")
-
-            settings['colorMode'] = config['Settings'].get('colorMode', settings['colorMode'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Converted colorMode: {settings['colorMode']}")
-
-            settings['lastExportPath'] = config['Settings'].get('lastExportPath', settings['lastExportPath'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Converted lastExportPath: {settings['lastExportPath']}")
-
-        with open(newConfigPath, 'w', encoding='utf-8') as configFile:
-            json.dump(settings, configFile, indent=2)
-        if Config.debug:
-            Logic.logMessage("DEBUG", "Converted config.ini to user.config")
-    elif Config.debug:
-        Logic.logMessage("DEBUG", "No config.ini found or user.config exists, skipping conversion")
-
-def reloadGlobals():
-    config = loadConfig()
-    Config.debug = config['debugMode']
-    Config.utcOffset = config['utcOffset']
-    Config.periodOffset = config['periodOffset']
-    Config.retroMode = config['retroMode']
-    Config.qaqcEnabled = config['qaqc']
-    Config.rawData = config['rawData']
-    Config.enableSQL = config['enableSQL']
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"Globals reloaded from user.config, enableSQL={Config.enableSQL}")
-
-def getConfigDir():
-    configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
-    
-    if not os.path.exists(configDir):
-        os.makedirs(configDir)
-    return configDir
-
-def getLogDir():
-    userConfigDir = Utils.getConfigDir()
-    return os.path.join(userConfigDir, 'logs')
-
-def getLogPath(filename):
-    return os.path.join(Utils.getLogDir(), filename)
-
-def getSqlSnippetDir():
-    quickLookDir = os.path.join(getConfigDir(), "quickLook")
-    sqlDir = os.path.join(quickLookDir, "sql")
-
-    if not os.path.exists(sqlDir):
-        os.makedirs(sqlDir)
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"getSqlSnippetDir: Created sql directory: {sqlDir}")
-
-    return sqlDir
+2025-11-05 04:49:17,719 [DEBUG] Thread 0 fetched 28 points for UID 'a3456c1764b846779ea76ce5b1c8c277', range 2025-11-04 08:00 to 2025-11-05 11:50
+2025-11-05 04:49:17,719 [DEBUG] Thread 0 completed task for UID a3456c1764b846779ea76ce5b1c8c277 with 28 points
+2025-11-05 04:49:17,719 [DEBUG] Thread 0 found no more tasks
+2025-11-05 04:49:17,721 [DEBUG] Thread 0 joined
+2025-11-05 04:49:17,722 [DEBUG] Combined results from 1 tasks with 1 UIDs
+2025-11-05 04:49:17,722 [DEBUG] Returning result dict with 1 UIDs
+2025-11-05 04:49:17,723 [DEBUG] queryWorker: Aquarius result for SDIDs ['a3456c1764b846779ea76ce5b1c8c277']: {'a3456c1764b846779ea76ce5b1c8c277': {'data': ['11/04/25 01:00:00,248.4888', '11/04/25 02:00:00,248.3809', '11/04/25 03:00:00,248.2174', '11/04/25 04:00:00,248.0022', '11/04/25 05:00:00,247.7454', '11/04/25 06:00:00,247.4649', '11/04/25 07:00:00,247.1733', '11/04/25 08:00:00,246.887', '11/04/25 09:00:00,246.623', '11/04/25 10:00:00,246.406', '11/04/25 11:00:00,246.2671', '11/04/25 12:00:00,246.2364', '11/04/25 13:00:00,246.3237', '11/04/25 14:00:00,246.5206', '11/04/25 15:00:00,246.7985', '11/04/25 16:00:00,247.1368', '11/04/25 17:00:00,247.4958', '11/04/25 18:00:00,247.8411', '11/04/25 19:00:00,248.16', '11/04/25 20:00:00,248.4249', '11/04/25 21:00:00,248.6289', '11/04/25 22:00:00,248.778', '11/04/25 23:00:00,248.8666', '11/05/25 00:00:00,248.8991', '11/05/25 01:00:00,248.8696', '11/05/25 02:00:00,248.7646', '11/05/25 03:00:00,248.5971', '11/05/25 04:00:00,248.3785'], 'label': 'BIBLC-EH-Corrected \nSystem', 'rawResponse': {'UniqueId': 'a3456c1764b846779ea76ce5b1c8c277', 'Parameter': 'Stage', 'Label': 'BIBLC-EH-Corrected', 'LocationIdentifier': 'System', 'NumPoints': 28, 'Unit': 'ft', 'Approvals': [{'ApprovalLevel': 900, 'DateAppliedUtc': '2020-10-23T19:10:07.6119152Z', 'User': 'admin', 'LevelDescription': 'Working', 'Comment': '', 'StartTime': '0001-01-01T00:00:00.0000000+00:00', 'EndTime': '9999-12-31T23:59:59.9999999+00:00'}], 'Qualifiers': [], 'Methods': [{'MethodCode': 'HGCOMP', 'StartTime': '2025-11-04T01:00:00.0000000-07:00', 'EndTime': '2025-11-05T04:50:00.0000001-07:00'}], 'Grades': [{'GradeCode': '0', 'StartTime': '2025-11-04T01:00:00.0000000-07:00', 'EndTime': '2025-11-05T04:50:00.0000001-07:00'}], 'GapTolerances': [{'ToleranceInMinutes': 60, 'StartTime': '2025-11-04T01:00:00.0000000-07:00', 'EndTime': '2025-11-05T04:50:00.0000001-07:00'}], 'InterpolationTypes': [{'Type': 'InstantaneousValues', 'StartTime': '2025-11-04T01:00:00.0000000-07:00', 'EndTime': '2025-11-05T04:50:00.0000001-07:00'}], 'Notes': [], 'TimeRange': {'StartTime': '2025-11-04T01:00:00.0000000-07:00', 'EndTime': '2025-11-05T04:00:00.0000000-07:00'}, 'Points': [{'Timestamp': '2025-11-04T01:00:00.0000000-07:00', 'Value': {'Numeric': 248.4888}}, {'Timestamp': '2025-11-04T02:00:00.0000000-07:00', 'Value': {'Numeric': 248.3809}}, {'Timestamp': '2025-11-04T03:00:00.0000000-07:00', 'Value': {'Numeric': 248.2174}}, {'Timestamp': '2025-11-04T04:00:00.0000000-07:00', 'Value': {'Numeric': 248.0022}}, {'Timestamp': '2025-11-04T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.7454}}, {'Timestamp': '2025-11-04T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.4649}}, {'Timestamp': '2025-11-04T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.1733}}, {'Timestamp': '2025-11-04T08:00:00.0000000-07:00', 'Value': {'Numeric': 246.887}}, {'Timestamp': '2025-11-04T09:00:00.0000000-07:00', 'Value': {'Numeric': 246.623}}, {'Timestamp': '2025-11-04T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.406}}, {'Timestamp': '2025-11-04T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.2671}}, {'Timestamp': '2025-11-04T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.2364}}, {'Timestamp': '2025-11-04T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.3237}}, {'Timestamp': '2025-11-04T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.5206}}, {'Timestamp': '2025-11-04T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.7985}}, {'Timestamp': '2025-11-04T16:00:00.0000000-07:00', 'Value': {'Numeric': 247.1368}}, {'Timestamp': '2025-11-04T17:00:00.0000000-07:00', 'Value': {'Numeric': 247.4958}}, {'Timestamp': '2025-11-04T18:00:00.0000000-07:00', 'Value': {'Numeric': 247.8411}}, {'Timestamp': '2025-11-04T19:00:00.0000000-07:00', 'Value': {'Numeric': 248.16}}, {'Timestamp': '2025-11-04T20:00:00.0000000-07:00', 'Value': {'Numeric': 248.4249}}, {'Timestamp': '2025-11-04T21:00:00.0000000-07:00', 'Value': {'Numeric': 248.6289}}, {'Timestamp': '2025-11-04T22:00:00.0000000-07:00', 'Value': {'Numeric': 248.778}}, {'Timestamp': '2025-11-04T23:00:00.0000000-07:00', 'Value': {'Numeric': 248.8666}}, {'Timestamp': '2025-11-05T00:00:00.0000000-07:00', 'Value': {'Numeric': 248.8991}}, {'Timestamp': '2025-11-05T01:00:00.0000000-07:00', 'Value': {'Numeric': 248.8696}}, {'Timestamp': '2025-11-05T02:00:00.0000000-07:00', 'Value': {'Numeric': 248.7646}}, {'Timestamp': '2025-11-05T03:00:00.0000000-07:00', 'Value': {'Numeric': 248.5971}}, {'Timestamp': '2025-11-05T04:00:00.0000000-07:00', 'Value': {'Numeric': 248.3785}}], 'ResponseVersion': 1, 'ResponseTime': '2025-11-05T11:49:17.8693556+00:00', 'Summary': 'Produced by AQUARIUS Time-Series Software.\r\nThe accuracy and reliability of this data is not guaranteed.  Aquatic Informatics Inc. accepts no liability for its use in any way.'}}}
+2025-11-05 04:49:17,723 [DEBUG] queryWorker: Aquarius label for a3456c1764b846779ea76ce5b1c8c277: BIBLC-EH-Corrected 
+System
+2025-11-05 04:49:17,723 [DEBUG] gapCheck for dataID 'a3456c1764b846779ea76ce5b1c8c277': timestamps len=28, data len=28
+2025-11-05 04:49:17,724 [DEBUG] Post-gapCheck len=28, sample first 3: ['11/04/25 01:00:00,248.4888', '11/04/25 02:00:00,248.3809', '11/04/25 03:00:00,248.2174']
+2025-11-05 04:49:17,725 [DEBUG] queryWorker: Completed group ('AQUARIUS', None, None) with 1 items
+2025-11-05 04:49:17,741 [DEBUG] executeQuery: Signal received for group ('AQUARIUS', None, None)
+2025-11-05 04:49:17,741 [DEBUG] executeQuery: Updated labelsDict with ['a3456c1764b846779ea76ce5b1c8c277']
+2025-11-05 04:49:17,741 [DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, None) with 1 items (1/2)
+2025-11-05 04:49:17,742 [DEBUG] executeQuery: Retrieved result from queue: ('AQUARIUS', None, None)
+2025-11-05 04:49:17,743 [DEBUG] executeQuery: Duplicate group ('AQUARIUS', None, None), skipping
+2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Executed query: 
+        SELECT 
+          site_datatype_id AS SDID, 
+          TO_CHAR(end_date_time, 'YYYY-MM-DD H with params ['20181', '2025-11-04 00:00:00', '2025-11-05 04:49:00']
+2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Query executed in 12.046 seconds
+2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Fetched 29 rows
+2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Found columns: ['SDID', 'END_DATE_TIME', 'START_DATE_TIME', 'DATE_TIME_LOADED', 'VALUE', 'VALIDATION', 'OVERWRITE_FLAG', 'METHOD_ID', 'DERIVATION_FLAGS']
+2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Cursor closed
+2025-11-05 04:49:29,584 [DEBUG] sqlRead: Executing meta query: 
+            SELECT 
+              site_datatype_id AS SDID, 
+              TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
+              TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
+              TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
+              value AS RBASE_VALUE,
+              validation,
+              overwrite_flag,
+              method_id,
+              agen_id,
+              collection_system_id,
+              loading_application_id,
+              computation_id,
+              data_flags
+            FROM LCHDBA.r_base@lchdb
+            WHERE site_datatype_id in (:1)
+              AND end_date_time BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
+              AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS') 
+              AND interval = 'hour'
+            ORDER BY SDID ASC, end_date_time ASC
+         with params ['20181', '2025-11-04 00:00:00', '2025-11-05 04:49:00']
+2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Query '
+            SELECT 
+              site_datatype_id AS SDID, 
+              TO_CHAR(start_date_time,' has bind vars: True
+2025-11-05 04:49:29,585 [DEBUG] OracleConnection.executeCustomQuery: Validating query: 
+            SELECT 
+              site_datatype_id AS SDID, 
+              TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
+              TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
+              TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
+              value AS RBASE_VALUE,
+              validation,
+              overwrite_flag,
+              method_id,
+              agen_id,
+              collection_system_id,
+              loading_application_id,
+              computation_id,
+              data_flags
+            FROM LCHDBA.r_base@lchdb
+            WHERE site_datatype_id in (:1)
+              AND end_date_time BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
+              AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS') 
+              AND interval = 'hour'
+            ORDER BY SDID ASC, end_date_time ASC
+        
+2025-11-05 04:49:29,810 [DEBUG] OracleConnection.executeCustomQuery: Executed query: 
+            SELECT 
+              site_datatype_id AS SDID, 
+              TO_CHAR(start_date_time, with params ['20181', '2025-11-04 00:00:00', '2025-11-05 04:49:00']
+2025-11-05 04:49:29,810 [DEBUG] OracleConnection.executeCustomQuery: Query executed in 0.226 seconds
+2025-11-05 04:49:29,810 [DEBUG] OracleConnection.executeCustomQuery: Fetched 29 rows
+2025-11-05 04:49:29,811 [DEBUG] OracleConnection.executeCustomQuery: Found columns: ['SDID', 'START_DATE_TIME', 'END_DATE_TIME', 'DATE_TIME_LOADED', 'RBASE_VALUE', 'VALIDATION', 'OVERWRITE_FLAG', 'METHOD_ID', 'AGEN_ID', 'COLLECTION_SYSTEM_ID', 'LOADING_APPLICATION_ID', 'COMPUTATION_ID', 'DATA_FLAGS']
+2025-11-05 04:49:29,811 [DEBUG] OracleConnection.executeCustomQuery: Cursor closed
+2025-11-05 04:49:29,813 [DEBUG] sqlRead: Processed 29 data points and 29 meta rows for SDID 20181
+2025-11-05 04:49:29,958 [DEBUG] oracleConnection.close: Connection closed.
+2025-11-05 04:49:29,959 [DEBUG] buildTimestamps called with start: 2025-11-04 01:00, end: 2025-11-05 04:49, interval: HOUR
+2025-11-05 04:49:29,959 [DEBUG] Generated 28 timestamps, sample first 3: ['11/04/25 01:00:00', '11/04/25 02:00:00', '11/04/25 03:00:00']
+2025-11-05 04:49:29,959 [DEBUG] gapCheck for dataID '20181': timestamps len=28, data len=29
+2025-11-05 04:49:29,959 [DEBUG] Removed 1 extra/mismatched rows from '20181': ts ['11/05/25 05:00:00']
+2025-11-05 04:49:29,959 [DEBUG] Post-gapCheck len=28, sample first 3: ['11/04/25 01:00:00,248.5366', '11/04/25 02:00:00,248.4888', '11/04/25 03:00:00,248.3809']
+2025-11-05 04:49:29,960 [DEBUG] sqlRead: Post-gapCheck 28 rows for SDID 20181
+2025-11-05 04:49:29,960 [DEBUG] queryWorker: USBR result for SDIDs ['20181']: {'20181': {'data': ['11/04/25 01:00:00,248.5366', '11/04/25 02:00:00,248.4888', '11/04/25 03:00:00,248.3809', '11/04/25 04:00:00,248.2174', '11/04/25 05:00:00,248.0022', '11/04/25 06:00:00,247.7454', '11/04/25 07:00:00,247.4649', '11/04/25 08:00:00,247.1733', '11/04/25 09:00:00,246.887', '11/04/25 10:00:00,246.623', '11/04/25 11:00:00,246.406', '11/04/25 12:00:00,246.2671', '11/04/25 13:00:00,246.2364', '11/04/25 14:00:00,246.3237', '11/04/25 15:00:00,246.5206', '11/04/25 16:00:00,246.7985', '11/04/25 17:00:00,247.1368', '11/04/25 18:00:00,247.4958', '11/04/25 19:00:00,247.8411', '11/04/25 20:00:00,248.16', '11/04/25 21:00:00,248.4249', '11/04/25 22:00:00,248.6289', '11/04/25 23:00:00,248.778', '11/05/25 00:00:00,248.8666', '11/05/25 01:00:00,248.8991', '11/05/25 02:00:00,248.8696', '11/05/25 03:00:00,248.7646', '11/05/25 04:00:00,248.5971'], 'rawResponse': [{'SDID': '20181', 'START_DATE_TIME': '2025-11-03 23:00:00', 'END_DATE_TIME': '2025-11-04 00:00:00', 'DATE_TIME_LOADED': '2025-11-04 00:04:17', 'RBASE_VALUE': 248.5366, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 00:00:00', 'END_DATE_TIME': '2025-11-04 01:00:00', 'DATE_TIME_LOADED': '2025-11-04 01:04:17', 'RBASE_VALUE': 248.4888, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 01:00:00', 'END_DATE_TIME': '2025-11-04 02:00:00', 'DATE_TIME_LOADED': '2025-11-04 02:04:16', 'RBASE_VALUE': 248.3809, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 02:00:00', 'END_DATE_TIME': '2025-11-04 03:00:00', 'DATE_TIME_LOADED': '2025-11-04 03:04:21', 'RBASE_VALUE': 248.2174, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 03:00:00', 'END_DATE_TIME': '2025-11-04 04:00:00', 'DATE_TIME_LOADED': '2025-11-04 04:04:17', 'RBASE_VALUE': 248.0022, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 04:00:00', 'END_DATE_TIME': '2025-11-04 05:00:00', 'DATE_TIME_LOADED': '2025-11-04 05:04:16', 'RBASE_VALUE': 247.7454, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 05:00:00', 'END_DATE_TIME': '2025-11-04 06:00:00', 'DATE_TIME_LOADED': '2025-11-04 06:04:16', 'RBASE_VALUE': 247.4649, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 06:00:00', 'END_DATE_TIME': '2025-11-04 07:00:00', 'DATE_TIME_LOADED': '2025-11-04 07:04:17', 'RBASE_VALUE': 247.1733, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 07:00:00', 'END_DATE_TIME': '2025-11-04 08:00:00', 'DATE_TIME_LOADED': '2025-11-04 08:04:17', 'RBASE_VALUE': 246.887, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 08:00:00', 'END_DATE_TIME': '2025-11-04 09:00:00', 'DATE_TIME_LOADED': '2025-11-04 09:04:17', 'RBASE_VALUE': 246.623, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 09:00:00', 'END_DATE_TIME': '2025-11-04 10:00:00', 'DATE_TIME_LOADED': '2025-11-04 10:04:18', 'RBASE_VALUE': 246.406, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 10:00:00', 'END_DATE_TIME': '2025-11-04 11:00:00', 'DATE_TIME_LOADED': '2025-11-04 11:04:16', 'RBASE_VALUE': 246.2671, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 11:00:00', 'END_DATE_TIME': '2025-11-04 12:00:00', 'DATE_TIME_LOADED': '2025-11-04 12:04:18', 'RBASE_VALUE': 246.2364, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 12:00:00', 'END_DATE_TIME': '2025-11-04 13:00:00', 'DATE_TIME_LOADED': '2025-11-04 13:04:17', 'RBASE_VALUE': 246.3237, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 13:00:00', 'END_DATE_TIME': '2025-11-04 14:00:00', 'DATE_TIME_LOADED': '2025-11-04 14:04:17', 'RBASE_VALUE': 246.5206, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 14:00:00', 'END_DATE_TIME': '2025-11-04 15:00:00', 'DATE_TIME_LOADED': '2025-11-04 15:04:16', 'RBASE_VALUE': 246.7985, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 15:00:00', 'END_DATE_TIME': '2025-11-04 16:00:00', 'DATE_TIME_LOADED': '2025-11-04 16:04:18', 'RBASE_VALUE': 247.1368, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 16:00:00', 'END_DATE_TIME': '2025-11-04 17:00:00', 'DATE_TIME_LOADED': '2025-11-04 17:04:18', 'RBASE_VALUE': 247.4958, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 17:00:00', 'END_DATE_TIME': '2025-11-04 18:00:00', 'DATE_TIME_LOADED': '2025-11-04 18:04:19', 'RBASE_VALUE': 247.8411, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 18:00:00', 'END_DATE_TIME': '2025-11-04 19:00:00', 'DATE_TIME_LOADED': '2025-11-04 19:04:19', 'RBASE_VALUE': 248.16, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 19:00:00', 'END_DATE_TIME': '2025-11-04 20:00:00', 'DATE_TIME_LOADED': '2025-11-04 20:04:18', 'RBASE_VALUE': 248.4249, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 20:00:00', 'END_DATE_TIME': '2025-11-04 21:00:00', 'DATE_TIME_LOADED': '2025-11-04 21:04:17', 'RBASE_VALUE': 248.6289, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 21:00:00', 'END_DATE_TIME': '2025-11-04 22:00:00', 'DATE_TIME_LOADED': '2025-11-04 22:04:20', 'RBASE_VALUE': 248.778, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 22:00:00', 'END_DATE_TIME': '2025-11-04 23:00:00', 'DATE_TIME_LOADED': '2025-11-04 23:04:20', 'RBASE_VALUE': 248.8666, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 23:00:00', 'END_DATE_TIME': '2025-11-05 00:00:00', 'DATE_TIME_LOADED': '2025-11-05 00:04:19', 'RBASE_VALUE': 248.8991, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-05 00:00:00', 'END_DATE_TIME': '2025-11-05 01:00:00', 'DATE_TIME_LOADED': '2025-11-05 01:04:18', 'RBASE_VALUE': 248.8696, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-05 01:00:00', 'END_DATE_TIME': '2025-11-05 02:00:00', 'DATE_TIME_LOADED': '2025-11-05 02:04:17', 'RBASE_VALUE': 248.7646, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-05 02:00:00', 'END_DATE_TIME': '2025-11-05 03:00:00', 'DATE_TIME_LOADED': '2025-11-05 03:04:20', 'RBASE_VALUE': 248.5971, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-05 03:00:00', 'END_DATE_TIME': '2025-11-05 04:00:00', 'DATE_TIME_LOADED': '2025-11-05 04:04:16', 'RBASE_VALUE': 248.3785, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}]}}
+2025-11-05 04:49:29,960 [DEBUG] queryWorker: Failed for group ('USBR', None, None): 'NoneType' object does not support item assignment
+2025-11-05 04:49:30,006 [DEBUG] executeQuery: Signal received for group ('USBR', None, None)
+2025-11-05 04:49:30,006 [DEBUG] executeQuery: Skipping empty group ('USBR', None, None), no data
+2025-11-05 04:49:30,008 [DEBUG] executeQuery: Retrieved result from queue: ('USBR', None, None)
+2025-11-05 04:49:30,008 [DEBUG] executeQuery: Duplicate group ('USBR', None, None), skipping
+2025-11-05 04:49:30,009 [DEBUG] executeQuery: Timer stopped, wait loop ended, final collected 2/2, queue size 0, active threads 0
+2025-11-05 04:49:30,009 [DEBUG] executeQuery: All 2 groups merged
+2025-11-05 04:49:30,010 [DEBUG] Added empty result for dataID 20181
+2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 0/28
+2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 1/28
+2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 2/28
+2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 3/28
+2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 4/28
+2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 5/28
+2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 6/28
+2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 7/28
+2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 8/28
+2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 9/28
+2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 10/28
+2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 11/28
+2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 12/28
+2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 13/28
+2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 14/28
+2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 15/28
+2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 16/28
+2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 17/28
+2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 18/28
+2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 19/28
+2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 20/28
+2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 21/28
+2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 22/28
+2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 23/28
+2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 24/28
+2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 25/28
+2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 26/28
+2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 27/28
+2025-11-05 04:49:30,013 [DEBUG] executeQuery: Built 28 rows for table
+2025-11-05 04:49:30,015 [DEBUG] buildTable: Starting with 28 rows, 2 headers
+2025-11-05 04:49:30,042 [DEBUG] buildTable: Aquarius not in dict, header 0: BIBLC-EH-Corrected 
+System
+2025-11-05 04:49:30,056 [DEBUG] buildTable: USBR in dict, header 1: BIBLC 
+20181
+2025-11-05 04:49:30,056 [DEBUG] buildTable: Setting table to 28 rows, 2 columns
+2025-11-05 04:49:30,057 [DEBUG] buildTable: Sampling 28 rows for column widths
+2025-11-05 04:49:30,057 [DEBUG] buildTable col 0: maxCellWidth=68, headerWidth=141
+2025-11-05 04:49:30,057 [DEBUG] buildTable col 1: No non-empty values, using fallback width 32
+2025-11-05 04:49:30,057 [DEBUG] buildTable col 1: maxCellWidth=32, headerWidth=45
+2025-11-05 04:49:30,057 [DEBUG] buildTable: Disabled table updates for population
+2025-11-05 04:49:30,058 [DEBUG] buildTable: Re-enabled table updates after population
+2025-11-05 04:49:30,058 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
+2025-11-05 04:49:30,060 [DEBUG] buildTable: Set column 0 width to 151
+2025-11-05 04:49:30,060 [DEBUG] buildTable: Set column 1 width to 55
+2025-11-05 04:49:30,060 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
+2025-11-05 04:49:30,060 [DEBUG] buildTable: Set default row height to 29
+2025-11-05 04:49:30,060 [DEBUG] buildTable: Custom resized 2 columns. Text width for col 1: 92, Visible width: 55, Row height: 29
+2025-11-05 04:49:30,060 [DEBUG] qaqc: Processing column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
+2025-11-05 04:49:30,082 [DEBUG] qaqc: Processed column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
+2025-11-05 04:49:30,082 [DEBUG] qaqc: Processing column 1 for lookupId 20181
+2025-11-05 04:49:30,097 [DEBUG] qaqc: Processed column 1 for lookupId 20181
+2025-11-05 04:49:30,097 [DEBUG] Stored query data: 1 series, type internal, keys=["'BIBLC-EH-Corrected \\nSystem'"]
+2025-11-05 04:49:30,097 [DEBUG] Stored 1 rawResponses for Aquarius
+2025-11-05 04:49:30,097 [DEBUG] Set columnMetadata with lookupId: [{'type': 'normal', 'dataIds': ['a3456c1764b846779ea76ce5b1c8c277'], 'dbs': 'AQUARIUS', 'queryInfos': ['a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS'], 'lookupId': 'BIBLC-EH-Corrected \nSystem'}, {'type': 'normal', 'dataIds': ['20181'], 'dbs': 'USBR-LCHDB', 'queryInfos': ['20181|HOUR|USBR-LCHDB'], 'lookupId': '20181'}]
+2025-11-05 04:49:30,103 [DEBUG] executeQuery: Table built, progress dialog completed
+2025-11-05 04:49:30,103 [DEBUG] Query executed and table updated.
+2025-11-05 04:49:30,103 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
+2025-11-05 04:49:30,109 [DEBUG] tabMain index during executeQuery: 1
+2025-11-05 04:49:30,109 [DEBUG] Removed tabMain from index 1 to move to 0
+2025-11-05 04:49:30,112 [DEBUG] Inserted tabMain at index 0 after query
+2025-11-05 04:49:30,124 [DEBUG] Query window closed after query.
