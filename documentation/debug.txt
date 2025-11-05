@@ -1,159 +1,844 @@
-2025-11-05 04:49:17,719 [DEBUG] Thread 0 fetched 28 points for UID 'a3456c1764b846779ea76ce5b1c8c277', range 2025-11-04 08:00 to 2025-11-05 11:50
-2025-11-05 04:49:17,719 [DEBUG] Thread 0 completed task for UID a3456c1764b846779ea76ce5b1c8c277 with 28 points
-2025-11-05 04:49:17,719 [DEBUG] Thread 0 found no more tasks
-2025-11-05 04:49:17,721 [DEBUG] Thread 0 joined
-2025-11-05 04:49:17,722 [DEBUG] Combined results from 1 tasks with 1 UIDs
-2025-11-05 04:49:17,722 [DEBUG] Returning result dict with 1 UIDs
-2025-11-05 04:49:17,723 [DEBUG] queryWorker: Aquarius result for SDIDs ['a3456c1764b846779ea76ce5b1c8c277']: {'a3456c1764b846779ea76ce5b1c8c277': {'data': ['11/04/25 01:00:00,248.4888', '11/04/25 02:00:00,248.3809', '11/04/25 03:00:00,248.2174', '11/04/25 04:00:00,248.0022', '11/04/25 05:00:00,247.7454', '11/04/25 06:00:00,247.4649', '11/04/25 07:00:00,247.1733', '11/04/25 08:00:00,246.887', '11/04/25 09:00:00,246.623', '11/04/25 10:00:00,246.406', '11/04/25 11:00:00,246.2671', '11/04/25 12:00:00,246.2364', '11/04/25 13:00:00,246.3237', '11/04/25 14:00:00,246.5206', '11/04/25 15:00:00,246.7985', '11/04/25 16:00:00,247.1368', '11/04/25 17:00:00,247.4958', '11/04/25 18:00:00,247.8411', '11/04/25 19:00:00,248.16', '11/04/25 20:00:00,248.4249', '11/04/25 21:00:00,248.6289', '11/04/25 22:00:00,248.778', '11/04/25 23:00:00,248.8666', '11/05/25 00:00:00,248.8991', '11/05/25 01:00:00,248.8696', '11/05/25 02:00:00,248.7646', '11/05/25 03:00:00,248.5971', '11/05/25 04:00:00,248.3785'], 'label': 'BIBLC-EH-Corrected \nSystem', 'rawResponse': {'UniqueId': 'a3456c1764b846779ea76ce5b1c8c277', 'Parameter': 'Stage', 'Label': 'BIBLC-EH-Corrected', 'LocationIdentifier': 'System', 'NumPoints': 28, 'Unit': 'ft', 'Approvals': [{'ApprovalLevel': 900, 'DateAppliedUtc': '2020-10-23T19:10:07.6119152Z', 'User': 'admin', 'LevelDescription': 'Working', 'Comment': '', 'StartTime': '0001-01-01T00:00:00.0000000+00:00', 'EndTime': '9999-12-31T23:59:59.9999999+00:00'}], 'Qualifiers': [], 'Methods': [{'MethodCode': 'HGCOMP', 'StartTime': '2025-11-04T01:00:00.0000000-07:00', 'EndTime': '2025-11-05T04:50:00.0000001-07:00'}], 'Grades': [{'GradeCode': '0', 'StartTime': '2025-11-04T01:00:00.0000000-07:00', 'EndTime': '2025-11-05T04:50:00.0000001-07:00'}], 'GapTolerances': [{'ToleranceInMinutes': 60, 'StartTime': '2025-11-04T01:00:00.0000000-07:00', 'EndTime': '2025-11-05T04:50:00.0000001-07:00'}], 'InterpolationTypes': [{'Type': 'InstantaneousValues', 'StartTime': '2025-11-04T01:00:00.0000000-07:00', 'EndTime': '2025-11-05T04:50:00.0000001-07:00'}], 'Notes': [], 'TimeRange': {'StartTime': '2025-11-04T01:00:00.0000000-07:00', 'EndTime': '2025-11-05T04:00:00.0000000-07:00'}, 'Points': [{'Timestamp': '2025-11-04T01:00:00.0000000-07:00', 'Value': {'Numeric': 248.4888}}, {'Timestamp': '2025-11-04T02:00:00.0000000-07:00', 'Value': {'Numeric': 248.3809}}, {'Timestamp': '2025-11-04T03:00:00.0000000-07:00', 'Value': {'Numeric': 248.2174}}, {'Timestamp': '2025-11-04T04:00:00.0000000-07:00', 'Value': {'Numeric': 248.0022}}, {'Timestamp': '2025-11-04T05:00:00.0000000-07:00', 'Value': {'Numeric': 247.7454}}, {'Timestamp': '2025-11-04T06:00:00.0000000-07:00', 'Value': {'Numeric': 247.4649}}, {'Timestamp': '2025-11-04T07:00:00.0000000-07:00', 'Value': {'Numeric': 247.1733}}, {'Timestamp': '2025-11-04T08:00:00.0000000-07:00', 'Value': {'Numeric': 246.887}}, {'Timestamp': '2025-11-04T09:00:00.0000000-07:00', 'Value': {'Numeric': 246.623}}, {'Timestamp': '2025-11-04T10:00:00.0000000-07:00', 'Value': {'Numeric': 246.406}}, {'Timestamp': '2025-11-04T11:00:00.0000000-07:00', 'Value': {'Numeric': 246.2671}}, {'Timestamp': '2025-11-04T12:00:00.0000000-07:00', 'Value': {'Numeric': 246.2364}}, {'Timestamp': '2025-11-04T13:00:00.0000000-07:00', 'Value': {'Numeric': 246.3237}}, {'Timestamp': '2025-11-04T14:00:00.0000000-07:00', 'Value': {'Numeric': 246.5206}}, {'Timestamp': '2025-11-04T15:00:00.0000000-07:00', 'Value': {'Numeric': 246.7985}}, {'Timestamp': '2025-11-04T16:00:00.0000000-07:00', 'Value': {'Numeric': 247.1368}}, {'Timestamp': '2025-11-04T17:00:00.0000000-07:00', 'Value': {'Numeric': 247.4958}}, {'Timestamp': '2025-11-04T18:00:00.0000000-07:00', 'Value': {'Numeric': 247.8411}}, {'Timestamp': '2025-11-04T19:00:00.0000000-07:00', 'Value': {'Numeric': 248.16}}, {'Timestamp': '2025-11-04T20:00:00.0000000-07:00', 'Value': {'Numeric': 248.4249}}, {'Timestamp': '2025-11-04T21:00:00.0000000-07:00', 'Value': {'Numeric': 248.6289}}, {'Timestamp': '2025-11-04T22:00:00.0000000-07:00', 'Value': {'Numeric': 248.778}}, {'Timestamp': '2025-11-04T23:00:00.0000000-07:00', 'Value': {'Numeric': 248.8666}}, {'Timestamp': '2025-11-05T00:00:00.0000000-07:00', 'Value': {'Numeric': 248.8991}}, {'Timestamp': '2025-11-05T01:00:00.0000000-07:00', 'Value': {'Numeric': 248.8696}}, {'Timestamp': '2025-11-05T02:00:00.0000000-07:00', 'Value': {'Numeric': 248.7646}}, {'Timestamp': '2025-11-05T03:00:00.0000000-07:00', 'Value': {'Numeric': 248.5971}}, {'Timestamp': '2025-11-05T04:00:00.0000000-07:00', 'Value': {'Numeric': 248.3785}}], 'ResponseVersion': 1, 'ResponseTime': '2025-11-05T11:49:17.8693556+00:00', 'Summary': 'Produced by AQUARIUS Time-Series Software.\r\nThe accuracy and reliability of this data is not guaranteed.  Aquatic Informatics Inc. accepts no liability for its use in any way.'}}}
-2025-11-05 04:49:17,723 [DEBUG] queryWorker: Aquarius label for a3456c1764b846779ea76ce5b1c8c277: BIBLC-EH-Corrected 
-System
-2025-11-05 04:49:17,723 [DEBUG] gapCheck for dataID 'a3456c1764b846779ea76ce5b1c8c277': timestamps len=28, data len=28
-2025-11-05 04:49:17,724 [DEBUG] Post-gapCheck len=28, sample first 3: ['11/04/25 01:00:00,248.4888', '11/04/25 02:00:00,248.3809', '11/04/25 03:00:00,248.2174']
-2025-11-05 04:49:17,725 [DEBUG] queryWorker: Completed group ('AQUARIUS', None, None) with 1 items
-2025-11-05 04:49:17,741 [DEBUG] executeQuery: Signal received for group ('AQUARIUS', None, None)
-2025-11-05 04:49:17,741 [DEBUG] executeQuery: Updated labelsDict with ['a3456c1764b846779ea76ce5b1c8c277']
-2025-11-05 04:49:17,741 [DEBUG] executeQuery: Collected results for group ('AQUARIUS', None, None) with 1 items (1/2)
-2025-11-05 04:49:17,742 [DEBUG] executeQuery: Retrieved result from queue: ('AQUARIUS', None, None)
-2025-11-05 04:49:17,743 [DEBUG] executeQuery: Duplicate group ('AQUARIUS', None, None), skipping
-2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Executed query: 
-        SELECT 
-          site_datatype_id AS SDID, 
-          TO_CHAR(end_date_time, 'YYYY-MM-DD H with params ['20181', '2025-11-04 00:00:00', '2025-11-05 04:49:00']
-2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Query executed in 12.046 seconds
-2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Fetched 29 rows
-2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Found columns: ['SDID', 'END_DATE_TIME', 'START_DATE_TIME', 'DATE_TIME_LOADED', 'VALUE', 'VALIDATION', 'OVERWRITE_FLAG', 'METHOD_ID', 'DERIVATION_FLAGS']
-2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Cursor closed
-2025-11-05 04:49:29,584 [DEBUG] sqlRead: Executing meta query: 
-            SELECT 
-              site_datatype_id AS SDID, 
-              TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
-              TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
-              TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
-              value AS RBASE_VALUE,
-              validation,
-              overwrite_flag,
-              method_id,
-              agen_id,
-              collection_system_id,
-              loading_application_id,
-              computation_id,
-              data_flags
-            FROM LCHDBA.r_base@lchdb
-            WHERE site_datatype_id in (:1)
-              AND end_date_time BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
-              AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS') 
-              AND interval = 'hour'
-            ORDER BY SDID ASC, end_date_time ASC
-         with params ['20181', '2025-11-04 00:00:00', '2025-11-05 04:49:00']
-2025-11-05 04:49:29,584 [DEBUG] OracleConnection.executeCustomQuery: Query '
-            SELECT 
-              site_datatype_id AS SDID, 
-              TO_CHAR(start_date_time,' has bind vars: True
-2025-11-05 04:49:29,585 [DEBUG] OracleConnection.executeCustomQuery: Validating query: 
-            SELECT 
-              site_datatype_id AS SDID, 
-              TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
-              TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
-              TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
-              value AS RBASE_VALUE,
-              validation,
-              overwrite_flag,
-              method_id,
-              agen_id,
-              collection_system_id,
-              loading_application_id,
-              computation_id,
-              data_flags
-            FROM LCHDBA.r_base@lchdb
-            WHERE site_datatype_id in (:1)
-              AND end_date_time BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
-              AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS') 
-              AND interval = 'hour'
-            ORDER BY SDID ASC, end_date_time ASC
-        
-2025-11-05 04:49:29,810 [DEBUG] OracleConnection.executeCustomQuery: Executed query: 
-            SELECT 
-              site_datatype_id AS SDID, 
-              TO_CHAR(start_date_time, with params ['20181', '2025-11-04 00:00:00', '2025-11-05 04:49:00']
-2025-11-05 04:49:29,810 [DEBUG] OracleConnection.executeCustomQuery: Query executed in 0.226 seconds
-2025-11-05 04:49:29,810 [DEBUG] OracleConnection.executeCustomQuery: Fetched 29 rows
-2025-11-05 04:49:29,811 [DEBUG] OracleConnection.executeCustomQuery: Found columns: ['SDID', 'START_DATE_TIME', 'END_DATE_TIME', 'DATE_TIME_LOADED', 'RBASE_VALUE', 'VALIDATION', 'OVERWRITE_FLAG', 'METHOD_ID', 'AGEN_ID', 'COLLECTION_SYSTEM_ID', 'LOADING_APPLICATION_ID', 'COMPUTATION_ID', 'DATA_FLAGS']
-2025-11-05 04:49:29,811 [DEBUG] OracleConnection.executeCustomQuery: Cursor closed
-2025-11-05 04:49:29,813 [DEBUG] sqlRead: Processed 29 data points and 29 meta rows for SDID 20181
-2025-11-05 04:49:29,958 [DEBUG] oracleConnection.close: Connection closed.
-2025-11-05 04:49:29,959 [DEBUG] buildTimestamps called with start: 2025-11-04 01:00, end: 2025-11-05 04:49, interval: HOUR
-2025-11-05 04:49:29,959 [DEBUG] Generated 28 timestamps, sample first 3: ['11/04/25 01:00:00', '11/04/25 02:00:00', '11/04/25 03:00:00']
-2025-11-05 04:49:29,959 [DEBUG] gapCheck for dataID '20181': timestamps len=28, data len=29
-2025-11-05 04:49:29,959 [DEBUG] Removed 1 extra/mismatched rows from '20181': ts ['11/05/25 05:00:00']
-2025-11-05 04:49:29,959 [DEBUG] Post-gapCheck len=28, sample first 3: ['11/04/25 01:00:00,248.5366', '11/04/25 02:00:00,248.4888', '11/04/25 03:00:00,248.3809']
-2025-11-05 04:49:29,960 [DEBUG] sqlRead: Post-gapCheck 28 rows for SDID 20181
-2025-11-05 04:49:29,960 [DEBUG] queryWorker: USBR result for SDIDs ['20181']: {'20181': {'data': ['11/04/25 01:00:00,248.5366', '11/04/25 02:00:00,248.4888', '11/04/25 03:00:00,248.3809', '11/04/25 04:00:00,248.2174', '11/04/25 05:00:00,248.0022', '11/04/25 06:00:00,247.7454', '11/04/25 07:00:00,247.4649', '11/04/25 08:00:00,247.1733', '11/04/25 09:00:00,246.887', '11/04/25 10:00:00,246.623', '11/04/25 11:00:00,246.406', '11/04/25 12:00:00,246.2671', '11/04/25 13:00:00,246.2364', '11/04/25 14:00:00,246.3237', '11/04/25 15:00:00,246.5206', '11/04/25 16:00:00,246.7985', '11/04/25 17:00:00,247.1368', '11/04/25 18:00:00,247.4958', '11/04/25 19:00:00,247.8411', '11/04/25 20:00:00,248.16', '11/04/25 21:00:00,248.4249', '11/04/25 22:00:00,248.6289', '11/04/25 23:00:00,248.778', '11/05/25 00:00:00,248.8666', '11/05/25 01:00:00,248.8991', '11/05/25 02:00:00,248.8696', '11/05/25 03:00:00,248.7646', '11/05/25 04:00:00,248.5971'], 'rawResponse': [{'SDID': '20181', 'START_DATE_TIME': '2025-11-03 23:00:00', 'END_DATE_TIME': '2025-11-04 00:00:00', 'DATE_TIME_LOADED': '2025-11-04 00:04:17', 'RBASE_VALUE': 248.5366, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 00:00:00', 'END_DATE_TIME': '2025-11-04 01:00:00', 'DATE_TIME_LOADED': '2025-11-04 01:04:17', 'RBASE_VALUE': 248.4888, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 01:00:00', 'END_DATE_TIME': '2025-11-04 02:00:00', 'DATE_TIME_LOADED': '2025-11-04 02:04:16', 'RBASE_VALUE': 248.3809, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 02:00:00', 'END_DATE_TIME': '2025-11-04 03:00:00', 'DATE_TIME_LOADED': '2025-11-04 03:04:21', 'RBASE_VALUE': 248.2174, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 03:00:00', 'END_DATE_TIME': '2025-11-04 04:00:00', 'DATE_TIME_LOADED': '2025-11-04 04:04:17', 'RBASE_VALUE': 248.0022, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 04:00:00', 'END_DATE_TIME': '2025-11-04 05:00:00', 'DATE_TIME_LOADED': '2025-11-04 05:04:16', 'RBASE_VALUE': 247.7454, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 05:00:00', 'END_DATE_TIME': '2025-11-04 06:00:00', 'DATE_TIME_LOADED': '2025-11-04 06:04:16', 'RBASE_VALUE': 247.4649, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 06:00:00', 'END_DATE_TIME': '2025-11-04 07:00:00', 'DATE_TIME_LOADED': '2025-11-04 07:04:17', 'RBASE_VALUE': 247.1733, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 07:00:00', 'END_DATE_TIME': '2025-11-04 08:00:00', 'DATE_TIME_LOADED': '2025-11-04 08:04:17', 'RBASE_VALUE': 246.887, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 08:00:00', 'END_DATE_TIME': '2025-11-04 09:00:00', 'DATE_TIME_LOADED': '2025-11-04 09:04:17', 'RBASE_VALUE': 246.623, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 09:00:00', 'END_DATE_TIME': '2025-11-04 10:00:00', 'DATE_TIME_LOADED': '2025-11-04 10:04:18', 'RBASE_VALUE': 246.406, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 10:00:00', 'END_DATE_TIME': '2025-11-04 11:00:00', 'DATE_TIME_LOADED': '2025-11-04 11:04:16', 'RBASE_VALUE': 246.2671, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 11:00:00', 'END_DATE_TIME': '2025-11-04 12:00:00', 'DATE_TIME_LOADED': '2025-11-04 12:04:18', 'RBASE_VALUE': 246.2364, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 12:00:00', 'END_DATE_TIME': '2025-11-04 13:00:00', 'DATE_TIME_LOADED': '2025-11-04 13:04:17', 'RBASE_VALUE': 246.3237, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 13:00:00', 'END_DATE_TIME': '2025-11-04 14:00:00', 'DATE_TIME_LOADED': '2025-11-04 14:04:17', 'RBASE_VALUE': 246.5206, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 14:00:00', 'END_DATE_TIME': '2025-11-04 15:00:00', 'DATE_TIME_LOADED': '2025-11-04 15:04:16', 'RBASE_VALUE': 246.7985, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 15:00:00', 'END_DATE_TIME': '2025-11-04 16:00:00', 'DATE_TIME_LOADED': '2025-11-04 16:04:18', 'RBASE_VALUE': 247.1368, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 16:00:00', 'END_DATE_TIME': '2025-11-04 17:00:00', 'DATE_TIME_LOADED': '2025-11-04 17:04:18', 'RBASE_VALUE': 247.4958, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 17:00:00', 'END_DATE_TIME': '2025-11-04 18:00:00', 'DATE_TIME_LOADED': '2025-11-04 18:04:19', 'RBASE_VALUE': 247.8411, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 18:00:00', 'END_DATE_TIME': '2025-11-04 19:00:00', 'DATE_TIME_LOADED': '2025-11-04 19:04:19', 'RBASE_VALUE': 248.16, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 19:00:00', 'END_DATE_TIME': '2025-11-04 20:00:00', 'DATE_TIME_LOADED': '2025-11-04 20:04:18', 'RBASE_VALUE': 248.4249, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 20:00:00', 'END_DATE_TIME': '2025-11-04 21:00:00', 'DATE_TIME_LOADED': '2025-11-04 21:04:17', 'RBASE_VALUE': 248.6289, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 21:00:00', 'END_DATE_TIME': '2025-11-04 22:00:00', 'DATE_TIME_LOADED': '2025-11-04 22:04:20', 'RBASE_VALUE': 248.778, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 22:00:00', 'END_DATE_TIME': '2025-11-04 23:00:00', 'DATE_TIME_LOADED': '2025-11-04 23:04:20', 'RBASE_VALUE': 248.8666, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-04 23:00:00', 'END_DATE_TIME': '2025-11-05 00:00:00', 'DATE_TIME_LOADED': '2025-11-05 00:04:19', 'RBASE_VALUE': 248.8991, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-05 00:00:00', 'END_DATE_TIME': '2025-11-05 01:00:00', 'DATE_TIME_LOADED': '2025-11-05 01:04:18', 'RBASE_VALUE': 248.8696, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-05 01:00:00', 'END_DATE_TIME': '2025-11-05 02:00:00', 'DATE_TIME_LOADED': '2025-11-05 02:04:17', 'RBASE_VALUE': 248.7646, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-05 02:00:00', 'END_DATE_TIME': '2025-11-05 03:00:00', 'DATE_TIME_LOADED': '2025-11-05 03:04:20', 'RBASE_VALUE': 248.5971, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}, {'SDID': '20181', 'START_DATE_TIME': '2025-11-05 03:00:00', 'END_DATE_TIME': '2025-11-05 04:00:00', 'DATE_TIME_LOADED': '2025-11-05 04:04:16', 'RBASE_VALUE': 248.3785, 'VALIDATION': 'V', 'OVERWRITE_FLAG': None, 'METHOD_ID': 13, 'AGEN_ID': 7, 'COLLECTION_SYSTEM_ID': 13, 'LOADING_APPLICATION_ID': 120, 'COMPUTATION_ID': 1, 'DATA_FLAGS': None, 'INTERVAL': 'hour'}]}}
-2025-11-05 04:49:29,960 [DEBUG] queryWorker: Failed for group ('USBR', None, None): 'NoneType' object does not support item assignment
-2025-11-05 04:49:30,006 [DEBUG] executeQuery: Signal received for group ('USBR', None, None)
-2025-11-05 04:49:30,006 [DEBUG] executeQuery: Skipping empty group ('USBR', None, None), no data
-2025-11-05 04:49:30,008 [DEBUG] executeQuery: Retrieved result from queue: ('USBR', None, None)
-2025-11-05 04:49:30,008 [DEBUG] executeQuery: Duplicate group ('USBR', None, None), skipping
-2025-11-05 04:49:30,009 [DEBUG] executeQuery: Timer stopped, wait loop ended, final collected 2/2, queue size 0, active threads 0
-2025-11-05 04:49:30,009 [DEBUG] executeQuery: All 2 groups merged
-2025-11-05 04:49:30,010 [DEBUG] Added empty result for dataID 20181
-2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 0/28
-2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 1/28
-2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 2/28
-2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 3/28
-2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 4/28
-2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 5/28
-2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 6/28
-2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 7/28
-2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 8/28
-2025-11-05 04:49:30,011 [DEBUG] executeQuery: Building row 9/28
-2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 10/28
-2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 11/28
-2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 12/28
-2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 13/28
-2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 14/28
-2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 15/28
-2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 16/28
-2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 17/28
-2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 18/28
-2025-11-05 04:49:30,012 [DEBUG] executeQuery: Building row 19/28
-2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 20/28
-2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 21/28
-2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 22/28
-2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 23/28
-2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 24/28
-2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 25/28
-2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 26/28
-2025-11-05 04:49:30,013 [DEBUG] executeQuery: Building row 27/28
-2025-11-05 04:49:30,013 [DEBUG] executeQuery: Built 28 rows for table
-2025-11-05 04:49:30,015 [DEBUG] buildTable: Starting with 28 rows, 2 headers
-2025-11-05 04:49:30,042 [DEBUG] buildTable: Aquarius not in dict, header 0: BIBLC-EH-Corrected 
-System
-2025-11-05 04:49:30,056 [DEBUG] buildTable: USBR in dict, header 1: BIBLC 
-20181
-2025-11-05 04:49:30,056 [DEBUG] buildTable: Setting table to 28 rows, 2 columns
-2025-11-05 04:49:30,057 [DEBUG] buildTable: Sampling 28 rows for column widths
-2025-11-05 04:49:30,057 [DEBUG] buildTable col 0: maxCellWidth=68, headerWidth=141
-2025-11-05 04:49:30,057 [DEBUG] buildTable col 1: No non-empty values, using fallback width 32
-2025-11-05 04:49:30,057 [DEBUG] buildTable col 1: maxCellWidth=32, headerWidth=45
-2025-11-05 04:49:30,057 [DEBUG] buildTable: Disabled table updates for population
-2025-11-05 04:49:30,058 [DEBUG] buildTable: Re-enabled table updates after population
-2025-11-05 04:49:30,058 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
-2025-11-05 04:49:30,060 [DEBUG] buildTable: Set column 0 width to 151
-2025-11-05 04:49:30,060 [DEBUG] buildTable: Set column 1 width to 55
-2025-11-05 04:49:30,060 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
-2025-11-05 04:49:30,060 [DEBUG] buildTable: Set default row height to 29
-2025-11-05 04:49:30,060 [DEBUG] buildTable: Custom resized 2 columns. Text width for col 1: 92, Visible width: 55, Row height: 29
-2025-11-05 04:49:30,060 [DEBUG] qaqc: Processing column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
-2025-11-05 04:49:30,082 [DEBUG] qaqc: Processed column 0 for lookupId a3456c1764b846779ea76ce5b1c8c277
-2025-11-05 04:49:30,082 [DEBUG] qaqc: Processing column 1 for lookupId 20181
-2025-11-05 04:49:30,097 [DEBUG] qaqc: Processed column 1 for lookupId 20181
-2025-11-05 04:49:30,097 [DEBUG] Stored query data: 1 series, type internal, keys=["'BIBLC-EH-Corrected \\nSystem'"]
-2025-11-05 04:49:30,097 [DEBUG] Stored 1 rawResponses for Aquarius
-2025-11-05 04:49:30,097 [DEBUG] Set columnMetadata with lookupId: [{'type': 'normal', 'dataIds': ['a3456c1764b846779ea76ce5b1c8c277'], 'dbs': 'AQUARIUS', 'queryInfos': ['a3456c1764b846779ea76ce5b1c8c277|HOUR|AQUARIUS'], 'lookupId': 'BIBLC-EH-Corrected \nSystem'}, {'type': 'normal', 'dataIds': ['20181'], 'dbs': 'USBR-LCHDB', 'queryInfos': ['20181|HOUR|USBR-LCHDB'], 'lookupId': '20181'}]
-2025-11-05 04:49:30,103 [DEBUG] executeQuery: Table built, progress dialog completed
-2025-11-05 04:49:30,103 [DEBUG] Query executed and table updated.
-2025-11-05 04:49:30,103 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
-2025-11-05 04:49:30,109 [DEBUG] tabMain index during executeQuery: 1
-2025-11-05 04:49:30,109 [DEBUG] Removed tabMain from index 1 to move to 0
-2025-11-05 04:49:30,112 [DEBUG] Inserted tabMain at index 0 after query
-2025-11-05 04:49:30,124 [DEBUG] Query window closed after query.
+2025-11-05 05:13:34,815 [DEBUG] executeQuery: Table built, progress dialog completed
+2025-11-05 05:13:34,815 [DEBUG] Query executed and table updated.
+2025-11-05 05:13:34,815 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
+2025-11-05 05:13:34,825 [DEBUG] tabMain index during executeQuery: 0
+2025-11-05 05:13:34,827 [DEBUG] Query window closed after query.
+2025-11-05 05:13:46,744 [DEBUG] uiQuery showEvent: queryType=internal
+2025-11-05 05:13:46,745 [DEBUG] centerWindowToParent: Centered winInternalQuery at 976,233
+2025-11-05 05:13:46,745 [DEBUG] Loaded config for quick look: Data Check (HDB & AQUARIUS)
+2025-11-05 05:13:46,746 [DEBUG] Set cbQuickLook to index 2: Data Check (HDB & AQUARIUS)
+2025-11-05 05:13:46,746 [DEBUG] Populating cbDatabase
+2025-11-05 05:13:46,746 [DEBUG] Populated cbDatabase with 10 items
+2025-11-05 05:13:46,749 [DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png and title to Internal Query
+2025-11-05 05:13:46,757 [DEBUG] btnInternalQueryPressed: Opened uiQuery as internal
+2025-11-05 05:13:54,793 [DEBUG] loadQuickLook: Added item 20179-108283|HOUR|USBR-YAOHDB
+2025-11-05 05:13:54,793 [DEBUG] loadQuickLook: Loaded 'MRID TEST' with 1 items
+2025-11-05 05:13:54,794 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'Data Check (HDB & AQUARIUS)', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP', 'sqlVerticalSizes': [337, 242], 'sqlHorizontalSizes': [1306, 282]}
+2025-11-05 05:13:54,795 [DEBUG] Loaded quick look: MRID TEST
+2025-11-05 05:13:56,242 [DEBUG] btnQueryPressed: Starting query process, queryType=internal
+2025-11-05 05:13:56,242 [DEBUG] Item text: '20179-108283|HOUR|USBR-YAOHDB', parts: ['20179-108283', 'HOUR', 'USBR-YAOHDB'], len: 3
+2025-11-05 05:13:56,242 [DEBUG] Added queryItem: ('20179-108283', 'HOUR', 'USBR-YAOHDB', '108283', 0)
+2025-11-05 05:13:56,242 [DEBUG] Stored last query as internal
+2025-11-05 05:13:56,242 [DEBUG] executeQuery: isInternal=True, items=1, deltaChecked=False, overlayChecked=False
+2025-11-05 05:13:56,242 [DEBUG] executeQuery: Filtered AQUARIUS for public query, remaining items=1
+2025-11-05 05:13:56,255 [DEBUG] executeQuery: Initialized and showed progress dialog
+2025-11-05 05:13:56,255 [DEBUG] executeQuery: Ensured dates are datetime for rounding: start=2025-11-04 01:00:00, end=2025-11-12 05:12:00
+2025-11-05 05:13:56,255 [DEBUG] Rounded down 2025-11-04 01:00:00 to HOUR
+2025-11-05 05:13:56,255 [DEBUG] buildTimestamps called with start: 2025-11-04 01:00, end: 2025-11-12 05:12, interval: HOUR
+2025-11-05 05:13:56,256 [DEBUG] Generated 197 timestamps, sample first 3: ['11/04/25 01:00:00', '11/04/25 02:00:00', '11/04/25 03:00:00']
+2025-11-05 05:13:56,258 [DEBUG] executeQuery: Setup complete, progress at 20%
+2025-11-05 05:13:56,258 [DEBUG] Starting 1 threads for 1 groups in background
+2025-11-05 05:13:56,258 [DEBUG] Started background worker 0 for group ('USBR', None, None)
+2025-11-05 05:13:56,258 [DEBUG] USBR.sqlRead called with svr: yaohdb, SDIDs: ['20179'], interval: HOUR, start: 2025-11-04 01:00, end: 2025-11-12 05:12, mrid: 108283, table: M
+2025-11-05 05:13:56,259 [DEBUG] executeQuery: Started timer for progress updates
+2025-11-05 05:13:56,259 [DEBUG] oracleConnection._setup: Checking for platform-specific files in C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client: ['oci.dll']
+2025-11-05 05:13:56,259 [DEBUG] oracleConnection._setup: Validated Instant Client files for windows
+2025-11-05 05:13:56,259 [DEBUG] oracleConnection._setup: Initialized oracledb with clientDir C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client
+2025-11-05 05:13:56,259 [DEBUG] oracleConnection._setup: Using env TNS_ADMIN: C:\Program Files\Oracle\Network\Admin (no copy)
+2025-11-05 05:13:59,061 [DEBUG] oracleConnection.connect: Error connecting to Oracle: ORA-01017: invalid username/password; logon denied
+Help: https://docs.oracle.com/error-help/db/ora-01017/
+2025-11-05 05:13:59,061 [ERROR] sqlRead: Query failed: ORA-01017: invalid username/password; logon denied
+Help: https://docs.oracle.com/error-help/db/ora-01017/
+2025-11-05 05:13:59,061 [DEBUG] buildTimestamps called with start: 2025-11-04 01:00, end: 2025-11-12 05:12, interval: HOUR
+2025-11-05 05:13:59,062 [DEBUG] Generated 197 timestamps, sample first 3: ['11/04/25 01:00:00', '11/04/25 02:00:00', '11/04/25 03:00:00']
+2025-11-05 05:13:59,062 [DEBUG] gapCheck for dataID '20179': timestamps len=197, data len=0
+2025-11-05 05:13:59,064 [DEBUG] Post-gapCheck len=197, sample first 3: ['11/04/25 01:00:00,', '11/04/25 02:00:00,', '11/04/25 03:00:00,']
+2025-11-05 05:13:59,065 [DEBUG] sqlRead: Post-gapCheck 197 rows for SDID 20179
+2025-11-05 05:13:59,065 [DEBUG] queryWorker: USBR result for SDIDs ['20179']: {'20179': {'data': ['11/04/25 01:00:00,', '11/04/25 02:00:00,', '11/04/25 03:00:00,', '11/04/25 04:00:00,', '11/04/25 05:00:00,', '11/04/25 06:00:00,', '11/04/25 07:00:00,', '11/04/25 08:00:00,', '11/04/25 09:00:00,', '11/04/25 10:00:00,', '11/04/25 11:00:00,', '11/04/25 12:00:00,', '11/04/25 13:00:00,', '11/04/25 14:00:00,', '11/04/25 15:00:00,', '11/04/25 16:00:00,', '11/04/25 17:00:00,', '11/04/25 18:00:00,', '11/04/25 19:00:00,', '11/04/25 20:00:00,', '11/04/25 21:00:00,', '11/04/25 22:00:00,', '11/04/25 23:00:00,', '11/05/25 00:00:00,', '11/05/25 01:00:00,', '11/05/25 02:00:00,', '11/05/25 03:00:00,', '11/05/25 04:00:00,', '11/05/25 05:00:00,', '11/05/25 06:00:00,', '11/05/25 07:00:00,', '11/05/25 08:00:00,', '11/05/25 09:00:00,', '11/05/25 10:00:00,', '11/05/25 11:00:00,', '11/05/25 12:00:00,', '11/05/25 13:00:00,', '11/05/25 14:00:00,', '11/05/25 15:00:00,', '11/05/25 16:00:00,', '11/05/25 17:00:00,', '11/05/25 18:00:00,', '11/05/25 19:00:00,', '11/05/25 20:00:00,', '11/05/25 21:00:00,', '11/05/25 22:00:00,', '11/05/25 23:00:00,', '11/06/25 00:00:00,', '11/06/25 01:00:00,', '11/06/25 02:00:00,', '11/06/25 03:00:00,', '11/06/25 04:00:00,', '11/06/25 05:00:00,', '11/06/25 06:00:00,', '11/06/25 07:00:00,', '11/06/25 08:00:00,', '11/06/25 09:00:00,', '11/06/25 10:00:00,', '11/06/25 11:00:00,', '11/06/25 12:00:00,', '11/06/25 13:00:00,', '11/06/25 14:00:00,', '11/06/25 15:00:00,', '11/06/25 16:00:00,', '11/06/25 17:00:00,', '11/06/25 18:00:00,', '11/06/25 19:00:00,', '11/06/25 20:00:00,', '11/06/25 21:00:00,', '11/06/25 22:00:00,', '11/06/25 23:00:00,', '11/07/25 00:00:00,', '11/07/25 01:00:00,', '11/07/25 02:00:00,', '11/07/25 03:00:00,', '11/07/25 04:00:00,', '11/07/25 05:00:00,', '11/07/25 06:00:00,', '11/07/25 07:00:00,', '11/07/25 08:00:00,', '11/07/25 09:00:00,', '11/07/25 10:00:00,', '11/07/25 11:00:00,', '11/07/25 12:00:00,', '11/07/25 13:00:00,', '11/07/25 14:00:00,', '11/07/25 15:00:00,', '11/07/25 16:00:00,', '11/07/25 17:00:00,', '11/07/25 18:00:00,', '11/07/25 19:00:00,', '11/07/25 20:00:00,', '11/07/25 21:00:00,', '11/07/25 22:00:00,', '11/07/25 23:00:00,', '11/08/25 00:00:00,', '11/08/25 01:00:00,', '11/08/25 02:00:00,', '11/08/25 03:00:00,', '11/08/25 04:00:00,', '11/08/25 05:00:00,', '11/08/25 06:00:00,', '11/08/25 07:00:00,', '11/08/25 08:00:00,', '11/08/25 09:00:00,', '11/08/25 10:00:00,', '11/08/25 11:00:00,', '11/08/25 12:00:00,', '11/08/25 13:00:00,', '11/08/25 14:00:00,', '11/08/25 15:00:00,', '11/08/25 16:00:00,', '11/08/25 17:00:00,', '11/08/25 18:00:00,', '11/08/25 19:00:00,', '11/08/25 20:00:00,', '11/08/25 21:00:00,', '11/08/25 22:00:00,', '11/08/25 23:00:00,', '11/09/25 00:00:00,', '11/09/25 01:00:00,', '11/09/25 02:00:00,', '11/09/25 03:00:00,', '11/09/25 04:00:00,', '11/09/25 05:00:00,', '11/09/25 06:00:00,', '11/09/25 07:00:00,', '11/09/25 08:00:00,', '11/09/25 09:00:00,', '11/09/25 10:00:00,', '11/09/25 11:00:00,', '11/09/25 12:00:00,', '11/09/25 13:00:00,', '11/09/25 14:00:00,', '11/09/25 15:00:00,', '11/09/25 16:00:00,', '11/09/25 17:00:00,', '11/09/25 18:00:00,', '11/09/25 19:00:00,', '11/09/25 20:00:00,', '11/09/25 21:00:00,', '11/09/25 22:00:00,', '11/09/25 23:00:00,', '11/10/25 00:00:00,', '11/10/25 01:00:00,', '11/10/25 02:00:00,', '11/10/25 03:00:00,', '11/10/25 04:00:00,', '11/10/25 05:00:00,', '11/10/25 06:00:00,', '11/10/25 07:00:00,', '11/10/25 08:00:00,', '11/10/25 09:00:00,', '11/10/25 10:00:00,', '11/10/25 11:00:00,', '11/10/25 12:00:00,', '11/10/25 13:00:00,', '11/10/25 14:00:00,', '11/10/25 15:00:00,', '11/10/25 16:00:00,', '11/10/25 17:00:00,', '11/10/25 18:00:00,', '11/10/25 19:00:00,', '11/10/25 20:00:00,', '11/10/25 21:00:00,', '11/10/25 22:00:00,', '11/10/25 23:00:00,', '11/11/25 00:00:00,', '11/11/25 01:00:00,', '11/11/25 02:00:00,', '11/11/25 03:00:00,', '11/11/25 04:00:00,', '11/11/25 05:00:00,', '11/11/25 06:00:00,', '11/11/25 07:00:00,', '11/11/25 08:00:00,', '11/11/25 09:00:00,', '11/11/25 10:00:00,', '11/11/25 11:00:00,', '11/11/25 12:00:00,', '11/11/25 13:00:00,', '11/11/25 14:00:00,', '11/11/25 15:00:00,', '11/11/25 16:00:00,', '11/11/25 17:00:00,', '11/11/25 18:00:00,', '11/11/25 19:00:00,', '11/11/25 20:00:00,', '11/11/25 21:00:00,', '11/11/25 22:00:00,', '11/11/25 23:00:00,', '11/12/25 00:00:00,', '11/12/25 01:00:00,', '11/12/25 02:00:00,', '11/12/25 03:00:00,', '11/12/25 04:00:00,', '11/12/25 05:00:00,'], 'rawResponse': []}}
+2025-11-05 05:13:59,065 [DEBUG] gapCheck for dataID '20179-108283': timestamps len=197, data len=197
+2025-11-05 05:13:59,067 [DEBUG] Post-gapCheck len=197, sample first 3: ['11/04/25 01:00:00,', '11/04/25 02:00:00,', '11/04/25 03:00:00,']
+2025-11-05 05:13:59,067 [DEBUG] queryWorker: Completed group ('USBR', None, None) with 1 items
+2025-11-05 05:13:59,116 [DEBUG] executeQuery: Signal received for group ('USBR', None, None)
+2025-11-05 05:13:59,116 [DEBUG] executeQuery: Skipping empty group ('USBR', None, None), no data
+2025-11-05 05:13:59,117 [DEBUG] executeQuery: Retrieved result from queue: ('USBR', None, None)
+2025-11-05 05:13:59,117 [DEBUG] executeQuery: Duplicate group ('USBR', None, None), skipping
+2025-11-05 05:13:59,118 [DEBUG] executeQuery: Timer stopped, wait loop ended, final collected 1/1, queue size 0, active threads 0
+2025-11-05 05:13:59,118 [DEBUG] executeQuery: All 1 groups merged
+2025-11-05 05:13:59,119 [DEBUG] Added empty result for dataID 20179-108283
+2025-11-05 05:13:59,120 [DEBUG] executeQuery: Building row 0/197
+2025-11-05 05:13:59,120 [DEBUG] executeQuery: Building row 1/197
+2025-11-05 05:13:59,120 [DEBUG] executeQuery: Building row 2/197
+2025-11-05 05:13:59,120 [DEBUG] executeQuery: Building row 3/197
+2025-11-05 05:13:59,121 [DEBUG] executeQuery: Building row 4/197
+2025-11-05 05:13:59,121 [DEBUG] executeQuery: Building row 5/197
+2025-11-05 05:13:59,121 [DEBUG] executeQuery: Building row 6/197
+2025-11-05 05:13:59,121 [DEBUG] executeQuery: Building row 7/197
+2025-11-05 05:13:59,121 [DEBUG] executeQuery: Building row 8/197
+2025-11-05 05:13:59,121 [DEBUG] executeQuery: Building row 9/197
+2025-11-05 05:13:59,122 [DEBUG] executeQuery: Building row 10/197
+2025-11-05 05:13:59,122 [DEBUG] executeQuery: Building row 11/197
+2025-11-05 05:13:59,122 [DEBUG] executeQuery: Building row 12/197
+2025-11-05 05:13:59,122 [DEBUG] executeQuery: Building row 13/197
+2025-11-05 05:13:59,122 [DEBUG] executeQuery: Building row 14/197
+2025-11-05 05:13:59,122 [DEBUG] executeQuery: Building row 15/197
+2025-11-05 05:13:59,122 [DEBUG] executeQuery: Building row 16/197
+2025-11-05 05:13:59,122 [DEBUG] executeQuery: Building row 17/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 18/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 19/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 20/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 21/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 22/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 23/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 24/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 25/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 26/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 27/197
+2025-11-05 05:13:59,123 [DEBUG] executeQuery: Building row 28/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 29/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 30/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 31/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 32/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 33/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 34/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 35/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 36/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 37/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 38/197
+2025-11-05 05:13:59,124 [DEBUG] executeQuery: Building row 39/197
+2025-11-05 05:13:59,125 [DEBUG] executeQuery: Building row 40/197
+2025-11-05 05:13:59,125 [DEBUG] executeQuery: Building row 41/197
+2025-11-05 05:13:59,125 [DEBUG] executeQuery: Building row 42/197
+2025-11-05 05:13:59,125 [DEBUG] executeQuery: Building row 43/197
+2025-11-05 05:13:59,125 [DEBUG] executeQuery: Building row 44/197
+2025-11-05 05:13:59,125 [DEBUG] executeQuery: Building row 45/197
+2025-11-05 05:13:59,125 [DEBUG] executeQuery: Building row 46/197
+2025-11-05 05:13:59,125 [DEBUG] executeQuery: Building row 47/197
+2025-11-05 05:13:59,125 [DEBUG] executeQuery: Building row 48/197
+2025-11-05 05:13:59,125 [DEBUG] executeQuery: Building row 49/197
+2025-11-05 05:13:59,126 [DEBUG] executeQuery: Building row 50/197
+2025-11-05 05:13:59,126 [DEBUG] executeQuery: Building row 51/197
+2025-11-05 05:13:59,126 [DEBUG] executeQuery: Building row 52/197
+2025-11-05 05:13:59,126 [DEBUG] executeQuery: Building row 53/197
+2025-11-05 05:13:59,126 [DEBUG] executeQuery: Building row 54/197
+2025-11-05 05:13:59,126 [DEBUG] executeQuery: Building row 55/197
+2025-11-05 05:13:59,126 [DEBUG] executeQuery: Building row 56/197
+2025-11-05 05:13:59,126 [DEBUG] executeQuery: Building row 57/197
+2025-11-05 05:13:59,126 [DEBUG] executeQuery: Building row 58/197
+2025-11-05 05:13:59,126 [DEBUG] executeQuery: Building row 59/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 60/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 61/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 62/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 63/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 64/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 65/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 66/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 67/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 68/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 69/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 70/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 71/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 72/197
+2025-11-05 05:13:59,127 [DEBUG] executeQuery: Building row 73/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 74/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 75/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 76/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 77/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 78/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 79/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 80/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 81/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 82/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 83/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 84/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 85/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 86/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 87/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 88/197
+2025-11-05 05:13:59,128 [DEBUG] executeQuery: Building row 89/197
+2025-11-05 05:13:59,129 [DEBUG] executeQuery: Building row 90/197
+2025-11-05 05:13:59,129 [DEBUG] executeQuery: Building row 91/197
+2025-11-05 05:13:59,129 [DEBUG] executeQuery: Building row 92/197
+2025-11-05 05:13:59,129 [DEBUG] executeQuery: Building row 93/197
+2025-11-05 05:13:59,129 [DEBUG] executeQuery: Building row 94/197
+2025-11-05 05:13:59,129 [DEBUG] executeQuery: Building row 95/197
+2025-11-05 05:13:59,129 [DEBUG] executeQuery: Building row 96/197
+2025-11-05 05:13:59,129 [DEBUG] executeQuery: Building row 97/197
+2025-11-05 05:13:59,129 [DEBUG] executeQuery: Building row 98/197
+2025-11-05 05:13:59,129 [DEBUG] executeQuery: Building row 99/197
+2025-11-05 05:13:59,130 [DEBUG] executeQuery: Building row 100/197
+2025-11-05 05:13:59,130 [DEBUG] executeQuery: Building row 101/197
+2025-11-05 05:13:59,130 [DEBUG] executeQuery: Building row 102/197
+2025-11-05 05:13:59,130 [DEBUG] executeQuery: Building row 103/197
+2025-11-05 05:13:59,130 [DEBUG] executeQuery: Building row 104/197
+2025-11-05 05:13:59,130 [DEBUG] executeQuery: Building row 105/197
+2025-11-05 05:13:59,130 [DEBUG] executeQuery: Building row 106/197
+2025-11-05 05:13:59,130 [DEBUG] executeQuery: Building row 107/197
+2025-11-05 05:13:59,130 [DEBUG] executeQuery: Building row 108/197
+2025-11-05 05:13:59,130 [DEBUG] executeQuery: Building row 109/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 110/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 111/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 112/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 113/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 114/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 115/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 116/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 117/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 118/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 119/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 120/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 121/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 122/197
+2025-11-05 05:13:59,131 [DEBUG] executeQuery: Building row 123/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 124/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 125/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 126/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 127/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 128/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 129/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 130/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 131/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 132/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 133/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 134/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 135/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 136/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 137/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 138/197
+2025-11-05 05:13:59,132 [DEBUG] executeQuery: Building row 139/197
+2025-11-05 05:13:59,133 [DEBUG] executeQuery: Building row 140/197
+2025-11-05 05:13:59,133 [DEBUG] executeQuery: Building row 141/197
+2025-11-05 05:13:59,133 [DEBUG] executeQuery: Building row 142/197
+2025-11-05 05:13:59,133 [DEBUG] executeQuery: Building row 143/197
+2025-11-05 05:13:59,133 [DEBUG] executeQuery: Building row 144/197
+2025-11-05 05:13:59,133 [DEBUG] executeQuery: Building row 145/197
+2025-11-05 05:13:59,133 [DEBUG] executeQuery: Building row 146/197
+2025-11-05 05:13:59,133 [DEBUG] executeQuery: Building row 147/197
+2025-11-05 05:13:59,133 [DEBUG] executeQuery: Building row 148/197
+2025-11-05 05:13:59,133 [DEBUG] executeQuery: Building row 149/197
+2025-11-05 05:13:59,134 [DEBUG] executeQuery: Building row 150/197
+2025-11-05 05:13:59,134 [DEBUG] executeQuery: Building row 151/197
+2025-11-05 05:13:59,134 [DEBUG] executeQuery: Building row 152/197
+2025-11-05 05:13:59,134 [DEBUG] executeQuery: Building row 153/197
+2025-11-05 05:13:59,134 [DEBUG] executeQuery: Building row 154/197
+2025-11-05 05:13:59,134 [DEBUG] executeQuery: Building row 155/197
+2025-11-05 05:13:59,134 [DEBUG] executeQuery: Building row 156/197
+2025-11-05 05:13:59,134 [DEBUG] executeQuery: Building row 157/197
+2025-11-05 05:13:59,134 [DEBUG] executeQuery: Building row 158/197
+2025-11-05 05:13:59,134 [DEBUG] executeQuery: Building row 159/197
+2025-11-05 05:13:59,136 [DEBUG] executeQuery: Building row 160/197
+2025-11-05 05:13:59,136 [DEBUG] executeQuery: Building row 161/197
+2025-11-05 05:13:59,136 [DEBUG] executeQuery: Building row 162/197
+2025-11-05 05:13:59,136 [DEBUG] executeQuery: Building row 163/197
+2025-11-05 05:13:59,136 [DEBUG] executeQuery: Building row 164/197
+2025-11-05 05:13:59,136 [DEBUG] executeQuery: Building row 165/197
+2025-11-05 05:13:59,137 [DEBUG] executeQuery: Building row 166/197
+2025-11-05 05:13:59,137 [DEBUG] executeQuery: Building row 167/197
+2025-11-05 05:13:59,137 [DEBUG] executeQuery: Building row 168/197
+2025-11-05 05:13:59,137 [DEBUG] executeQuery: Building row 169/197
+2025-11-05 05:13:59,137 [DEBUG] executeQuery: Building row 170/197
+2025-11-05 05:13:59,137 [DEBUG] executeQuery: Building row 171/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 172/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 173/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 174/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 175/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 176/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 177/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 178/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 179/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 180/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 181/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 182/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 183/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 184/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 185/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 186/197
+2025-11-05 05:13:59,138 [DEBUG] executeQuery: Building row 187/197
+2025-11-05 05:13:59,139 [DEBUG] executeQuery: Building row 188/197
+2025-11-05 05:13:59,139 [DEBUG] executeQuery: Building row 189/197
+2025-11-05 05:13:59,139 [DEBUG] executeQuery: Building row 190/197
+2025-11-05 05:13:59,139 [DEBUG] executeQuery: Building row 191/197
+2025-11-05 05:13:59,139 [DEBUG] executeQuery: Building row 192/197
+2025-11-05 05:13:59,139 [DEBUG] executeQuery: Building row 193/197
+2025-11-05 05:13:59,139 [DEBUG] executeQuery: Building row 194/197
+2025-11-05 05:13:59,139 [DEBUG] executeQuery: Building row 195/197
+2025-11-05 05:13:59,139 [DEBUG] executeQuery: Building row 196/197
+2025-11-05 05:13:59,139 [DEBUG] executeQuery: Built 197 rows for table
+2025-11-05 05:13:59,142 [DEBUG] buildTable: Starting with 197 rows, 1 headers
+2025-11-05 05:13:59,157 [DEBUG] buildTable: USBR in dict with MRID, header 0: BIBLC 
+20179-108283
+2025-11-05 05:13:59,157 [DEBUG] buildTable: Setting table to 197 rows, 1 columns
+2025-11-05 05:13:59,161 [DEBUG] buildTable: Sampling 197 rows for column widths
+2025-11-05 05:13:59,161 [DEBUG] buildTable col 0: No non-empty values, using fallback width 32
+2025-11-05 05:13:59,161 [DEBUG] buildTable col 0: maxCellWidth=32, headerWidth=105
+2025-11-05 05:13:59,161 [DEBUG] buildTable: Disabled table updates for population
+2025-11-05 05:13:59,162 [DEBUG] buildTable: Re-enabled table updates after population
+2025-11-05 05:13:59,162 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
+2025-11-05 05:13:59,163 [DEBUG] buildTable: Set column 0 width to 115
+2025-11-05 05:13:59,163 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
+2025-11-05 05:13:59,163 [DEBUG] buildTable: Set default row height to 29
+2025-11-05 05:13:59,163 [DEBUG] qaqc: Processing column 0 for lookupId 20179-108283
+2025-11-05 05:13:59,189 [DEBUG] qaqc: Processed column 0 for lookupId 20179-108283
+2025-11-05 05:13:59,189 [DEBUG] Stored query data: 0 series, type internal, keys=[]
+2025-11-05 05:13:59,189 [DEBUG] Stored 0 rawResponses for Aquarius
+2025-11-05 05:13:59,189 [DEBUG] Set columnMetadata with lookupId: [{'type': 'normal', 'dataIds': ['20179-108283'], 'dbs': 'USBR-YAOHDB', 'queryInfos': ['20179-108283|HOUR|USBR-YAOHDB'], 'lookupId': '20179-108283'}]
+2025-11-05 05:13:59,198 [DEBUG] executeQuery: Table built, progress dialog completed
+2025-11-05 05:13:59,198 [DEBUG] Query executed and table updated.
+2025-11-05 05:13:59,198 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
+2025-11-05 05:13:59,205 [DEBUG] tabMain index during executeQuery: 0
+2025-11-05 05:13:59,212 [DEBUG] Query window closed after query.
+2025-11-05 05:14:12,471 [DEBUG] uiQuery showEvent: queryType=public
+2025-11-05 05:14:12,471 [DEBUG] centerWindowToParent: Centered winInternalQuery at 976,233
+2025-11-05 05:14:12,481 [DEBUG] Loaded config for quick look: MRID TEST
+2025-11-05 05:14:12,481 [DEBUG] Set cbQuickLook to index 4: MRID TEST
+2025-11-05 05:14:12,481 [DEBUG] Populating cbDatabase
+2025-11-05 05:14:12,481 [DEBUG] Populated cbDatabase with 9 items
+2025-11-05 05:14:12,483 [DEBUG] uiQuery showEvent: Set window icon to PublicQuery.png and title to Public Query
+2025-11-05 05:14:12,490 [DEBUG] btnPublicQueryPressed: Opened uiQuery as public
+2025-11-05 05:14:18,594 [DEBUG] btnQueryPressed: Starting query process, queryType=public
+2025-11-05 05:14:18,595 [DEBUG] Item text: '20179-108283|HOUR|USBR-YAOHDB', parts: ['20179-108283', 'HOUR', 'USBR-YAOHDB'], len: 3
+2025-11-05 05:14:18,595 [DEBUG] Added queryItem: ('20179-108283', 'HOUR', 'USBR-YAOHDB', '108283', 0)
+2025-11-05 05:14:18,595 [DEBUG] Stored last query as public
+2025-11-05 05:14:18,595 [DEBUG] executeQuery: isInternal=False, items=1, deltaChecked=False, overlayChecked=False
+2025-11-05 05:14:18,595 [DEBUG] executeQuery: Filtered AQUARIUS for public query, remaining items=1
+2025-11-05 05:14:18,603 [DEBUG] executeQuery: Initialized and showed progress dialog
+2025-11-05 05:14:18,603 [DEBUG] executeQuery: Ensured dates are datetime for rounding: start=2025-11-04 01:00:00, end=2025-11-12 05:12:00
+2025-11-05 05:14:18,604 [DEBUG] Rounded down 2025-11-04 01:00:00 to HOUR
+2025-11-05 05:14:18,604 [DEBUG] buildTimestamps called with start: 2025-11-04 01:00, end: 2025-11-12 05:12, interval: HOUR
+2025-11-05 05:14:18,605 [DEBUG] Generated 197 timestamps, sample first 3: ['11/04/25 01:00:00', '11/04/25 02:00:00', '11/04/25 03:00:00']
+2025-11-05 05:14:18,608 [DEBUG] executeQuery: Setup complete, progress at 20%
+2025-11-05 05:14:18,608 [DEBUG] Starting 1 threads for 1 groups in background
+2025-11-05 05:14:18,609 [DEBUG] Started background worker 0 for group ('USBR', None, None)
+2025-11-05 05:14:18,609 [DEBUG] USBR.apiRead called with svr: yaohdb, SDIDs: ['20179'], interval: HOUR, start: 2025-11-04 01:00, end: 2025-11-12 05:12, mrid: 108283, table='R'
+2025-11-05 05:14:18,609 [DEBUG] buildTimestamps called with start: 2025-11-04 01:00, end: 2025-11-12 05:12, interval: HOUR
+2025-11-05 05:14:18,609 [DEBUG] executeQuery: Started timer for progress updates
+2025-11-05 05:14:18,611 [DEBUG] Generated 197 timestamps, sample first 3: ['11/04/25 01:00:00', '11/04/25 02:00:00', '11/04/25 03:00:00']
+2025-11-05 05:14:18,611 [DEBUG] Fetching USBR URL: https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr=yaohdb&SDI=20179&tstp=HR&t1=2025-11-04T00:00&t2=2025-11-12T05:12&table=M&mrid=108283&format=json
+2025-11-05 05:14:20,359 [DEBUG] Fetched 1 series entries.
+2025-11-05 05:14:20,359 [DEBUG] Found series for '20179': 131 points.
+2025-11-05 05:14:20,360 [DEBUG] queryWorker: USBR result for SDIDs ['20179']: {'20179': ['11/04/25 14:00:00,4598.911398112870', '11/04/25 15:00:00,5246.072836961890', '11/04/25 16:00:00,6036.732585898080', '11/04/25 17:00:00,6877.786928570370', '11/04/25 18:00:00,7664.124627223390', '11/04/25 19:00:00,8306.601463917820', '11/04/25 20:00:00,8749.739403952690', '11/04/25 21:00:00,8974.929634267180', '11/04/25 22:00:00,8993.515259797590', '11/04/25 23:00:00,8835.962465023520', '11/05/25 00:00:00,8541.499150796270', '11/05/25 01:00:00,8151.328744544960', '11/05/25 02:00:00,7702.614992142410', '11/05/25 03:00:00,7225.252169672550', '11/05/25 04:00:00,6741.792797197840', '11/05/25 05:00:00,6268.881060940680', '11/05/25 06:00:00,5818.878604322650', '11/05/25 07:00:00,5401.291724407310', '11/05/25 08:00:00,5024.053673444860', '11/05/25 09:00:00,4694.810183976550', '11/05/25 10:00:00,4422.337292675790', '11/05/25 11:00:00,4218.150812305040', '11/05/25 12:00:00,4098.153326866960', '11/05/25 13:00:00,4083.526351843140', '11/05/25 14:00:00,4198.917011037230', '11/05/25 15:00:00,4465.102670014080', '11/05/25 16:00:00,4885.354626506760', '11/05/25 17:00:00,5431.369601421420', '11/05/25 18:00:00,6040.344537519460', '11/05/25 19:00:00,6629.542901121290', '11/05/25 20:00:00,7120.910754374090', '11/05/25 21:00:00,7461.278590248140', '11/05/25 22:00:00,7629.600374711110', '11/05/25 23:00:00,7632.545650556710', '11/06/25 00:00:00,7494.612342055240', '11/06/25 01:00:00,7248.666287984580', '11/06/25 02:00:00,6928.226366040190', '11/06/25 03:00:00,6562.8514400646', '11/06/25 04:00:00,6176.626721282240', '11/06/25 05:00:00,5788.606720419110', '11/06/25 06:00:00,5413.975246142730', '11/06/25 07:00:00,5065.286649327120', '11/06/25 08:00:00,4753.607083683530', '11/06/25 09:00:00,4489.426390957750', '11/06/25 10:00:00,4283.0605200437', '11/06/25 11:00:00,4144.089249539650', '11/06/25 12:00:00,4079.346771065040', '11/06/25 13:00:00,4089.437590362930', '11/06/25 14:00:00,4164.949834751770', '11/06/25 15:00:00,4284.860398569710', '11/06/25 16:00:00,4419.392645045850', '11/06/25 17:00:00,4536.972776512580', '11/06/25 18:00:00,4611.970852335350', '11/06/25 19:00:00,4629.5546158290', '11/06/25 20:00:00,4586.280585769590', '11/06/25 21:00:00,4487.512837394990', '11/06/25 22:00:00,4343.697177095030', '11/06/25 23:00:00,4167.045778732360', '11/07/25 00:00:00,3969.288521256410', '11/07/25 01:00:00,3760.261954520640', '11/07/25 02:00:00,3547.596570742650', '11/07/25 03:00:00,3337.068038286990', '11/07/25 04:00:00,3133.039764295670', '11/07/25 05:00:00,2938.806804612010', '11/07/25 06:00:00,2756.917009818410', '11/07/25 07:00:00,2589.583434130390', '11/07/25 08:00:00,2439.264876126310', '11/07/25 09:00:00,2309.487708151150', '11/07/25 10:00:00,2205.9970774673', '11/07/25 11:00:00,2138.272017105990', '11/07/25 12:00:00,2121.1026788113', '11/07/25 13:00:00,2175.006214642250', '11/07/25 14:00:00,2322.9259880379', '11/07/25 15:00:00,2580.957119147840', '11/07/25 16:00:00,2945.976579041290', '11/07/25 17:00:00,3389.772952806470', '11/07/25 18:00:00,3866.525502072390', '11/07/25 19:00:00,4328.392544310650', '11/07/25 20:00:00,4738.066309600490', '11/07/25 21:00:00,5072.9645395778', '11/07/25 22:00:00,5323.293287999110', '11/07/25 23:00:00,5488.299845568950', '11/08/25 00:00:00,5573.213496155190', '11/08/25 01:00:00,5588.249440963970', '11/08/25 02:00:00,5546.663577101740', '11/08/25 03:00:00,5462.663572646340', '11/08/25 04:00:00,5350.623414012470', '11/08/25 05:00:00,5225.346405156830', '11/08/25 06:00:00,5102.522523635470', '11/08/25 07:00:00,4998.902020453910', '11/08/25 08:00:00,4932.0118110982', '11/08/25 09:00:00,4919.191334121780', '11/08/25 10:00:00,4975.594196721370', '11/08/25 11:00:00,5110.997939087120', '11/08/25 12:00:00,5326.0421268596', '11/08/25 13:00:00,5609.568010431720', '11/08/25 14:00:00,5939.013951850510', '11/08/25 15:00:00,6284.4746382655', '11/08/25 16:00:00,6614.821890089190', '11/08/25 17:00:00,6903.171546640180', '11/08/25 18:00:00,7129.857080858360', '11/08/25 19:00:00,7282.853800851730', '11/08/25 20:00:00,7356.750445508490', '11/08/25 21:00:00,7351.404886973220', '11/08/25 22:00:00,7270.846027267630', '11/08/25 23:00:00,7122.4423359280', '11/09/25 00:00:00,6916.143779426970', '11/09/25 01:00:00,6664.7222399631', '11/09/25 02:00:00,6381.905296048920', '11/09/25 03:00:00,6080.460980387460', '11/09/25 04:00:00,5771.8227797502', '11/09/25 05:00:00,5466.712261592390', '11/09/25 06:00:00,5175.915139432110', '11/09/25 07:00:00,4910.950602520760', '11/09/25 08:00:00,4684.709945960670', '11/09/25 09:00:00,4512.052096403430', '11/09/25 10:00:00,4409.990576552950', '11/09/25 11:00:00,4396.631957232420', '11/09/25 12:00:00,4487.735788366070', '11/09/25 13:00:00,4690.408761339860', '11/09/25 14:00:00,4995.704511289330', '11/09/25 15:00:00,5374.616768223440', '11/09/25 16:00:00,5781.689795746170', '11/09/25 17:00:00,6165.765934672730', '11/09/25 18:00:00,6482.404942574230', '11/09/25 19:00:00,6702.185932147110', '11/09/25 20:00:00,6812.809049430560', '11/09/25 21:00:00,6816.500942992140', '11/09/25 22:00:00,6725.414575299920', '11/09/25 23:00:00,6557.086589773770', '11/10/25 00:00:00,6330.9402626406']}
+2025-11-05 05:14:20,360 [DEBUG] gapCheck for dataID '20179-108283': timestamps len=197, data len=131
+2025-11-05 05:14:20,363 [DEBUG] Post-gapCheck len=197, sample first 3: ['11/04/25 01:00:00,', '11/04/25 02:00:00,', '11/04/25 03:00:00,']
+2025-11-05 05:14:20,363 [DEBUG] queryWorker: Completed group ('USBR', None, None) with 1 items
+2025-11-05 05:14:20,388 [DEBUG] executeQuery: Signal received for group ('USBR', None, None)
+2025-11-05 05:14:20,388 [DEBUG] executeQuery: Collected results for group ('USBR', None, None) with 1 items (1/1)
+2025-11-05 05:14:20,389 [DEBUG] executeQuery: Retrieved result from queue: ('USBR', None, None)
+2025-11-05 05:14:20,389 [DEBUG] executeQuery: Duplicate group ('USBR', None, None), skipping
+2025-11-05 05:14:20,389 [DEBUG] executeQuery: Timer stopped, wait loop ended, final collected 1/1, queue size 0, active threads 0
+2025-11-05 05:14:20,389 [DEBUG] executeQuery: All 1 groups merged
+2025-11-05 05:14:20,390 [DEBUG] executeQuery: Building row 0/197
+2025-11-05 05:14:20,390 [DEBUG] executeQuery: Building row 1/197
+2025-11-05 05:14:20,390 [DEBUG] executeQuery: Building row 2/197
+2025-11-05 05:14:20,390 [DEBUG] executeQuery: Building row 3/197
+2025-11-05 05:14:20,390 [DEBUG] executeQuery: Building row 4/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 5/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 6/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 7/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 8/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 9/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 10/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 11/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 12/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 13/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 14/197
+2025-11-05 05:14:20,391 [DEBUG] executeQuery: Building row 15/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 16/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 17/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 18/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 19/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 20/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 21/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 22/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 23/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 24/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 25/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 26/197
+2025-11-05 05:14:20,392 [DEBUG] executeQuery: Building row 27/197
+2025-11-05 05:14:20,393 [DEBUG] executeQuery: Building row 28/197
+2025-11-05 05:14:20,393 [DEBUG] executeQuery: Building row 29/197
+2025-11-05 05:14:20,393 [DEBUG] executeQuery: Building row 30/197
+2025-11-05 05:14:20,393 [DEBUG] executeQuery: Building row 31/197
+2025-11-05 05:14:20,393 [DEBUG] executeQuery: Building row 32/197
+2025-11-05 05:14:20,393 [DEBUG] executeQuery: Building row 33/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 34/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 35/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 36/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 37/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 38/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 39/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 40/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 41/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 42/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 43/197
+2025-11-05 05:14:20,394 [DEBUG] executeQuery: Building row 44/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 45/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 46/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 47/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 48/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 49/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 50/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 51/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 52/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 53/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 54/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 55/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 56/197
+2025-11-05 05:14:20,395 [DEBUG] executeQuery: Building row 57/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 58/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 59/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 60/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 61/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 62/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 63/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 64/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 65/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 66/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 67/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 68/197
+2025-11-05 05:14:20,396 [DEBUG] executeQuery: Building row 69/197
+2025-11-05 05:14:20,397 [DEBUG] executeQuery: Building row 70/197
+2025-11-05 05:14:20,397 [DEBUG] executeQuery: Building row 71/197
+2025-11-05 05:14:20,397 [DEBUG] executeQuery: Building row 72/197
+2025-11-05 05:14:20,397 [DEBUG] executeQuery: Building row 73/197
+2025-11-05 05:14:20,397 [DEBUG] executeQuery: Building row 74/197
+2025-11-05 05:14:20,397 [DEBUG] executeQuery: Building row 75/197
+2025-11-05 05:14:20,397 [DEBUG] executeQuery: Building row 76/197
+2025-11-05 05:14:20,397 [DEBUG] executeQuery: Building row 77/197
+2025-11-05 05:14:20,397 [DEBUG] executeQuery: Building row 78/197
+2025-11-05 05:14:20,397 [DEBUG] executeQuery: Building row 79/197
+2025-11-05 05:14:20,398 [DEBUG] executeQuery: Building row 80/197
+2025-11-05 05:14:20,398 [DEBUG] executeQuery: Building row 81/197
+2025-11-05 05:14:20,398 [DEBUG] executeQuery: Building row 82/197
+2025-11-05 05:14:20,398 [DEBUG] executeQuery: Building row 83/197
+2025-11-05 05:14:20,398 [DEBUG] executeQuery: Building row 84/197
+2025-11-05 05:14:20,398 [DEBUG] executeQuery: Building row 85/197
+2025-11-05 05:14:20,398 [DEBUG] executeQuery: Building row 86/197
+2025-11-05 05:14:20,398 [DEBUG] executeQuery: Building row 87/197
+2025-11-05 05:14:20,398 [DEBUG] executeQuery: Building row 88/197
+2025-11-05 05:14:20,398 [DEBUG] executeQuery: Building row 89/197
+2025-11-05 05:14:20,399 [DEBUG] executeQuery: Building row 90/197
+2025-11-05 05:14:20,399 [DEBUG] executeQuery: Building row 91/197
+2025-11-05 05:14:20,399 [DEBUG] executeQuery: Building row 92/197
+2025-11-05 05:14:20,399 [DEBUG] executeQuery: Building row 93/197
+2025-11-05 05:14:20,399 [DEBUG] executeQuery: Building row 94/197
+2025-11-05 05:14:20,399 [DEBUG] executeQuery: Building row 95/197
+2025-11-05 05:14:20,399 [DEBUG] executeQuery: Building row 96/197
+2025-11-05 05:14:20,399 [DEBUG] executeQuery: Building row 97/197
+2025-11-05 05:14:20,399 [DEBUG] executeQuery: Building row 98/197
+2025-11-05 05:14:20,399 [DEBUG] executeQuery: Building row 99/197
+2025-11-05 05:14:20,400 [DEBUG] executeQuery: Building row 100/197
+2025-11-05 05:14:20,400 [DEBUG] executeQuery: Building row 101/197
+2025-11-05 05:14:20,400 [DEBUG] executeQuery: Building row 102/197
+2025-11-05 05:14:20,400 [DEBUG] executeQuery: Building row 103/197
+2025-11-05 05:14:20,400 [DEBUG] executeQuery: Building row 104/197
+2025-11-05 05:14:20,400 [DEBUG] executeQuery: Building row 105/197
+2025-11-05 05:14:20,400 [DEBUG] executeQuery: Building row 106/197
+2025-11-05 05:14:20,400 [DEBUG] executeQuery: Building row 107/197
+2025-11-05 05:14:20,400 [DEBUG] executeQuery: Building row 108/197
+2025-11-05 05:14:20,400 [DEBUG] executeQuery: Building row 109/197
+2025-11-05 05:14:20,401 [DEBUG] executeQuery: Building row 110/197
+2025-11-05 05:14:20,401 [DEBUG] executeQuery: Building row 111/197
+2025-11-05 05:14:20,401 [DEBUG] executeQuery: Building row 112/197
+2025-11-05 05:14:20,401 [DEBUG] executeQuery: Building row 113/197
+2025-11-05 05:14:20,401 [DEBUG] executeQuery: Building row 114/197
+2025-11-05 05:14:20,401 [DEBUG] executeQuery: Building row 115/197
+2025-11-05 05:14:20,401 [DEBUG] executeQuery: Building row 116/197
+2025-11-05 05:14:20,401 [DEBUG] executeQuery: Building row 117/197
+2025-11-05 05:14:20,401 [DEBUG] executeQuery: Building row 118/197
+2025-11-05 05:14:20,401 [DEBUG] executeQuery: Building row 119/197
+2025-11-05 05:14:20,402 [DEBUG] executeQuery: Building row 120/197
+2025-11-05 05:14:20,402 [DEBUG] executeQuery: Building row 121/197
+2025-11-05 05:14:20,402 [DEBUG] executeQuery: Building row 122/197
+2025-11-05 05:14:20,402 [DEBUG] executeQuery: Building row 123/197
+2025-11-05 05:14:20,402 [DEBUG] executeQuery: Building row 124/197
+2025-11-05 05:14:20,402 [DEBUG] executeQuery: Building row 125/197
+2025-11-05 05:14:20,402 [DEBUG] executeQuery: Building row 126/197
+2025-11-05 05:14:20,402 [DEBUG] executeQuery: Building row 127/197
+2025-11-05 05:14:20,402 [DEBUG] executeQuery: Building row 128/197
+2025-11-05 05:14:20,402 [DEBUG] executeQuery: Building row 129/197
+2025-11-05 05:14:20,403 [DEBUG] executeQuery: Building row 130/197
+2025-11-05 05:14:20,403 [DEBUG] executeQuery: Building row 131/197
+2025-11-05 05:14:20,403 [DEBUG] executeQuery: Building row 132/197
+2025-11-05 05:14:20,403 [DEBUG] executeQuery: Building row 133/197
+2025-11-05 05:14:20,403 [DEBUG] executeQuery: Building row 134/197
+2025-11-05 05:14:20,403 [DEBUG] executeQuery: Building row 135/197
+2025-11-05 05:14:20,403 [DEBUG] executeQuery: Building row 136/197
+2025-11-05 05:14:20,403 [DEBUG] executeQuery: Building row 137/197
+2025-11-05 05:14:20,403 [DEBUG] executeQuery: Building row 138/197
+2025-11-05 05:14:20,403 [DEBUG] executeQuery: Building row 139/197
+2025-11-05 05:14:20,404 [DEBUG] executeQuery: Building row 140/197
+2025-11-05 05:14:20,404 [DEBUG] executeQuery: Building row 141/197
+2025-11-05 05:14:20,404 [DEBUG] executeQuery: Building row 142/197
+2025-11-05 05:14:20,404 [DEBUG] executeQuery: Building row 143/197
+2025-11-05 05:14:20,404 [DEBUG] executeQuery: Building row 144/197
+2025-11-05 05:14:20,404 [DEBUG] executeQuery: Building row 145/197
+2025-11-05 05:14:20,404 [DEBUG] executeQuery: Building row 146/197
+2025-11-05 05:14:20,404 [DEBUG] executeQuery: Building row 147/197
+2025-11-05 05:14:20,404 [DEBUG] executeQuery: Building row 148/197
+2025-11-05 05:14:20,404 [DEBUG] executeQuery: Building row 149/197
+2025-11-05 05:14:20,405 [DEBUG] executeQuery: Building row 150/197
+2025-11-05 05:14:20,405 [DEBUG] executeQuery: Building row 151/197
+2025-11-05 05:14:20,405 [DEBUG] executeQuery: Building row 152/197
+2025-11-05 05:14:20,405 [DEBUG] executeQuery: Building row 153/197
+2025-11-05 05:14:20,405 [DEBUG] executeQuery: Building row 154/197
+2025-11-05 05:14:20,405 [DEBUG] executeQuery: Building row 155/197
+2025-11-05 05:14:20,405 [DEBUG] executeQuery: Building row 156/197
+2025-11-05 05:14:20,405 [DEBUG] executeQuery: Building row 157/197
+2025-11-05 05:14:20,405 [DEBUG] executeQuery: Building row 158/197
+2025-11-05 05:14:20,405 [DEBUG] executeQuery: Building row 159/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 160/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 161/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 162/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 163/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 164/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 165/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 166/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 167/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 168/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 169/197
+2025-11-05 05:14:20,406 [DEBUG] executeQuery: Building row 170/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 171/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 172/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 173/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 174/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 175/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 176/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 177/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 178/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 179/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 180/197
+2025-11-05 05:14:20,407 [DEBUG] executeQuery: Building row 181/197
+2025-11-05 05:14:20,408 [DEBUG] executeQuery: Building row 182/197
+2025-11-05 05:14:20,408 [DEBUG] executeQuery: Building row 183/197
+2025-11-05 05:14:20,408 [DEBUG] executeQuery: Building row 184/197
+2025-11-05 05:14:20,408 [DEBUG] executeQuery: Building row 185/197
+2025-11-05 05:14:20,408 [DEBUG] executeQuery: Building row 186/197
+2025-11-05 05:14:20,408 [DEBUG] executeQuery: Building row 187/197
+2025-11-05 05:14:20,408 [DEBUG] executeQuery: Building row 188/197
+2025-11-05 05:14:20,408 [DEBUG] executeQuery: Building row 189/197
+2025-11-05 05:14:20,409 [DEBUG] executeQuery: Building row 190/197
+2025-11-05 05:14:20,409 [DEBUG] executeQuery: Building row 191/197
+2025-11-05 05:14:20,409 [DEBUG] executeQuery: Building row 192/197
+2025-11-05 05:14:20,409 [DEBUG] executeQuery: Building row 193/197
+2025-11-05 05:14:20,409 [DEBUG] executeQuery: Building row 194/197
+2025-11-05 05:14:20,409 [DEBUG] executeQuery: Building row 195/197
+2025-11-05 05:14:20,409 [DEBUG] executeQuery: Building row 196/197
+2025-11-05 05:14:20,409 [DEBUG] executeQuery: Built 197 rows for table
+2025-11-05 05:14:20,412 [DEBUG] buildTable: Starting with 197 rows, 1 headers
+2025-11-05 05:14:20,432 [DEBUG] buildTable: USBR in dict with MRID, header 0: BIBLC 
+20179-108283
+2025-11-05 05:14:20,432 [DEBUG] buildTable: Setting table to 197 rows, 1 columns
+2025-11-05 05:14:20,437 [DEBUG] buildTable: Sampling 197 rows for column widths
+2025-11-05 05:14:20,438 [DEBUG] buildTable col 0: maxCellWidth=149, headerWidth=105
+2025-11-05 05:14:20,438 [DEBUG] buildTable: Disabled table updates for population
+2025-11-05 05:14:20,439 [DEBUG] buildTable: Re-enabled table updates after population
+2025-11-05 05:14:20,439 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
+2025-11-05 05:14:20,442 [DEBUG] buildTable: Set column 0 width to 169
+2025-11-05 05:14:20,442 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
+2025-11-05 05:14:20,442 [DEBUG] buildTable: Set default row height to 29
+2025-11-05 05:14:20,442 [DEBUG] qaqc: Processing column 0 for lookupId 20179-108283
+2025-11-05 05:14:20,468 [DEBUG] qaqc: Processed column 0 for lookupId 20179-108283
+2025-11-05 05:14:20,468 [DEBUG] Stored query data: 0 series, type public, keys=[]
+2025-11-05 05:14:20,468 [DEBUG] Stored 0 rawResponses for Aquarius
+2025-11-05 05:14:20,468 [DEBUG] Set columnMetadata with lookupId: [{'type': 'normal', 'dataIds': ['20179-108283'], 'dbs': 'USBR-YAOHDB', 'queryInfos': ['20179-108283|HOUR|USBR-YAOHDB'], 'lookupId': '20179-108283'}]
+2025-11-05 05:14:20,482 [DEBUG] executeQuery: Table built, progress dialog completed
+2025-11-05 05:14:20,482 [DEBUG] Query executed and table updated.
+2025-11-05 05:14:20,482 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
+2025-11-05 05:14:20,485 [DEBUG] tabMain index during executeQuery: 0
+2025-11-05 05:14:20,488 [DEBUG] Query window closed after query.
+2025-11-05 05:17:30,676 [DEBUG] Globals reloaded from user.config, enableSQL=True
+2025-11-05 05:17:30,677 [DEBUG] Removed tabSQL at index 1 on startup
+2025-11-05 05:17:30,677 [DEBUG] Removed tabMain at index 0 on startup
+2025-11-05 05:17:30,678 [DEBUG] Added tabSQL on startup since enabled
+2025-11-05 05:17:30,678 [DEBUG] Populating cbDatabase
+2025-11-05 05:17:30,678 [DEBUG] Populated cbDatabase with 6 items
+2025-11-05 05:17:30,679 [DEBUG] Loaded 2 SQL snippets
+2025-11-05 05:17:30,679 [DEBUG] uiMain initialized with header context menu, Config.rawData: False
+2025-11-05 05:17:30,683 [DEBUG] No config.ini found or user.config exists, skipping conversion
+2025-11-05 05:17:30,686 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'MRID TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP', 'sqlVerticalSizes': [337, 242], 'sqlHorizontalSizes': [1306, 282]}
+2025-11-05 05:17:30,687 [DEBUG] Loaded full config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'MRID TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP', 'sqlVerticalSizes': [337, 242], 'sqlHorizontalSizes': [1306, 282]}
+2025-11-05 05:17:30,687 [DEBUG] Restored sqlVerticalSizes: [337, 242]
+2025-11-05 05:17:30,688 [DEBUG] Restored sqlHorizontalSizes: [1306, 282]
+2025-11-05 05:17:30,688 [DEBUG] Set up splitters and layout for tabSQL to handle resizing
+2025-11-05 05:17:30,688 [DEBUG] Loading UI file: C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\winQuery.ui
+2025-11-05 05:17:30,793 [DEBUG] initializeQueryWindow: Setting initial state
+2025-11-05 05:17:30,794 [DEBUG] initializeQueryWindow: Set default dates and radio button
+2025-11-05 05:17:30,808 [DEBUG] uiQuery initialized
+2025-11-05 05:17:30,828 [DEBUG] uiDataDictionary initialized with btnDeleteRow
+2025-11-05 05:17:30,844 [DEBUG] uiQuickLook initialized with QLineEdit qleQuickLookName
+2025-11-05 05:17:30,869 [DEBUG] uiOptions initialized
+2025-11-05 05:17:30,921 [WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
+2025-11-05 05:17:30,944 [DEBUG] No config.ini found or user.config exists, skipping conversion
+2025-11-05 05:17:30,945 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'MRID TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP', 'sqlVerticalSizes': [337, 242], 'sqlHorizontalSizes': [1306, 282]}
+2025-11-05 05:17:30,947 [DEBUG] Loaded full config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'MRID TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP', 'sqlVerticalSizes': [337, 242], 'sqlHorizontalSizes': [1306, 282]}
+2025-11-05 05:17:30,948 [DEBUG] Applied retro font at startup
+2025-11-05 05:17:30,950 [DEBUG] Applied retro scroll bar styles to mainTable
+2025-11-05 05:17:31,010 [DEBUG] Applied retro scroll bar styles globally
+2025-11-05 05:17:32,052 [DEBUG] Built DataDictionary with 29306 rows, 11 columns
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Found user Quick Look: BIBLC TEST.json
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Found user Quick Look: TEST.json
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Found user Quick Look: USGS TESTING.json
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (AQUARIUS).txt
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & AQUARIUS).txt
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Added example Quick Look: Data Check (HDB & USGS).txt
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Added example Quick Look: MRID TEST.txt
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Added example Quick Look: USGS Example.txt
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Added BIBLC TEST to cbQuickLook
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Added Data Check (AQUARIUS) to cbQuickLook
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & AQUARIUS) to cbQuickLook
+2025-11-05 05:17:32,056 [DEBUG] loadAllQuickLooks: Added Data Check (HDB & USGS) to cbQuickLook
+2025-11-05 05:17:32,057 [DEBUG] loadAllQuickLooks: Added MRID TEST to cbQuickLook
+2025-11-05 05:17:32,057 [DEBUG] loadAllQuickLooks: Added TEST to cbQuickLook
+2025-11-05 05:17:32,057 [DEBUG] loadAllQuickLooks: Added USGS Example to cbQuickLook
+2025-11-05 05:17:32,057 [DEBUG] loadAllQuickLooks: Added USGS TESTING to cbQuickLook
+2025-11-05 05:17:33,504 [DEBUG] uiQuery showEvent: queryType=internal
+2025-11-05 05:17:33,504 [DEBUG] centerWindowToParent: Centered winInternalQuery at 976,233
+2025-11-05 05:17:33,506 [DEBUG] Loaded config for quick look: MRID TEST
+2025-11-05 05:17:33,506 [DEBUG] Set cbQuickLook to index 4: MRID TEST
+2025-11-05 05:17:33,506 [DEBUG] Populating cbDatabase
+2025-11-05 05:17:33,506 [DEBUG] Populated cbDatabase with 10 items
+2025-11-05 05:17:33,509 [DEBUG] uiQuery showEvent: Set window icon to InternalQuery.png and title to Internal Query
+2025-11-05 05:17:33,515 [DEBUG] btnInternalQueryPressed: Opened uiQuery as internal
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 1721|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 1863|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 1930|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2013|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2020|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2021|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2046|INSTANT:60|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2049|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2055|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2057|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2057|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2060|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2071|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2072|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,140 [DEBUG] loadQuickLook: Added item 2082|INSTANT:60|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2083|INSTANT:60|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2086|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2087|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2089|INSTANT:60|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2090|INSTANT:60|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2100|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2101|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2105|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2106|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2109|INSTANT:60|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2119|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2146|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2149|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2158|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2164|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2166|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2282|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2335|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2336|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2337|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2340|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2343|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2359|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2361|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2508|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 2731|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 3417|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 4178|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 4179|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,141 [DEBUG] loadQuickLook: Added item 4180|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4181|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4262|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4263|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4781|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4782|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4788|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4829|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4830|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4831|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4839|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4841|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4842|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4843|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4844|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 4916|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 5012|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 5013|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 5014|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 5074|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 5075|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 7776|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 7777|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 7778|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 7779|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 7988|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 7989|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 7990|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 7991|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 7997|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 7998|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,142 [DEBUG] loadQuickLook: Added item 8005|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8006|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8007|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8008|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8009|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8024|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8065|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8066|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8067|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8869|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8870|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8899|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8900|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8901|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8902|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8903|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8907|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 8908|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 10090|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 13971|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 19120|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 20179|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 20181|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 20182|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 20183|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 20184|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 20186|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 20187|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 20188|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 20189|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,143 [DEBUG] loadQuickLook: Added item 20191|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 20192|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 20193|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 20242|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 20243|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 20244|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 20245|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 20248|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 21072|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 21074|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 21075|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 24273|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 24283|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 24273|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 24283|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 25399|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 26149|HOUR|USBR-LCHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 2508|HOUR|USBR-YAOHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 8023|HOUR|USBR-YAOHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 21163|HOUR|USBR-YAOHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 21165|HOUR|USBR-YAOHDB
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Added item 09428500-210438-60|INSTANT:15|USGS-NWIS
+2025-11-05 05:17:42,144 [DEBUG] loadQuickLook: Loaded 'Data Check (HDB & USGS)' with 127 items
+2025-11-05 05:17:42,145 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'MRID TEST', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP', 'sqlVerticalSizes': [337, 242], 'sqlHorizontalSizes': [1306, 282]}
+2025-11-05 05:17:42,146 [DEBUG] Loaded quick look: Data Check (HDB & USGS)
+2025-11-05 05:17:53,488 [DEBUG] btnClearQueryPressed: Cleared query list
+2025-11-05 05:17:54,110 [DEBUG] qleDataID focus in, setting Add Query default
+2025-11-05 05:17:56,251 [DEBUG] Enter key pressed
+2025-11-05 05:17:56,251 [DEBUG] qleDataID focused, triggering btnAddQueryPressed
+2025-11-05 05:17:56,251 [DEBUG] btnAddQueryPressed: Added item: 21163|HOUR|USBR-YAOHDB
+2025-11-05 05:17:57,946 [DEBUG] Enter key pressed
+2025-11-05 05:17:57,946 [DEBUG] qleDataID focused, triggering btnAddQueryPressed
+2025-11-05 05:17:57,947 [DEBUG] btnAddQueryPressed: Added item: 21165|HOUR|USBR-YAOHDB
+2025-11-05 05:18:02,040 [DEBUG] qleDataID focus out, setting Query Data default
+2025-11-05 05:18:02,116 [DEBUG] btnQueryPressed: Starting query process, queryType=internal
+2025-11-05 05:18:02,117 [DEBUG] Item text: '21163|HOUR|USBR-YAOHDB', parts: ['21163', 'HOUR', 'USBR-YAOHDB'], len: 3
+2025-11-05 05:18:02,117 [DEBUG] Added queryItem: ('21163', 'HOUR', 'USBR-YAOHDB', '0', 0)
+2025-11-05 05:18:02,117 [DEBUG] Item text: '21165|HOUR|USBR-YAOHDB', parts: ['21165', 'HOUR', 'USBR-YAOHDB'], len: 3
+2025-11-05 05:18:02,117 [DEBUG] Added queryItem: ('21165', 'HOUR', 'USBR-YAOHDB', '0', 1)
+2025-11-05 05:18:02,117 [DEBUG] Stored last query as internal
+2025-11-05 05:18:02,117 [DEBUG] executeQuery: isInternal=True, items=2, deltaChecked=False, overlayChecked=False
+2025-11-05 05:18:02,118 [DEBUG] executeQuery: Filtered AQUARIUS for public query, remaining items=2
+2025-11-05 05:18:02,131 [DEBUG] executeQuery: Initialized and showed progress dialog
+2025-11-05 05:18:02,135 [DEBUG] executeQuery: Ensured dates are datetime for rounding: start=2025-11-04 01:00:00, end=2025-11-05 05:17:00
+2025-11-05 05:18:02,135 [DEBUG] Rounded down 2025-11-04 01:00:00 to HOUR
+2025-11-05 05:18:02,135 [DEBUG] buildTimestamps called with start: 2025-11-04 01:00, end: 2025-11-05 05:17, interval: HOUR
+2025-11-05 05:18:02,135 [DEBUG] Generated 29 timestamps, sample first 3: ['11/04/25 01:00:00', '11/04/25 02:00:00', '11/04/25 03:00:00']
+2025-11-05 05:18:02,137 [DEBUG] executeQuery: Setup complete, progress at 20%
+2025-11-05 05:18:02,137 [DEBUG] Starting 1 threads for 1 groups in background
+2025-11-05 05:18:02,138 [DEBUG] Started background worker 0 for group ('USBR', None, None)
+2025-11-05 05:18:02,139 [DEBUG] USBR.sqlRead called with svr: yaohdb, SDIDs: ['21163', '21165'], interval: HOUR, start: 2025-11-04 01:00, end: 2025-11-05 05:17, mrid: 0, table: R
+2025-11-05 05:18:02,139 [DEBUG] executeQuery: Started timer for progress updates
+2025-11-05 05:18:02,139 [DEBUG] oracleConnection._setup: Checking for platform-specific files in C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client: ['oci.dll']
+2025-11-05 05:18:02,139 [DEBUG] oracleConnection._setup: Validated Instant Client files for windows
+2025-11-05 05:18:03,605 [DEBUG] oracleConnection._setup: Initialized oracledb with clientDir C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\oracle\client
+2025-11-05 05:18:03,605 [DEBUG] oracleConnection._setup: Using env TNS_ADMIN: C:\Program Files\Oracle\Network\Admin (no copy)
+2025-11-05 05:18:06,845 [DEBUG] oracleConnection.connect: Error connecting to Oracle: ORA-01017: invalid username/password; logon denied
+Help: https://docs.oracle.com/error-help/db/ora-01017/
+2025-11-05 05:18:06,846 [ERROR] sqlRead: Query failed: ORA-01017: invalid username/password; logon denied
+Help: https://docs.oracle.com/error-help/db/ora-01017/
+2025-11-05 05:18:06,846 [DEBUG] buildTimestamps called with start: 2025-11-04 01:00, end: 2025-11-05 05:17, interval: HOUR
+2025-11-05 05:18:06,846 [DEBUG] Generated 29 timestamps, sample first 3: ['11/04/25 01:00:00', '11/04/25 02:00:00', '11/04/25 03:00:00']
+2025-11-05 05:18:06,846 [DEBUG] gapCheck for dataID '21163': timestamps len=29, data len=0
+2025-11-05 05:18:06,848 [DEBUG] Post-gapCheck len=29, sample first 3: ['11/04/25 01:00:00,', '11/04/25 02:00:00,', '11/04/25 03:00:00,']
+2025-11-05 05:18:06,848 [DEBUG] sqlRead: Post-gapCheck 29 rows for SDID 21163
+2025-11-05 05:18:06,848 [DEBUG] gapCheck for dataID '21165': timestamps len=29, data len=0
+2025-11-05 05:18:06,848 [DEBUG] Post-gapCheck len=29, sample first 3: ['11/04/25 01:00:00,', '11/04/25 02:00:00,', '11/04/25 03:00:00,']
+2025-11-05 05:18:06,848 [DEBUG] sqlRead: Post-gapCheck 29 rows for SDID 21165
+2025-11-05 05:18:06,848 [DEBUG] queryWorker: USBR result for SDIDs ['21163', '21165']: {'21163': {'data': ['11/04/25 01:00:00,', '11/04/25 02:00:00,', '11/04/25 03:00:00,', '11/04/25 04:00:00,', '11/04/25 05:00:00,', '11/04/25 06:00:00,', '11/04/25 07:00:00,', '11/04/25 08:00:00,', '11/04/25 09:00:00,', '11/04/25 10:00:00,', '11/04/25 11:00:00,', '11/04/25 12:00:00,', '11/04/25 13:00:00,', '11/04/25 14:00:00,', '11/04/25 15:00:00,', '11/04/25 16:00:00,', '11/04/25 17:00:00,', '11/04/25 18:00:00,', '11/04/25 19:00:00,', '11/04/25 20:00:00,', '11/04/25 21:00:00,', '11/04/25 22:00:00,', '11/04/25 23:00:00,', '11/05/25 00:00:00,', '11/05/25 01:00:00,', '11/05/25 02:00:00,', '11/05/25 03:00:00,', '11/05/25 04:00:00,', '11/05/25 05:00:00,'], 'rawResponse': []}, '21165': {'data': ['11/04/25 01:00:00,', '11/04/25 02:00:00,', '11/04/25 03:00:00,', '11/04/25 04:00:00,', '11/04/25 05:00:00,', '11/04/25 06:00:00,', '11/04/25 07:00:00,', '11/04/25 08:00:00,', '11/04/25 09:00:00,', '11/04/25 10:00:00,', '11/04/25 11:00:00,', '11/04/25 12:00:00,', '11/04/25 13:00:00,', '11/04/25 14:00:00,', '11/04/25 15:00:00,', '11/04/25 16:00:00,', '11/04/25 17:00:00,', '11/04/25 18:00:00,', '11/04/25 19:00:00,', '11/04/25 20:00:00,', '11/04/25 21:00:00,', '11/04/25 22:00:00,', '11/04/25 23:00:00,', '11/05/25 00:00:00,', '11/05/25 01:00:00,', '11/05/25 02:00:00,', '11/05/25 03:00:00,', '11/05/25 04:00:00,', '11/05/25 05:00:00,'], 'rawResponse': []}}
+2025-11-05 05:18:06,848 [DEBUG] gapCheck for dataID '21163': timestamps len=29, data len=29
+2025-11-05 05:18:06,850 [DEBUG] Post-gapCheck len=29, sample first 3: ['11/04/25 01:00:00,', '11/04/25 02:00:00,', '11/04/25 03:00:00,']
+2025-11-05 05:18:06,850 [DEBUG] gapCheck for dataID '21165': timestamps len=29, data len=29
+2025-11-05 05:18:06,850 [DEBUG] Post-gapCheck len=29, sample first 3: ['11/04/25 01:00:00,', '11/04/25 02:00:00,', '11/04/25 03:00:00,']
+2025-11-05 05:18:06,850 [DEBUG] queryWorker: Completed group ('USBR', None, None) with 2 items
+2025-11-05 05:18:06,858 [DEBUG] executeQuery: Signal received for group ('USBR', None, None)
+2025-11-05 05:18:06,858 [DEBUG] executeQuery: Skipping empty group ('USBR', None, None), no data
+2025-11-05 05:18:06,859 [DEBUG] executeQuery: Retrieved result from queue: ('USBR', None, None)
+2025-11-05 05:18:06,859 [DEBUG] executeQuery: Duplicate group ('USBR', None, None), skipping
+2025-11-05 05:18:06,860 [DEBUG] executeQuery: Timer stopped, wait loop ended, final collected 1/1, queue size 0, active threads 0
+2025-11-05 05:18:06,860 [DEBUG] executeQuery: All 1 groups merged
+2025-11-05 05:18:06,860 [DEBUG] Added empty result for dataID 21163
+2025-11-05 05:18:06,860 [DEBUG] Added empty result for dataID 21165
+2025-11-05 05:18:06,861 [DEBUG] executeQuery: Building row 0/29
+2025-11-05 05:18:06,861 [DEBUG] executeQuery: Building row 1/29
+2025-11-05 05:18:06,861 [DEBUG] executeQuery: Building row 2/29
+2025-11-05 05:18:06,861 [DEBUG] executeQuery: Building row 3/29
+2025-11-05 05:18:06,861 [DEBUG] executeQuery: Building row 4/29
+2025-11-05 05:18:06,861 [DEBUG] executeQuery: Building row 5/29
+2025-11-05 05:18:06,861 [DEBUG] executeQuery: Building row 6/29
+2025-11-05 05:18:06,861 [DEBUG] executeQuery: Building row 7/29
+2025-11-05 05:18:06,861 [DEBUG] executeQuery: Building row 8/29
+2025-11-05 05:18:06,861 [DEBUG] executeQuery: Building row 9/29
+2025-11-05 05:18:06,862 [DEBUG] executeQuery: Building row 10/29
+2025-11-05 05:18:06,862 [DEBUG] executeQuery: Building row 11/29
+2025-11-05 05:18:06,862 [DEBUG] executeQuery: Building row 12/29
+2025-11-05 05:18:06,862 [DEBUG] executeQuery: Building row 13/29
+2025-11-05 05:18:06,862 [DEBUG] executeQuery: Building row 14/29
+2025-11-05 05:18:06,862 [DEBUG] executeQuery: Building row 15/29
+2025-11-05 05:18:06,862 [DEBUG] executeQuery: Building row 16/29
+2025-11-05 05:18:06,862 [DEBUG] executeQuery: Building row 17/29
+2025-11-05 05:18:06,862 [DEBUG] executeQuery: Building row 18/29
+2025-11-05 05:18:06,862 [DEBUG] executeQuery: Building row 19/29
+2025-11-05 05:18:06,863 [DEBUG] executeQuery: Building row 20/29
+2025-11-05 05:18:06,863 [DEBUG] executeQuery: Building row 21/29
+2025-11-05 05:18:06,863 [DEBUG] executeQuery: Building row 22/29
+2025-11-05 05:18:06,863 [DEBUG] executeQuery: Building row 23/29
+2025-11-05 05:18:06,863 [DEBUG] executeQuery: Building row 24/29
+2025-11-05 05:18:06,863 [DEBUG] executeQuery: Building row 25/29
+2025-11-05 05:18:06,863 [DEBUG] executeQuery: Building row 26/29
+2025-11-05 05:18:06,863 [DEBUG] executeQuery: Building row 27/29
+2025-11-05 05:18:06,863 [DEBUG] executeQuery: Building row 28/29
+2025-11-05 05:18:06,863 [DEBUG] executeQuery: Built 29 rows for table
+2025-11-05 05:18:06,865 [DEBUG] buildTable: Starting with 29 rows, 2 headers
+2025-11-05 05:18:06,899 [DEBUG] buildTable: USBR in dict, header 0: PPGLC 
+21163
+2025-11-05 05:18:06,923 [DEBUG] buildTable: USBR in dict, header 1: PPGLC 
+21165
+2025-11-05 05:18:06,923 [DEBUG] buildTable: Setting table to 29 rows, 2 columns
+2025-11-05 05:18:06,925 [DEBUG] buildTable: Sampling 29 rows for column widths
+2025-11-05 05:18:06,925 [DEBUG] buildTable col 0: No non-empty values, using fallback width 32
+2025-11-05 05:18:06,925 [DEBUG] buildTable col 0: maxCellWidth=32, headerWidth=47
+2025-11-05 05:18:06,925 [DEBUG] buildTable col 1: No non-empty values, using fallback width 32
+2025-11-05 05:18:06,925 [DEBUG] buildTable col 1: maxCellWidth=32, headerWidth=47
+2025-11-05 05:18:06,925 [DEBUG] buildTable: Disabled table updates for population
+2025-11-05 05:18:06,926 [DEBUG] buildTable: Re-enabled table updates after population
+2025-11-05 05:18:06,926 [DEBUG] buildTable: Set stretchLastSection=False to prevent last column expansion.
+2025-11-05 05:18:06,927 [DEBUG] buildTable: Set column 0 width to 57
+2025-11-05 05:18:06,927 [DEBUG] buildTable: Set column 1 width to 57
+2025-11-05 05:18:06,927 [DEBUG] buildTable: Sample cell height: 19, Adjusted row height: 29
+2025-11-05 05:18:06,927 [DEBUG] buildTable: Set default row height to 29
+2025-11-05 05:18:06,927 [DEBUG] buildTable: Custom resized 2 columns. Text width for col 1: 97, Visible width: 57, Row height: 29
+2025-11-05 05:18:06,928 [DEBUG] qaqc: Processing column 0 for lookupId 21163
+2025-11-05 05:18:06,953 [DEBUG] qaqc: Processed column 0 for lookupId 21163
+2025-11-05 05:18:06,953 [DEBUG] qaqc: Processing column 1 for lookupId 21165
+2025-11-05 05:18:06,979 [DEBUG] qaqc: Processed column 1 for lookupId 21165
+2025-11-05 05:18:06,979 [DEBUG] Stored query data: 0 series, type internal, keys=[]
+2025-11-05 05:18:06,979 [DEBUG] Stored 0 rawResponses for Aquarius
+2025-11-05 05:18:06,980 [DEBUG] Set columnMetadata with lookupId: [{'type': 'normal', 'dataIds': ['21163'], 'dbs': 'USBR-YAOHDB', 'queryInfos': ['21163|HOUR|USBR-YAOHDB'], 'lookupId': '21163'}, {'type': 'normal', 'dataIds': ['21165'], 'dbs': 'USBR-YAOHDB', 'queryInfos': ['21165|HOUR|USBR-YAOHDB'], 'lookupId': '21165'}]
+2025-11-05 05:18:06,985 [DEBUG] executeQuery: Table built, progress dialog completed
+2025-11-05 05:18:06,985 [DEBUG] Query executed and table updated.
+2025-11-05 05:18:06,985 [DEBUG] executeQuery: Stored lastDeltaChecked=False, lastOverlayChecked=False
+2025-11-05 05:18:06,988 [DEBUG] tabMain index during executeQuery: 1
+2025-11-05 05:18:06,988 [DEBUG] Removed tabMain from index 1 to move to 0
+2025-11-05 05:18:06,990 [DEBUG] Inserted tabMain at index 0 after query
+2025-11-05 05:18:06,999 [DEBUG] Query window closed after query.
+2025-11-05 05:18:11,875 [DEBUG] No config.ini found or user.config exists, skipping conversion
+2025-11-05 05:18:11,886 [DEBUG] Loaded config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'Data Check (HDB & USGS)', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP', 'sqlVerticalSizes': [337, 242], 'sqlHorizontalSizes': [1306, 282]}
+2025-11-05 05:18:11,888 [DEBUG] Loaded full config: {'lastExportPath': 'C:/Temp', 'debugMode': True, 'utcOffset': 'UTC-07:00 | Mountain Time (US & Canada)/Arizona', 'periodOffset': True, 'retroMode': True, 'qaqc': True, 'rawData': False, 'lastQuickLook': 'Data Check (HDB & USGS)', 'tnsNamesLocation': 'C:\\Program Files\\Oracle\\Network\\Admin', 'enableSQL': True, 'hourTimestampMethod': 'EOP', 'sqlVerticalSizes': [337, 242], 'sqlHorizontalSizes': [1306, 282]}
+2025-11-05 05:18:11,890 [DEBUG] Saved splitter sizes to config: vertical=[337, 242], horizontal=[1306, 282]
