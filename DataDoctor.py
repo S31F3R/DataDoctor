@@ -94,6 +94,9 @@ class uiMain(QMainWindow):
         # Set up Data Query tab
         self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
+        # Stop table from stretching last column
+        self.sqlTable.horizontalHeader().setStretchLastSection(False)
+
         if not self.tabMain.layout():
             layout = QGridLayout(self.tabMain)
             layout.addWidget(self.mainTable)
@@ -178,15 +181,13 @@ class uiMain(QMainWindow):
             comboLayout.addSpacing(4)
             comboLayout.addWidget(self.cbDatabase)
             topLayout.addWidget(comboWidget)
-
             topLayout.addStretch()
 
             # Vertical splitter for pteSQL (top) and sqlTable (bottom)
             sqlSplitter = QSplitter(Qt.Orientation.Vertical, sqlTab)
             sqlSplitter.setObjectName('sqlSplitter')
             sqlSplitter.addWidget(self.pteSQL)
-            sqlSplitter.addWidget(self.sqlTable)
-            self.sqlTable.horizontalHeader().setStretchLastSection(False)
+            sqlSplitter.addWidget(self.sqlTable)            
 
             # Set initial sizes based on .ui
             sqlSplitter.setSizes([231, 291])
