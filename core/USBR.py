@@ -167,13 +167,15 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         return {}
     sdidPlaceholders = ','.join([f':{i+1}' for i in range(len(SDIDs))])
 
-    # Determine time_col for BETWEEN
+    # Determine time_col for BETWEEN and matching
     if interval == 'HOUR' and Config.periodOffset:
         timeCol = 'end_date_time'
+        timeAlias = 'END_DATE_TIME'
     else:
         timeCol = 'start_date_time'
+        timeAlias = 'START_DATE_TIME'
 
-    # Data query (second SQL, add start_date_time for periodOffset=False on HOUR)
+    # Interval query
     dataQuery = f"""
         SELECT 
           site_datatype_id AS SDID, 
@@ -196,8 +198,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         dataQuery = dataQuery.replace('ORDER BY', f"AND model_run_id = :{len(SDIDs)+3}\nORDER BY")
         dataParams.append(mrid)
 
-    # Metadata query (first SQL, optional for table=='R')
-    metaResults = []  # Default empty
+    # Base query (metadata, only for 'R')
+    metaResults = [] # Default empty
+    
     if table == 'R':
         metaQuery = f"""
             SELECT 
@@ -233,79 +236,105 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         oracleConn = Oracle.oracleConnection(dsn)
         conn = oracleConn.connect()
 
-        # Fetch data
-        if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Executing data query: {dataQuery} with params {dataParams}")
+        # Fetch interval data (always)
+        if Config.debug: 
+            Logic.logMessage("DEBUG", f"sqlRead: Executing interval query: {dataQuery} with params {dataParams}")
         dataResults = oracleConn.executeCustomQuery(dataQuery, params=dataParams)
 
-        # Group data by SDID
-        dataBySDID = defaultdict(list)
+        # Group interval data by SDID and time_key (for merging)
+        dataBySDIDTime = defaultdict(dict)
+
         for row in dataResults:
             SDID = str(row['SDID'])
-            dataBySDID[SDID].append(row)
+            timeKey = row[timeAlias]
+            dataBySDIDTime[SDID][timeKey] = row
 
-        # Fetch metadata if applicable
+        # Fetch base metadata if applicable
+        metaBySDIDTime = defaultdict(dict)
+
         if table == 'R':
-            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Executing meta query: {metaQuery} with params {metaParams}")
+            if Config.debug: 
+                Logic.logMessage("DEBUG", f"sqlRead: Executing base query: {metaQuery} with params {metaParams}")
             metaResults = oracleConn.executeCustomQuery(metaQuery, params=metaParams)
 
-            # Group meta by SDID
-            metaBySDID = defaultdict(list)
+            # Group base by SDID and time_key
             for row in metaResults:
                 SDID = str(row['SDID'])
-                metaBySDID[SDID].append(row)
+                timeKey = row[timeAlias]
+                metaBySDIDTime[SDID][timeKey] = row
 
         # Process for each SDID
         for SDID in SDIDs:
             SDIDStr = str(SDID)
-            specificRows = dataBySDID.get(SDIDStr, [])
+            intervalData = dataBySDIDTime.get(SDIDStr, {})
+            baseData = metaBySDIDTime.get(SDIDStr, {}) if table == 'R' else {}
             outputData = []
+            mergedMeta = []
 
-            for row in specificRows:
-                value = row.get('VALUE')
-                if interval == 'HOUR' and Config.periodOffset:
-                    dateTimeStr = row['END_DATE_TIME']
-                else:
-                    dateTimeStr = row['START_DATE_TIME']
+            # Use interval times as primary; fall back to base if no interval
+            allTimes = sorted(set(list(intervalData.keys()) + list(baseData.keys())))
+
+            for timeKey in allTimes:
+                intRow = intervalData.get(timeKey, {})
+                baseRow = baseData.get(timeKey, {})
+
+                # Value for table: interval if present, else base (but prefer interval per request)
+                value = intRow.get('VALUE') if intRow else baseRow.get('RBASE_VALUE') if baseRow else None
+
+                if value is None:
+                    continue # Skip if no value
+
+                # Format timestamp from timeKey
                 try:
-                    dateTime = datetime.strptime(dateTimeStr, '%Y-%m-%d %H:%M:%S')
+                    dateTime = datetime.strptime(timeKey, '%Y-%m-%d %H:%M:%S')
                     formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
                     valStr = str(value) if value is not None else ''
                     outputData.append(f'{formattedTs},{valStr}')
                 except ValueError as e:
-                    Logic.logMessage("WARN", f"sqlRead: Invalid date_time skipped for SDID {SDID}: {dateTimeStr} ({e})")
+                    Logic.logMessage("WARN", f"sqlRead: Invalid timeKey skipped for SDID {SDID}: {timeKey} ({e})")
                     continue
 
-            # Metadata for this SDID (base rows)
-            metaRows = metaBySDID.get(SDIDStr, []) if table == 'R' else []
+                # Merge metadata: base as base, override common tags with interval if present/not None
+                mergedRow = baseRow.copy() if baseRow else {}
+                mergedRow.update({k: v for k, v in intRow.items() if v is not None}) # Override with interval non-None
+                mergedRow['SDID'] = SDIDStr
+                mergedRow['INTERVAL'] = tableSuffix.lower()
 
-            # Add INTERVAL and SDID to each meta dict (user request)
-            for mrow in metaRows:
-                mrow['SDID'] = SDIDStr
-                mrow['INTERVAL'] = tableSuffix.lower()
+                if intRow:
+                    mergedRow['INTERVAL_VALUE'] = intRow.get('VALUE') # Add interval value explicitly
+                if baseRow:
+                    mergedRow['RBASE_VALUE'] = baseRow.get('RBASE_VALUE') # Preserve base value
+                mergedMeta.append(mergedRow)
 
-            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(metaRows)} meta rows for SDID {SDID}")
+            if Config.debug: 
+                Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(mergedMeta)} merged meta rows for SDID {SDID}")
 
-            # Structure output with metadata
+            # Structure output with merged metadata
             resultDict[SDIDStr] = {
                 'data': outputData,
-                'rawResponse': metaRows  # List of dicts from base; can merge specific later
+                'rawResponse': mergedMeta # List of merged dicts, sorted by time
             }
 
     except Exception as e:
         Logic.logMessage("ERROR", f"sqlRead: Query failed: {e}")
-        resultDict = {}  # Reset resultDict on failure
+        resultDict = {} # Reset resultDict on failure
+
         for SDID in SDIDs:
             resultDict[str(SDID)] = {'data': [], 'rawResponse': []}
     finally:
         if oracleConn: oracleConn.close()
 
-    # Apply gapCheck on data
+    # Apply gapCheck on data (metadata not gapped, as it's per available time)
     timestamps = Query.buildTimestamps(startDate, endDate, interval)
+
     for SDID in SDIDs:
         SDIDStr = str(SDID)
+
         if SDIDStr in resultDict:
             resultDict[SDIDStr]['data'] = Query.gapCheck(timestamps, resultDict[SDIDStr]['data'], SDIDStr)
-            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[SDIDStr]['data'])} rows for SDID {SDID}")
+
+            if Config.debug: 
+                Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[SDIDStr]['data'])} rows for SDID {SDID}")
 
     if not resultDict:
         Logic.logMessage("WARN", "sqlRead: No data after processing")
