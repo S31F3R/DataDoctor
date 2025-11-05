@@ -227,8 +227,8 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     resultDict = {}
     oracleConn = None
     try:
-        # Set dsn to short lower name
-        dsn = svr
+        # Always connect to 'lchdb' and use links for target svr
+        dsn = 'lchdb'
 
         oracleConn = Oracle.oracleConnection(dsn)
         conn = oracleConn.connect()
