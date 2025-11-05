@@ -705,8 +705,8 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             elif db == 'AQUARIUS':
                 interval = 'INSTANT:1'
         groupKey = (db.split('-')[0] if db.startswith('USBR-') else db, None, None)
-        SDID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
-        groups[groupKey].append((origIndex, dataID, SDID, db, interval, mrid))
+        baseDataID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
+        groups[groupKey].append((origIndex, dataID, baseDataID, db, interval, mrid))
     pool = QThreadPool.globalInstance()
     resultQueue = queue.Queue()
     maxDbThreads = 3
