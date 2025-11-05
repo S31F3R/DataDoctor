@@ -4,6 +4,7 @@ import requests
 import json
 from core import Oracle, Query, Config, Logic
 from datetime import datetime, timedelta
+from collections import defaultdict
 
 def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     if Config.debug:
