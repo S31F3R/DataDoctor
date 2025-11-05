@@ -67,7 +67,7 @@ class queryWorker(QRunnable):
 
                         # If internal, switch to sqlRead
                         if self.isInternal:
-                            result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
+                            result = USBR.sqlRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
                         else: # External use apiRead
                             result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
                         
@@ -104,13 +104,17 @@ class queryWorker(QRunnable):
                         continue
                 for idx, (origIndex, dataID, SDID) in enumerate(items):
                     if SDID in result and result[SDID]:
+                        res = result[SDID]
+                        if isinstance(res, dict):
+                            outputData = res.get('data', [])
+                            if 'rawResponse' in res:
+                                groupRawResponses[SDID] = res['rawResponse']
+                        else:
+                            outputData = res
                         if db == 'AQUARIUS':
-                            outputData = result.get(SDID, {}).get('data', [])
                             groupLabels[dataID] = result.get(SDID, {}).get('label', dataID)
                             if Config.debug:
                                 Logic.logMessage("DEBUG", f"queryWorker: Aquarius label for {dataID}: {groupLabels[dataID]}")
-                        else:
-                            outputData = result.get(SDID, [])
                         alignedData = gapCheck(self.timestamps, outputData, dataID)
                         values = [line.split(',')[1] if line else '' for line in alignedData]
                         groupResult[dataID] = values

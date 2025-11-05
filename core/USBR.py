@@ -121,7 +121,7 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     if Config.debug: Logic.logMessage("DEBUG", f"USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
 
-    # Map interval to Oracle table suffix
+    # Map interval to table suffix (consistent with apiRead)
     intervalMap = {
         'HOUR': 'HOUR',
         'INSTANT:1': 'INSTANT',
@@ -133,21 +133,86 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         'WATER YEAR': 'WY'
     }
 
-    tableSuffix = intervalMap.get(interval, 'H')
+    tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
 
-    # Adjust table name for MRID
-    tableName = f"HDB_{table}_{tableSuffix}" if table == 'R' else f"HDB_M_{tableSuffix}"
+    # Derive schema and link from svr
+    schema = (svr.upper() + 'A')
+    link = f'@{svr}'
 
-    # Parse dates
+    # Table names
+    baseTable = f'{schema}.r_base{link}' # Always r_base for metadata
+    dataTable = f'{schema}.{table.lower()}_{tableSuffix.lower()}{link}' # r_hour or m_hour, etc.
+
+    # Parse dates with offset handling
     try:
         startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
         endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
-        if Config.periodOffset and interval == 'HOUR': startDateTime = startDateTime - timedelta(hours=1)
+        if Config.periodOffset and interval == 'HOUR':
+            startDateTime = startDateTime - timedelta(hours=1)
     except ValueError as e:
         Logic.logMessage("ERROR", f"sqlRead: Date parse failed: {e}")
         return {}
 
-    # Build query
+    startStr = startDateTime.strftime('%Y-%m-%d %H:%M:%S')
+    endStr = endDateTime.strftime('%Y-%m-%d %H:%M:%S')
+
+    # Build placeholders for SDIDs
+    if not SDIDs:
+        Logic.logMessage("WARN", "sqlRead: No SDIDs provided")
+        return {}
+    sdidPlaceholders = ','.join([f':{i+1}' for i in range(len(SDIDs))])
+
+    # Data query (second SQL)
+    dataQuery = f"""
+        SELECT 
+          site_datatype_id AS SDID, 
+          TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME,
+          TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
+          value,
+          validation,
+          overwrite_flag,
+          method_id,
+          derivation_flags
+        FROM {dataTable}
+        WHERE site_datatype_id in ({sdidPlaceholders})
+          AND end_date_time BETWEEN TO_DATE(:{len(SDIDs)+1}, 'YYYY-MM-DD HH24:MI:SS') 
+          AND TO_DATE(:{len(SDIDs)+2}, 'YYYY-MM-DD HH24:MI:SS')
+        ORDER BY SDID ASC, end_date_time ASC
+    """
+    dataParams = SDIDs + [startStr, endStr]
+    if table == 'M' and mrid != '0':
+        dataQuery = dataQuery.replace('ORDER BY', f"AND model_run_id = :{len(SDIDs)+3}\nORDER BY")
+        dataParams.append(mrid)
+
+    # Metadata query (first SQL, optional for table=='R')
+    metaResults = [] # Default empty
+
+    if table == 'R':
+        metaQuery = f"""
+            SELECT 
+              site_datatype_id AS SDID, 
+              TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
+              TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
+              TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
+              value AS RBASE_VALUE,
+              validation,
+              overwrite_flag,
+              method_id,
+              agen_id,
+              collection_system_id,
+              loading_application_id,
+              computation_id,
+              data_flags
+            FROM {baseTable}
+            WHERE site_datatype_id in ({sdidPlaceholders})
+              AND end_date_time BETWEEN TO_DATE(:{len(SDIDs)+1}, 'YYYY-MM-DD HH24:MI:SS') 
+              AND TO_DATE(:{len(SDIDs)+2}, 'YYYY-MM-DD HH24:MI:SS') 
+              AND interval = '{tableSuffix.lower()}'
+            ORDER BY SDID ASC, end_date_time ASC
+        """
+        metaParams = SDIDs + [startStr, endStr]
+
+    # Execute queries
     resultDict = {}
     oracleConn = None
 
@@ -163,42 +228,90 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             'pnhyd': 'USBR-PNHYD',
             'gphyd': 'USBR-GPHYD'
         }
-
         dsn = tnsMap.get(svr.lower(), svr)
         oracleConn = Oracle.oracleConnection(dsn)
         conn = oracleConn.connect()
 
+        # Fetch data
+        if Config.debug: 
+            Logic.logMessage("DEBUG", f"sqlRead: Executing data query: {dataQuery} with params {dataParams}")
+        dataResults = oracleConn.executeCustomQuery(dataQuery, params=dataParams)
+
+        # Group data by SDID
+        dataBySDID = defaultdict(list)
+
+        for row in dataResults:
+            sdid = str(row['SDID'])
+            dataBySDID[sdid].append(row)
+
+        # Fetch metadata if applicable
+        if table == 'R':
+            if Config.debug: 
+                Logic.logMessage("DEBUG", f"sqlRead: Executing meta query: {metaQuery} with params {metaParams}")
+            metaResults = oracleConn.executeCustomQuery(metaQuery, params=metaParams)
+
+            # Group meta by SDID
+            metaBySDID = defaultdict(list)
+
+            for row in metaResults:
+                sdid = str(row['SDID'])
+                metaBySDID[sdid].append(row)
+
+        # Process for each SDID
         for sdi in SDIDs:
-            query = f"""
-                SELECT TO_CHAR(hdb_date, 'MM/DD/YY HH24:MI:00') AS timestamp, value
-                FROM {tableName}
-                WHERE sdi = :1
-                AND hdb_date BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI')
-                AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI')
-                {'AND mrid = :4' if mrid != '0' else ''}
-                ORDER BY hdb_date
-            """
+            sdiStr = str(sdi)
+            specific_rows = dataBySDID.get(sdiStr, [])
+            outputData = []
 
-            params = [sdi, startDate, endDate]
-            if mrid != '0': params.append(mrid)
-            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Executing query for SDI {sdi}: {query}")
+            for row in specific_rows:
+                value = row.get('VALUE')
+                dateTimeStr = row['DATE_TIME']
 
-            try:
-                data = oracleConn.executeQuery(query, params=params)
-                resultDict[sdi] = Query.gapCheck(
-                    Query.buildTimestamps(startDate, endDate, interval),
-                    data,
-                    sdi
-                )
+                try:
+                    dateTime = datetime.strptime(dateTimeStr, '%Y-%m-%d %H:%M:%S')
 
-                if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Fetched {len(resultDict[sdi])} rows for SDI {sdi}")
-            except Exception as e:
-                Logic.logMessage("ERROR", f"sqlRead: Query failed for SDI {sdi}: {e}")
-                resultDict[sdi] = []
+                    if Config.periodOffset and interval == 'HOUR':
+                        dateTime = dateTime + timedelta(hours=1)
+                    formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+                    valStr = str(value) if value is not None else ''
+                    outputData.append(f'{formattedTs},{valStr}')
+                except ValueError as e:
+                    Logic.logMessage("WARN", f"sqlRead: Invalid date_time skipped for SDI {sdi}: {dateTimeStr} ({e})")
+                    continue
+
+            # Metadata for this SDID (base rows)
+            metaRows = metaBySDID.get(sdiStr, []) if table == 'R' else []
+
+            # Add INTERVAL and SDID to each meta dict (user request)
+            for mrow in metaRows:
+                mrow['SDID'] = sdiStr
+                mrow['INTERVAL'] = tableSuffix.lower()
+
+            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(metaRows)} meta rows for SDI {sdi}")
+
+            # Structure output with metadata
+            resultDict[sdiStr] = {
+                'data': outputData,
+                'rawResponse': metaRows # List of dicts from base; can merge specific later
+            }
+
     except Exception as e:
-        Logic.logMessage("ERROR", f"sqlRead: Connection failed: {e}")
-        return {}
+        Logic.logMessage("ERROR", f"sqlRead: Query failed: {e}")
+        for sdi in SDIDs:
+            resultDict[str(sdi)] = {'data': [], 'rawResponse': []}
     finally:
         if oracleConn: oracleConn.close()
-            
+
+    # Apply gapCheck on data
+    timestamps = Query.buildTimestamps(startDate, endDate, interval)
+
+    for sdi in SDIDs:
+        sdiStr = str(sdi)
+
+        if sdiStr in resultDict:
+            resultDict[sdiStr]['data'] = Query.gapCheck(timestamps, resultDict[sdiStr]['data'], sdiStr)
+            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[sdiStr]['data'])} rows for SDI {sdi}")
+
+    if not resultDict:
+        Logic.logMessage("WARN", "sqlRead: No data after processing")
     return resultDict
