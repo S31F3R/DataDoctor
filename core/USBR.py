@@ -137,15 +137,15 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         'WATER YEAR': 'WY'
     }
 
-    tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
+    tableSuffix = intervalMap.get(interval, 'HOUR')  # Default to HOUR if unknown
 
     # Derive schema and link from svr
     schema = (svr.upper() + 'A')
     link = f'@{svr}'
 
     # Table names
-    baseTable = f'{schema}.r_base{link}' # Always r_base for metadata
-    dataTable = f'{schema}.{table.lower()}_{tableSuffix.lower()}{link}' # r_hour or m_hour, etc.
+    baseTable = f'{schema}.r_base{link}'  # Always r_base for metadata
+    dataTable = f'{schema}.{table.lower()}_{tableSuffix.lower()}{link}'  # r_hour or m_hour, etc.
 
     # Parse dates with offset handling
     try:
@@ -189,8 +189,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         dataParams.append(mrid)
 
     # Metadata query (first SQL, optional for table=='R')
-    metaResults = [] # Default empty
-
+    metaResults = []  # Default empty
     if table == 'R':
         metaQuery = f"""
             SELECT 
@@ -219,7 +218,6 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     # Execute queries
     resultDict = {}
     oracleConn = None
-
     try:
         # Map server to TNS alias
         tnsMap = {
@@ -237,26 +235,22 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         conn = oracleConn.connect()
 
         # Fetch data
-        if Config.debug: 
-            Logic.logMessage("DEBUG", f"sqlRead: Executing data query: {dataQuery} with params {dataParams}")
+        if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Executing data query: {dataQuery} with params {dataParams}")
         dataResults = oracleConn.executeCustomQuery(dataQuery, params=dataParams)
 
         # Group data by SDID
         dataBySDID = defaultdict(list)
-
         for row in dataResults:
             sdid = str(row['SDID'])
             dataBySDID[sdid].append(row)
 
         # Fetch metadata if applicable
         if table == 'R':
-            if Config.debug: 
-                Logic.logMessage("DEBUG", f"sqlRead: Executing meta query: {metaQuery} with params {metaParams}")
+            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Executing meta query: {metaQuery} with params {metaParams}")
             metaResults = oracleConn.executeCustomQuery(metaQuery, params=metaParams)
 
             # Group meta by SDID
             metaBySDID = defaultdict(list)
-
             for row in metaResults:
                 sdid = str(row['SDID'])
                 metaBySDID[sdid].append(row)
@@ -270,17 +264,15 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             for row in specific_rows:
                 value = row.get('VALUE')
                 dateTimeStr = row['DATE_TIME']
-
                 try:
                     dateTime = datetime.strptime(dateTimeStr, '%Y-%m-%d %H:%M:%S')
-
                     if Config.periodOffset and interval == 'HOUR':
                         dateTime = dateTime + timedelta(hours=1)
                     formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
                     valStr = str(value) if value is not None else ''
                     outputData.append(f'{formattedTs},{valStr}')
                 except ValueError as e:
-                    Logic.logMessage("WARN", f"sqlRead: Invalid date_time skipped for SDID {sdi}: {dateTimeStr} ({e})")
+                    Logic.logMessage("WARN", f"sqlRead: Invalid date_time skipped for SDI {sdi}: {dateTimeStr} ({e})")
                     continue
 
             # Metadata for this SDID (base rows)
@@ -291,12 +283,12 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                 mrow['SDID'] = sdiStr
                 mrow['INTERVAL'] = tableSuffix.lower()
 
-            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(metaRows)} meta rows for SDID {sdi}")
+            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(metaRows)} meta rows for SDI {sdi}")
 
             # Structure output with metadata
             resultDict[sdiStr] = {
                 'data': outputData,
-                'rawResponse': metaRows # List of dicts from base; can merge specific later
+                'rawResponse': metaRows  # List of dicts from base; can merge specific later
             }
 
     except Exception as e:
@@ -308,13 +300,11 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     # Apply gapCheck on data
     timestamps = Query.buildTimestamps(startDate, endDate, interval)
-
     for sdi in SDIDs:
         sdiStr = str(sdi)
-
         if sdiStr in resultDict:
             resultDict[sdiStr]['data'] = Query.gapCheck(timestamps, resultDict[sdiStr]['data'], sdiStr)
-            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[sdiStr]['data'])} rows for SDID {sdi}")
+            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[sdiStr]['data'])} rows for SDI {sdi}")
 
     if not resultDict:
         Logic.logMessage("WARN", "sqlRead: No data after processing")
