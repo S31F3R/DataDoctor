@@ -166,11 +166,12 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         return {}
     sdidPlaceholders = ','.join([f':{i+1}' for i in range(len(SDIDs))])
 
-    # Data query (second SQL)
+    # Data query (second SQL, add start_date_time for periodOffset=False on HOUR)
     dataQuery = f"""
         SELECT 
           site_datatype_id AS SDID, 
-          TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME,
+          TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
+          TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
           TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
           value,
           validation,
@@ -219,9 +220,18 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     resultDict = {}
     oracleConn = None
     try:
-        # Set dsn to short lower name
-        dsn = svr
-
+        # Map server to TNS alias
+        tnsMap = {
+            'lchdb': 'USBR-LCHDB',
+            'yaohdb': 'USBR-YAOHDB',
+            'uchdb2': 'USBR-UCHDB2',
+            'ecohdb': 'USBR-ECOHDB',
+            'lbohdb': 'USBR-LBOHDB',
+            'kbohdb': 'USBR-KBOHDB',
+            'pnhyd': 'USBR-PNHYD',
+            'gphyd': 'USBR-GPHYD'
+        }
+        dsn = tnsMap.get(svr.lower(), svr)
         oracleConn = Oracle.oracleConnection(dsn)
         conn = oracleConn.connect()
 
@@ -254,7 +264,10 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
             for row in specificRows:
                 value = row.get('VALUE')
-                dateTimeStr = row['DATE_TIME']
+                if interval == 'HOUR':
+                    dateTimeStr = row['END_DATE_TIME'] if Config.periodOffset else row['START_DATE_TIME']
+                else:
+                    dateTimeStr = row['END_DATE_TIME']
                 try:
                     dateTime = datetime.strptime(dateTimeStr, '%Y-%m-%d %H:%M:%S')
                     if Config.periodOffset and interval == 'HOUR':
