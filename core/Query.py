@@ -49,7 +49,7 @@ class queryWorker(QRunnable):
         db, _, _ = self.groupKey
         groupResult = {}
         groupLabels = {} if db == 'AQUARIUS' else None
-        groupRawResponses = {} if db == 'AQUARIUS' else None
+        groupRawResponses = {}  # Always dict to support USBR metadata
         usbrGroups = defaultdict(list)
 
         for origIndex, dataID, SDID, itemDb, interval, mrid in self.groupItems:
@@ -83,7 +83,6 @@ class queryWorker(QRunnable):
                         
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
-                        groupRawResponses = {SDID: result.get(SDID, {}).get('rawResponse', {}) for SDID in SDIDs}
                     except Exception as e:
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: Aquarius apiRead failed for SDIDs {SDIDs}: {e}")
