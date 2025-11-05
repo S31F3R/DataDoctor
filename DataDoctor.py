@@ -589,11 +589,12 @@ class uiMain(QMainWindow):
             Logic.logMessage("WARN", "Invalid cell: No timestamp or series label")
             return
         
-        # Get lookupId from columnMetadata (unique dataID)
+        # Get lookupId and db from columnMetadata
         lookupId = self.columnMetadata[col].get('lookupId') if col < len(self.columnMetadata) else None
+        db = self.columnMetadata[col].get('dbs') if col < len(self.columnMetadata) else None
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}")
+            Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
         
         response = self.seriesResponses.get(lookupId) if lookupId else None
         
@@ -602,17 +603,20 @@ class uiMain(QMainWindow):
         
         menu = QMenu(self)
         
-        # Add metadata details if internal query, non-overlay, and response is dict (for Aquarius metadata)
+        # Add metadata details if internal query, non-overlay
         isOverlay = col < len(self.columnMetadata) and self.columnMetadata[col].get('type') == 'overlay'
 
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: Condition check - internal={self.currentQueryType == 'internal'}, not overlay={not isOverlay}, response dict={isinstance(response, dict)}")
-        if self.currentQueryType == 'internal' and not isOverlay and isinstance(response, dict):
-            detailsAction = menu.addAction("Show details")
-            detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response))
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' action")
+        if self.currentQueryType == 'internal' and not isOverlay:
+            if db == 'AQUARIUS' and isinstance(response, dict):
+                detailsAction = menu.addAction("Show details")
+                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'AQUARIUS'))
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for AQUARIUS")
+            elif db.startswith('USBR') and isinstance(response, list):
+                detailsAction = menu.addAction("Show details")
+                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USBR'))
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USBR")
         
         # Add overlay if column is overlay (existing logic, with renamed action)
         if isOverlay:
@@ -628,14 +632,14 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"showCellContextMenu: No actions for cell ({row}, {col})")
 
-    def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response):
-        """Open uiDetails for Aquarius metadata."""
+    def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType):
+        """Open uiDetails for metadata (Aquarius or USBR)."""
         detailsWin = uiDetails(parent=self)
-        detailsWin.populateDetails('AQUARIUS', seriesLabel, timestampStr, response)
+        detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response)
         detailsWin.show()
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showMetadataDetails: Opened details for {timestampStr} - {seriesLabel}")
+            Logic.logMessage("DEBUG", f"showMetadataDetails: Opened details for {timestampStr} - {seriesLabel} ({dbType})")
 
     def onTabCloseRequested(self, index):
         self.tabWidget.removeTab(index)

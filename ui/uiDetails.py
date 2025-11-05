@@ -54,20 +54,20 @@ class uiDetails(QWidget):
         # Clear existing rows and set columns dynamically
         self.detailsTable.setRowCount(0)
         
-        if queryType in ["overlay", "headerNormal", "headerDelta", "headerOverlay"]:
+        if queryType in ["overlay", "headerNormal", "headerDelta", "headerOverlay", "USBR"]:
             self.detailsTable.setColumnCount(2)
-            self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details"])
+            self.detailsTable.setHorizontalHeaderLabels(["TAG", "VALUE"])
         else:
             self.detailsTable.setColumnCount(4)
             self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
         
         self.detailsTable.horizontalHeader().setStretchLastSection(True)
         
-        # Handler dictionary for database-specific metadata (easy to add USBR/USGS)
+        # Handler dictionary for database-specific metadata (easy to add USGS)
         metadataHandlers = {
             "AQUARIUS": self.populateAquarius,
             "USGS": self.populateUSGS, # TODO: Implement for USGS
-            "USBR": self.populateUSBR, # TODO: Implement for USBR
+            "USBR": self.populateUSBR,
         }
         
         if queryType == "overlay":
@@ -212,18 +212,18 @@ class uiDetails(QWidget):
         # Add rows for selected metadata (per list 1-10)
         
         # 1. Parameter/Label/Unit (series-level)
-        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}")
+        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}", response.get('Label', 'N/A'))
         
         # 2. Timestamp/Value (point-level, respect Config.rawData for formatting)
         value = point['Value']
         numeric = value.get('Numeric', 'N/A')
         display = Logic.valuePrecision(numeric) if not Config.rawData and numeric != 'N/A' else str(numeric)
-        self.addRow("Value", display)
+        self.addRow("Value", display, point.get('Timestamp', 'N/A'))
         
         # 3-9: Arrays with time-range filtering
         self.addArrayRows("Approval", response.get('Approvals', []), timestamp, 
-                           lambda item: f"Level: {item.get('ApprovalLevel', 'N/A')} ({item.get('LevelDescription', 'N/A')}) \nUser: {item.get('User', 'N/A')} \nApplied: {item.get('DateAppliedUtc', 'N/A')} \nComment: {item.get('Comment', 'N/A')}")                   
-
+                           lambda item: f"Level: {item.get('ApprovalLevel', 'N/A')} ({item.get('LevelDescription', 'N/A')}) \nUser: {item.get('User', 'N/A')} \nApplied: {item.get('DateAppliedUtc', 'N/A')} \nComment: {item.get('Comment', 'N/A')}")
+        
         self.addArrayRows("Qualifier", response.get('Qualifiers', []), timestamp, 
                            lambda item: f"Identifier: {item.get('Identifier', 'N/A')} | User: {item.get('User', 'N/A')} | Applied: {item.get('DateApplied', 'N/A')}")
         
@@ -251,12 +251,47 @@ class uiDetails(QWidget):
         self.addRow("Note", "USGS metadata not implemented yet")
     
     def populateUSBR(self, timestampStr, response):
-        """Placeholder for USBR metadata population."""
-        # TODO: Implement based on USBR API response structure
-        # Example: self.addRow("Site ID", response.get('siteId', 'N/A'))
-        # self.addRow("Value", response.get('value', 'N/A'), response.get('timestamp', 'N/A'), "")
-        # Add any array-like metadata if applicable
-        self.addRow("Note", "USBR metadata not implemented yet")
+        """Internal method to populate for USBR metadata (list of merged dicts)."""
+        if not isinstance(response, list):
+            Logic.logMessage("WARN", f"Invalid response for USBR: expected list, got {type(response).__name__}")
+            return
+        
+        # Convert timestampStr ('mm/dd/yy HH:MM:00') to match query format ('YYYY-MM-DD HH24:MI:SS')
+        try:
+            tsDate = datetime.strptime(timestampStr, '%m/%d/%y %H:%M:00')
+            matchKey = tsDate.strftime('%Y-%m-%d %H:%M:%S')
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Converted timestampStr {timestampStr} to matchKey {matchKey}")
+        except ValueError as e:
+            Logic.logMessage("ERROR", f"Failed to convert timestampStr {timestampStr}: {e}")
+            return
+        
+        # Determine match field based on periodOffset (for HOUR)
+        matchField = 'END_DATE_TIME' if interval == 'HOUR' and Config.periodOffset else 'START_DATE_TIME'
+        
+        # Filter row by exact match on matchField
+        matchingRow = next((row for row in response if row.get(matchField) == matchKey), None)
+        
+        if not matchingRow:
+            Logic.logMessage("WARN", f"No matching metadata for {matchKey} in USBR response")
+            self.addRow("Note", "No metadata for this timestamp")
+            return
+        
+        # Defined tag order (per user spec)
+        tags = [
+            'SDID', 'INTERVAL', 'START_DATE_TIME', 'END_DATE_TIME', 'DATE_TIME_LOADED',
+            'INTERVAL_VALUE', 'RBASE_VALUE', 'VALIDATION', 'OVERWRITE_FLAG', 'METHOD_ID',
+            'AGEN_ID', 'COLLECTION_SYSTEM_ID', 'LOADING_APPLICATION_ID', 'COMPUTATION_ID', 'DATA_FLAGS'
+        ]
+        
+        # Add rows in order, value as str or '' if missing/None
+        for tag in tags:
+            value = matchingRow.get(tag)
+            valStr = str(value) if value is not None else ''
+            self.addRow(tag, valStr)
+        
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Populated USBR metadata with {len(tags)} tags for {matchKey}")
     
     def addRow(self, metaType, details, startTime="", endTime=""):
         """Add a single row to the table (defaults for 2-column modes)."""
