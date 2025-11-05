@@ -219,18 +219,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     resultDict = {}
     oracleConn = None
     try:
-        # Map server to TNS alias
-        tnsMap = {
-            'lchdb': 'USBR-LCHDB',
-            'yaohdb': 'USBR-YAOHDB',
-            'uchdb2': 'USBR-UCHDB2',
-            'ecohdb': 'USBR-ECOHDB',
-            'lbohdb': 'USBR-LBOHDB',
-            'kbohdb': 'USBR-KBOHDB',
-            'pnhyd': 'USBR-PNHYD',
-            'gphyd': 'USBR-GPHYD'
-        }
-        dsn = tnsMap.get(svr.lower(), svr)
+        # Set dsn to short lower name
+        dsn = svr
+
         oracleConn = Oracle.oracleConnection(dsn)
         conn = oracleConn.connect()
 
@@ -241,8 +232,8 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         # Group data by SDID
         dataBySDID = defaultdict(list)
         for row in dataResults:
-            sdid = str(row['SDID'])
-            dataBySDID[sdid].append(row)
+            SDID = str(row['SDID'])
+            dataBySDID[SDID].append(row)
 
         # Fetch metadata if applicable
         if table == 'R':
@@ -252,16 +243,16 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             # Group meta by SDID
             metaBySDID = defaultdict(list)
             for row in metaResults:
-                sdid = str(row['SDID'])
-                metaBySDID[sdid].append(row)
+                SDID = str(row['SDID'])
+                metaBySDID[SDID].append(row)
 
         # Process for each SDID
-        for sdi in SDIDs:
-            sdiStr = str(sdi)
-            specific_rows = dataBySDID.get(sdiStr, [])
+        for SDID in SDIDs:
+            SDIDStr = str(SDID)
+            specificRows = dataBySDID.get(SDIDStr, [])
             outputData = []
 
-            for row in specific_rows:
+            for row in specificRows:
                 value = row.get('VALUE')
                 dateTimeStr = row['DATE_TIME']
                 try:
@@ -272,39 +263,39 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                     valStr = str(value) if value is not None else ''
                     outputData.append(f'{formattedTs},{valStr}')
                 except ValueError as e:
-                    Logic.logMessage("WARN", f"sqlRead: Invalid date_time skipped for SDI {sdi}: {dateTimeStr} ({e})")
+                    Logic.logMessage("WARN", f"sqlRead: Invalid date_time skipped for SDID {SDID}: {dateTimeStr} ({e})")
                     continue
 
             # Metadata for this SDID (base rows)
-            metaRows = metaBySDID.get(sdiStr, []) if table == 'R' else []
+            metaRows = metaBySDID.get(SDIDStr, []) if table == 'R' else []
 
             # Add INTERVAL and SDID to each meta dict (user request)
             for mrow in metaRows:
-                mrow['SDID'] = sdiStr
+                mrow['SDID'] = SDIDStr
                 mrow['INTERVAL'] = tableSuffix.lower()
 
-            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(metaRows)} meta rows for SDI {sdi}")
+            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(metaRows)} meta rows for SDID {SDID}")
 
             # Structure output with metadata
-            resultDict[sdiStr] = {
+            resultDict[SDIDStr] = {
                 'data': outputData,
                 'rawResponse': metaRows  # List of dicts from base; can merge specific later
             }
 
     except Exception as e:
         Logic.logMessage("ERROR", f"sqlRead: Query failed: {e}")
-        for sdi in SDIDs:
-            resultDict[str(sdi)] = {'data': [], 'rawResponse': []}
+        for SDID in SDIDs:
+            resultDict[str(SDID)] = {'data': [], 'rawResponse': []}
     finally:
         if oracleConn: oracleConn.close()
 
     # Apply gapCheck on data
     timestamps = Query.buildTimestamps(startDate, endDate, interval)
-    for sdi in SDIDs:
-        sdiStr = str(sdi)
-        if sdiStr in resultDict:
-            resultDict[sdiStr]['data'] = Query.gapCheck(timestamps, resultDict[sdiStr]['data'], sdiStr)
-            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[sdiStr]['data'])} rows for SDI {sdi}")
+    for SDID in SDIDs:
+        SDIDStr = str(SDID)
+        if SDIDStr in resultDict:
+            resultDict[SDIDStr]['data'] = Query.gapCheck(timestamps, resultDict[SDIDStr]['data'], SDIDStr)
+            if Config.debug: Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[SDIDStr]['data'])} rows for SDID {SDID}")
 
     if not resultDict:
         Logic.logMessage("WARN", "sqlRead: No data after processing")
