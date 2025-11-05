@@ -32,13 +32,14 @@ class uiDetails(QWidget):
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDetails initialized")
     
-    def populateDetails(self, queryType, seriesLabel, timestampStr, response):
+    def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None):
         """
         Populate the table with metadata or overlay info for the given cell.
         - queryType: str (e.g., "AQUARIUS", "USGS", "USBR", "overlay", "headerNormal", "headerDelta", "headerOverlay") for handling different modes.
         - seriesLabel: str (header label for the series/column).
         - timestampStr: str (timestamp from vertical header, e.g., "2023-01-01T00:00:00Z") or empty for headers.
         - response: dict (full API response for metadata, cell data for overlay, meta dict for headers).
+        - interval: str (optional, e.g., 'HOUR' for USBR matchField logic).
         """
         
         if Config.debug:
@@ -67,7 +68,7 @@ class uiDetails(QWidget):
         metadataHandlers = {
             "AQUARIUS": self.populateAquarius,
             "USGS": self.populateUSGS, # TODO: Implement for USGS
-            "USBR": self.populateUSBR,
+            "USBR": lambda ts, resp: self.populateUSBR(ts, resp, interval),
         }
         
         if queryType == "overlay":
@@ -250,7 +251,7 @@ class uiDetails(QWidget):
         # Add array rows for qualifiers, etc.
         self.addRow("Note", "USGS metadata not implemented yet")
     
-    def populateUSBR(self, timestampStr, response):
+    def populateUSBR(self, timestampStr, response, interval):
         """Internal method to populate for USBR metadata (list of merged dicts)."""
         if not isinstance(response, list):
             Logic.logMessage("WARN", f"Invalid response for USBR: expected list, got {type(response).__name__}")

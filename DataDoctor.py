@@ -607,14 +607,18 @@ class uiMain(QMainWindow):
         isOverlay = col < len(self.columnMetadata) and self.columnMetadata[col].get('type') == 'overlay'
 
         if self.currentQueryType == 'internal' and not isOverlay:
+            # Extract interval from queryInfos (e.g., '20179|HOUR|USBR-LCHDB' -> 'HOUR')
+            queryInfo = self.columnMetadata[col].get('queryInfos', ['|'])[0]
+            interval = queryInfo.split('|')[1] if '|' in queryInfo else 'HOUR'  # Default to HOUR if missing
+            
             if db == 'AQUARIUS' and isinstance(response, dict):
                 detailsAction = menu.addAction("Show details")
-                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'AQUARIUS'))
+                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'AQUARIUS', interval))
                 if Config.debug:
                     Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for AQUARIUS")
             elif db.startswith('USBR') and isinstance(response, list):
                 detailsAction = menu.addAction("Show details")
-                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USBR'))
+                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USBR', interval))
                 if Config.debug:
                     Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USBR")
         
@@ -632,10 +636,10 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"showCellContextMenu: No actions for cell ({row}, {col})")
 
-    def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType):
+    def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType, interval):
         """Open uiDetails for metadata (Aquarius or USBR)."""
         detailsWin = uiDetails(parent=self)
-        detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response)
+        detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response, interval)
         detailsWin.show()
         
         if Config.debug:
