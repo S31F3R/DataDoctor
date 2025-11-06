@@ -595,12 +595,10 @@ class uiMain(QMainWindow):
         
         if Config.debug:
             Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
-        
         response = self.seriesResponses.get(lookupId) if lookupId else None
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")
-        
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")        
         menu = QMenu(self)
         
         # Add metadata details if internal query, non-overlay
