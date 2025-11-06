@@ -593,6 +593,10 @@ class uiMain(QMainWindow):
         lookupId = self.columnMetadata[col].get('lookupId') if col < len(self.columnMetadata) else None
         db = self.columnMetadata[col].get('dbs') if col < len(self.columnMetadata) else None
         
+        # Normalize db to string if it's a list (for single-db normal columns)
+        if isinstance(db, list) and len(db) > 0:
+            db = db[0]
+        
         if Config.debug:
             Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
         response = self.seriesResponses.get(lookupId) if lookupId else None
@@ -603,7 +607,6 @@ class uiMain(QMainWindow):
         
         # Add metadata details if internal query, normal type
         colType = self.columnMetadata[col].get('type') if col < len(self.columnMetadata) else None
-
         if self.currentQueryType == 'internal' and colType == 'normal':
 
             # Extract interval from queryInfos (e.g., '20179|HOUR|USBR-LCHDB' -> 'HOUR')
@@ -619,13 +622,12 @@ class uiMain(QMainWindow):
             elif db.startswith('USBR') and isinstance(response, list):
                 detailsAction = menu.addAction("Show details")
                 detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USBR', interval))
-
+                
                 if Config.debug:
                     Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USBR")
         
         # Add overlay if column is overlay (existing logic, with renamed action)
         isOverlay = colType == 'overlay'
-
         if isOverlay:
             overlayAction = menu.addAction("Overlay details")
             overlayAction.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
