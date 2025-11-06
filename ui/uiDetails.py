@@ -57,7 +57,7 @@ class uiDetails(QWidget):
         
         if queryType in ["overlay", "headerNormal", "headerDelta", "headerOverlay", "USBR"]:
             self.detailsTable.setColumnCount(2)
-            self.detailsTable.setHorizontalHeaderLabels(["TAG", "VALUE"])
+            self.detailsTable.setHorizontalHeaderLabels(["Type", "Value"])
         else:
             self.detailsTable.setColumnCount(4)
             self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
@@ -282,7 +282,7 @@ class uiDetails(QWidget):
         # Defined tag order (per user spec)
         tags = [
             'SDID', 'Interval', 'Start Date/Time', 'End Date/Time', 'Date/Time Loaded',
-            'Interval Value', 'r_base Value', 'Validation', 'Overwrite Flag', 'Method',
+            'Interval Value', 'Base Value', 'Validation', 'Overwrite Flag', 'Method',
             'Agency Name', 'Collection System', 'Loading Application', 'Computation', 
             'Computation ID', 'Data Flags'
         ]

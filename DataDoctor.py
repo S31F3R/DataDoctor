@@ -628,6 +628,7 @@ class uiMain(QMainWindow):
         
         # Add overlay if column is overlay (existing logic, with renamed action)
         isOverlay = colType == 'overlay'
+        
         if isOverlay:
             overlayAction = menu.addAction("Overlay details")
             overlayAction.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
