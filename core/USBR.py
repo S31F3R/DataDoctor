@@ -20,9 +20,11 @@ def fetchAgenMap(oracleConn, schema):
         FROM {schema}.hdb_agen
         ORDER BY agen_id
     """
+
     try:
         results = oracleConn.executeCustomQuery(agenQuery)
         agenMap = {row['AGEN_ID']: row['AGEN_NAME'] for row in results}
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"Fetched {len(agenMap)} agen mappings")
     except Exception as e:
@@ -37,9 +39,11 @@ def fetchCollectionMap(oracleConn, schema):
         FROM {schema}.hdb_collection_system
         ORDER BY collection_system_id
     """
+
     try:
         results = oracleConn.executeCustomQuery(collectionQuery)
         collectionMap = {row['COLLECTION_SYSTEM_ID']: row['COLLECTION_SYSTEM_NAME'] for row in results}
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"Fetched {len(collectionMap)} collection mappings")
     except Exception as e:
@@ -54,9 +58,11 @@ def fetchLoadingMap(oracleConn, schema):
         FROM {schema}.hdb_loading_application
         ORDER BY loading_application_id
     """
+
     try:
         results = oracleConn.executeCustomQuery(loadingQuery)
         loadingMap = {row['LOADING_APPLICATION_ID']: row['LOADING_APPLICATION_NAME'] for row in results}
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"Fetched {len(loadingMap)} loading mappings")
     except Exception as e:
@@ -71,6 +77,7 @@ def fetchMethodMap(oracleConn, schema):
         FROM {schema}.hdb_method
         ORDER BY method_id
     """
+
     try:
         results = oracleConn.executeCustomQuery(methodQuery)
         methodMap = {row['METHOD_ID']: row['METHOD_NAME'] for row in results}
@@ -88,6 +95,7 @@ def fetchComputationMap(oracleConn, schema, link):
         FROM {schema}.cp_computation{link}
         ORDER BY computation_id
     """
+
     try:
         results = oracleConn.executeCustomQuery(computationQuery)
         computationMap = {row['COMPUTATION_ID']: row['COMPUTATION_NAME'] for row in results}
@@ -125,8 +133,7 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
 
     if Config.periodOffset and interval == 'HOUR':
-        startDateTime = startDateTime - timedelta(hours=1)
-
+        startDateTime = startDateTime - timedelta(hours=1)     
     startYear = startDateTime.year
     startMonth = f'{startDateTime.month:02d}'
     startDay = f'{startDateTime.day:02d}'
@@ -222,11 +229,10 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     # Set primary dsn on first call
     if primaryDsn is None:
         primaryDsn = svr
+
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Set primaryDsn to first svr: {primaryDsn}")
-
+            Logic.logMessage("DEBUG", f"Set primaryDsn to first svr: {primaryDsn}")         
     dsn = primaryDsn
-
     schema = primaryDsn.upper().rstrip('2') + 'A' if primaryDsn.endswith('2') else primaryDsn.upper() + 'A'
 
     # Map interval to table suffix (consistent with apiRead)
@@ -241,7 +247,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         'WATER YEAR': 'WY'
     }
 
-    tableSuffix = intervalMap.get(interval, 'HOUR')  # Default to HOUR if unknown
+    tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
 
     # Derive target schema and link from svr
     targetSchema = svr.upper().rstrip('2') + 'A' if svr.endswith('2') else svr.upper() + 'A'
@@ -249,12 +255,13 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     # Table names
     baseTable = f'{targetSchema}.r_base{link}'  # Always r_base for metadata
-    dataTable = f'{targetSchema}.{table.lower()}_{tableSuffix.lower()}{link}'  # r_hour or m_hour, etc.
+    dataTable = f'{targetSchema}.{table.lower()}_{tableSuffix.lower()}{link}' # r_hour or m_hour, etc.
 
     # Parse dates with offset handling
     try:
         startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
         endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
+
         if Config.periodOffset and interval == 'HOUR':
             startDateTime = startDateTime - timedelta(hours=1)
     except ValueError as e:
@@ -270,13 +277,12 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     elif interval == 'DAY':
         deltaSec = 86400
     elif interval == 'MONTH':
-        deltaSec = 86400 * 30.437  # Average days per month
+        deltaSec = 86400 * 30.437 # Average days per month
     elif interval == 'YEAR' or interval == 'WATER YEAR':
-        deltaSec = 86400 * 365.25  # Average days per year
+        deltaSec = 86400 * 365.25 # Average days per year
     else:
         Logic.logMessage("WARN", f"Unsupported interval for points estimation: {interval}. Defaulting to single chunk.")
-        deltaSec = (endDateTime - startDateTime).total_seconds() + 1  # Treat as one chunk
-
+        deltaSec = (endDateTime - startDateTime).total_seconds() + 1 # Treat as one chunk
     totalSec = (endDateTime - startDateTime).total_seconds()
     totalPoints = int(totalSec / deltaSec) + 1
     numChunks = (totalPoints + queryLimit - 1) // queryLimit
@@ -287,6 +293,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     # Generate sub-ranges
     subRanges = []
     chunkDurationSec = totalSec / numChunks
+
     for i in range(numChunks):
         subStart = startDateTime + timedelta(seconds=i * chunkDurationSec)
         subEnd = subStart + timedelta(seconds=chunkDurationSec) if i < numChunks - 1 else endDateTime
@@ -333,11 +340,13 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
           AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS')
         ORDER BY {timeCol} ASC
     """
+
     if table == 'M' and mrid != '0':
         dataQuery = dataQuery.replace('ORDER BY', f"AND model_run_id = :4\nORDER BY")
 
     # Base query template (metadata, only for 'R', single SDID)
     metaQuery = None
+
     if table == 'R':
         metaQuery = f"""
             SELECT 
@@ -392,8 +401,10 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         # Fetch base metadata if applicable
         metaResults = []
         metaByTime = {}
+
         if table == 'R':
             metaParams = [SDID, subStartStr, subEndStr]
+
             if Config.debug: 
                 Logic.logMessage("DEBUG", f"sqlRead thread {threadId}: Executing base query with params {metaParams}")
             metaResults = oracleConn.executeCustomQuery(metaQuery, params=metaParams)
@@ -489,6 +500,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     # Collect results
     resultDict = defaultdict(lambda: {'data': [], 'rawResponse': []})
+
     while not resultQueue.empty():
         SDID, partial = resultQueue.get()
         SDIDStr = str(SDID)
@@ -502,10 +514,13 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     # Apply gapCheck
     timestamps = Query.buildTimestamps(startDate, endDate, interval)
+
     for SDID in SDIDs:
         SDIDStr = str(SDID)
+
         if SDIDStr in resultDict:
             resultDict[SDIDStr]['data'] = Query.gapCheck(timestamps, resultDict[SDIDStr]['data'], SDIDStr)
+            
             if Config.debug: 
                 Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[SDIDStr]['data'])} rows for SDID {SDID}")
 
