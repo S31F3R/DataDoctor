@@ -5,8 +5,12 @@ import json
 from core import Oracle, Query, Config, Logic
 from datetime import datetime, timedelta
 from collections import defaultdict
+import threading
+import queue
 
 primaryDsn = None
+queryLimit = 500
+maxThreads = 15
 
 def fetchAgenMap(oracleConn, schema):
     # Fetch agen map from primary dsn's hdb tables (local, no link)
@@ -257,16 +261,53 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         Logic.logMessage("ERROR", f"sqlRead: Date parse failed: {e}")
         return {}
 
-    startStr = startDateTime.strftime('%Y-%m-%d %H:%M:%S')
-    endStr = endDateTime.strftime('%Y-%m-%d %H:%M:%S')
+    # Calculate delta for points estimation
+    if 'INSTANT:' in interval:
+        minutes = int(interval.split(':')[1])
+        deltaSec = minutes * 60
+    elif interval == 'HOUR':
+        deltaSec = 3600
+    elif interval == 'DAY':
+        deltaSec = 86400
+    elif interval == 'MONTH':
+        deltaSec = 86400 * 30.437  # Average days per month
+    elif interval == 'YEAR' or interval == 'WATER YEAR':
+        deltaSec = 86400 * 365.25  # Average days per year
+    else:
+        Logic.logMessage("WARN", f"Unsupported interval for points estimation: {interval}. Defaulting to single chunk.")
+        deltaSec = (endDateTime - startDateTime).total_seconds() + 1  # Treat as one chunk
 
-    # Build placeholders for SDIDs
-    if not SDIDs:
-        Logic.logMessage("WARN", "sqlRead: No SDIDs provided")
-        return {}
-    sdidPlaceholders = ','.join([f':{i+1}' for i in range(len(SDIDs))])
+    totalSec = (endDateTime - startDateTime).total_seconds()
+    totalPoints = int(totalSec / deltaSec) + 1
+    numChunks = (totalPoints + queryLimit - 1) // queryLimit
 
-    # Determine time_col for BETWEEN and matching
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"Estimated {totalPoints} points, splitting into {numChunks} chunks")
+
+    # Generate sub-ranges
+    subRanges = []
+    chunkDurationSec = totalSec / numChunks
+    for i in range(numChunks):
+        subStart = startDateTime + timedelta(seconds=i * chunkDurationSec)
+        subEnd = subStart + timedelta(seconds=chunkDurationSec) if i < numChunks - 1 else endDateTime
+        subStartStr = subStart.strftime('%Y-%m-%d %H:%M:%S')
+        subEndStr = subEnd.strftime('%Y-%m-%d %H:%M:%S')
+        subRanges.append((subStartStr, subEndStr))
+
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"Generated {len(subRanges)} sub-ranges")
+
+    # Fetch maps outside threads using a single connection
+    mapConn = Oracle.oracleConnection(dsn)
+    mapConn.connect()
+    agenMap = fetchAgenMap(mapConn, schema)
+    collectionMap = fetchCollectionMap(mapConn, schema)
+    loadingMap = fetchLoadingMap(mapConn, schema)
+    methodMap = fetchMethodMap(mapConn, schema)
+    computationMap = fetchComputationMap(mapConn, targetSchema, link)
+    mapConn.close()
+
+    # Determine timeCol for BETWEEN and matching
     if interval == 'HOUR' and Config.periodOffset:
         timeCol = 'end_date_time'
         timeAlias = 'END_DATE_TIME'
@@ -274,7 +315,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         timeCol = 'start_date_time'
         timeAlias = 'START_DATE_TIME'
 
-    # Interval query
+    # Interval query template (for single SDID)
     dataQuery = f"""
         SELECT 
           site_datatype_id AS SDID, 
@@ -287,19 +328,16 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
           method_id,
           derivation_flags
         FROM {dataTable}
-        WHERE site_datatype_id in ({sdidPlaceholders})
-          AND {timeCol} BETWEEN TO_DATE(:{len(SDIDs)+1}, 'YYYY-MM-DD HH24:MI:SS') 
-          AND TO_DATE(:{len(SDIDs)+2}, 'YYYY-MM-DD HH24:MI:SS')
-        ORDER BY SDID ASC, {timeCol} ASC
+        WHERE site_datatype_id = :1
+          AND {timeCol} BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
+          AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS')
+        ORDER BY {timeCol} ASC
     """
-    dataParams = SDIDs + [startStr, endStr]
     if table == 'M' and mrid != '0':
-        dataQuery = dataQuery.replace('ORDER BY', f"AND model_run_id = :{len(SDIDs)+3}\nORDER BY")
-        dataParams.append(mrid)
+        dataQuery = dataQuery.replace('ORDER BY', f"AND model_run_id = :4\nORDER BY")
 
-    # Base query (metadata, only for 'R')
-    metaResults = [] # Default empty
-    
+    # Base query template (metadata, only for 'R', single SDID)
+    metaQuery = None
     if table == 'R':
         metaQuery = f"""
             SELECT 
@@ -317,148 +355,160 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
               computation_id,
               data_flags
             FROM {baseTable}
-            WHERE site_datatype_id in ({sdidPlaceholders})
-              AND {timeCol} BETWEEN TO_DATE(:{len(SDIDs)+1}, 'YYYY-MM-DD HH24:MI:SS') 
-              AND TO_DATE(:{len(SDIDs)+2}, 'YYYY-MM-DD HH24:MI:SS') 
+            WHERE site_datatype_id = :1
+              AND {timeCol} BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
+              AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS') 
               AND interval = '{tableSuffix.lower()}'
-            ORDER BY SDID ASC, {timeCol} ASC
+            ORDER BY {timeCol} ASC
         """
-        metaParams = SDIDs + [startStr, endStr]
 
-    # Execute queries
-    resultDict = {}
-    oracleConn = None
-    try:
+    # Threading setup
+    resultQueue = queue.Queue()
+    tasks = [(SDID, subStartStr, subEndStr) for SDID in SDIDs for subStartStr, subEndStr in subRanges]
+    numTasks = len(tasks)
+    numThreads = min(maxThreads, numTasks)
+
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"Created {numTasks} tasks for {len(SDIDs)} SDIDs across {len(subRanges)} sub-ranges, using {numThreads} threads")
+
+    def queryTask(SDID, subStartStr, subEndStr, threadId):
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Thread {threadId} processing task for SDID {SDID}, range {subStartStr} to {subEndStr}")
         oracleConn = Oracle.oracleConnection(dsn)
         oracleConn.connect()
 
-        agenMap = fetchAgenMap(oracleConn, schema)
-        collectionMap = fetchCollectionMap(oracleConn, schema)
-        loadingMap = fetchLoadingMap(oracleConn, schema)
-        methodMap = fetchMethodMap(oracleConn, schema)
-        computationMap = fetchComputationMap(oracleConn, targetSchema, link)
+        # Data params
+        dataParams = [SDID, subStartStr, subEndStr]
+        if table == 'M' and mrid != '0':
+            dataParams.append(mrid)
 
         if Config.debug: 
-            Logic.logMessage("DEBUG", f"sqlRead: Executing interval query: {dataQuery} with params {dataParams}")
+            Logic.logMessage("DEBUG", f"sqlRead thread {threadId}: Executing interval query with params {dataParams}")
         dataResults = oracleConn.executeCustomQuery(dataQuery, params=dataParams)
 
-        # Group interval data by SDID and time_key (for merging)
-        dataBySDIDTime = defaultdict(dict)
-
-        for row in dataResults:
-            SDID = str(row['SDID'])
-            timeKey = row[timeAlias]
-            dataBySDIDTime[SDID][timeKey] = row
+        # Group interval data by timeKey
+        dataByTime = {row[timeAlias]: row for row in dataResults}
 
         # Fetch base metadata if applicable
-        metaBySDIDTime = defaultdict(dict)
-
+        metaResults = []
+        metaByTime = {}
         if table == 'R':
+            metaParams = [SDID, subStartStr, subEndStr]
             if Config.debug: 
-                Logic.logMessage("DEBUG", f"sqlRead: Executing base query: {metaQuery} with params {metaParams}")
+                Logic.logMessage("DEBUG", f"sqlRead thread {threadId}: Executing base query with params {metaParams}")
             metaResults = oracleConn.executeCustomQuery(metaQuery, params=metaParams)
+            metaByTime = {row[timeAlias]: row for row in metaResults}
 
-            # Group base by SDID and time_key
-            for row in metaResults:
-                SDID = str(row['SDID'])
-                timeKey = row[timeAlias]
-                metaBySDIDTime[SDID][timeKey] = row
+        # Process for this SDID and sub-range
+        outputData = []
+        mergedMeta = []
 
-        # Process for each SDID
-        for SDID in SDIDs:
-            SDIDStr = str(SDID)
-            intervalData = dataBySDIDTime.get(SDIDStr, {})
-            baseData = metaBySDIDTime.get(SDIDStr, {}) if table == 'R' else {}
-            outputData = []
-            mergedMeta = []
+        allTimes = sorted(set(list(dataByTime.keys()) + list(metaByTime.keys())))
 
-            # Use interval times as primary; fall back to base if no interval
-            allTimes = sorted(set(list(intervalData.keys()) + list(baseData.keys())))
+        for timeKey in allTimes:
+            intRow = dataByTime.get(timeKey, {})
+            baseRow = metaByTime.get(timeKey, {})
 
-            for timeKey in allTimes:
-                intRow = intervalData.get(timeKey, {})
-                baseRow = baseData.get(timeKey, {})
+            # Value for table: interval if present, else base (but prefer interval per request)
+            value = intRow.get('VALUE') if intRow else baseRow.get('RBASE_VALUE') if baseRow else None
 
-                # Value for table: interval if present, else base (but prefer interval per request)
-                value = intRow.get('VALUE') if intRow else baseRow.get('RBASE_VALUE') if baseRow else None
+            if value is None:
+                continue # Skip if no value
 
-                if value is None:
-                    continue # Skip if no value
+            # Format timestamp from timeKey
+            try:
+                dateTime = datetime.strptime(timeKey, '%Y-%m-%d %H:%M:%S')
+                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+                valStr = str(value) if value is not None else ''
+                outputData.append(f'{formattedTs},{valStr}')
+            except ValueError as e:
+                Logic.logMessage("WARN", f"sqlRead thread {threadId}: Invalid timeKey skipped for SDID {SDID}: {timeKey} ({e})")
+                continue
 
-                # Format timestamp from timeKey
-                try:
-                    dateTime = datetime.strptime(timeKey, '%Y-%m-%d %H:%M:%S')
-                    formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
-                    valStr = str(value) if value is not None else ''
-                    outputData.append(f'{formattedTs},{valStr}')
-                except ValueError as e:
-                    Logic.logMessage("WARN", f"sqlRead: Invalid timeKey skipped for SDID {SDID}: {timeKey} ({e})")
-                    continue
+            # Merge metadata: base as base, override common tags with interval if present/not None
+            mergedRow = baseRow.copy() if baseRow else {}
+            mergedRow.update({k: v for k, v in intRow.items() if v is not None}) # Override with interval non-None
+            mergedRow['SDID'] = str(SDID)
+            mergedRow['INTERVAL'] = tableSuffix.lower()
 
-                # Merge metadata: base as base, override common tags with interval if present/not None
-                mergedRow = baseRow.copy() if baseRow else {}
-                mergedRow.update({k: v for k, v in intRow.items() if v is not None}) # Override with interval non-None
-                mergedRow['SDID'] = SDIDStr
-                mergedRow['INTERVAL'] = tableSuffix.lower()
+            if intRow:
+                mergedRow['INTERVAL_VALUE'] = intRow.get('VALUE') # Add interval value explicitly
+            if baseRow:
+                mergedRow['RBASE_VALUE'] = baseRow.get('RBASE_VALUE') # Preserve base value
 
-                if intRow:
-                    mergedRow['INTERVAL_VALUE'] = intRow.get('VALUE') # Add interval value explicitly
-                if baseRow:
-                    mergedRow['RBASE_VALUE'] = baseRow.get('RBASE_VALUE') # Preserve base value
+            # Build display dict with friendly keys and name replacements
+            displayMeta = {}
+            displayMeta['SDID'] = mergedRow.get('SDID', '')
+            displayMeta['Interval'] = mergedRow.get('INTERVAL', '')
+            displayMeta['Start Date/Time'] = mergedRow.get('START_DATE_TIME', '')
+            displayMeta['End Date/Time'] = mergedRow.get('END_DATE_TIME', '')
+            displayMeta['Date/Time Loaded'] = mergedRow.get('DATE_TIME_LOADED', '')
+            displayMeta['Interval Value'] = str(mergedRow.get('INTERVAL_VALUE', '')) if mergedRow.get('INTERVAL_VALUE') is not None else ''
+            displayMeta['r_base Value'] = str(mergedRow.get('RBASE_VALUE', '')) if mergedRow.get('RBASE_VALUE') is not None else ''
+            displayMeta['Validation'] = mergedRow.get('VALIDATION', '') or ''
+            displayMeta['Overwrite Flag'] = mergedRow.get('OVERWRITE_FLAG', '') or ''
+            displayMeta['Method'] = methodMap.get(mergedRow.get('METHOD_ID'), '') or ''
+            displayMeta['Agency Name'] = agenMap.get(mergedRow.get('AGEN_ID'), '') or ''
+            displayMeta['Collection System'] = collectionMap.get(mergedRow.get('COLLECTION_SYSTEM_ID'), '') or ''
+            displayMeta['Loading Application'] = loadingMap.get(mergedRow.get('LOADING_APPLICATION_ID'), '') or ''
+            compId = mergedRow.get('COMPUTATION_ID')
+            compName = computationMap.get(compId, '') if compId is not None else ''
+            displayMeta['Computation'] = compName
+            displayMeta['Computation ID'] = str(compId) if compId is not None else ''
+            displayMeta['Data Flags'] = mergedRow.get('DATA_FLAGS', '') or mergedRow.get('DERIVATION_FLAGS', '') or ''
 
-                # Build display dict with friendly keys and name replacements
-                displayMeta = {}
-                displayMeta['SDID'] = mergedRow.get('SDID', '')
-                displayMeta['Interval'] = mergedRow.get('INTERVAL', '')
-                displayMeta['Start Date/Time'] = mergedRow.get('START_DATE_TIME', '')
-                displayMeta['End Date/Time'] = mergedRow.get('END_DATE_TIME', '')
-                displayMeta['Date/Time Loaded'] = mergedRow.get('DATE_TIME_LOADED', '')
-                displayMeta['Interval Value'] = str(mergedRow.get('INTERVAL_VALUE', '')) if mergedRow.get('INTERVAL_VALUE') is not None else ''
-                displayMeta['r_base Value'] = str(mergedRow.get('RBASE_VALUE', '')) if mergedRow.get('RBASE_VALUE') is not None else ''
-                displayMeta['Validation'] = mergedRow.get('VALIDATION', '') or ''
-                displayMeta['Overwrite Flag'] = mergedRow.get('OVERWRITE_FLAG', '') or ''
-                displayMeta['Method'] = methodMap.get(mergedRow.get('METHOD_ID'), '') or ''
-                displayMeta['Agency Name'] = agenMap.get(mergedRow.get('AGEN_ID'), '') or ''
-                displayMeta['Collection System'] = collectionMap.get(mergedRow.get('COLLECTION_SYSTEM_ID'), '') or ''
-                displayMeta['Loading Application'] = loadingMap.get(mergedRow.get('LOADING_APPLICATION_ID'), '') or ''
-                compId = mergedRow.get('COMPUTATION_ID')
-                compName = computationMap.get(compId, '') if compId is not None else ''
-                displayMeta['Computation'] = compName
-                displayMeta['Computation ID'] = str(compId) if compId is not None else ''
-                displayMeta['Data Flags'] = mergedRow.get('DATA_FLAGS', '') or mergedRow.get('DERIVATION_FLAGS', '') or ''
+            mergedMeta.append(displayMeta)
 
-                mergedMeta.append(displayMeta)
+        oracleConn.close()
+        resultQueue.put((SDID, {'data': outputData, 'rawResponse': mergedMeta}))
 
-            if Config.debug: 
-                Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(mergedMeta)} merged meta rows for SDID {SDID}")
+        if Config.debug: 
+            Logic.logMessage("DEBUG", f"sqlRead thread {threadId}: Processed {len(outputData)} data points and {len(mergedMeta)} merged meta rows for SDID {SDID}")
 
-            # Structure output with merged metadata
-            resultDict[SDIDStr] = {
-                'data': outputData,
-                'rawResponse': mergedMeta # List of merged dicts, sorted by time
-            }
+    # Start threads
+    taskQueue = queue.Queue()
+    for task in tasks: taskQueue.put(task)
+    threads = []
 
-    except Exception as e:
-        Logic.logMessage("ERROR", f"sqlRead: Query failed: {e}")
-        resultDict = {} # Reset resultDict on failure
+    def worker(threadId):
+        while True:
+            try:
+                SDID, subStartStr, subEndStr = taskQueue.get_nowait()
+                queryTask(SDID, subStartStr, subEndStr, threadId)
+                taskQueue.task_done()
+            except queue.Empty:
+                break
 
-        for SDID in SDIDs:
-            resultDict[str(SDID)] = {'data': [], 'rawResponse': []}
-    finally:
-        if oracleConn: oracleConn.close()
+    for i in range(numThreads):
+        t = threading.Thread(target=worker, args=(i,))
+        threads.append(t)
+        t.start()
 
-    # Apply gapCheck on data (metadata not gapped, as it's per available time)
+    for t in threads:
+        t.join()
+
+    # Collect results
+    resultDict = defaultdict(lambda: {'data': [], 'rawResponse': []})
+    while not resultQueue.empty():
+        SDID, partial = resultQueue.get()
+        SDIDStr = str(SDID)
+        resultDict[SDIDStr]['data'].extend(partial['data'])
+        resultDict[SDIDStr]['rawResponse'].extend(partial['rawResponse'])
+
+    # Sort per SDID
+    for SDIDStr in resultDict:
+        resultDict[SDIDStr]['data'].sort(key=lambda x: datetime.strptime(x.split(',')[0], '%m/%d/%y %H:%M:00'))
+        resultDict[SDIDStr]['rawResponse'].sort(key=lambda m: datetime.strptime(m['Start Date/Time'], '%Y-%m-%d %H:%M:%S'))
+
+    # Apply gapCheck
     timestamps = Query.buildTimestamps(startDate, endDate, interval)
-
     for SDID in SDIDs:
         SDIDStr = str(SDID)
-
         if SDIDStr in resultDict:
             resultDict[SDIDStr]['data'] = Query.gapCheck(timestamps, resultDict[SDIDStr]['data'], SDIDStr)
-
             if Config.debug: 
                 Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[SDIDStr]['data'])} rows for SDID {SDID}")
 
     if not resultDict:
         Logic.logMessage("WARN", "sqlRead: No data after processing")
-    return resultDict
+    return dict(resultDict)
