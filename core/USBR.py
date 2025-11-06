@@ -446,7 +446,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             resultDict[str(SDID)] = {'data': [], 'rawResponse': []}
     finally:
         if oracleConn: oracleConn.close()
-        primaryDsn = None  # Reset for next query run
+        primaryDsn = None  # Reset for next independent query run if needed
 
     # Apply gapCheck on data (metadata not gapped, as it's per available time)
     timestamps = Query.buildTimestamps(startDate, endDate, interval)
