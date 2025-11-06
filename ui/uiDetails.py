@@ -268,7 +268,7 @@ class uiDetails(QWidget):
             return
         
         # Determine match field based on periodOffset (for HOUR)
-        matchField = 'END_DATE_TIME' if interval == 'HOUR' and Config.periodOffset else 'START_DATE_TIME'
+        matchField = 'End Date/Time' if interval == 'HOUR' and Config.periodOffset else 'Start Date/Time'
         
         # Filter row by exact match on matchField
         matchingRow = next((row for row in response if row.get(matchField) == matchKey), None)
@@ -278,11 +278,11 @@ class uiDetails(QWidget):
             self.addRow("Note", "No metadata for this timestamp")
             return
         
-        # Defined tag order (per user spec)
+        # Defined tag order (per user spec, fixed typo)
         tags = [
             'SDID', 'Interval', 'Start Date/Time', 'End Date/Time', 'Date/Time Loaded',
             'Interval Value', 'r_base Value', 'Validation', 'Overwrite Flag', 'Method',
-            'Agency Name', 'Collection System', 'Loading Application', 'Computaiton', 
+            'Agency Name', 'Collection System', 'Loading Application', 'Computation', 
             'Computation ID', 'Data Flags'
         ]
         

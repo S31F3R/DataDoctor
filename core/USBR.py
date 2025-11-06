@@ -121,13 +121,12 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     return resultDict
 
 def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
-    if Config.debug: Logic.logMessage("DEBUG", f"USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
 
-    # Parse svr to short lower if full format
     if '-' in svr:
         svr = svr.split('-')[1].lower()
 
-    # Map interval to table suffix (consistent with apiRead)
     intervalMap = {
         'HOUR': 'HOUR',
         'INSTANT:1': 'INSTANT',
@@ -139,21 +138,16 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         'WATER YEAR': 'WY'
     }
 
-    tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
+    tableSuffix = intervalMap.get(interval, 'HOUR')
 
-    # Derive schema and link from svr
     schema = svr.upper().rstrip('2') + 'A' if svr.endswith('2') else svr.upper() + 'A'
-    link = f'@{svr}'
 
-    # Table names
-    baseTable = f'{schema}.r_base{link}' # Always r_base for metadata
-    dataTable = f'{schema}.{table.lower()}_{tableSuffix.lower()}{link}' # r_hour or m_hour, etc.
+    baseTable = f'{schema}.r_base'
+    dataTable = f'{schema}.{table.lower()}_{tableSuffix.lower()}'
 
-    # Parse dates with offset handling
     try:
         startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
         endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
-        
         if Config.periodOffset and interval == 'HOUR':
             startDateTime = startDateTime - timedelta(hours=1)
     except ValueError as e:
@@ -163,13 +157,11 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     startStr = startDateTime.strftime('%Y-%m-%d %H:%M:%S')
     endStr = endDateTime.strftime('%Y-%m-%d %H:%M:%S')
 
-    # Build placeholders for SDIDs
     if not SDIDs:
         Logic.logMessage("WARN", "sqlRead: No SDIDs provided")
         return {}
     sdidPlaceholders = ','.join([f':{i+1}' for i in range(len(SDIDs))])
 
-    # Determine time_col for BETWEEN and matching
     if interval == 'HOUR' and Config.periodOffset:
         timeCol = 'end_date_time'
         timeAlias = 'END_DATE_TIME'
@@ -177,7 +169,6 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         timeCol = 'start_date_time'
         timeAlias = 'START_DATE_TIME'
 
-    # Interval query
     dataQuery = f"""
         SELECT 
           site_datatype_id AS SDID, 
@@ -200,8 +191,8 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         dataQuery = dataQuery.replace('ORDER BY', f"AND model_run_id = :{len(SDIDs)+3}\nORDER BY")
         dataParams.append(mrid)
 
-    # Base query (metadata, only for 'R')
-    metaResults = [] # Default empty
+    metaResults = []
+
     if table == 'R':
         metaQuery = f"""
             SELECT 
@@ -227,26 +218,24 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         """
         metaParams = SDIDs + [startStr, endStr]
 
-    # Execute queries
     resultDict = {}
     oracleConn = None
-
     try:
-        # Always connect to 'lchdb' and use links for target svr
-        dsn = 'lchdb'
+        dsn = svr
 
         oracleConn = Oracle.oracleConnection(dsn)
         conn = oracleConn.connect()
 
-        # Fetch lookups (caches per svr)
-        lookups = fetchLookups(conn, svr)
+        agenMap = fetchAgenMap(conn)
+        collectionMap = fetchCollectionMap(conn)
+        loadingMap = fetchLoadingMap(conn)
+        methodMap = fetchMethodMap(conn)
+        computationMap = fetchComputationMap(conn, schema)
 
-        # Fetch interval data (always)
         if Config.debug: 
             Logic.logMessage("DEBUG", f"sqlRead: Executing interval query: {dataQuery} with params {dataParams}")
         dataResults = oracleConn.executeCustomQuery(dataQuery, params=dataParams)
 
-        # Group interval data by SDID and time_key (for merging)
         dataBySDIDTime = defaultdict(dict)
 
         for row in dataResults:
@@ -254,20 +243,18 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             timeKey = row[timeAlias]
             dataBySDIDTime[SDID][timeKey] = row
 
-        # Fetch base metadata if applicable
         metaBySDIDTime = defaultdict(dict)
+
         if table == 'R':
             if Config.debug: 
                 Logic.logMessage("DEBUG", f"sqlRead: Executing base query: {metaQuery} with params {metaParams}")
             metaResults = oracleConn.executeCustomQuery(metaQuery, params=metaParams)
 
-            # Group base by SDID and time_key
             for row in metaResults:
                 SDID = str(row['SDID'])
                 timeKey = row[timeAlias]
                 metaBySDIDTime[SDID][timeKey] = row
 
-        # Process for each SDID
         for SDID in SDIDs:
             SDIDStr = str(SDID)
             intervalData = dataBySDIDTime.get(SDIDStr, {})
@@ -275,20 +262,17 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             outputData = []
             mergedMeta = []
 
-            # Use interval times as primary; fall back to base if no interval
             allTimes = sorted(set(list(intervalData.keys()) + list(baseData.keys())))
 
             for timeKey in allTimes:
                 intRow = intervalData.get(timeKey, {})
                 baseRow = baseData.get(timeKey, {})
 
-                # Value for table: interval if present, else base (but prefer interval per request)
                 value = intRow.get('VALUE') if intRow else baseRow.get('RBASE_VALUE') if baseRow else None
 
                 if value is None:
-                    continue # Skip if no value
+                    continue
 
-                # Format timestamp from timeKey
                 try:
                     dateTime = datetime.strptime(timeKey, '%Y-%m-%d %H:%M:%S')
                     formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
@@ -298,53 +282,55 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                     Logic.logMessage("WARN", f"sqlRead: Invalid timeKey skipped for SDID {SDID}: {timeKey} ({e})")
                     continue
 
-                # Merge metadata: base as base, override common tags with interval if present/not None
                 mergedRow = baseRow.copy() if baseRow else {}
-                mergedRow.update({k: v for k, v in intRow.items() if v is not None}) # Override with interval non-None
+                mergedRow.update({k: v for k, v in intRow.items() if v is not None})
                 mergedRow['SDID'] = SDIDStr
                 mergedRow['INTERVAL'] = tableSuffix.lower()
 
                 if intRow:
-                    mergedRow['INTERVAL_VALUE'] = intRow.get('VALUE') # Add interval value explicitly
+                    mergedRow['INTERVAL_VALUE'] = intRow.get('VALUE')
                 if baseRow:
-                    mergedRow['RBASE_VALUE'] = baseRow.get('RBASE_VALUE') # Preserve base value
+                    mergedRow['RBASE_VALUE'] = baseRow.get('RBASE_VALUE')
 
-                # Replace IDs with names (delete old ID except for computation)
-                if 'AGEN_ID' in mergedRow:
-                    mergedRow['AGEN_NAME'] = lookups['agenMap'].get(mergedRow['AGEN_ID'], '')
-                    del mergedRow['AGEN_ID']
-                if 'COLLECTION_SYSTEM_ID' in mergedRow:
-                    mergedRow['COLLECTION_SYSTEM'] = lookups['collectionMap'].get(mergedRow['COLLECTION_SYSTEM_ID'], '')
-                    del mergedRow['COLLECTION_SYSTEM_ID']
-                if 'LOADING_APPLICATION_ID' in mergedRow:
-                    mergedRow['LOADING_APPLICATION'] = lookups['loadingMap'].get(mergedRow['LOADING_APPLICATION_ID'], '')
-                    del mergedRow['LOADING_APPLICATION_ID']
-                if 'METHOD_ID' in mergedRow:
-                    mergedRow['METHOD'] = lookups['methodMap'].get(mergedRow['METHOD_ID'], '')
-                    del mergedRow['METHOD_ID']
-                if 'COMPUTATION_ID' in mergedRow:
-                    compName = lookups['computationMap'].get(mergedRow['COMPUTATION_ID'], '')
-                    mergedRow['COMPUTATION'] = f"{compName}\nID: {mergedRow['COMPUTATION_ID']}" if compName else str(mergedRow['COMPUTATION_ID'])
-                mergedMeta.append(mergedRow)
+                displayMeta = {}
+                displayMeta['SDID'] = mergedRow.get('SDID', '')
+                displayMeta['Interval'] = mergedRow.get('INTERVAL', '')
+                displayMeta['Start Date/Time'] = mergedRow.get('START_DATE_TIME', '')
+                displayMeta['End Date/Time'] = mergedRow.get('END_DATE_TIME', '')
+                displayMeta['Date/Time Loaded'] = mergedRow.get('DATE_TIME_LOADED', '')
+                displayMeta['Interval Value'] = str(mergedRow.get('INTERVAL_VALUE', '')) if mergedRow.get('INTERVAL_VALUE') is not None else ''
+                displayMeta['r_base Value'] = str(mergedRow.get('RBASE_VALUE', '')) if mergedRow.get('RBASE_VALUE') is not None else ''
+                displayMeta['Validation'] = mergedRow.get('VALIDATION', '') or ''
+                displayMeta['Overwrite Flag'] = mergedRow.get('OVERWRITE_FLAG', '') or ''
+                displayMeta['Method'] = methodMap.get(mergedRow.get('METHOD_ID'), '') or ''
+                displayMeta['Agency Name'] = agenMap.get(mergedRow.get('AGEN_ID'), '') or ''
+                displayMeta['Collection System'] = collectionMap.get(mergedRow.get('COLLECTION_SYSTEM_ID'), '') or ''
+                displayMeta['Loading Application'] = loadingMap.get(mergedRow.get('LOADING_APPLICATION_ID'), '') or ''
+                compId = mergedRow.get('COMPUTATION_ID')
+                compName = computationMap.get(compId, '') if compId is not None else ''
+                displayMeta['Computation'] = compName
+                displayMeta['Computation ID'] = str(compId) if compId is not None else ''
+                displayMeta['Data Flags'] = mergedRow.get('DATA_FLAGS', '') or mergedRow.get('DERIVATION_FLAGS', '') or ''
+
+                mergedMeta.append(displayMeta)
+
             if Config.debug: 
                 Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(mergedMeta)} merged meta rows for SDID {SDID}")
 
-            # Structure output with merged metadata
             resultDict[SDIDStr] = {
                 'data': outputData,
-                'rawResponse': mergedMeta # List of merged dicts, sorted by time
+                'rawResponse': mergedMeta
             }
 
     except Exception as e:
         Logic.logMessage("ERROR", f"sqlRead: Query failed: {e}")
-        resultDict = {} # Reset resultDict on failure
+        resultDict = {}
 
         for SDID in SDIDs:
             resultDict[str(SDID)] = {'data': [], 'rawResponse': []}
     finally:
         if oracleConn: oracleConn.close()
 
-    # Apply gapCheck on data (metadata not gapped, as it's per available time)
     timestamps = Query.buildTimestamps(startDate, endDate, interval)
 
     for SDID in SDIDs:
@@ -360,60 +346,82 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         Logic.logMessage("WARN", "sqlRead: No data after processing")
     return resultDict
 
-@lru_cache(maxsize=None)
-def fetchLookups(conn, svr):
-    """Fetch all lookup maps for a svr (agen, collection, loading, method, computation)."""
-    lookups = {
-        'agenMap': {},
-        'collectionMap': {},
-        'loadingMap': {},
-        'methodMap': {},
-        'computationMap': {}
-    }
-
-    # Schema adjustment for special cases like uchdb2
-    schema = svr.upper().rstrip('2') + 'A' if svr.endswith('2') else svr.upper() + 'A'
-    link = f'@{svr}'
-
-    # Common lookups (hdb_* tables)
-    agenQuery = f"""
+def fetchAgenMap(conn):
+    agenMap = {}
+    agenQuery = """
         SELECT agen_id, agen_name
-        FROM {schema}.hdb_agen{link}
+        FROM LCHDBA.hdb_agen@lchdb
         ORDER BY agen_id
     """
-    collectionQuery = f"""
+    try:
+        results = conn.executeCustomQuery(agenQuery)
+        agenMap = {row['AGEN_ID']: row['AGEN_NAME'] for row in results}
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Fetched {len(agenMap)} agen mappings")
+    except Exception as e:
+        Logic.logMessage("ERROR", f"Failed to fetch agenMap: {e}")
+    return agenMap
+
+def fetchCollectionMap(conn):
+    collectionMap = {}
+    collectionQuery = """
         SELECT collection_system_id, collection_system_name
-        FROM {schema}.hdb_collection_system{link}
+        FROM LCHDBA.hdb_collection_system@lchdb
         ORDER BY collection_system_id
     """
-    loadingQuery = f"""
+    try:
+        results = conn.executeCustomQuery(collectionQuery)
+        collectionMap = {row['COLLECTION_SYSTEM_ID']: row['COLLECTION_SYSTEM_NAME'] for row in results}
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Fetched {len(collectionMap)} collection mappings")
+    except Exception as e:
+        Logic.logMessage("ERROR", f"Failed to fetch collectionMap: {e}")
+    return collectionMap
+
+def fetchLoadingMap(conn):
+    loadingMap = {}
+    loadingQuery = """
         SELECT loading_application_id, loading_application_name
-        FROM {schema}.hdb_loading_application{link}
+        FROM LCHDBA.hdb_loading_application@lchdb
         ORDER BY loading_application_id
     """
-    methodQuery = f"""
+    try:
+        results = conn.executeCustomQuery(loadingQuery)
+        loadingMap = {row['LOADING_APPLICATION_ID']: row['LOADING_APPLICATION_NAME'] for row in results}
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Fetched {len(loadingMap)} loading mappings")
+    except Exception as e:
+        Logic.logMessage("ERROR", f"Failed to fetch loadingMap: {e}")
+    return loadingMap
+
+def fetchMethodMap(conn):
+    methodMap = {}
+    methodQuery = """
         SELECT method_id, method_name
-        FROM {schema}.hdb_method{link}
+        FROM LCHDBA.hdb_method@lchdb
         ORDER BY method_id
     """
+    try:
+        results = conn.executeCustomQuery(methodQuery)
+        methodMap = {row['METHOD_ID']: row['METHOD_NAME'] for row in results}
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Fetched {len(methodMap)} method mappings")
+    except Exception as e:
+        Logic.logMessage("ERROR", f"Failed to fetch methodMap: {e}")
+    return methodMap
 
-    # Computation-specific
+def fetchComputationMap(conn, schema):
+    computationMap = {}
     computationQuery = f"""
         SELECT computation_id, computation_name
-        FROM {schema}.cp_computation{link}
+        FROM {schema}.cp_computation
         ORDER BY computation_id
     """
-
     try:
-        lookups['agenMap'] = {row['AGEN_ID']: row['AGEN_NAME'] for row in conn.executeCustomQuery(agenQuery)}
-        lookups['collectionMap'] = {row['COLLECTION_SYSTEM_ID']: row['COLLECTION_SYSTEM_NAME'] for row in conn.executeCustomQuery(collectionQuery)}
-        lookups['loadingMap'] = {row['LOADING_APPLICATION_ID']: row['LOADING_APPLICATION_NAME'] for row in conn.executeCustomQuery(loadingQuery)}
-        lookups['methodMap'] = {row['METHOD_ID']: row['METHOD_NAME'] for row in conn.executeCustomQuery(methodQuery)}
-        lookups['computationMap'] = {row['COMPUTATION_ID']: row['COMPUTATION_NAME'] for row in conn.executeCustomQuery(computationQuery)}
-
+        results = conn.executeCustomQuery(computationQuery)
+        computationMap = {row['COMPUTATION_ID']: row['COMPUTATION_NAME'] for row in results}
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Fetched lookups for svr {svr}: agen {len(lookups['agenMap'])}, collection {len(lookups['collectionMap'])}, loading {len(lookups['loadingMap'])}, method {len(lookups['methodMap'])}, computation {len(lookups['computationMap'])}")
+            Logic.logMessage("DEBUG", f"Fetched {len(computationMap)} computation mappings")
     except Exception as e:
-        Logic.logMessage("ERROR", f"Failed to fetch lookups for svr {svr}: {e}")
-    
-    return lookups
+        Logic.logMessage("ERROR", f"Failed to fetch computationMap: {e}")
+    return computationMap
