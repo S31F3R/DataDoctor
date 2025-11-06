@@ -280,9 +280,10 @@ class uiDetails(QWidget):
         
         # Defined tag order (per user spec)
         tags = [
-            'SDID', 'INTERVAL', 'START_DATE_TIME', 'END_DATE_TIME', 'DATE_TIME_LOADED',
-            'INTERVAL_VALUE', 'RBASE_VALUE', 'VALIDATION', 'OVERWRITE_FLAG', 'METHOD_ID',
-            'AGEN_ID', 'COLLECTION_SYSTEM_ID', 'LOADING_APPLICATION_ID', 'COMPUTATION_ID', 'DATA_FLAGS'
+            'SDID', 'Interval', 'Start Date/Time', 'End Date/Time', 'Date/Time Loaded',
+            'Interval Value', 'r_base Value', 'Validation', 'Overwrite Flag', 'Method',
+            'Agency Name', 'Collection System', 'Loading Application', 'Computaiton', 
+            'Computation ID', 'Data Flags'
         ]
         
         # Add rows in order, value as str or '' if missing/None

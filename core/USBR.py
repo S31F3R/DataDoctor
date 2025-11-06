@@ -5,6 +5,7 @@ import json
 from core import Oracle, Query, Config, Logic
 from datetime import datetime, timedelta
 from collections import defaultdict
+from functools import lru_cache
 
 def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     if Config.debug:
@@ -141,7 +142,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
 
     # Derive schema and link from svr
-    schema = (svr.upper() + 'A')
+    schema = svr.upper().rstrip('2') + 'A' if svr.endswith('2') else svr.upper() + 'A'
     link = f'@{svr}'
 
     # Table names
@@ -152,7 +153,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     try:
         startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
         endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
-
+        
         if Config.periodOffset and interval == 'HOUR':
             startDateTime = startDateTime - timedelta(hours=1)
     except ValueError as e:
@@ -168,7 +169,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         return {}
     sdidPlaceholders = ','.join([f':{i+1}' for i in range(len(SDIDs))])
 
-    # Determine timeCol for BETWEEN and matching
+    # Determine time_col for BETWEEN and matching
     if interval == 'HOUR' and Config.periodOffset:
         timeCol = 'end_date_time'
         timeAlias = 'END_DATE_TIME'
@@ -201,7 +202,6 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     # Base query (metadata, only for 'R')
     metaResults = [] # Default empty
-    
     if table == 'R':
         metaQuery = f"""
             SELECT 
@@ -230,6 +230,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     # Execute queries
     resultDict = {}
     oracleConn = None
+
     try:
         # Always connect to 'lchdb' and use links for target svr
         dsn = 'lchdb'
@@ -237,12 +238,15 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         oracleConn = Oracle.oracleConnection(dsn)
         conn = oracleConn.connect()
 
+        # Fetch lookups (caches per svr)
+        lookups = fetchLookups(conn, svr)
+
         # Fetch interval data (always)
         if Config.debug: 
             Logic.logMessage("DEBUG", f"sqlRead: Executing interval query: {dataQuery} with params {dataParams}")
         dataResults = oracleConn.executeCustomQuery(dataQuery, params=dataParams)
 
-        # Group interval data by SDID and timeKey (for merging)
+        # Group interval data by SDID and time_key (for merging)
         dataBySDIDTime = defaultdict(dict)
 
         for row in dataResults:
@@ -252,13 +256,12 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
         # Fetch base metadata if applicable
         metaBySDIDTime = defaultdict(dict)
-
         if table == 'R':
             if Config.debug: 
                 Logic.logMessage("DEBUG", f"sqlRead: Executing base query: {metaQuery} with params {metaParams}")
             metaResults = oracleConn.executeCustomQuery(metaQuery, params=metaParams)
 
-            # Group base by SDID and timeKey
+            # Group base by SDID and time_key
             for row in metaResults:
                 SDID = str(row['SDID'])
                 timeKey = row[timeAlias]
@@ -305,8 +308,24 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                     mergedRow['INTERVAL_VALUE'] = intRow.get('VALUE') # Add interval value explicitly
                 if baseRow:
                     mergedRow['RBASE_VALUE'] = baseRow.get('RBASE_VALUE') # Preserve base value
-                mergedMeta.append(mergedRow)
 
+                # Replace IDs with names (delete old ID except for computation)
+                if 'AGEN_ID' in mergedRow:
+                    mergedRow['AGEN_NAME'] = lookups['agenMap'].get(mergedRow['AGEN_ID'], '')
+                    del mergedRow['AGEN_ID']
+                if 'COLLECTION_SYSTEM_ID' in mergedRow:
+                    mergedRow['COLLECTION_SYSTEM'] = lookups['collectionMap'].get(mergedRow['COLLECTION_SYSTEM_ID'], '')
+                    del mergedRow['COLLECTION_SYSTEM_ID']
+                if 'LOADING_APPLICATION_ID' in mergedRow:
+                    mergedRow['LOADING_APPLICATION'] = lookups['loadingMap'].get(mergedRow['LOADING_APPLICATION_ID'], '')
+                    del mergedRow['LOADING_APPLICATION_ID']
+                if 'METHOD_ID' in mergedRow:
+                    mergedRow['METHOD'] = lookups['methodMap'].get(mergedRow['METHOD_ID'], '')
+                    del mergedRow['METHOD_ID']
+                if 'COMPUTATION_ID' in mergedRow:
+                    compName = lookups['computationMap'].get(mergedRow['COMPUTATION_ID'], '')
+                    mergedRow['COMPUTATION'] = f"{compName}\nID: {mergedRow['COMPUTATION_ID']}" if compName else str(mergedRow['COMPUTATION_ID'])
+                mergedMeta.append(mergedRow)
             if Config.debug: 
                 Logic.logMessage("DEBUG", f"sqlRead: Processed {len(outputData)} data points and {len(mergedMeta)} merged meta rows for SDID {SDID}")
 
@@ -340,3 +359,61 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     if not resultDict:
         Logic.logMessage("WARN", "sqlRead: No data after processing")
     return resultDict
+
+@lru_cache(maxsize=None)
+def fetchLookups(conn, svr):
+    """Fetch all lookup maps for a svr (agen, collection, loading, method, computation)."""
+    lookups = {
+        'agenMap': {},
+        'collectionMap': {},
+        'loadingMap': {},
+        'methodMap': {},
+        'computationMap': {}
+    }
+
+    # Schema adjustment for special cases like uchdb2
+    schema = svr.upper().rstrip('2') + 'A' if svr.endswith('2') else svr.upper() + 'A'
+    link = f'@{svr}'
+
+    # Common lookups (hdb_* tables)
+    agenQuery = f"""
+        SELECT agen_id, agen_name
+        FROM {schema}.hdb_agen{link}
+        ORDER BY agen_id
+    """
+    collectionQuery = f"""
+        SELECT collection_system_id, collection_system_name
+        FROM {schema}.hdb_collection_system{link}
+        ORDER BY collection_system_id
+    """
+    loadingQuery = f"""
+        SELECT loading_application_id, loading_application_name
+        FROM {schema}.hdb_loading_application{link}
+        ORDER BY loading_application_id
+    """
+    methodQuery = f"""
+        SELECT method_id, method_name
+        FROM {schema}.hdb_method{link}
+        ORDER BY method_id
+    """
+
+    # Computation-specific
+    computationQuery = f"""
+        SELECT computation_id, computation_name
+        FROM {schema}.cp_computation{link}
+        ORDER BY computation_id
+    """
+
+    try:
+        lookups['agenMap'] = {row['AGEN_ID']: row['AGEN_NAME'] for row in conn.executeCustomQuery(agenQuery)}
+        lookups['collectionMap'] = {row['COLLECTION_SYSTEM_ID']: row['COLLECTION_SYSTEM_NAME'] for row in conn.executeCustomQuery(collectionQuery)}
+        lookups['loadingMap'] = {row['LOADING_APPLICATION_ID']: row['LOADING_APPLICATION_NAME'] for row in conn.executeCustomQuery(loadingQuery)}
+        lookups['methodMap'] = {row['METHOD_ID']: row['METHOD_NAME'] for row in conn.executeCustomQuery(methodQuery)}
+        lookups['computationMap'] = {row['COMPUTATION_ID']: row['COMPUTATION_NAME'] for row in conn.executeCustomQuery(computationQuery)}
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Fetched lookups for svr {svr}: agen {len(lookups['agenMap'])}, collection {len(lookups['collectionMap'])}, loading {len(lookups['loadingMap'])}, method {len(lookups['methodMap'])}, computation {len(lookups['computationMap'])}")
+    except Exception as e:
+        Logic.logMessage("ERROR", f"Failed to fetch lookups for svr {svr}: {e}")
+    
+    return lookups
