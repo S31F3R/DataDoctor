@@ -88,8 +88,19 @@ class oracleConnection:
     def executeCustomQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> Any:
         if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
 
+        # Remove any white space
+        query = query.strip()
+
+        # Check if ; was at the end of the query, if so, remove it
+        if query.endswith(';'):
+            query = query[:-1]
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Removed trailing semicolon from query")
+
         # Detect bind variables (e.g., :1, :name) more precisely
         hasBindVars = bool(re.search(r'(?<!\w):(\d+|[a-zA-Z]\w*)', query))
+
         if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Query '{query[:100]}' has bind vars: {hasBindVars}")
 
         if not params and hasBindVars:
