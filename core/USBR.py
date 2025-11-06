@@ -138,20 +138,21 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         'WATER YEAR': 'WY'
     }
 
-    tableSuffix = intervalMap.get(interval, 'HOUR')  # Default to HOUR if unknown
+    tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
 
     # Derive schema and link from svr
     schema = (svr.upper() + 'A')
     link = f'@{svr}'
 
     # Table names
-    baseTable = f'{schema}.r_base{link}'  # Always r_base for metadata
-    dataTable = f'{schema}.{table.lower()}_{tableSuffix.lower()}{link}'  # r_hour or m_hour, etc.
+    baseTable = f'{schema}.r_base{link}' # Always r_base for metadata
+    dataTable = f'{schema}.{table.lower()}_{tableSuffix.lower()}{link}' # r_hour or m_hour, etc.
 
     # Parse dates with offset handling
     try:
         startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
         endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
+
         if Config.periodOffset and interval == 'HOUR':
             startDateTime = startDateTime - timedelta(hours=1)
     except ValueError as e:
@@ -167,7 +168,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         return {}
     sdidPlaceholders = ','.join([f':{i+1}' for i in range(len(SDIDs))])
 
-    # Determine time_col for BETWEEN and matching
+    # Determine timeCol for BETWEEN and matching
     if interval == 'HOUR' and Config.periodOffset:
         timeCol = 'end_date_time'
         timeAlias = 'END_DATE_TIME'
@@ -241,7 +242,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             Logic.logMessage("DEBUG", f"sqlRead: Executing interval query: {dataQuery} with params {dataParams}")
         dataResults = oracleConn.executeCustomQuery(dataQuery, params=dataParams)
 
-        # Group interval data by SDID and time_key (for merging)
+        # Group interval data by SDID and timeKey (for merging)
         dataBySDIDTime = defaultdict(dict)
 
         for row in dataResults:
@@ -257,7 +258,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                 Logic.logMessage("DEBUG", f"sqlRead: Executing base query: {metaQuery} with params {metaParams}")
             metaResults = oracleConn.executeCustomQuery(metaQuery, params=metaParams)
 
-            # Group base by SDID and time_key
+            # Group base by SDID and timeKey
             for row in metaResults:
                 SDID = str(row['SDID'])
                 timeKey = row[timeAlias]
