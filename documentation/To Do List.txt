@@ -1,4 +1,5 @@
 -Check if it's ok to have last char in sql query remove ; if exists
+-quick looks are saving as text, not json
 
 ####### KNOWN BUGS #######
 -Remove uiQuickLook.py and winQuickLook.ui. Replace with same method used for snippets save
