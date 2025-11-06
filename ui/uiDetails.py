@@ -213,7 +213,7 @@ class uiDetails(QWidget):
         # Add rows for selected metadata (per list 1-10)
         
         # 1. Parameter/Label/Unit (series-level)
-        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}", response.get('Label', 'N/A'))
+        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}")
         
         # 2. Timestamp/Value (point-level, respect Config.rawData for formatting)
         value = point['Value']
