@@ -601,26 +601,31 @@ class uiMain(QMainWindow):
             Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")        
         menu = QMenu(self)
         
-        # Add metadata details if internal query, non-overlay
-        isOverlay = col < len(self.columnMetadata) and self.columnMetadata[col].get('type') == 'overlay'
+        # Add metadata details if internal query, normal type
+        colType = self.columnMetadata[col].get('type') if col < len(self.columnMetadata) else None
 
-        if self.currentQueryType == 'internal' and not isOverlay:
+        if self.currentQueryType == 'internal' and colType == 'normal':
+
             # Extract interval from queryInfos (e.g., '20179|HOUR|USBR-LCHDB' -> 'HOUR')
             queryInfo = self.columnMetadata[col].get('queryInfos', ['|'])[0]
-            interval = queryInfo.split('|')[1] if '|' in queryInfo else 'HOUR'  # Default to HOUR if missing
+            interval = queryInfo.split('|')[1] if '|' in queryInfo else 'HOUR' # Default to HOUR if missing
             
             if db == 'AQUARIUS' and isinstance(response, dict):
                 detailsAction = menu.addAction("Show details")
                 detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'AQUARIUS', interval))
+
                 if Config.debug:
                     Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for AQUARIUS")
             elif db.startswith('USBR') and isinstance(response, list):
                 detailsAction = menu.addAction("Show details")
                 detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USBR', interval))
+
                 if Config.debug:
                     Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USBR")
         
         # Add overlay if column is overlay (existing logic, with renamed action)
+        isOverlay = colType == 'overlay'
+
         if isOverlay:
             overlayAction = menu.addAction("Overlay details")
             overlayAction.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
