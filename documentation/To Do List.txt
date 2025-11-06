@@ -1,12 +1,9 @@
--Check if it's ok to have last char in sql query remove ; if exists
-
-
 ####### KNOWN BUGS #######
 -Remove uiQuickLook.py and winQuickLook.ui. Replace with same method used for snippets save
 -Aquarius doesn't use label from data dict if one is set
 -[WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
 -Bug if SQL Query Builder was turned off and program restarted
--Context menu breaks if delta is checked and overlay is not. Need to still give normal context menu items when delta is checked
+
 -quick looks are saving as text, not json
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
