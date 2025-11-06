@@ -129,12 +129,12 @@ class uiDetails(QWidget):
         """Internal method to populate for normal header metadata."""
         
         # Add query info
-        query_infos = meta.get('queryInfos', 'N/A')
-        query_str = query_infos[0] if isinstance(query_infos, list) else str(query_infos)
-        self.addRow("Query Info", query_str)
+        queryInfos = meta.get('queryInfos', 'N/A')
+        queryStr = queryInfos[0] if isinstance(queryInfos, list) else str(queryInfos)
+        self.addRow("Query Info", queryStr)
         
         # Add stats (computed as in original)
-        maxStr, minStr, meanStr = self.computeColumnStats(meta['col']) # Assuming col in meta
+        maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
         self.addRow("Max", maxStr)
         self.addRow("Min", minStr)
         self.addRow("Mean", meanStr)
@@ -142,7 +142,7 @@ class uiDetails(QWidget):
     def populateHeaderDelta(self, meta):
         """Internal method to populate for delta header metadata."""
         
-        # Add details (changed to "Calculation" per user suggestion)
+        # Add details
         self.addRow("Calculation", f"{meta.get('dataIds', ['N/A', 'N/A'])[0]} - {meta.get('dataIds', ['N/A', 'N/A'])[1]}")
         
         # Add stats
@@ -154,7 +154,7 @@ class uiDetails(QWidget):
     def populateHeaderOverlay(self, meta):
         """Internal method to populate for overlay header metadata."""
         
-        # Add primary/secondary (tweaked per user request)
+        # Add primary/secondary
         self.addRow("Primary", meta.get('queryInfos', ['N/A', 'N/A'])[0])
         self.addRow("Secondary", meta.get('queryInfos', ['N/A', 'N/A'])[1])
         
@@ -167,6 +167,7 @@ class uiDetails(QWidget):
     def computeColumnStats(self, col):
         """Compute stats for a column (mirrors original logic)."""
         values = []
+
         for row in range(self.parent().mainTable.rowCount()):
             item = self.parent().mainTable.item(row, col)
 
@@ -213,7 +214,7 @@ class uiDetails(QWidget):
         # Add rows for selected metadata (per list 1-10)
         
         # 1. Parameter/Label/Unit (series-level)
-        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}")
+        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}", response.get('Label', 'N/A'))
         
         # 2. Timestamp/Value (point-level, respect Config.rawData for formatting)
         value = point['Value']
@@ -278,7 +279,7 @@ class uiDetails(QWidget):
             self.addRow("Note", "No metadata for this timestamp")
             return
         
-        # Defined tag order (per user spec, fixed typo)
+        # Defined tag order (per user spec)
         tags = [
             'SDID', 'Interval', 'Start Date/Time', 'End Date/Time', 'Date/Time Loaded',
             'Interval Value', 'r_base Value', 'Validation', 'Overwrite Flag', 'Method',
@@ -309,6 +310,7 @@ class uiDetails(QWidget):
     def addArrayRows(self, metaType, items, timestamp, detailFormatter):
         """Add rows for array items matching the timestamp range."""
         added = False
+
         for item in items:
             try:
                 start = self.parseDateTime(item.get('StartTime'))
@@ -333,6 +335,7 @@ class uiDetails(QWidget):
 
         # Try formats
         formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']
+
         for fmt in formats:
             try:
                 dt = datetime.strptime(dtStr, fmt)
@@ -342,8 +345,9 @@ class uiDetails(QWidget):
 
         # Fallback: remove all ':' in time part
         dtStr = dtStr.replace(':', '')
-        formats_no_colon = ['%m/%d/%y %H%M00', '%Y-%m-%dT%H%M%S%z', '%Y-%m-%dT%H%M%S', '%Y-%m-%d %H%M%S']
-        for fmt in formats_no_colon:
+        formatsNoColon = ['%m/%d/%y %H%M00', '%Y-%m-%dT%H%M%S%z', '%Y-%m-%dT%H%M%S', '%Y-%m-%d %H%M%S']
+
+        for fmt in formatsNoColon:
             try:
                 dt = datetime.strptime(dtStr, fmt)
                 return dt.replace(tzinfo=None) # Return naive datetime for comparison
