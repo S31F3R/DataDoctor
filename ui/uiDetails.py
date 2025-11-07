@@ -31,6 +31,7 @@ class uiDetails(QWidget):
         
         # Zero main layout margins for single-panel view
         layout = self.layout()
+
         if layout:
             layout.setContentsMargins(0, 0, 0, 0)
         
@@ -58,11 +59,9 @@ class uiDetails(QWidget):
         tabTable.resizeColumnsToContents()
         tabTable.resizeRowsToContents()
         tabTable.verticalScrollBar().setVisible(False) # Suppress scrollbar
-        tabTable.horizontalScrollBar().setVisible(False) # Suppress horizontal too
-        
+        tabTable.horizontalScrollBar().setVisible(False) # Suppress horizontal too        
         width = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50 # +50 buffer for right gap
-        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 50 # +50 buffer for last row/margins
-        
+        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 50 # +50 buffer for last row/margins       
         self.resize(width, height)
         
         if Config.debug:
@@ -117,6 +116,7 @@ class uiDetails(QWidget):
             if not hasattr(self, 'tabWidget') or not self.tabWidget:
                 self.tabWidget = QTabWidget(self)
                 layout = self.layout() # Assuming QVBoxLayout or similar from .ui
+
                 if layout:
                     layout.addWidget(self.tabWidget)
                 self.detailsTable.hide() # Hide original table, use per-tab tables
@@ -132,8 +132,7 @@ class uiDetails(QWidget):
                 normT = t.split('-')[0] if '-' in t else t
                 
                 tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
-                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'
-                
+                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'                
                 tabWidget = QWidget()
                 tabLayout = QVBoxLayout(tabWidget)
                 tabLayout.setContentsMargins(0, 0, 0, 0) # Zero margins to remove gaps
@@ -142,7 +141,8 @@ class uiDetails(QWidget):
                 tabTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
                 tabTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
                 tabTable.verticalHeader().setVisible(False)
-                tabTable.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding) # Expand to fill layout
+                tabTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding) # Expand to fill layout
+                tabTable.horizontalScrollBar().setVisible(False) # Hide horizontal scrollbar
                 
                 # Set columns/headers based on type
                 if normT in ["overlay", "USBR", "USGS"]:
@@ -160,17 +160,17 @@ class uiDetails(QWidget):
                     metadataHandlers[normT](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
                 else:
                     Logic.logMessage("WARN", f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab")
-                    continue
-                
+                    continue                
                 tabLayout.addWidget(tabTable)
                 
                 # Tab name: Uppercase abbreviations/suffixes, capitalize "Details"
-                tabName = t.upper() if t.upper() in ['USBR', 'USGS'] or '-' in t else t.capitalize()
-                tabName += " Details"
-                if i > 0:  # For DB tabs
+                if t.upper() in ['USBR', 'USGS'] or '-' in t:
+                    tabName = t.upper() + " Details"
+                else:
+                    tabName = t.capitalize() + " Details"
+                if i > 0: # For DB tabs
                     if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                        tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"
-                
+                        tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
                 self.tabWidget.addTab(tabWidget, tabName)
                 
                 # Initial resize table (final resize on tab change)
@@ -213,8 +213,8 @@ class uiDetails(QWidget):
             # Manually calculate and set window size to fit content exactly (no scroll bars)
             self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
             self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
-            width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding for borders/margins
-            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 50  # +50 buffer
+            width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding for borders/margins
+            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 50 # +50 buffer
             self.resize(width, height)
         
         if Config.debug:
