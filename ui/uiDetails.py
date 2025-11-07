@@ -59,13 +59,14 @@ class uiDetails(QWidget):
         tabTable.resizeColumnsToContents()
         tabTable.resizeRowsToContents()
         tabTable.verticalScrollBar().setVisible(False) # Suppress scrollbar
-        tabTable.horizontalScrollBar().setVisible(False) # Suppress horizontal too        
+        tabTable.horizontalScrollBar().setVisible(False) # Suppress horizontal too
+        tabTable.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # Always off to avoid space reservation        
         width = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50 # +50 buffer for right gap
-        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 30 # Reduced buffer to avoid extra row      
+        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 30 # Reduced buffer to avoid extra row
         self.resize(width, height)
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Resized to current tab {index}: {width}x{height}")
+    
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"Resized to current tab {index}: {width}x{height}")
 
     def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None, multiTypes=None, responsesList=None, intervalsList=None):
         """
@@ -78,8 +79,7 @@ class uiDetails(QWidget):
         - multiTypes: list (optional, e.g., ['overlay', 'USBR', 'AQUARIUS']) for tabbed view.
         - responsesList: list (optional, matching multiTypes order) for per-tab data.
         - intervalsList: list (optional, matching multiTypes order) for per-tab intervals.
-        """
-        
+        """        
         if Config.debug:
             Logic.logMessage("DEBUG", f"Populating details for queryType: {queryType}, series: {seriesLabel}, timestamp: {timestampStr}, multiTypes={multiTypes}")
         
@@ -115,7 +115,6 @@ class uiDetails(QWidget):
             if not hasattr(self, 'tabWidget') or not self.tabWidget:
                 self.tabWidget = QTabWidget(self)
                 layout = self.layout() # Assuming QVBoxLayout or similar from .ui
-
                 if layout:
                     layout.addWidget(self.tabWidget)
                 self.detailsTable.hide() # Hide original table, use per-tab tables
@@ -146,6 +145,7 @@ class uiDetails(QWidget):
                 tabTable.verticalHeader().setVisible(False)
                 tabTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding) # Expand to fill layout
                 tabTable.horizontalScrollBar().setVisible(False) # Hide horizontal scrollbar
+                tabTable.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # Always off to avoid space reservation
                 
                 # Set columns/headers based on type
                 if normT in ["overlay", "USBR", "USGS"]:
@@ -163,8 +163,7 @@ class uiDetails(QWidget):
                     metadataHandlers[normT](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
                 else:
                     Logic.logMessage("WARN", f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab")
-                    continue
-                
+                    continue                
                 tabLayout.addWidget(tabTable)
                 
                 # Tab name: Uppercase abbreviations/suffixes, capitalize "Details"
@@ -172,10 +171,9 @@ class uiDetails(QWidget):
                     tabName = t.upper() + " Details"
                 else:
                     tabName = t.capitalize() + " Details"
-                if i > 0:  # For DB tabs
+                if i > 0: # For DB tabs
                     if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                        tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"
-                
+                        tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
                 self.tabWidget.addTab(tabWidget, tabName)
                 
                 # Initial resize table (final resize on tab change)
