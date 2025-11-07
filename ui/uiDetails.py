@@ -1,6 +1,6 @@
 # uiDetails.py - Details window for displaying cell metadata or overlay info
 
-from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QAbstractItemView
+from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QAbstractItemView, QTabWidget, QVBoxLayout, QTableWidget
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 from PyQt6 import uic
@@ -32,7 +32,7 @@ class uiDetails(QWidget):
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDetails initialized")
     
-    def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None, multiTypes=None):
+    def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None, multiTypes=None, responses_list=None):
         """
         Populate the table with metadata or overlay info for the given cell.
         - queryType: str (e.g., "AQUARIUS", "USGS", "USBR", "overlay", "headerNormal", "headerDelta", "headerOverlay") for handling different modes.
@@ -41,6 +41,7 @@ class uiDetails(QWidget):
         - response: dict (full API response for metadata, cell data for overlay, meta dict for headers).
         - interval: str (optional, e.g., 'HOUR' for USBR matchField logic).
         - multiTypes: list (optional, e.g., ['overlay', 'USBR', 'AQUARIUS']) for tabbed view.
+        - responses_list: list (optional, matching multiTypes order) for per-tab data.
         """
         
         if Config.debug:
@@ -62,7 +63,8 @@ class uiDetails(QWidget):
             self.detailsTable.setHorizontalHeaderLabels(["Type", "Value"])
         else:
             self.detailsTable.setColumnCount(4)
-            self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])        
+            self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
+        
         self.detailsTable.horizontalHeader().setStretchLastSection(True)
         
         # Handler dictionary for database-specific metadata (easy to add USGS)
@@ -74,11 +76,10 @@ class uiDetails(QWidget):
         
         # If multiTypes provided (e.g., for overlay cell), use tabs
         if multiTypes and len(multiTypes) > 1:
-
             # Create QTabWidget if not exists
             if not hasattr(self, 'tabWidget') or not self.tabWidget:
                 self.tabWidget = QTabWidget(self)
-                layout = self.layout() 
+                layout = self.layout() # Assuming QVBoxLayout or similar from .ui
 
                 if layout:
                     layout.addWidget(self.tabWidget)
@@ -89,7 +90,8 @@ class uiDetails(QWidget):
                 self.tabWidget.removeTab(0)
             
             # Add tabs in order (Overlay first, then DBs)
-            for t in multiTypes:
+            for i, t in enumerate(multiTypes):
+                tab_resp = responses_list[i] if responses_list and i < len(responses_list) else {}                
                 tabWidget = QWidget()
                 tabLayout = QVBoxLayout(tabWidget)
                 tabTable = QTableWidget(tabWidget) # New table per tab
@@ -100,9 +102,9 @@ class uiDetails(QWidget):
                 
                 # Populate per type
                 if t == 'overlay':
-                    self.populateOverlay(timestampStr, response, table=tabTable) # Pass custom table
+                    self.populateOverlay(timestampStr, tab_resp, table=tabTable) # Pass custom table
                 elif t in metadataHandlers:
-                    metadataHandlers[t](timestampStr, response, table=tabTable) # Pass custom table
+                    metadataHandlers[t](timestampStr, tab_resp, table=tabTable) # Pass custom table
                 else:
                     Logic.logMessage("WARN", f"Unknown type {t} in multiTypes - Skipped tab")
                     continue
@@ -113,6 +115,10 @@ class uiDetails(QWidget):
                 # Resize tab table
                 tabTable.resizeColumnsToContents()
                 tabTable.resizeRowsToContents()
+            
+            if self.tabWidget.count() == 0:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "populateDetails: No tabs created for multiTypes")
             
             if Config.debug:
                 Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes")
@@ -125,8 +131,8 @@ class uiDetails(QWidget):
             # Single-type: Use original table (no tabs)
             if hasattr(self, 'tabWidget') and self.tabWidget:
                 self.tabWidget.hide()
-                self.detailsTable.show()
-            
+                self.detailsTable.show()  
+
             if queryType == "overlay":
                 self.populateOverlay(timestampStr, response)
             elif queryType == "headerNormal":
@@ -158,7 +164,7 @@ class uiDetails(QWidget):
     def populateOverlay(self, timestampStr, data, table=None):
         """Internal method to populate for overlay cell data."""
         if table is None:
-            table = self.detailsTable  # Fallback to main table
+            table = self.detailsTable # Fallback to main table
         
         # Handle missing keys safely
         primaryVal = data.get('primaryVal', 'N/A') if data.get('primaryVal') is not None else 'N/A'
@@ -258,7 +264,7 @@ class uiDetails(QWidget):
         # Parse timestamp to datetime for comparisons
         try:
             timestamp = self.parseDateTime(timestampStr)
-            
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"populateDetails: Parsed timestamp {timestampStr} to {timestamp}")
         except ValueError as e:

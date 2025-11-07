@@ -608,6 +608,7 @@ class uiMain(QMainWindow):
         
         # Add metadata details if internal query, normal type
         colType = self.columnMetadata[col].get('type') if col < len(self.columnMetadata) else None
+
         if self.currentQueryType == 'internal' and colType == 'normal':
 
             # Extract interval from queryInfos (e.g., '20179|HOUR|USBR-LCHDB' -> 'HOUR')
@@ -633,7 +634,7 @@ class uiMain(QMainWindow):
                 if Config.debug:
                     Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USGS")
         
-        # Add overlay if column is overlay (existing logic, with renamed action)
+        # Add single action for overlay columns
         isOverlay = colType == 'overlay'
         
         if isOverlay:
@@ -644,14 +645,9 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"showCellContextMenu: Overlay types for col {col}: {types}")
             
-            # Add actions for each type
-            for t in types:
-                if t == 'overlay':
-                    actionText = "Overlay details"
-                else:
-                    actionText = f"{t} details"
-                action = menu.addAction(actionText)
-                action.triggered.connect(lambda _, typ=t: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, typ, None, multiTypes=types))
+            # Add single action
+            detailsAction = menu.addAction("Show details")
+            detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'overlay', interval, multiTypes=types))
         
         if menu.actions(): # Only show if actions added
             menu.exec(self.mainTable.viewport().mapToGlobal(pos))
@@ -664,8 +660,36 @@ class uiMain(QMainWindow):
 
     def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType, interval, multiTypes=None):
         """Open uiDetails for metadata (Aquarius or USBR)."""
+        # For multiTypes, gather responses for each type
+        responses_list = None
+
+        if multiTypes:
+            meta = self.columnMetadata[col]
+            lookupIds = meta.get('lookupId', [])
+            responses_list = []
+            
+            for i, t in enumerate(multiTypes):
+                if t == 'overlay':                    
+                    # Use cell data for overlay tab
+                    item = self.mainTable.item(row, col)
+                    cell_data = item.data(Qt.ItemDataRole.UserRole) if item else {}
+                    responses_list.append(cell_data)
+                else:
+                    # Use seriesResponses for DB tabs
+                    if i-1 < len(lookupIds): # i-1 since overlay is first
+                        norm_label = lookupIds[i-1].replace('\n', ' ').strip()
+                        db_response = self.seriesResponses.get(norm_label, {})
+                        responses_list.append(db_response)
+                    else:
+                        responses_list.append({})
+                        if Config.debug:
+                            Logic.logMessage("WARN", f"showMetadataDetails: No lookupId for type {t} at index {i-1}")
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"showMetadataDetails: Gathered {len(responses_list)} responses for multiTypes {multiTypes}")
+        
         detailsWin = uiDetails(parent=self)
-        detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response, interval, multiTypes=multiTypes)
+        detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response, interval, multiTypes=multiTypes, responses_list=responses_list)
         detailsWin.show()
         
         if Config.debug:
