@@ -1,6 +1,6 @@
 # uiDetails.py - Details window for displaying cell metadata or overlay info
 
-from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QAbstractItemView, QTabWidget, QVBoxLayout, QTableWidget
+from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QAbstractItemView, QTabWidget, QVBoxLayout, QTableWidget, QSizePolicy
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt
 from PyQt6 import uic
