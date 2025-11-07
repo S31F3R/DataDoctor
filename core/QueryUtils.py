@@ -90,7 +90,6 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
                 'queryInfos': [queryInfos[pairIndex*2+1]],
                 'lookupId': lookupIdSecondary
             })
-
         if deltaChecked:
             columnMetadata.append({
                 'type': 'delta',
@@ -121,9 +120,9 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
     # Set columnMetadata on mainWindow
     if mainWindow:
         mainWindow.columnMetadata = columnMetadata
-
+        
         if Config.debug:
-            Logic.logMessage("DEBUG", "modifyTable: Set columnMetadata via passed mainWindow with {} entries: {repr(columnMetadata)}".format(len(columnMetadata)))
+            Logic.logMessage("DEBUG", f"Set columnMetadata via passed mainWindow with {len(columnMetadata)} entries: {repr(columnMetadata)}")
     else:
         widget = table
         mainWindowFound = None
@@ -137,7 +136,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
             mainWindowFound.columnMetadata = columnMetadata
 
             if Config.debug:
-                Logic.logMessage("DEBUG", "modifyTable: Set columnMetadata with {} entries: {repr(columnMetadata)}".format(len(columnMetadata)))
+                Logic.logMessage("DEBUG", f"Set columnMetadata with {len(columnMetadata)} entries: {repr(columnMetadata)}")
         else:
             if Config.debug:
                 Logic.logMessage("WARN", "modifyTable: Could not find uiMain for columnMetadata")
