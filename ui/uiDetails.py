@@ -51,9 +51,10 @@ class uiDetails(QWidget):
         
         # Calculate size based on tab table
         tabTable.resizeColumnsToContents()
-        tabTable.resizeRowsToContents()        
+        tabTable.resizeRowsToContents()
+        tabTable.verticalScrollBar().setVisible(False) # Suppress scrollbar        
         width = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 30
-        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 30        
+        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 50 # +50 buffer for last row/margins
         self.resize(width, height)
         
         if Config.debug:
@@ -97,21 +98,21 @@ class uiDetails(QWidget):
         
         # Handler dictionary for database-specific metadata (easy to add USGS)
         metadataHandlers = {
-            "AQUARIUS": lambda ts, resp, interval=None, table=None: self.populateAquarius(ts, resp, table=table),  # Ignore interval
-            "USGS": lambda ts, resp, interval=None, table=None: self.populateUSGS(ts, resp, table=table),  # Ignore interval
+            "AQUARIUS": lambda ts, resp, interval=None, table=None: self.populateAquarius(ts, resp, table=table), # Ignore interval
+            "USGS": lambda ts, resp, interval=None, table=None: self.populateUSGS(ts, resp, table=table), # Ignore interval
             "USBR": lambda ts, resp, interval=None, table=None: self.populateUSBR(ts, resp, interval, table=table),
         }
         
         # If multiTypes provided (e.g., for overlay cell), use tabs
         if multiTypes and len(multiTypes) > 1:
+            
             # Create QTabWidget if not exists
             if not hasattr(self, 'tabWidget') or not self.tabWidget:
                 self.tabWidget = QTabWidget(self)
-                layout = self.layout() # Assuming QVBoxLayout or similar from .ui
-
+                layout = self.layout()  # Assuming QVBoxLayout or similar from .ui
                 if layout:
                     layout.addWidget(self.tabWidget)
-                self.detailsTable.hide() # Hide original table, use per-tab tables
+                self.detailsTable.hide()  # Hide original table, use per-tab tables
                 self.tabWidget.currentChanged.connect(self.resizeToCurrentTab) # Connect here if created
             
             # Clear existing tabs
@@ -121,9 +122,11 @@ class uiDetails(QWidget):
             # Add tabs in order (Overlay first, then DBs)
             for i, t in enumerate(multiTypes):
                 # Normalize t for handlers (e.g., 'USBR-LCHDB' -> 'USBR')
-                normT = t.split('-')[0] if '-' in t else t                
+                normT = t.split('-')[0] if '-' in t else t
+                
                 tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
-                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'                
+                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'
+                
                 tabWidget = QWidget()
                 tabLayout = QVBoxLayout(tabWidget)
                 tabTable = QTableWidget(tabWidget) # New table per tab
@@ -148,15 +151,18 @@ class uiDetails(QWidget):
                     metadataHandlers[normT](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
                 else:
                     Logic.logMessage("WARN", f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab")
-                    continue                
+                    continue
+                
                 tabLayout.addWidget(tabTable)
                 
-                # Tab name: Handle same DB with (Primary)/(Secondary)
-                tabName = t.capitalize() + " Details"
-
+                # Tab name: Uppercase abbreviations, keep suffixes, capitalize "Details"
+                if t.upper() in ['USBR', 'USGS'] or '-' in t:
+                    tabName = t.upper() + " Details"
+                else:
+                    tabName = t.capitalize() + " Details"
                 if i > 0: # For DB tabs
                     if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                        tabName = t.capitalize() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
+                        tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
                 self.tabWidget.addTab(tabWidget, tabName)
                 
                 # Initial resize table (final resize on tab change)
@@ -200,7 +206,7 @@ class uiDetails(QWidget):
             self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
             self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
             width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding for borders/margins
-            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding, account for frames
+            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 50  # +50 buffer
             self.resize(width, height)
         
         if Config.debug:
