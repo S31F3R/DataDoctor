@@ -16,7 +16,6 @@ from ui.uiAbout import uiAbout
 from ui.uiDataDictionary import uiDataDictionary
 from ui.uiOptions import uiOptions
 from ui.uiQuery import uiQuery
-from ui.uiQuickLook import uiQuickLook
 from ui.uiDetails import uiDetails
 from core.Oracle import oracleConnection
 
@@ -695,12 +694,10 @@ if __name__ == '__main__':
     winMain = uiMain()
     winQuery = uiQuery(winMain)
     winDataDictionary = uiDataDictionary(winMain)
-    winQuickLook = uiQuickLook(winMain)
     winOptions = uiOptions(winMain)
     winAbout = uiAbout(winMain)
     winMain.winQuery = winQuery
-    winMain.winDataDictionary = winDataDictionary
-    winMain.winQuickLook = winQuickLook
+    winMain.winDataDictionary = winDataDictionary  
     winMain.winOptions = winOptions
     winMain.winAbout = winAbout
 
