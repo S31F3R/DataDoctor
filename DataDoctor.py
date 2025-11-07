@@ -608,7 +608,6 @@ class uiMain(QMainWindow):
         
         # Add metadata details if internal query, normal type
         colType = self.columnMetadata[col].get('type') if col < len(self.columnMetadata) else None
-
         if self.currentQueryType == 'internal' and colType == 'normal':
 
             # Extract interval from queryInfos (e.g., '20179|HOUR|USBR-LCHDB' -> 'HOUR')
@@ -647,7 +646,7 @@ class uiMain(QMainWindow):
             
             # Add single action
             detailsAction = menu.addAction("Show details")
-            detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'overlay', interval, multiTypes=types))
+            detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'overlay', multiTypes=types))
         
         if menu.actions(): # Only show if actions added
             menu.exec(self.mainTable.viewport().mapToGlobal(pos))
@@ -658,38 +657,46 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"showCellContextMenu: No actions for cell ({row}, {col})")
 
-    def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType, interval, multiTypes=None):
+    def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType, interval=None, multiTypes=None):
         """Open uiDetails for metadata (Aquarius or USBR)."""
-        # For multiTypes, gather responses for each type
-        responses_list = None
+        # For multiTypes, gather responses and intervals for each type
+        responsesList = None
+        intervalsList = None
 
         if multiTypes:
             meta = self.columnMetadata[col]
             lookupIds = meta.get('lookupId', [])
-            responses_list = []
+            responsesList = []
+            intervalsList = []
             
             for i, t in enumerate(multiTypes):
-                if t == 'overlay':                    
+                if t == 'overlay':
                     # Use cell data for overlay tab
                     item = self.mainTable.item(row, col)
-                    cell_data = item.data(Qt.ItemDataRole.UserRole) if item else {}
-                    responses_list.append(cell_data)
+                    cellData = item.data(Qt.ItemDataRole.UserRole) if item else {}
+                    responsesList.append(cellData)
+                    intervalsList.append(None)  # No interval for overlay
                 else:
                     # Use seriesResponses for DB tabs
-                    if i-1 < len(lookupIds): # i-1 since overlay is first
-                        norm_label = lookupIds[i-1].replace('\n', ' ').strip()
-                        db_response = self.seriesResponses.get(norm_label, {})
-                        responses_list.append(db_response)
+                    if i-1 < len(lookupIds):  # i-1 since overlay is first
+                        normLabel = lookupIds[i-1].replace('\n', ' ').strip()
+                        dbResponse = self.seriesResponses.get(normLabel, {})
+                        responsesList.append(dbResponse)
+                        # Extract interval from queryInfos
+                        qInfo = meta['queryInfos'][i-1] if i-1 < len(meta['queryInfos']) else '|'
+                        dbInterval = qInfo.split('|')[1] if '|' in qInfo else 'HOUR'
+                        intervalsList.append(dbInterval)
                     else:
-                        responses_list.append({})
+                        responsesList.append({})
+                        intervalsList.append('HOUR')
                         if Config.debug:
-                            Logic.logMessage("WARN", f"showMetadataDetails: No lookupId for type {t} at index {i-1}")
+                            Logic.logMessage("DEBUG", f"showMetadataDetails: No lookupId/queryInfo for type {t} at index {i-1}")
             
             if Config.debug:
-                Logic.logMessage("DEBUG", f"showMetadataDetails: Gathered {len(responses_list)} responses for multiTypes {multiTypes}")
+                Logic.logMessage("DEBUG", f"showMetadataDetails: Gathered {len(responsesList)} responses and intervals for multiTypes {multiTypes}")
         
         detailsWin = uiDetails(parent=self)
-        detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response, interval, multiTypes=multiTypes, responses_list=responses_list)
+        detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response, interval, multiTypes=multiTypes, responsesList=responsesList, intervalsList=intervalsList)
         detailsWin.show()
         
         if Config.debug:
