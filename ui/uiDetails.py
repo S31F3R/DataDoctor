@@ -61,7 +61,7 @@ class uiDetails(QWidget):
         tabTable.verticalScrollBar().setVisible(False) # Suppress scrollbar
         tabTable.horizontalScrollBar().setVisible(False) # Suppress horizontal too        
         width = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50 # +50 buffer for right gap
-        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 50 # +50 buffer for last row/margins       
+        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 30 # Reduced buffer to avoid extra row      
         self.resize(width, height)
         
         if Config.debug:
@@ -85,7 +85,6 @@ class uiDetails(QWidget):
         
         # Set title using first line of seriesLabel only (no timestamp for headers)
         titleLabel = seriesLabel.split('\n')[0] if '\n' in seriesLabel else seriesLabel
-
         if timestampStr:
             self.lblTitle.setText(f"Details for {timestampStr} - {titleLabel}")
         else:
@@ -126,13 +125,17 @@ class uiDetails(QWidget):
             while self.tabWidget.count() > 0:
                 self.tabWidget.removeTab(0)
             
+            # Track max width for min window size
+            maxTabWidth = 0
+            
             # Add tabs in order (Overlay first, then DBs)
             for i, t in enumerate(multiTypes):
                 # Normalize t for handlers (e.g., 'USBR-LCHDB' -> 'USBR')
                 normT = t.split('-')[0] if '-' in t else t
                 
                 tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
-                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'                
+                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'
+                
                 tabWidget = QWidget()
                 tabLayout = QVBoxLayout(tabWidget)
                 tabLayout.setContentsMargins(0, 0, 0, 0) # Zero margins to remove gaps
@@ -160,7 +163,8 @@ class uiDetails(QWidget):
                     metadataHandlers[normT](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
                 else:
                     Logic.logMessage("WARN", f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab")
-                    continue                
+                    continue
+                
                 tabLayout.addWidget(tabTable)
                 
                 # Tab name: Uppercase abbreviations/suffixes, capitalize "Details"
@@ -168,21 +172,29 @@ class uiDetails(QWidget):
                     tabName = t.upper() + " Details"
                 else:
                     tabName = t.capitalize() + " Details"
-                if i > 0: # For DB tabs
+                if i > 0:  # For DB tabs
                     if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                        tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
+                        tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"
+                
                 self.tabWidget.addTab(tabWidget, tabName)
                 
                 # Initial resize table (final resize on tab change)
                 tabTable.resizeColumnsToContents()
                 tabTable.resizeRowsToContents()
+                
+                # Update maxTabWidth
+                tempWidth = sum(tabTable.columnWidth(j) for j in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50
+                maxTabWidth = max(maxTabWidth, tempWidth)
+            
+            # Set min width based on widest tab
+            self.setMinimumWidth(maxTabWidth)
             
             if self.tabWidget.count() == 0:
                 if Config.debug:
                     Logic.logMessage("DEBUG", "populateDetails: No tabs created for multiTypes")
             
             if Config.debug:
-                Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes")
+                Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes, min width {maxTabWidth}")
             
             # Initial resize to first tab
             self.resizeToCurrentTab(0)
@@ -214,7 +226,7 @@ class uiDetails(QWidget):
             self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
             self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
             width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding for borders/margins
-            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 50 # +50 buffer
+            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30 # Reduced buffer to avoid extra row
             self.resize(width, height)
         
         if Config.debug:
