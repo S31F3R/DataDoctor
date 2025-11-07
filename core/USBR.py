@@ -455,7 +455,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             displayMeta['End Date/Time'] = mergedRow.get('END_DATE_TIME', '')
             displayMeta['Date/Time Loaded'] = mergedRow.get('DATE_TIME_LOADED', '')
             displayMeta['Interval Value'] = str(mergedRow.get('INTERVAL_VALUE', '')) if mergedRow.get('INTERVAL_VALUE') is not None else ''
-            displayMeta['r_base Value'] = str(mergedRow.get('RBASE_VALUE', '')) if mergedRow.get('RBASE_VALUE') is not None else ''
+            displayMeta['Base Value'] = str(mergedRow.get('RBASE_VALUE', '')) if mergedRow.get('RBASE_VALUE') is not None else ''
             displayMeta['Validation'] = mergedRow.get('VALIDATION', '') or ''
             displayMeta['Overwrite Flag'] = mergedRow.get('OVERWRITE_FLAG', '') or ''
             displayMeta['Method'] = methodMap.get(mergedRow.get('METHOD_ID'), '') or ''
