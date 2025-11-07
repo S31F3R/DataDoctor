@@ -273,6 +273,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
     table.clear()
+
     if not data:
         if Config.debug:
             Logic.logMessage("DEBUG", "buildTable: No data to display.")
@@ -280,9 +281,11 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
     processedHeaders = []
+
     for i, h in enumerate(buildHeader):
         dataId = h.strip()
         intervalStr = intervals[i].upper()
+        
         if intervalStr.startswith('INSTANT:'):
             intervalStr = 'INSTANT'
         database = databases[i] if databases and i < len(databases) else None
@@ -306,14 +309,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                     fullLabel = f"{baseLabel} \n{intervalStr}"
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
-            elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
-                apiFull = labelsDict[dataId]
-                parts = apiFull.split('\n')
-                label = parts[0].strip() if len(parts) >= 1 else dataId
-                location = parts[1].strip() if len(parts) >= 2 else dataId
-                fullLabel = f"{label} \n{location}"
+            elif database == 'AQUARIUS':
+                fullLabel = f"{baseLabel} \n{dataId}"
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"buildTable: Aquarius in dict, header {i}: {fullLabel}")
+                    Logic.logMessage("DEBUG", f"buildTable: Aquarius in dict, using dict label, header {i}: {fullLabel}")
             else:
                 if mrid and mrid != '0':
                     fullLabel = f"{baseLabel} \n{dataId}-{mrid}"
@@ -341,7 +340,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 location = parts[1].strip() if len(parts) >= 2 else dataId
                 fullLabel = f"{label} \n{location}"
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"buildTable: Aquarius not in dict, header {i}: {fullLabel}")
+                    Logic.logMessage("DEBUG", f"buildTable: Aquarius not in dict, using API label, header {i}: {fullLabel}")
             else:
                 if mrid and mrid != '0':
                     fullLabel = f"{dataId}-{mrid} \n{intervalStr}"
@@ -431,7 +430,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         Logic.logMessage("DEBUG", "buildTable: Set stretchLastSection=False to prevent last column expansion.")
     if dataDictionaryTable:
         maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
-        vHeader.setMinimumWidth(max(120, maxTimeWidth) + 10)
+        vHeader.setMinimumWidth(120 if maxTimeWidth < 120 else maxTimeWidth + 10)
     for c in range(numCols):
         table.setColumnWidth(c, columnWidths[c])
         if Config.debug:
