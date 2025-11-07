@@ -2,7 +2,8 @@
 
 import json
 import os
-from PyQt6.QtWidgets import QMainWindow, QLineEdit, QComboBox, QDateTimeEdit, QListWidget, QPushButton, QRadioButton, QButtonGroup, QCheckBox, QMessageBox
+from PyQt6.QtWidgets import (QMainWindow, QLineEdit, QComboBox, QDateTimeEdit, QListWidget, QPushButton, QRadioButton,
+                            QButtonGroup, QCheckBox, QMessageBox, QInputDialog)
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6 import uic
@@ -238,21 +239,20 @@ class uiQuery(QMainWindow):
 
     def btnSaveQuickLookPressed(self):
         if Config.debug:
-            Logic.logMessage("DEBUG", "btnSaveQuickLookPressed: Attempting to open Save Quick Look dialog")
+            Logic.logMessage("DEBUG", "btnSaveQuickLookPressed: Attempting to save Quick Look")
         if self.listQueryList.count() == 0:
             if Config.debug:
                 Logic.logMessage("DEBUG", "btnSaveQuickLookPressed: Empty query list, showing warning")
             QMessageBox.warning(self, "Empty Query List", "Cannot save Quick Look: No items in the query list.")
-            return
-        if self.winMain:
-            self.winMain.winQuickLook.currentListQueryList = self.listQueryList
-            self.winMain.winQuickLook.CurrentCbQuickLook = self.cbQuickLook
-            self.winMain.winQuickLook.exec()
-            self.raise_()
-            self.activateWindow()
+            return        
+        name, ok = QInputDialog.getText(self, "Save Quick Look", "Quick Look name:")
+
+        if ok and name:
+            Logic.saveQuickLook(name, self.listQueryList)
+            Utils.loadQuickLooks(self.cbQuickLook)
 
             if Config.debug:
-                Logic.logMessage("DEBUG", "btnSaveQuickLookPressed: Save Quick Look dialog opened and closed")
+                Logic.logMessage("DEBUG", f"btnSaveQuickLookPressed: Saved '{name}' and reloaded combo box")
 
     def btnLoadQuickLookPressed(self):
         Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
