@@ -97,11 +97,20 @@ class uiDetails(QWidget):
                 
                 tabWidget = QWidget()
                 tabLayout = QVBoxLayout(tabWidget)
-                tabTable = QTableWidget(tabWidget)  # New table per tab
+                tabTable = QTableWidget(tabWidget) # New table per tab
                 tabTable.setSortingEnabled(True)
                 tabTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
                 tabTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
                 tabTable.verticalHeader().setVisible(False)
+                
+                # Set columns/headers based on type
+                if t in ["overlay", "USBR", "USGS"]:
+                    tabTable.setColumnCount(2)
+                    tabTable.setHorizontalHeaderLabels(["Type", "Value"])
+                else:
+                    tabTable.setColumnCount(4)
+                    tabTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
+                tabTable.horizontalHeader().setStretchLastSection(True)
                 
                 # Populate per type
                 if t == 'overlay':
@@ -110,14 +119,16 @@ class uiDetails(QWidget):
                     metadataHandlers[t](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
                 else:
                     Logic.logMessage("WARN", f"Unknown type {t} in multiTypes - Skipped tab")
-                    continue                
+                    continue
+                
                 tabLayout.addWidget(tabTable)
                 
                 # Tab name: Handle same DB with (Primary)/(Secondary)
                 tabName = t.capitalize() + " Details"
                 if i > 0: # For DB tabs
                     if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                        tabName = t.capitalize() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
+                        tabName = t.capitalize() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"
+                
                 self.tabWidget.addTab(tabWidget, tabName)
                 
                 # Resize tab table
