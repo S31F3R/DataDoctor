@@ -1,3 +1,5 @@
+-Need to search for PRINT and make sure they are all converted to logs
+
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
 -Export CSV needs to work based on what tab is selected
