@@ -3,7 +3,6 @@
 -Aquarius doesn't use label from data dict if one is set
 -[WARNING] Failed to load sound effect: type object 'QSoundEffect' has no attribute 'Infinite'
 -Bug if SQL Query Builder was turned off and program restarted
-
 -quick looks are saving as text, not json
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
@@ -34,12 +33,6 @@
     -Tab 2, primary (overlay output primary) context menu
     -Tab 3, secondary context menu
     -All the tabs should be labled, basked on the type of query: AQUARIUS, USBR, USGS
--Create overlay mode, could be a combo box
-    -All queries need to go through all overlays before table population
-    -Overlay needs to switch what type of conditional formatting to show
-    -QAQC will be an overlay type and is default if QAQC is enabled
-    -One of the overlays should use HDB-POET type colors for computations, overwrite flag, etc
-    -This overlay might not be needed. If not, ignore this entire feature and just figure out a way to show overwrite flag
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme
