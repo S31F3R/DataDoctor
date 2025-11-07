@@ -25,11 +25,6 @@
         -/AQUARIUS/Publish/v2/GetParameterList?format=json
     -Need to combine aquarius parameters to HDB data types for formatting rules
 -modify and test for day, month, year, and water year queries
--Overlay should create 3 tabs if using internal query
-    -Tab 1, Overlay context menu
-    -Tab 2, primary (overlay output primary) context menu
-    -Tab 3, secondary context menu
-    -All the tabs should be labled, basked on the type of query: AQUARIUS, USBR, USGS
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme
