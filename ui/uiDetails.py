@@ -70,9 +70,9 @@ class uiDetails(QWidget):
         
         # Handler dictionary for database-specific metadata (easy to add USGS)
         metadataHandlers = {
-            "AQUARIUS": self.populateAquarius,
-            "USGS": self.populateUSGS,
-            "USBR": lambda ts, resp, intvl: self.populateUSBR(ts, resp, intvl),
+            "AQUARIUS": lambda ts, resp, intvl=None, tbl=None: self.populateAquarius(ts, resp, table=tbl), # Ignore intvl
+            "USGS": lambda ts, resp, intvl=None, tbl=None: self.populateUSGS(ts, resp, table=tbl), # Ignore intvl
+            "USBR": lambda ts, resp, intvl=None, tbl=None: self.populateUSBR(ts, resp, intvl, table=tbl),
         }
         
         # If multiTypes provided (e.g., for overlay cell), use tabs
@@ -80,11 +80,11 @@ class uiDetails(QWidget):
             # Create QTabWidget if not exists
             if not hasattr(self, 'tabWidget') or not self.tabWidget:
                 self.tabWidget = QTabWidget(self)
-                layout = self.layout()  # Assuming QVBoxLayout or similar from .ui
+                layout = self.layout() # Assuming QVBoxLayout or similar from .ui
 
                 if layout:
                     layout.addWidget(self.tabWidget)
-                self.detailsTable.hide()  # Hide original table, use per-tab tables
+                self.detailsTable.hide() # Hide original table, use per-tab tables
             
             # Clear existing tabs
             while self.tabWidget.count() > 0:
