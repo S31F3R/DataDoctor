@@ -184,7 +184,7 @@ class oracleConnection:
         except oracledb.Error as e:
             if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.close: Error closing connection: {e}")
         finally:
-            pass  # No temp dir to clean
+            pass # No temp dir to clean
 
     def testConnection(self):
         if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.testConnection: Testing connection to {self.dsn}")       
