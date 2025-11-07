@@ -62,7 +62,7 @@ class uiDetails(QWidget):
         tabTable.horizontalScrollBar().setVisible(False) # Suppress horizontal too
         tabTable.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # Always off to avoid space reservation        
         width = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50 # +50 buffer for right gap
-        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 30 # Reduced buffer to avoid extra row
+        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 20 # Reduced buffer to avoid extra row
         self.resize(width, height)
     
         if Config.debug:
@@ -350,7 +350,7 @@ class uiDetails(QWidget):
         # Add rows for selected metadata (per list 1-10)
         
         # 1. Parameter/Label/Unit (series-level)
-        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}", response.get('Label', 'N/A'), table=table)
+        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}", table=table)
         
         # 2. Timestamp/Value (point-level, respect Config.rawData for formatting)
         value = point['Value']
