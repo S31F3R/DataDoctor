@@ -29,9 +29,36 @@ class uiDetails(QWidget):
         self.detailsTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows) # Select whole rows
         self.detailsTable.verticalHeader().setVisible(False) # Hide row numbers to reduce extra space
         
+        # Connect tab change for resize if tabWidget created later
+        if hasattr(self, 'tabWidget') and self.tabWidget:
+            self.tabWidget.currentChanged.connect(self.resizeToCurrentTab)
+        
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDetails initialized")
-    
+
+    def resizeToCurrentTab(self, index):
+        """Resize window to fit current tab's content without scrollbars."""
+        if not hasattr(self, 'tabWidget') or not self.tabWidget:
+            return
+        
+        currentTab = self.tabWidget.widget(index)
+        if not currentTab:
+            return
+        
+        tabTable = currentTab.findChild(QTableWidget)
+        if not tabTable:
+            return
+        
+        # Calculate size based on tab table
+        tabTable.resizeColumnsToContents()
+        tabTable.resizeRowsToContents()        
+        width = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 30
+        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 30        
+        self.resize(width, height)
+        
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Resized to current tab {index}: {width}x{height}")
+
     def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None, multiTypes=None, responsesList=None, intervalsList=None):
         """
         Populate the table with metadata or overlay info for the given cell.
@@ -70,8 +97,8 @@ class uiDetails(QWidget):
         
         # Handler dictionary for database-specific metadata (easy to add USGS)
         metadataHandlers = {
-            "AQUARIUS": lambda ts, resp, interval=None, table=None: self.populateAquarius(ts, resp, table=table), # Ignore interval
-            "USGS": lambda ts, resp, interval=None, table=None: self.populateUSGS(ts, resp, table=table), # Ignore interval
+            "AQUARIUS": lambda ts, resp, interval=None, table=None: self.populateAquarius(ts, resp, table=table),  # Ignore interval
+            "USGS": lambda ts, resp, interval=None, table=None: self.populateUSGS(ts, resp, table=table),  # Ignore interval
             "USBR": lambda ts, resp, interval=None, table=None: self.populateUSBR(ts, resp, interval, table=table),
         }
         
@@ -85,6 +112,7 @@ class uiDetails(QWidget):
                 if layout:
                     layout.addWidget(self.tabWidget)
                 self.detailsTable.hide() # Hide original table, use per-tab tables
+                self.tabWidget.currentChanged.connect(self.resizeToCurrentTab) # Connect here if created
             
             # Clear existing tabs
             while self.tabWidget.count() > 0:
@@ -92,9 +120,10 @@ class uiDetails(QWidget):
             
             # Add tabs in order (Overlay first, then DBs)
             for i, t in enumerate(multiTypes):
+                # Normalize t for handlers (e.g., 'USBR-LCHDB' -> 'USBR')
+                normT = t.split('-')[0] if '-' in t else t                
                 tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
-                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'
-                
+                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'                
                 tabWidget = QWidget()
                 tabLayout = QVBoxLayout(tabWidget)
                 tabTable = QTableWidget(tabWidget) # New table per tab
@@ -104,7 +133,7 @@ class uiDetails(QWidget):
                 tabTable.verticalHeader().setVisible(False)
                 
                 # Set columns/headers based on type
-                if t in ["overlay", "USBR", "USGS"]:
+                if normT in ["overlay", "USBR", "USGS"]:
                     tabTable.setColumnCount(2)
                     tabTable.setHorizontalHeaderLabels(["Type", "Value"])
                 else:
@@ -113,25 +142,24 @@ class uiDetails(QWidget):
                 tabTable.horizontalHeader().setStretchLastSection(True)
                 
                 # Populate per type
-                if t == 'overlay':
+                if normT == 'overlay':
                     self.populateOverlay(timestampStr, tabResp, table=tabTable) # Pass custom table
-                elif t in metadataHandlers:
-                    metadataHandlers[t](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
+                elif normT in metadataHandlers:
+                    metadataHandlers[normT](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
                 else:
-                    Logic.logMessage("WARN", f"Unknown type {t} in multiTypes - Skipped tab")
-                    continue
-                
+                    Logic.logMessage("WARN", f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab")
+                    continue                
                 tabLayout.addWidget(tabTable)
                 
                 # Tab name: Handle same DB with (Primary)/(Secondary)
                 tabName = t.capitalize() + " Details"
+
                 if i > 0: # For DB tabs
                     if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                        tabName = t.capitalize() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"
-                
+                        tabName = t.capitalize() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
                 self.tabWidget.addTab(tabWidget, tabName)
                 
-                # Resize tab table
+                # Initial resize table (final resize on tab change)
                 tabTable.resizeColumnsToContents()
                 tabTable.resizeRowsToContents()
             
@@ -142,10 +170,8 @@ class uiDetails(QWidget):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes")
             
-            # Resize window for tabs
-            width = max(400, self.tabWidget.sizeHint().width()) # Min width
-            height = self.lblTitle.height() + self.tabWidget.sizeHint().height() + 30
-            self.resize(width, height)
+            # Initial resize to first tab
+            self.resizeToCurrentTab(0)
         else:
             # Single-type: Use original table (no tabs)
             if hasattr(self, 'tabWidget') and self.tabWidget:
@@ -173,8 +199,8 @@ class uiDetails(QWidget):
             # Manually calculate and set window size to fit content exactly (no scroll bars)
             self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
             self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
-            width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding for borders/margins
-            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding, account for frames
+            width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding for borders/margins
+            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding, account for frames
             self.resize(width, height)
         
         if Config.debug:
