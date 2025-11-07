@@ -32,7 +32,7 @@ class uiDetails(QWidget):
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDetails initialized")
     
-    def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None):
+    def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None, multiTypes=None):
         """
         Populate the table with metadata or overlay info for the given cell.
         - queryType: str (e.g., "AQUARIUS", "USGS", "USBR", "overlay", "headerNormal", "headerDelta", "headerOverlay") for handling different modes.
@@ -40,13 +40,15 @@ class uiDetails(QWidget):
         - timestampStr: str (timestamp from vertical header, e.g., "2023-01-01T00:00:00Z") or empty for headers.
         - response: dict (full API response for metadata, cell data for overlay, meta dict for headers).
         - interval: str (optional, e.g., 'HOUR' for USBR matchField logic).
+        - multiTypes: list (optional, e.g., ['overlay', 'USBR', 'AQUARIUS']) for tabbed view.
         """
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Populating details for queryType: {queryType}, series: {seriesLabel}, timestamp: {timestampStr}")
+            Logic.logMessage("DEBUG", f"Populating details for queryType: {queryType}, series: {seriesLabel}, timestamp: {timestampStr}, multiTypes={multiTypes}")
         
         # Set title using first line of seriesLabel only (no timestamp for headers)
         titleLabel = seriesLabel.split('\n')[0] if '\n' in seriesLabel else seriesLabel
+
         if timestampStr:
             self.lblTitle.setText(f"Details for {timestampStr} - {titleLabel}")
         else:
@@ -55,52 +57,108 @@ class uiDetails(QWidget):
         # Clear existing rows and set columns dynamically
         self.detailsTable.setRowCount(0)
         
-        if queryType in ["overlay", "headerNormal", "headerDelta", "headerOverlay", "USBR"]:
+        if queryType in ["overlay", "headerNormal", "headerDelta", "headerOverlay", "USBR", "USGS"]:
             self.detailsTable.setColumnCount(2)
             self.detailsTable.setHorizontalHeaderLabels(["Type", "Value"])
         else:
             self.detailsTable.setColumnCount(4)
-            self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
-        
+            self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])        
         self.detailsTable.horizontalHeader().setStretchLastSection(True)
         
         # Handler dictionary for database-specific metadata (easy to add USGS)
         metadataHandlers = {
             "AQUARIUS": self.populateAquarius,
-            "USGS": self.populateUSGS, # TODO: Implement for USGS
+            "USGS": self.populateUSGS,
             "USBR": lambda ts, resp: self.populateUSBR(ts, resp, interval),
         }
         
-        if queryType == "overlay":
-            self.populateOverlay(timestampStr, response)
-        elif queryType == "headerNormal":
-            self.populateHeaderNormal(response)
-        elif queryType == "headerDelta":
-            self.populateHeaderDelta(response)
-        elif queryType == "headerOverlay":
-            self.populateHeaderOverlay(response)
-        elif queryType in metadataHandlers:
-            metadataHandlers[queryType](timestampStr, response)
+        # If multiTypes provided (e.g., for overlay cell), use tabs
+        if multiTypes and len(multiTypes) > 1:
+
+            # Create QTabWidget if not exists
+            if not hasattr(self, 'tabWidget') or not self.tabWidget:
+                self.tabWidget = QTabWidget(self)
+                layout = self.layout() 
+
+                if layout:
+                    layout.addWidget(self.tabWidget)
+                self.detailsTable.hide() # Hide original table, use per-tab tables
+            
+            # Clear existing tabs
+            while self.tabWidget.count() > 0:
+                self.tabWidget.removeTab(0)
+            
+            # Add tabs in order (Overlay first, then DBs)
+            for t in multiTypes:
+                tabWidget = QWidget()
+                tabLayout = QVBoxLayout(tabWidget)
+                tabTable = QTableWidget(tabWidget) # New table per tab
+                tabTable.setSortingEnabled(True)
+                tabTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+                tabTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+                tabTable.verticalHeader().setVisible(False)
+                
+                # Populate per type
+                if t == 'overlay':
+                    self.populateOverlay(timestampStr, response, table=tabTable) # Pass custom table
+                elif t in metadataHandlers:
+                    metadataHandlers[t](timestampStr, response, table=tabTable) # Pass custom table
+                else:
+                    Logic.logMessage("WARN", f"Unknown type {t} in multiTypes - Skipped tab")
+                    continue
+                
+                tabLayout.addWidget(tabTable)
+                self.tabWidget.addTab(tabWidget, t.capitalize() + " Details")
+                
+                # Resize tab table
+                tabTable.resizeColumnsToContents()
+                tabTable.resizeRowsToContents()
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes")
+            
+            # Resize window for tabs
+            width = max(400, self.tabWidget.sizeHint().width()) # Min width
+            height = self.lblTitle.height() + self.tabWidget.sizeHint().height() + 30
+            self.resize(width, height)
         else:
-            Logic.logMessage("WARN", f"Unknown queryType: {queryType} - No details populated")
-            return
+            # Single-type: Use original table (no tabs)
+            if hasattr(self, 'tabWidget') and self.tabWidget:
+                self.tabWidget.hide()
+                self.detailsTable.show()
+            
+            if queryType == "overlay":
+                self.populateOverlay(timestampStr, response)
+            elif queryType == "headerNormal":
+                self.populateHeaderNormal(response)
+            elif queryType == "headerDelta":
+                self.populateHeaderDelta(response)
+            elif queryType == "headerOverlay":
+                self.populateHeaderOverlay(response)
+            elif queryType in metadataHandlers:
+                metadataHandlers[queryType](timestampStr, response)
+            else:
+                Logic.logMessage("WARN", f"Unknown queryType: {queryType} - No details populated")
+                return
         
-        # Resize table to contents
-        self.detailsTable.resizeColumnsToContents()
-        self.detailsTable.resizeRowsToContents()
-        
-        # Manually calculate and set window size to fit content exactly (no scroll bars)
-        self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
-        self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
-        width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding for borders/margins
-        height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding, account for frames
-        self.resize(width, height)
+            # Resize table to contents
+            self.detailsTable.resizeColumnsToContents()
+            self.detailsTable.resizeRowsToContents()
+            
+            # Manually calculate and set window size to fit content exactly (no scroll bars)
+            self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
+            self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
+            width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding for borders/margins
+            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding, account for frames
+            self.resize(width, height)
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Populated {self.detailsTable.rowCount()} rows")
+            Logic.logMessage("DEBUG", f"Populated {self.detailsTable.rowCount()} rows (or tabs)")
     
-    def populateOverlay(self, timestampStr, data):
+    def populateOverlay(self, timestampStr, data, table=None):
         """Internal method to populate for overlay cell data."""
+        if table is None:
+            table = self.detailsTable  # Fallback to main table
         
         # Handle missing keys safely
         primaryVal = data.get('primaryVal', 'N/A') if data.get('primaryVal') is not None else 'N/A'
@@ -117,13 +175,13 @@ class uiDetails(QWidget):
                 pass # Keep as string if not numeric
         
         # Add rows for overlay specifics (broken out per user request)
-        self.addRow("Primary Info", data.get('dataId1', 'N/A'))
-        self.addRow("Primary Value", str(primaryVal))
-        self.addRow("Primary Database", data.get('db1', 'N/A'))
-        self.addRow("Secondary Info", data.get('dataId2', 'N/A'))
-        self.addRow("Secondary Value", str(secondaryVal))
-        self.addRow("Secondary Database", data.get('db2', 'N/A'))
-        self.addRow("Delta", str(delta))
+        self.addRow("Primary Info", data.get('dataId1', 'N/A'), table=table)
+        self.addRow("Primary Value", str(primaryVal), table=table)
+        self.addRow("Primary Database", data.get('db1', 'N/A'), table=table)
+        self.addRow("Secondary Info", data.get('dataId2', 'N/A'), table=table)
+        self.addRow("Secondary Value", str(secondaryVal), table=table)
+        self.addRow("Secondary Database", data.get('db2', 'N/A'), table=table)
+        self.addRow("Delta", str(delta), table=table)
     
     def populateHeaderNormal(self, meta):
         """Internal method to populate for normal header metadata."""
@@ -192,12 +250,15 @@ class uiDetails(QWidget):
         
         return maxStr, minStr, meanStr
     
-    def populateAquarius(self, timestampStr, response):
+    def populateAquarius(self, timestampStr, response, table=None):
         """Internal method to populate for AQUARIUS response."""
+        if table is None:
+            table = self.detailsTable
         
         # Parse timestamp to datetime for comparisons
         try:
             timestamp = self.parseDateTime(timestampStr)
+            
             if Config.debug:
                 Logic.logMessage("DEBUG", f"populateDetails: Parsed timestamp {timestampStr} to {timestamp}")
         except ValueError as e:
@@ -214,46 +275,40 @@ class uiDetails(QWidget):
         # Add rows for selected metadata (per list 1-10)
         
         # 1. Parameter/Label/Unit (series-level)
-        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}", response.get('Label', 'N/A'))
+        self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}", response.get('Label', 'N/A'), table=table)
         
         # 2. Timestamp/Value (point-level, respect Config.rawData for formatting)
         value = point['Value']
         numeric = value.get('Numeric', 'N/A')
         display = Logic.valuePrecision(numeric) if not Config.rawData and numeric != 'N/A' else str(numeric)
-        self.addRow("Value", display, point.get('Timestamp', 'N/A'))
+        self.addRow("Value", display, point.get('Timestamp', 'N/A'), table=table)
         
         # 3-9: Arrays with time-range filtering
         self.addArrayRows("Approval", response.get('Approvals', []), timestamp, 
-                           lambda item: f"Level: {item.get('ApprovalLevel', 'N/A')} ({item.get('LevelDescription', 'N/A')}) \nUser: {item.get('User', 'N/A')} \nApplied: {item.get('DateAppliedUtc', 'N/A')} \nComment: {item.get('Comment', 'N/A')}")
+                        lambda item: f"Level: {item.get('ApprovalLevel', 'N/A')} ({item.get('LevelDescription', 'N/A')}) \nUser: {item.get('User', 'N/A')} \nApplied: {item.get('DateAppliedUtc', 'N/A')} \nComment: {item.get('Comment', 'N/A')}", table=table)
         
         self.addArrayRows("Qualifier", response.get('Qualifiers', []), timestamp, 
-                           lambda item: f"Identifier: {item.get('Identifier', 'N/A')} | User: {item.get('User', 'N/A')} | Applied: {item.get('DateApplied', 'N/A')}")
+                        lambda item: f"Identifier: {item.get('Identifier', 'N/A')} | User: {item.get('User', 'N/A')} | Applied: {item.get('DateApplied', 'N/A')}", table=table)
         
         self.addArrayRows("Method", response.get('Methods', []), timestamp, 
-                           lambda item: f"Code: {item.get('MethodCode', 'N/A')}")
+                        lambda item: f"Code: {item.get('MethodCode', 'N/A')}", table=table)
         
         self.addArrayRows("Grade", response.get('Grades', []), timestamp, 
-                           lambda item: f"Code: {item.get('GradeCode', 'N/A')}")
+                        lambda item: f"Code: {item.get('GradeCode', 'N/A')}", table=table)
         
         self.addArrayRows("Gap Tolerance", response.get('GapTolerances', []), timestamp, 
-                           lambda item: f"Tolerance (min): {item.get('ToleranceInMinutes', 'N/A')}")
+                        lambda item: f"Tolerance (min): {item.get('ToleranceInMinutes', 'N/A')}", table=table)
         
         self.addArrayRows("Interpolation Type", response.get('InterpolationTypes', []), timestamp, 
-                           lambda item: f"Type: {item.get('Type', 'N/A')}")
+                        lambda item: f"Type: {item.get('Type', 'N/A')}", table=table)
         
         self.addArrayRows("Note", response.get('Notes', []), timestamp, 
-                           lambda item: f"Text: {item.get('NoteText', 'N/A')}")
-    
-    def populateUSGS(self, timestampStr, response):
-        """Placeholder for USGS metadata population."""
-        # TODO: Implement based on USGS API response structure
-        # Example: self.addRow("Parameter Code", response.get('parameterCd', 'N/A'))
-        # self.addRow("Value", response.get('value', 'N/A'), response.get('dateTime', 'N/A'), "")
-        # Add array rows for qualifiers, etc.
-        self.addRow("Note", "USGS metadata not implemented yet")
-    
-    def populateUSBR(self, timestampStr, response, interval):
+                        lambda item: f"Text: {item.get('NoteText', 'N/A')}", table=table)
+        
+    def populateUSBR(self, timestampStr, response, interval, table=None):
         """Internal method to populate for USBR metadata (list of merged dicts)."""
+        if table is None:
+            table = self.detailsTable
         if not isinstance(response, list):
             Logic.logMessage("WARN", f"Invalid response for USBR: expected list, got {type(response).__name__}")
             return
@@ -262,6 +317,7 @@ class uiDetails(QWidget):
         try:
             tsDate = datetime.strptime(timestampStr, '%m/%d/%y %H:%M:00')
             matchKey = tsDate.strftime('%Y-%m-%d %H:%M:%S')
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Converted timestampStr {timestampStr} to matchKey {matchKey}")
         except ValueError as e:
@@ -276,7 +332,7 @@ class uiDetails(QWidget):
         
         if not matchingRow:
             Logic.logMessage("WARN", f"No matching metadata for {matchKey} in USBR response")
-            self.addRow("Note", "No metadata for this timestamp")
+            self.addRow("Note", "No metadata for this timestamp", table=table)
             return
         
         # Defined tag order (per user spec)
@@ -291,37 +347,70 @@ class uiDetails(QWidget):
         for tag in tags:
             value = matchingRow.get(tag)
             valStr = str(value) if value is not None else ''
-            self.addRow(tag, valStr)
+            self.addRow(tag, valStr, table=table)
         
         if Config.debug:
             Logic.logMessage("DEBUG", f"Populated USBR metadata with {len(tags)} tags for {matchKey}")
     
-    def addRow(self, metaType, details, startTime="", endTime=""):
-        """Add a single row to the table (defaults for 2-column modes)."""
-        row = self.detailsTable.rowCount()
-        self.detailsTable.insertRow(row)
-        self.detailsTable.setItem(row, 0, QTableWidgetItem(metaType))
-        self.detailsTable.setItem(row, 1, QTableWidgetItem(details))
+    def populateUSGS(self, timestampStr, response, table=None):
+        """Internal method to populate for USGS response (placeholder based on typical structure)."""
+        if table is None:
+            table = self.detailsTable
+        
+        # Assuming response is dict with 'value', 'dateTime', 'qualifiers' (list), etc.
+        # Parse timestamp for comparisons if needed
+        try:
+            timestamp = self.parseDateTime(timestampStr)
+        except ValueError as e:
+            Logic.logMessage("ERROR", f"Failed to parse timestamp {timestampStr}: {e}")
+            return
+        
+        # Find matching point (assuming 'timeSeries' or similar; simplify to direct fields for placeholder)
+        value = response.get('value', 'N/A')
+        dateTime = response.get('dateTime', 'N/A')
+        
+        # Add basic rows
+        self.addRow("Parameter Code", response.get('parameterCd', 'N/A'), table=table)
+        self.addRow("Value", str(value), dateTime, table=table)
+        
+        # Array for qualifiers (similar to Aquarius)
+        self.addArrayRows("Qualifier", response.get('qualifiers', []), timestamp, 
+                        lambda item: f"Code: {item.get('code', 'N/A')} | Description: {item.get('description', 'N/A')}", table=table)
+        
+        if Config.debug:
+            Logic.logMessage("DEBUG", "populateUSGS: Populated basic USGS metadata (placeholder)")
 
-        if self.detailsTable.columnCount() > 2:
-            self.detailsTable.setItem(row, 2, QTableWidgetItem(startTime))
-            self.detailsTable.setItem(row, 3, QTableWidgetItem(endTime))
-    
-    def addArrayRows(self, metaType, items, timestamp, detailFormatter):
+    def addRow(self, metaType, details, startTime="", endTime="", table=None):
+        """Add a single row to the table (defaults for 2-column modes)."""
+        if table is None:
+            table = self.detailsTable
+        row = table.rowCount()
+        table.insertRow(row)
+        table.setItem(row, 0, QTableWidgetItem(metaType))
+        table.setItem(row, 1, QTableWidgetItem(details))
+
+        if table.columnCount() > 2:
+            table.setItem(row, 2, QTableWidgetItem(startTime))
+            table.setItem(row, 3, QTableWidgetItem(endTime))
+
+    def addArrayRows(self, metaType, items, timestamp, detailFormatter, table=None):
         """Add rows for array items matching the timestamp range."""
+        if table is None:
+            table = self.detailsTable
         added = False
 
         for item in items:
             try:
                 start = self.parseDateTime(item.get('StartTime'))
                 end = self.parseDateTime(item.get('EndTime'))
+
                 if start <= timestamp <= end:
-                    self.addRow(metaType, detailFormatter(item), item.get('StartTime', 'N/A'), item.get('EndTime', 'N/A'))
+                    self.addRow(metaType, detailFormatter(item), item.get('StartTime', 'N/A'), item.get('EndTime', 'N/A'), table=table)
                     added = True
             except (ValueError, TypeError) as e:
                 Logic.logMessage("WARN", f"Skipping invalid array item in {metaType}: {e}")
         if not added:
-            self.addRow(metaType, "N/A")
+            self.addRow(metaType, "N/A", table=table)
     
     def parseDateTime(self, dtStr):
         """Parse string to datetime, assuming common formats (e.g., ISO)."""

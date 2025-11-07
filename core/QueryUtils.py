@@ -54,35 +54,51 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
         if overlayChecked:
             processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, queryInfos, pairIndex)
 
-        # Append metadata in final order
+        # Append metadata in final order with lists
         if overlayChecked:
+            primaryDb = databases[pairIndex*2]
+            primaryId = dataIds[pairIndex*2]
+            lookupId = [labelsDict.get(primaryId, primaryId) if primaryDb == 'AQUARIUS' else primaryId,
+                        labelsDict.get(dataIds[pairIndex*2+1], dataIds[pairIndex*2+1]) if databases[pairIndex*2+1] == 'AQUARIUS' else dataIds[pairIndex*2+1]]
             columnMetadata.append({
                 'type': 'overlay',
                 'dataIds': [dataIds[pairIndex*2], dataIds[pairIndex*2+1]],
                 'dbs': [databases[pairIndex*2], databases[pairIndex*2+1]],
                 'queryInfos': [queryInfos[pairIndex*2], queryInfos[pairIndex*2+1]],
-                'pairIndex': pairIndex
+                'pairIndex': pairIndex,
+                'lookupId': lookupId # List for multi
             })
         else:
+            primaryDb = databases[pairIndex*2]
+            primaryId = dataIds[pairIndex*2]
+            lookupIdPrimary = labelsDict.get(primaryId, primaryId) if primaryDb == 'AQUARIUS' else primaryId
             columnMetadata.append({
                 'type': 'normal',
                 'dataIds': [dataIds[pairIndex*2]],
                 'dbs': [databases[pairIndex*2]],
-                'queryInfos': [queryInfos[pairIndex*2]]
+                'queryInfos': [queryInfos[pairIndex*2]],
+                'lookupId': lookupIdPrimary
             })
+
+            secondaryDb = databases[pairIndex*2+1]
+            secondaryId = dataIds[pairIndex*2+1]
+            lookupIdSecondary = labelsDict.get(secondaryId, secondaryId) if secondaryDb == 'AQUARIUS' else secondaryId
             columnMetadata.append({
                 'type': 'normal',
                 'dataIds': [dataIds[pairIndex*2+1]],
                 'dbs': [databases[pairIndex*2+1]],
-                'queryInfos': [queryInfos[pairIndex*2+1]]
+                'queryInfos': [queryInfos[pairIndex*2+1]],
+                'lookupId': lookupIdSecondary
             })
+
         if deltaChecked:
             columnMetadata.append({
                 'type': 'delta',
                 'dataIds': [dataIds[pairIndex*2], dataIds[pairIndex*2+1]],
                 'dbs': [databases[pairIndex*2], databases[pairIndex*2+1]],
                 'queryInfos': [queryInfos[pairIndex*2], queryInfos[pairIndex*2+1]],
-                'pairIndex': pairIndex
+                'pairIndex': pairIndex,
+                'lookupId': lookupId # Reuse list from overlay or similar
             })
 
         # Advance col
@@ -91,21 +107,27 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
 
     # For odd last column if any
     if col < table.columnCount():
+        lastDb = databases[-1]
+        lastId = dataIds[-1]
+        lookupIdLast = labelsDict.get(lastId, lastId) if lastDb == 'AQUARIUS' else lastId
         columnMetadata.append({
             'type': 'normal',
             'dataIds': [dataIds[-1]],
             'dbs': [databases[-1]],
-            'queryInfos': [queryInfos[-1]]
+            'queryInfos': [queryInfos[-1]],
+            'lookupId': lookupIdLast
         })
 
     # Set columnMetadata on mainWindow
     if mainWindow:
         mainWindow.columnMetadata = columnMetadata
+
         if Config.debug:
-            Logic.logMessage("DEBUG", "modifyTable: Set columnMetadata via passed mainWindow with {} entries".format(len(columnMetadata)))
+            Logic.logMessage("DEBUG", "modifyTable: Set columnMetadata via passed mainWindow with {} entries: {repr(columnMetadata)}".format(len(columnMetadata)))
     else:
         widget = table
         mainWindowFound = None
+
         while widget is not None:
             if isinstance(widget, uiMain):
                 mainWindowFound = widget
@@ -113,8 +135,9 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
             widget = widget.parent()
         if mainWindowFound:
             mainWindowFound.columnMetadata = columnMetadata
+
             if Config.debug:
-                Logic.logMessage("DEBUG", "modifyTable: Set columnMetadata with {} entries".format(len(columnMetadata)))
+                Logic.logMessage("DEBUG", "modifyTable: Set columnMetadata with {} entries: {repr(columnMetadata)}".format(len(columnMetadata)))
         else:
             if Config.debug:
                 Logic.logMessage("WARN", "modifyTable: Could not find uiMain for columnMetadata")
@@ -128,6 +151,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
     for c in range(table.columnCount()):
         cellValues = [table.item(r, c).text() if table.item(r, c) else "0.00" for r in range(sampleRows)]
         nonEmptyValues = [val for val in cellValues if val]
+
         if nonEmptyValues:
             maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
         else:
@@ -137,6 +161,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
         headerLines = headerText.split('\n')
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
         finalWidth = max(maxCellWidth, headerWidth)
+
         if headerWidth > maxCellWidth:
             paddingIncrease = headerWidth - maxCellWidth
             finalWidth = maxCellWidth + paddingIncrease + 10
@@ -145,6 +170,7 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
         columnWidths.append(finalWidth)
     for c in range(table.columnCount()):
         table.setColumnWidth(c, columnWidths[c])
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"modifyTable: Set column {c} width to {columnWidths[c]}")
 

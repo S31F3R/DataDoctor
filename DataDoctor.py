@@ -575,8 +575,7 @@ class uiMain(QMainWindow):
         index = self.mainTable.indexAt(pos)
 
         if not index.isValid():
-            return
-        
+            return        
         row = index.row()
         col = index.column()
         
@@ -627,31 +626,50 @@ class uiMain(QMainWindow):
                 
                 if Config.debug:
                     Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USBR")
+            elif db == 'USGS-NWIS' and isinstance(response, dict):
+                detailsAction = menu.addAction("Show details")
+                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USGS', interval))
+                
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USGS")
         
         # Add overlay if column is overlay (existing logic, with renamed action)
         isOverlay = colType == 'overlay'
         
         if isOverlay:
-            overlayAction = menu.addAction("Overlay details")
-            overlayAction.triggered.connect(lambda: self.showOverlayCellDetails(row, col))
+            # Get types from columnMetadata (e.g., ['overlay', 'USBR', 'AQUARIUS'])
+            meta = self.columnMetadata[col]
+            types = ['overlay'] + meta.get('dbs', []) # Overlay first, then DBs in order
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"showCellContextMenu: Overlay types for col {col}: {types}")
+            
+            # Add actions for each type
+            for t in types:
+                if t == 'overlay':
+                    actionText = "Overlay details"
+                else:
+                    actionText = f"{t} details"
+                action = menu.addAction(actionText)
+                action.triggered.connect(lambda _, typ=t: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, typ, None, multiTypes=types))
         
         if menu.actions(): # Only show if actions added
             menu.exec(self.mainTable.viewport().mapToGlobal(pos))
             
             if Config.debug:
-                Logic.logMessage("DEBUG", f"showCellContextMenu: Displayed menu for cell ({row}, {col})")
+                Logic.logMessage("DEBUG", f"showCellContextMenu: Displayed menu for cell ({row}, {col}) with {len(menu.actions())} actions")
         else:
             if Config.debug:
                 Logic.logMessage("DEBUG", f"showCellContextMenu: No actions for cell ({row}, {col})")
 
-    def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType, interval):
+    def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType, interval, multiTypes=None):
         """Open uiDetails for metadata (Aquarius or USBR)."""
         detailsWin = uiDetails(parent=self)
-        detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response, interval)
+        detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response, interval, multiTypes=multiTypes)
         detailsWin.show()
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showMetadataDetails: Opened details for {timestampStr} - {seriesLabel} ({dbType})")
+            Logic.logMessage("DEBUG", f"showMetadataDetails: Opened details for {timestampStr} - {seriesLabel} ({dbType}), multiTypes={multiTypes}")
 
     def onTabCloseRequested(self, index):
         self.tabWidget.removeTab(index)

@@ -134,7 +134,7 @@ class queryWorker(QRunnable):
                 Logic.logMessage("DEBUG", f"queryWorker: Failed for group {self.groupKey}: {e}")
             for _, dataID, _ in items:
                 groupResult[dataID] = self.defaultBlanks
-                
+
                 if db == 'AQUARIUS':
                     groupLabels[dataID] = dataID
         self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels, groupRawResponses))
@@ -671,6 +671,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         Logic.logMessage("DEBUG", "executeQuery: Filtered AQUARIUS for public query, remaining items={}".format(len(queryItems)))
     if not queryItems:
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid query items (AQUARIUS not allowed in public queries).")
+        
         if Config.debug:
             Logic.logMessage("DEBUG", "executeQuery: No valid items after filtering, aborting")
         return
@@ -767,6 +768,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             if Config.debug:
                 Logic.logMessage("DEBUG", f"executeQuery: Skipping empty group {groupKey}, no data")
             collected += 1
+
             if not progressDialog.wasCanceled():
                 progressDialog.setValue(20 + int(50 * collected / numGroups))
                 progressDialog.setLabelText(f"Completed {groupKey[0]} query ({collected}/{numGroups})")
@@ -818,8 +820,8 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
             if elapsed > timeoutSeconds:
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")
-                print(f"[WARN] Query timeout after {timeoutSeconds} seconds; some data may be missing")
+                    Logic.logMessage("DEBUG", f"executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")             
+                Logic.logMessage("WARN", f"Query timeout after {timeoutSeconds} seconds; some data may be missing")
                 progressDialog.cancel()
                 QMessageBox.warning(mainWindow, "Query Timeout", "Query timed out; some data may be missing.")
             return
@@ -827,6 +829,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             while not resultQueue.empty():
                 try:
                     result = resultQueue.get_nowait()
+
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"executeQuery: Retrieved result from queue: {result[0]}")
                     handleResult(result)
@@ -859,6 +862,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         while not resultQueue.empty() and retryCount < maxRetries:
             try:
                 result = resultQueue.get_nowait()
+
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"executeQuery: Processed final queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
                 handleResult(result)
@@ -869,9 +873,11 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             if Config.debug:
                 Logic.logMessage("DEBUG", f"executeQuery: Max retries ({maxRetries}) reached for final queue flush, queue size {resultQueue.qsize()}")
     timer.stop()
+
     if Config.debug:
         Logic.logMessage("DEBUG", f"executeQuery: Timer stopped, wait loop ended, final collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
     QCoreApplication.processEvents()
+
     if progressDialog.wasCanceled():
         if Config.debug:
             Logic.logMessage("DEBUG", f"executeQuery: User canceled via progress dialog")
@@ -887,6 +893,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     for dataID, _, _, _, _ in queryItems:
         if dataID not in valueDict:
             valueDict[dataID] = defaultBlanks
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Added empty result for dataID {dataID}")
     originalDataIds = [item[0] for item in queryItems]
@@ -939,25 +946,26 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         else:    
             mainWindow.columnMetadata = []
             mergedDataIds = [[id] for id in originalDataIds] # Derived from originalDataIds
-            mergedDbs = databases # From databases list
-            mergedQueryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems] # Constructed from queryItems
+            mergedDbs = [[db] for db in databases] # List for consistency
+            mergedQueryInfos = [[f"{item[0]}|{item[1]}|{item[2]}"] for item in queryItems] # List of lists
             mergedHeaders = originalDataIds # Or processedHeaders if set earlier
             
             for col in range(len(mergedHeaders)):  
                 dataId = mergedDataIds[col][0] if mergedDataIds[col] else None
-                db = mergedDbs[col]
+                db = mergedDbs[col][0]
                 lookupId = labelsDict.get(dataId, dataId) if db == 'AQUARIUS' else dataId
                 metadata = {
                     'type': 'normal',
                     'dataIds': mergedDataIds[col], 
-                    'dbs': db, 
-                    'queryInfos': [mergedQueryInfos[col]],  # Changed to list for consistency in uiDetails
+                    'dbs': mergedDbs[col], 
+                    'queryInfos': mergedQueryInfos[col], 
                     'lookupId': lookupId  
                 }
+
                 mainWindow.columnMetadata.append(metadata)
 
             if Config.debug:
-                Logic.logMessage("DEBUG", f"Set columnMetadata with lookupId: {repr(mainWindow.columnMetadata)}")
+                Logic.logMessage("DEBUG", "executeQuery: Set columnMetadata for non-overlay with lists: {repr(mainWindow.columnMetadata)}")
         progressDialog.setValue(100)
         progressDialog.repaint()
         QCoreApplication.processEvents()
@@ -976,6 +984,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     # Store last delta and overlay states for refresh using globals
     Config.lastDeltaChecked = deltaChecked
     Config.lastOverlayChecked = overlayChecked
+
     if Config.debug:
         Logic.logMessage("DEBUG", f"executeQuery: Stored lastDeltaChecked={deltaChecked}, lastOverlayChecked={overlayChecked}")
     progressDialog.cancel()
@@ -988,10 +997,12 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     if index != 0:
         if index != -1:
             mainWindow.tabWidget.removeTab(index)
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Removed tabMain from index {index} to move to 0")
         mainWindow.tabWidget.insertTab(0, mainWindow.tabMain, mainWindow.dataQueryTitle)
         mainWindow.tabWidget.setCurrentIndex(0)
+
         if Config.debug:
             Logic.logMessage("DEBUG", "Inserted tabMain at index 0 after query")
     QCoreApplication.processEvents()
