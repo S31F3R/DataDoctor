@@ -8,4 +8,4 @@ Traceback (most recent call last):
   File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\uiDetails.py", line 109, in populateDetails
     metadataHandlers[t](timestampStr, tabResp, tabIntvl, table=tabTable) # Pass custom table and interval
     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-TypeError: uiDetails.populateAquarius() got multiple values for argument 'table'
+TypeError: uiDetails.populateDetails.<locals>.<lambda>() got an unexpected keyword argument 'table'
