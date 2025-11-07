@@ -118,46 +118,8 @@ class uiMain(QMainWindow):
         self.dataQueryTitle = "Data Query"
         self.sqlTitle = "SQL Query Builder"
 
-        if sqlIndex != -1:
-            self.tabWidget.removeTab(sqlIndex)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Removed tabSQL at index {sqlIndex} on startup")
-        else:
-            if Config.debug:
-                Logic.logMessage("WARN", "tabSQL not found in tabWidget on startup")
-        dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
-
-        if dataQueryIndex != -1:
-            self.tabWidget.removeTab(dataQueryIndex)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Removed tabMain at index {dataQueryIndex} on startup")
-        else:
-            if Config.debug:
-                Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
-
-        # Add back SQL tab if enabled
-        if Config.enableSQL and sqlTab:
-            self.tabWidget.addTab(sqlTab, self.sqlTitle)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled")  
-
-        # Add dummy items to controls. This fixes issues with Qt6 quirks
-        self.cbDatabase.addItem("")    
-        self.listSnippets.addItem("")        
-
-        # Populate cbDatabase and load snippets if controls found
-        if Config.enableSQL and self.cbDatabase:
-            Utils.loadDatabase(self.cbDatabase, 'sql')
-        if Config.enableSQL and self.listSnippets:
-            self.loadSnippets()
-        if Config.debug:
-            Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
-
         # Set up splitters and layout for tabSQL to enable resizing
-        if Config.enableSQL and sqlTab:
+        if sqlTab:
             self.lblDatabase = self.findChild(QLabel, 'lblDatabase')
 
             # Top controls layout (horizontal, packed on left)
@@ -236,6 +198,40 @@ class uiMain(QMainWindow):
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "Set up splitters and layout for tabSQL to handle resizing")
+
+        if sqlIndex != -1:
+            self.tabWidget.removeTab(sqlIndex)
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Removed tabSQL at index {sqlIndex} on startup")
+        else:
+            if Config.debug:
+                Logic.logMessage("WARN", "tabSQL not found in tabWidget on startup")
+        dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
+
+        if dataQueryIndex != -1:
+            self.tabWidget.removeTab(dataQueryIndex)
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Removed tabMain at index {dataQueryIndex} on startup")
+        else:
+            if Config.debug:
+                Logic.logMessage("WARN", "tabMain not found in tabWidget on startup")
+
+        # Add dummy items to controls. This fixes issues with Qt6 quirks
+        self.cbDatabase.addItem("")    
+        self.listSnippets.addItem("")        
+
+        # Add back SQL tab if enabled
+        if Config.enableSQL:
+            self.tabWidget.addTab(sqlTab, self.sqlTitle)
+            self.refreshSqlTab()
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled and refreshed")  
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
 
     def closeEvent(self, event):
         """Override closeEvent to save splitter sizes if SQL tab is enabled and present."""
@@ -679,6 +675,36 @@ class uiMain(QMainWindow):
         
         if Config.debug:
             Logic.logMessage("DEBUG", f"showOverlayCellDetails: Opened details for cell ({row}, {col})")
+
+    def refreshSqlTab(self):
+        # Load saved splitter sizes from config
+        config = Utils.loadConfig()
+
+        sqlSplitter = self.findChild(QSplitter, 'sqlSplitter')
+        mainSplitter = self.findChild(QSplitter, 'mainSplitter')
+
+        if sqlSplitter and 'sqlVerticalSizes' in config:
+            sqlSplitter.setSizes(config['sqlVerticalSizes'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Restored sqlVerticalSizes: {config['sqlVerticalSizes']}")
+        if mainSplitter and 'sqlHorizontalSizes' in config:
+            mainSplitter.setSizes(config['sqlHorizontalSizes'])
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Restored sqlHorizontalSizes: {config['sqlHorizontalSizes']}")
+
+        # Populate cbDatabase and load snippets if controls found
+        if self.cbDatabase:
+            Utils.loadDatabase(self.cbDatabase, 'sql')
+            self.cbDatabase.setMinimumWidth(200)
+            self.cbDatabase.adjustSize()
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Refreshed cbDatabase with sizing")
+        if self.listSnippets:
+            self.loadSnippets()
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Refreshed snippets list")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

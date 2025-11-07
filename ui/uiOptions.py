@@ -414,8 +414,9 @@ class uiOptions(QDialog):
                     if sqlIndex == -1:
                         insertIndex = 1 if self.winMain.tabWidget.indexOf(self.winMain.tabMain) != -1 else 0
                         self.winMain.tabWidget.insertTab(insertIndex, sqlTab, self.winMain.sqlTitle)
+                        self.winMain.refreshSqlTab()
                         if Config.debug:
-                            Logic.logMessage("DEBUG", f"Added tabSQL at index {insertIndex} after enableSQL change")
+                            Logic.logMessage("DEBUG", f"Added tabSQL at index {insertIndex} after enableSQL change and refreshed")
                 else:
                     sqlIndex = self.winMain.tabWidget.indexOf(sqlTab)
                     if sqlIndex != -1:
