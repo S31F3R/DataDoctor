@@ -29,6 +29,11 @@ class uiDetails(QWidget):
         self.detailsTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows) # Select whole rows
         self.detailsTable.verticalHeader().setVisible(False) # Hide row numbers to reduce extra space
         
+        # Zero main layout margins for single-panel view
+        layout = self.layout()
+        if layout:
+            layout.setContentsMargins(0, 0, 0, 0)
+        
         # Connect tab change for resize if tabWidget created later
         if hasattr(self, 'tabWidget') and self.tabWidget:
             self.tabWidget.currentChanged.connect(self.resizeToCurrentTab)
@@ -52,9 +57,12 @@ class uiDetails(QWidget):
         # Calculate size based on tab table
         tabTable.resizeColumnsToContents()
         tabTable.resizeRowsToContents()
-        tabTable.verticalScrollBar().setVisible(False) # Suppress scrollbar        
-        width = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 30
+        tabTable.verticalScrollBar().setVisible(False) # Suppress scrollbar
+        tabTable.horizontalScrollBar().setVisible(False) # Suppress horizontal too
+        
+        width = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50 # +50 buffer for right gap
         height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 50 # +50 buffer for last row/margins
+        
         self.resize(width, height)
         
         if Config.debug:
@@ -105,14 +113,13 @@ class uiDetails(QWidget):
         
         # If multiTypes provided (e.g., for overlay cell), use tabs
         if multiTypes and len(multiTypes) > 1:
-            
             # Create QTabWidget if not exists
             if not hasattr(self, 'tabWidget') or not self.tabWidget:
                 self.tabWidget = QTabWidget(self)
-                layout = self.layout()  # Assuming QVBoxLayout or similar from .ui
+                layout = self.layout() # Assuming QVBoxLayout or similar from .ui
                 if layout:
                     layout.addWidget(self.tabWidget)
-                self.detailsTable.hide()  # Hide original table, use per-tab tables
+                self.detailsTable.hide() # Hide original table, use per-tab tables
                 self.tabWidget.currentChanged.connect(self.resizeToCurrentTab) # Connect here if created
             
             # Clear existing tabs
@@ -129,11 +136,13 @@ class uiDetails(QWidget):
                 
                 tabWidget = QWidget()
                 tabLayout = QVBoxLayout(tabWidget)
+                tabLayout.setContentsMargins(0, 0, 0, 0) # Zero margins to remove gaps
                 tabTable = QTableWidget(tabWidget) # New table per tab
                 tabTable.setSortingEnabled(True)
                 tabTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
                 tabTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
                 tabTable.verticalHeader().setVisible(False)
+                tabTable.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding) # Expand to fill layout
                 
                 # Set columns/headers based on type
                 if normT in ["overlay", "USBR", "USGS"]:
@@ -155,14 +164,13 @@ class uiDetails(QWidget):
                 
                 tabLayout.addWidget(tabTable)
                 
-                # Tab name: Uppercase abbreviations, keep suffixes, capitalize "Details"
-                if t.upper() in ['USBR', 'USGS'] or '-' in t:
-                    tabName = t.upper() + " Details"
-                else:
-                    tabName = t.capitalize() + " Details"
-                if i > 0: # For DB tabs
+                # Tab name: Uppercase abbreviations/suffixes, capitalize "Details"
+                tabName = t.upper() if t.upper() in ['USBR', 'USGS'] or '-' in t else t.capitalize()
+                tabName += " Details"
+                if i > 0:  # For DB tabs
                     if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                        tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
+                        tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"
+                
                 self.tabWidget.addTab(tabWidget, tabName)
                 
                 # Initial resize table (final resize on tab change)
