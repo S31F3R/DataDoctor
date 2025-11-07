@@ -60,7 +60,7 @@ class uiAbout(QDialog):
             wavPath = Logic.resourcePath('ui/sounds/8-Bit-Perplexion.wav')
             self.soundEffect = QSoundEffect(self)
             self.soundEffect.setSource(QUrl.fromLocalFile(wavPath))
-            self.soundEffect.setLoopCount(QSoundEffect.Loop.Infinite)
+            self.soundEffect.setLoopCount(-2)
             self.soundEffect.setVolume(0.8)
         except Exception as e:
             Logic.logMessage("WARN", f"Failed to load sound effect: {e}")
