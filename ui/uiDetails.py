@@ -70,9 +70,9 @@ class uiDetails(QWidget):
         
         # Handler dictionary for database-specific metadata (easy to add USGS)
         metadataHandlers = {
-            "AQUARIUS": lambda ts, resp, intvl=None, tbl=None: self.populateAquarius(ts, resp, table=tbl), # Ignore intvl
-            "USGS": lambda ts, resp, intvl=None, tbl=None: self.populateUSGS(ts, resp, table=tbl), # Ignore intvl
-            "USBR": lambda ts, resp, intvl=None, tbl=None: self.populateUSBR(ts, resp, intvl, table=tbl),
+            "AQUARIUS": lambda ts, resp, interval=None, table=None: self.populateAquarius(ts, resp, table=table), # Ignore interval
+            "USGS": lambda ts, resp, interval=None, table=None: self.populateUSGS(ts, resp, table=table), # Ignore interval
+            "USBR": lambda ts, resp, interval=None, table=None: self.populateUSBR(ts, resp, interval, table=table),
         }
         
         # If multiTypes provided (e.g., for overlay cell), use tabs
@@ -93,10 +93,11 @@ class uiDetails(QWidget):
             # Add tabs in order (Overlay first, then DBs)
             for i, t in enumerate(multiTypes):
                 tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
-                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'                
+                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'
+                
                 tabWidget = QWidget()
                 tabLayout = QVBoxLayout(tabWidget)
-                tabTable = QTableWidget(tabWidget) # New table per tab
+                tabTable = QTableWidget(tabWidget)  # New table per tab
                 tabTable.setSortingEnabled(True)
                 tabTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
                 tabTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -106,12 +107,18 @@ class uiDetails(QWidget):
                 if t == 'overlay':
                     self.populateOverlay(timestampStr, tabResp, table=tabTable) # Pass custom table
                 elif t in metadataHandlers:
-                    metadataHandlers[t](timestampStr, tabResp, tabIntvl, table=tabTable) # Pass custom table and interval
+                    metadataHandlers[t](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
                 else:
                     Logic.logMessage("WARN", f"Unknown type {t} in multiTypes - Skipped tab")
                     continue                
                 tabLayout.addWidget(tabTable)
-                self.tabWidget.addTab(tabWidget, t.capitalize() + " Details")
+                
+                # Tab name: Handle same DB with (Primary)/(Secondary)
+                tabName = t.capitalize() + " Details"
+                if i > 0: # For DB tabs
+                    if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
+                        tabName = t.capitalize() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
+                self.tabWidget.addTab(tabWidget, tabName)
                 
                 # Resize tab table
                 tabTable.resizeColumnsToContents()
@@ -143,7 +150,7 @@ class uiDetails(QWidget):
             elif queryType == "headerOverlay":
                 self.populateHeaderOverlay(response)
             elif queryType in metadataHandlers:
-                metadataHandlers[queryType](timestampStr, response, interval)
+                metadataHandlers[queryType](timestampStr, response, interval=interval)
             else:
                 Logic.logMessage("WARN", f"Unknown queryType: {queryType} - No details populated")
                 return
@@ -155,8 +162,8 @@ class uiDetails(QWidget):
             # Manually calculate and set window size to fit content exactly (no scroll bars)
             self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
             self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
-            width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding for borders/margins
-            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30  # Tighter padding, account for frames
+            width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding for borders/margins
+            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding, account for frames
             self.resize(width, height)
         
         if Config.debug:
