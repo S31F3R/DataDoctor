@@ -675,13 +675,14 @@ class uiMain(QMainWindow):
                     item = self.mainTable.item(row, col)
                     cellData = item.data(Qt.ItemDataRole.UserRole) if item else {}
                     responsesList.append(cellData)
-                    intervalsList.append(None)  # No interval for overlay
+                    intervalsList.append(None) # No interval for overlay
                 else:
                     # Use seriesResponses for DB tabs
-                    if i-1 < len(lookupIds):  # i-1 since overlay is first
+                    if i-1 < len(lookupIds): # i-1 since overlay is first
                         normLabel = lookupIds[i-1].replace('\n', ' ').strip()
                         dbResponse = self.seriesResponses.get(normLabel, {})
                         responsesList.append(dbResponse)
+                        
                         # Extract interval from queryInfos
                         qInfo = meta['queryInfos'][i-1] if i-1 < len(meta['queryInfos']) else '|'
                         dbInterval = qInfo.split('|')[1] if '|' in qInfo else 'HOUR'
