@@ -226,7 +226,7 @@ class uiMain(QMainWindow):
         if Config.enableSQL:
             self.tabWidget.addTab(sqlTab, self.sqlTitle)
             self.refreshSqlTab()
-            
+
             if Config.debug:
                 Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled and refreshed")  
 
@@ -411,7 +411,10 @@ class uiMain(QMainWindow):
                 v['label'] = v['label'].replace('\n', ' ').replace('\u00a0', ' ')
                 v['label'] = ' '.join(v['label'].split()).strip()
             normalizedResponses[key] = v
-        
+
+        # Normalize keys to remove \n for consistency
+        normalizedResponses = {k.replace('\n', ' ').strip(): v for k, v in normalizedResponses.items()}
+
         self.seriesResponses = normalizedResponses
         self.currentQueryType = queryType
         
@@ -570,6 +573,7 @@ class uiMain(QMainWindow):
     def showCellContextMenu(self, pos):
         """Show context menu for cell right-click: Metadata details (internal only, non-overlay) + overlay if applicable."""
         index = self.mainTable.indexAt(pos)
+
         if not index.isValid():
             return
         
@@ -594,10 +598,13 @@ class uiMain(QMainWindow):
         
         if Config.debug:
             Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
-        response = self.seriesResponses.get(lookupId) if lookupId else None
+        
+        # Normalize seriesLabel for lookup to match seriesResponses keys
+        normalizedLabel = seriesLabel.replace('\n', ' ').strip() if db == 'AQUARIUS' else seriesLabel.split('\n')[-1].strip()
+        response = self.seriesResponses.get(normalizedLabel) if normalizedLabel else None
         
         if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")        
+            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")              
         menu = QMenu(self)
         
         # Add metadata details if internal query, normal type

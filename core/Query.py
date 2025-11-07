@@ -104,14 +104,17 @@ class queryWorker(QRunnable):
                 for idx, (origIndex, dataID, SDID) in enumerate(items):
                     if SDID in result and result[SDID]:
                         res = result[SDID]
+
                         if isinstance(res, dict):
                             outputData = res.get('data', [])
                             if 'rawResponse' in res:
-                                groupRawResponses[SDID] = res['rawResponse']
+                                groupRawResponses[dataID] = res['rawResponse']
                         else:
                             outputData = res
+                            groupRawResponses[dataID] = res # Use full dataID as key for USBR
                         if db == 'AQUARIUS':
                             groupLabels[dataID] = result.get(SDID, {}).get('label', dataID)
+
                             if Config.debug:
                                 Logic.logMessage("DEBUG", f"queryWorker: Aquarius label for {dataID}: {groupLabels[dataID]}")
                         alignedData = gapCheck(self.timestamps, outputData, dataID)
@@ -119,6 +122,7 @@ class queryWorker(QRunnable):
                         groupResult[dataID] = values
                     else:
                         groupResult[dataID] = self.defaultBlanks
+
                         if db == 'AQUARIUS':
                             groupLabels[dataID] = dataID
                         if Config.debug:
@@ -130,6 +134,7 @@ class queryWorker(QRunnable):
                 Logic.logMessage("DEBUG", f"queryWorker: Failed for group {self.groupKey}: {e}")
             for _, dataID, _ in items:
                 groupResult[dataID] = self.defaultBlanks
+                
                 if db == 'AQUARIUS':
                     groupLabels[dataID] = dataID
         self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels, groupRawResponses))
@@ -285,12 +290,13 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     for i, h in enumerate(buildHeader):
         dataId = h.strip()
         intervalStr = intervals[i].upper()
-        
+
         if intervalStr.startswith('INSTANT:'):
             intervalStr = 'INSTANT'
         database = databases[i] if databases and i < len(databases) else None
         dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataId)
         mrid = None
+
         if database and database.startswith('USBR-') and '-' in dataId:
             parts = dataId.rsplit('-', 1)
             dataId = parts[0]
@@ -299,8 +305,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             commonCol = getColByName(dataDictionaryTable, 'commonName')
             commonItem = dataDictionaryTable.item(dictRow, commonCol) if commonCol != -1 else None
             baseLabel = commonItem.text().strip() if commonItem else dataId
+
             if database == 'USGS-NWIS':
                 parts = dataId.split('-')
+
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                     fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
                     if Config.debug:
@@ -311,11 +319,13 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                         Logic.logMessage("DEBUG", f"buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
             elif database == 'AQUARIUS':
                 fullLabel = f"{baseLabel} \n{dataId}"
+
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"buildTable: Aquarius in dict, using dict label, header {i}: {fullLabel}")
             else:
                 if mrid and mrid != '0':
                     fullLabel = f"{baseLabel} \n{dataId}-{mrid}"
+
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USBR in dict with MRID, header {i}: {fullLabel}")
                 else:
@@ -325,12 +335,15 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         else:
             if database == 'USGS-NWIS':
                 parts = dataId.split('-')
+
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                     fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: Parsed USGS header {i}: {fullLabel}")
                 else:
                     fullLabel = f"{dataId} \n{intervalStr}"
+
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USGS not in dict, header {i}: {fullLabel}")
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
@@ -339,6 +352,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 label = parts[0].strip() if len(parts) >= 1 else dataId
                 location = parts[1].strip() if len(parts) >= 2 else dataId
                 fullLabel = f"{label} \n{location}"
+
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"buildTable: Aquarius not in dict, using API label, header {i}: {fullLabel}")
             else:
@@ -355,6 +369,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     skipDateCol = dataDictionaryTable is not None
     numCols = len(headers)
     numRows = len(data)
+
     if numRows > 10000:
         reply = QMessageBox.warning(None, "Large Dataset Warning",
                                     f"Query returned {numRows} rows, which may slow down the UI. Consider a smaller date range or coarser interval (e.g., HOUR instead of INSTANT:1). Continue?",
@@ -369,6 +384,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.setColumnCount(numCols)
     table.setHorizontalHeaderLabels(headers)
     table.show()
+
     if dataDictionaryTable:
         timestamps = [row.split(',')[0].strip() for row in data]
         table.setVerticalHeaderLabels(timestamps)
@@ -382,22 +398,27 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     metrics = QFontMetrics(font)
     columnWidths = []
     sampleRows = min(1000, numRows)
+
     if Config.debug:
         Logic.logMessage("DEBUG", f"buildTable: Sampling {sampleRows} rows for column widths")
     for c in range(numCols):
         cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data[:sampleRows]]
         nonEmptyValues = [val for val in cellValues if val]
+
         if nonEmptyValues:
             maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
         else:
             maxCellWidth = metrics.horizontalAdvance("0.00")
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"buildTable col {c}: No non-empty values, using fallback width {maxCellWidth}")
         headerLines = headers[c].split('\n')
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
         finalWidth = max(maxCellWidth, headerWidth)
+
         if headerWidth > maxCellWidth:
             paddingIncrease = headerWidth - maxCellWidth
             finalWidth = maxCellWidth + paddingIncrease + 10
@@ -405,18 +426,22 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             finalWidth += 20
         columnWidths.append(finalWidth)
     table.setUpdatesEnabled(False)
+
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: Disabled table updates for population")
     for rowIdx, rowStr in enumerate(data):
         rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
+
         for colIdx in range(min(numCols, len(rowData))):
             cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+
             if not Config.rawData and cellText.strip():
                 item.setText(Logic.valuePrecision(cellText))
             table.setItem(rowIdx, colIdx, item)
     table.setUpdatesEnabled(True)
+
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: Re-enabled table updates after population")
     table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
@@ -426,6 +451,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.setMinimumSize(0, 0)
     table.update()
     header.setStretchLastSection(False)
+
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: Set stretchLastSection=False to prevent last column expansion.")
     if dataDictionaryTable:
@@ -433,18 +459,22 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         vHeader.setMinimumWidth(120 if maxTimeWidth < 120 else maxTimeWidth + 10)
     for c in range(numCols):
         table.setColumnWidth(c, columnWidths[c])
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"buildTable: Set column {c} width to {columnWidths[c]}")
     rowHeight = metrics.height() + 10
     sampleItem = QTableWidgetItem("189.5140")
     sampleItem.setFont(font)
     sampleCellHeight = sampleItem.sizeHint().height()
+
     if sampleCellHeight <= 0:
         sampleCellHeight = metrics.height()
     adjustedRowHeight = max(rowHeight, sampleCellHeight + 2)
+
     if Config.debug:
         Logic.logMessage("DEBUG", f"buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
     vHeader.setDefaultSectionSize(adjustedRowHeight)
+
     if Config.debug:
         Logic.logMessage("DEBUG", f"buildTable: Set default row height to {adjustedRowHeight}")
     header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -452,15 +482,18 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.update()
     table.horizontalScrollBar().setValue(0)
     visibleWidth = table.columnWidth(1) if numCols > 1 else 0
+
     if Config.debug and numCols > 1:
         Logic.logMessage("DEBUG", f"buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
     dataIds = buildHeader
+
     if Config.qaqcEnabled:
         qaqc(table, dataDictionaryTable, dataIds)
     else:
         for r in range(table.rowCount()):
             for c in range(table.columnCount()):
                 item = table.item(r, c)
+
                 if item:
                     item.setBackground(QColor(0, 0, 0, 0))
         if Config.debug:
