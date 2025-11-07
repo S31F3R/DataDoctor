@@ -65,8 +65,8 @@ class uiDetails(QWidget):
         height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 30 # Reduced buffer to avoid extra row
         self.resize(width, height)
     
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"Resized to current tab {index}: {width}x{height}")
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Resized to current tab {index}: {width}x{height}")
 
     def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None, multiTypes=None, responsesList=None, intervalsList=None):
         """
