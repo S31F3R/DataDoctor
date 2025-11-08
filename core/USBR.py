@@ -2,11 +2,11 @@
 
 import requests
 import json
+import threading
+import queue
 from core import Oracle, Query, Config, Logic
 from datetime import datetime, timedelta
 from collections import defaultdict
-import threading
-import queue
 
 primaryDsn = None
 queryLimit = 500
