@@ -66,7 +66,7 @@ class uiDetails(QWidget):
         contentWidth = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50 # +50 buffer for right gap
         
         # Tab bar width to prevent header cutoff
-        tabBarWidth = self.tabWidget.tabBar().sizeHint().width() + self.tabWidget.frameWidth() * 2 + 20 # +20 minimal buffer for margins
+        tabBarWidth = self.tabWidget.tabBar().sizeHint().width() + 50  # +50 buffer for margins, matching content
         
         # Use max of content or tab bar width
         width = max(contentWidth, tabBarWidth)
