@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\DataDoctor\ui\uiDetails.py", line 69, in resizeToCurrentTab
-    tabBarWidth = self.tabWidget.tabBar().sizeHint().width() + self.tabWidget.frameWidth() * 2 + 20 # +20 minimal buffer for margins
-                                                               ^^^^^^^^^^^^^^^^^^^^^^^^^
-AttributeError: 'QTabWidget' object has no attribute 'frameWidth'
