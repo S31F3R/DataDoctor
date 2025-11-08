@@ -671,7 +671,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         Logic.logMessage("DEBUG", "executeQuery: Filtered AQUARIUS for public query, remaining items={}".format(len(queryItems)))
     if not queryItems:
         QMessageBox.warning(mainWindow, "No Valid Items", "No valid query items (AQUARIUS not allowed in public queries).")
-        
+
         if Config.debug:
             Logic.logMessage("DEBUG", "executeQuery: No valid items after filtering, aborting")
         return
@@ -726,7 +726,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     if Config.debug:
         Logic.logMessage("DEBUG", "executeQuery: Setup complete, progress at 20%")
     defaultBlanks = [''] * len(timestamps)
-    labelsDict = {} if isInternal else None
+    labelsDict = {} # Always dict, populated only if isInternal
     groups = defaultdict(list)
 
     for dataID, interval, db, mrid, origIndex in queryItems:
@@ -779,6 +779,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
         if groupLabels and labelsDict is not None:
             labelsDict.update(groupLabels)
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
         if groupRawResponses:
@@ -820,7 +821,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
             if elapsed > timeoutSeconds:
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")             
+                    Logic.logMessage("DEBUG", f"executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")      
                 Logic.logMessage("WARN", f"Query timeout after {timeoutSeconds} seconds; some data may be missing")
                 progressDialog.cancel()
                 QMessageBox.warning(mainWindow, "Query Timeout", "Query timed out; some data may be missing.")
@@ -905,9 +906,10 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     for r in range(len(timestamps)):
         rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
         data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
+
         if r % 100 == 0 or r % 10 == 0: # Update more frequently for small tables
             progressDialog.setLabelText(f"Building rows... ({r}/{len(timestamps)} rows)")
-            progressDialog.setValue(70 + int(20 * r / len(timestamps)))  # Adjusted to 70-90 for rows
+            progressDialog.setValue(70 + int(20 * r / len(timestamps))) # Adjusted to 70-90 for rows
             progressDialog.repaint()
             QCoreApplication.processEvents()
         if Config.debug:
@@ -931,8 +933,12 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         # Build the table
         buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
 
-        # Remap rawResponses keys to fullLabel
-        rawResponses = {labelsDict.get(k, k): v for k, v in rawResponses.items()}
+        # Remap rawResponses keys to fullLabel (guard for labelsDict None/empty)
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"executeQuery: Remapping rawResponses keys, labelsDict type={type(labelsDict)}, keys={list(labelsDict.keys())}")
+        if labelsDict:
+            rawResponses = {labelsDict.get(k, k): v for k, v in rawResponses.items()}
+        # Else keep as-is for non-Aquarius (e.g., public USBR keys are SDIDs)
 
         # Store rawResponses for Aquarius
         mainWindow.storeQueryData(rawResponses, 'internal' if isInternal else 'public')
@@ -1002,7 +1008,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 Logic.logMessage("DEBUG", f"Removed tabMain from index {index} to move to 0")
         mainWindow.tabWidget.insertTab(0, mainWindow.tabMain, mainWindow.dataQueryTitle)
         mainWindow.tabWidget.setCurrentIndex(0)
-
+        
         if Config.debug:
             Logic.logMessage("DEBUG", "Inserted tabMain at index 0 after query")
     QCoreApplication.processEvents()
