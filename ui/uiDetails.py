@@ -61,10 +61,19 @@ class uiDetails(QWidget):
         tabTable.verticalScrollBar().setVisible(False) # Suppress scrollbar
         tabTable.horizontalScrollBar().setVisible(False) # Suppress horizontal too
         tabTable.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # Always off to avoid space reservation        
-        width = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50 # +50 buffer for right gap
+        
+        # Content width for current tab
+        contentWidth = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50 # +50 buffer for right gap
+        
+        # Tab bar width to prevent header cutoff
+        tabBarWidth = self.tabWidget.tabBar().sizeHint().width() + self.tabWidget.frameWidth() * 2 + 20 # +20 minimal buffer for margins
+        
+        # Use max of content or tab bar width
+        width = max(contentWidth, tabBarWidth)
+        
         height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 20 # Reduced buffer to avoid extra row
         self.resize(width, height)
-    
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"Resized to current tab {index}: {width}x{height}")
 
@@ -115,6 +124,7 @@ class uiDetails(QWidget):
             if not hasattr(self, 'tabWidget') or not self.tabWidget:
                 self.tabWidget = QTabWidget(self)
                 layout = self.layout() # Assuming QVBoxLayout or similar from .ui
+
                 if layout:
                     layout.addWidget(self.tabWidget)
                 self.detailsTable.hide() # Hide original table, use per-tab tables
@@ -124,17 +134,12 @@ class uiDetails(QWidget):
             while self.tabWidget.count() > 0:
                 self.tabWidget.removeTab(0)
             
-            # Track max width for min window size
-            maxTabWidth = 0
-            
             # Add tabs in order (Overlay first, then DBs)
             for i, t in enumerate(multiTypes):
                 # Normalize t for handlers (e.g., 'USBR-LCHDB' -> 'USBR')
-                normT = t.split('-')[0] if '-' in t else t
-                
+                normT = t.split('-')[0] if '-' in t else t                
                 tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
-                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'
-                
+                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'                
                 tabWidget = QWidget()
                 tabLayout = QVBoxLayout(tabWidget)
                 tabLayout.setContentsMargins(0, 0, 0, 0) # Zero margins to remove gaps
@@ -179,20 +184,13 @@ class uiDetails(QWidget):
                 # Initial resize table (final resize on tab change)
                 tabTable.resizeColumnsToContents()
                 tabTable.resizeRowsToContents()
-                
-                # Update maxTabWidth
-                tempWidth = sum(tabTable.columnWidth(j) for j in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50
-                maxTabWidth = max(maxTabWidth, tempWidth)
-            
-            # Set min width based on widest tab
-            self.setMinimumWidth(maxTabWidth)
             
             if self.tabWidget.count() == 0:
                 if Config.debug:
                     Logic.logMessage("DEBUG", "populateDetails: No tabs created for multiTypes")
             
             if Config.debug:
-                Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes, min width {maxTabWidth}")
+                Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes")
             
             # Initial resize to first tab
             self.resizeToCurrentTab(0)
