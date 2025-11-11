@@ -206,15 +206,15 @@ def gapCheck(timestamps, data, dataID=''):
                 i += 1
                 continue
             parts = line.split(',')
-            if len(parts) < 2:
-                print("[WARN] Malformed data row skipped: '{}' for '{}'".format(line, dataID))
+            if len(parts) < 2:                
+                Logic.logMessage("WARN", "Malformed data row skipped: '{}' for '{}'".format(line, dataID))
                 i += 1
                 continue
             actualTimestampStr = parts[0].strip()
             try:
                 actualDateTime = datetime.strptime(actualTimestampStr, '%m/%d/%y %H:%M:%S')
             except ValueError:
-                print("[WARN] Invalid ts skipped: '{}' in '{}' for '{}'".format(actualTimestampStr, line, dataID))
+                Logic.logMessage("WARN", "Invalid ts skipped: '{}' in '{}' for '{}'".format(actualTimestampStr, line, dataID))  
                 i += 1
                 continue
             if actualDateTime == expectedDateTime:
@@ -271,7 +271,7 @@ def getColByName(table, name):
             return c
     if Config.debug:
         Logic.logMessage("DEBUG", f"Available DataDictionary columns: {[table.horizontalHeaderItem(c).text().strip() for c in range(table.columnCount()) if table.horizontalHeaderItem(c)]}")
-    print(f"[WARN] Column not found in DataDictionary: {name}")
+    Logic.logMessage("WARN", "IColumn not found in DataDictionary: {name}")  
     return -1
 
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None):
@@ -1008,7 +1008,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 Logic.logMessage("DEBUG", f"Removed tabMain from index {index} to move to 0")
         mainWindow.tabWidget.insertTab(0, mainWindow.tabMain, mainWindow.dataQueryTitle)
         mainWindow.tabWidget.setCurrentIndex(0)
-        
+
         if Config.debug:
             Logic.logMessage("DEBUG", "Inserted tabMain at index 0 after query")
     QCoreApplication.processEvents()
