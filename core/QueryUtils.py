@@ -91,6 +91,9 @@ def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labe
                 'lookupId': lookupIdSecondary
             })
         if deltaChecked:
+            # Initialize lookupId for delta if not already set (e.g., in delta-only mode)
+            if not overlayChecked:
+                lookupId = [lookupIdPrimary, lookupIdSecondary]
             columnMetadata.append({
                 'type': 'delta',
                 'dataIds': [dataIds[pairIndex*2], dataIds[pairIndex*2+1]],
