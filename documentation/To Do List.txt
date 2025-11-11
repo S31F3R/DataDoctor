@@ -1,4 +1,3 @@
--Need to search for PRINT and make sure they are all converted to logs
 -See if there is a way to get trace errors to show up in logs
 -See if there is a way to get QT_LOGGING_RULES to show up in logs
 
