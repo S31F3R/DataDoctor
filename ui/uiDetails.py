@@ -33,7 +33,7 @@ class uiDetails(QWidget):
         layout = self.layout()
 
         if layout:
-            layout.setContentsMargins(10, 0, 10, 0)
+            layout.setContentsMargins(4, 0, 4, 0)
         
         # Connect tab change for resize if tabWidget created later
         if hasattr(self, 'tabWidget') and self.tabWidget:
