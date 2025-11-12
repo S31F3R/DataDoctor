@@ -948,7 +948,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
         # Modify table if query tools are checked
         if deltaChecked or overlayChecked:
-            QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, originalIntervals, lookupIds, mainWindow=mainWindow)   
+            QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, lookupIds, mainWindow=mainWindow)   
         else:    
             mainWindow.columnMetadata = []
             mergedDataIds = [[id] for id in originalDataIds] # Derived from originalDataIds

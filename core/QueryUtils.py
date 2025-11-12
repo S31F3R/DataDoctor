@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QTableWidgetItem
 from core import Logic, Config
 from DataDoctor import uiMain
 
-def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labelsDict, dataDictionaryTable, intervals, lookupIds, mainWindow=None):
+def modifyTable(table, deltaChecked, overlayChecked, databases, queryItems, labelsDict, lookupIds, mainWindow=None):
     if Config.debug:
         Logic.logMessage("DEBUG", "modifyTable: Starting with delta={}, overlay={}".format(deltaChecked, overlayChecked))
     numRows = table.rowCount()
