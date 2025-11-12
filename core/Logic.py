@@ -56,7 +56,6 @@ def initLogging():
     if Config.debug:
         logger.debug("initLogging: Logging initialized with console level {} and file at {}".format(logging.getLevelName(consoleLevel), filePath))
 
-# Log a message with the given level
 def logMessage(level, message):
     logger = logging.getLogger('Data Doctor')
     level = level.upper()
