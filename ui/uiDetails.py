@@ -95,9 +95,9 @@ class uiDetails(QWidget):
         # Set title using first line of seriesLabel only (no timestamp for headers)
         titleLabel = seriesLabel.split('\n')[0] if '\n' in seriesLabel else seriesLabel
         if timestampStr:
-            self.lblTitle.setText(f"Details for {timestampStr} - {titleLabel}")
+            self.lblTitle.setText(f" Details for {timestampStr} - {titleLabel}")
         else:
-            self.lblTitle.setText(f"Details for {titleLabel}")
+            self.lblTitle.setText(f" Details for {titleLabel}")
         
         # Clear existing rows and set columns dynamically
         self.detailsTable.setRowCount(0)
