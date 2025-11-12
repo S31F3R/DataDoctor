@@ -56,3 +56,4 @@ tmp/
 
 # Oracle client
 oracle/client
+oracle/client/*
