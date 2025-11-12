@@ -248,12 +248,12 @@ class uiDetails(QWidget):
                 pass # Keep as string if not numeric
         
         # Add rows for overlay specifics (broken out per user request)
+        self.addRow("Primary Database", data.get('db1', 'N/A'), table=table)
         self.addRow("Primary Info", data.get('dataId1', 'N/A'), table=table)
         self.addRow("Primary Value", str(primaryVal), table=table)
-        self.addRow("Primary Database", data.get('db1', 'N/A'), table=table)
-        self.addRow("Secondary Info", data.get('dataId2', 'N/A'), table=table)
-        self.addRow("Secondary Value", str(secondaryVal), table=table)
         self.addRow("Secondary Database", data.get('db2', 'N/A'), table=table)
+        self.addRow("Secondary Info", data.get('dataId2', 'N/A'), table=table)
+        self.addRow("Secondary Value", str(secondaryVal), table=table)        
         self.addRow("Delta", str(delta), table=table)
     
     def populateHeaderNormal(self, meta):
