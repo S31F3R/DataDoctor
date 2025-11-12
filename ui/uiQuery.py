@@ -79,12 +79,27 @@ class uiQuery(QMainWindow):
         # Add blank combobox item
         self.cbDatabase.addItem('')
 
-        # Set button style
-        for btn in [self.btnDataIdInfo, self.btnIntervalInfo, self.btnUpMax, self.btnUp15,
-                    self.btnUp5, self.btnUp1, self.btnDownMax, self.btnDown15, self.btnRemoveQuery,
-                    self.btnDown5, self.btnDown1, self.btnSearch, self.btnQueryOptionsInfo]:
+        # Map button style
+        buttonIcons = [
+                        (self.btnDataIdInfo, "Info", 24),
+                        (self.btnIntervalInfo, "Info", 24),
+                        (self.btnUpMax, "Up-MAX", 24),
+                        (self.btnUp15, "Up-15", 24),
+                        (self.btnUp5, "Up-5", 24),
+                        (self.btnUp1, "Up-1", 24),
+                        (self.btnDownMax, "Down-MAX", 24),
+                        (self.btnDown15, "Down-15", 24),
+                        (self.btnRemoveQuery, "Delete", 24),
+                        (self.btnDown5, "Down-5", 24),
+                        (self.btnDown1, "Down-1", 24),
+                        (self.btnSearch, "Search", 24),
+                        (self.btnQueryOptionsInfo, "Info", 24)
+                      ]
+
+        # Set button style        
+        for btn, iconName, iconSize in buttonIcons:
             if btn:
-                Utils.buttonStyle(btn)
+                Utils.buttonStyle(btn, iconName, iconSize=iconSize)
 
         # Create events
         self.btnQuery.clicked.connect(self.btnQueryPressed)

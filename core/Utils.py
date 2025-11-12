@@ -3,9 +3,9 @@
 import os
 import json
 import configparser
-from PyQt6.QtCore import QStandardPaths
+from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication
+from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
 
 def applyStylesAndFonts(app, mainTable, queryList):
@@ -68,24 +68,96 @@ def loadDatabase(comboBox, queryType=None):
         if Config.debug:
             Logic.logMessage("ERROR", "cbDatabase is None, cannot populate")
 
-def buttonStyle(button):
-    """Apply flat, borderless style to a QPushButton with no hover/press effects."""
-    button.setStyleSheet("""
-        QPushButton {
-            border: none;
-            background: transparent;
-        }
-        QPushButton:hover {
-            background: transparent;
-        }
-        QPushButton:pressed {
-            background: transparent;
-            border: none;
-        }
-        QPushButton:focus {
-            outline: none;
-        }
-    """)
+def buttonStyle(button, iconName=None, iconSize=None):
+    """Apply flat, borderless style to a QPushButton with hover/press effects using resized icons if iconName provided."""
+    if iconName:
+        normalPath = Logic.resourcePath(f'ui/icons/{iconName}.png')
+        hoverPath = Logic.resourcePath(f'ui/icons/hoover/{iconName}.png')
+        pressedPath = Logic.resourcePath(f'ui/icons/pressed/{iconName}.png')
+
+        # Load and resize pixmaps if paths exist
+        normalPixmap = QPixmap(normalPath)
+        hoverPixmap = QPixmap(hoverPath)
+        pressedPixmap = QPixmap(pressedPath)
+
+        if normalPixmap.isNull():
+            Logic.logMessage("WARN", f"Missing normal icon for {iconName} at {normalPath}")
+            normalPixmap = QPixmap()  # Empty fallback
+        if hoverPixmap.isNull():
+            Logic.logMessage("WARN", f"Missing hover icon for {iconName} at {hoverPath}")
+            hoverPixmap = normalPixmap  # Fallback to normal
+        if pressedPixmap.isNull():
+            Logic.logMessage("WARN", f"Missing pressed icon for {iconName} at {pressedPath}")
+            pressedPixmap = normalPixmap  # Fallback to normal
+
+        # Resize if iconSize provided
+        if iconSize and isinstance(iconSize, int) and iconSize > 0:
+            normalPixmap = normalPixmap.scaled(iconSize, iconSize, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            hoverPixmap = hoverPixmap.scaled(iconSize, iconSize, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            pressedPixmap = pressedPixmap.scaled(iconSize, iconSize, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            button.setIconSize(QSize(iconSize, iconSize))  # For icon-only buttons
+
+        # Set initial icon
+        button.setIcon(QIcon(normalPixmap))
+
+        # Define local event filter for state swaps
+        class ButtonEventFilter(QObject):
+            def eventFilter(self, obj, event):
+                if event.type() == QEvent.Type.Enter:
+                    obj.setIcon(QIcon(hoverPixmap))
+                elif event.type() == QEvent.Type.Leave:
+                    obj.setIcon(QIcon(normalPixmap))
+                elif event.type() == QEvent.Type.MouseButtonPress:
+                    obj.setIcon(QIcon(pressedPixmap))
+                elif event.type() == QEvent.Type.MouseButtonRelease:
+                    obj.setIcon(QIcon(hoverPixmap if obj.underMouse() else normalPixmap))
+                return super().eventFilter(obj, event)
+
+        # Install filter (remove any existing to avoid duplicates)
+        button.removeEventFilter(button)
+        button.installEventFilter(ButtonEventFilter(button))
+
+        # Apply flat stylesheet
+        button.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background: transparent;
+            }
+            QPushButton:hover {
+                background: transparent;
+            }
+            QPushButton:pressed {
+                background: transparent;
+                border: none;
+            }
+            QPushButton:focus {
+                outline: none;
+            }
+        """)
+
+        if Config.debug:
+            size_info = f" with resized: {iconSize}x{iconSize}" if iconSize else ""
+            Logic.logMessage("DEBUG", f"Applied hover/pressed icon swaps to button with icon: {iconName}{size_info}")
+    else:
+        button.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background: transparent;
+            }
+            QPushButton:hover {
+                background: transparent;
+            }
+            QPushButton:pressed {
+                background: transparent;
+                border: none;
+            }
+            QPushButton:focus {
+                outline: none;
+            }
+        """)
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", "Applied basic flat style to button (no icon effects)")
 
 def centerWindowToParent(ui):
     """Center a window relative to its parent (main window), robust for multi-monitor."""

@@ -24,9 +24,9 @@ class uiDataDictionary(QMainWindow):
         self.btnDeleteRow.clicked.connect(self.btnDeleteRowPressed)
         
         # Set button style
-        Utils.buttonStyle(self.btnSave)
-        Utils.buttonStyle(self.btnAddRow)
-        Utils.buttonStyle(self.btnDeleteRow)
+        Utils.buttonStyle(self.btnSave, "Save", 36)
+        Utils.buttonStyle(self.btnAddRow, "Plus", 36)
+        Utils.buttonStyle(self.btnDeleteRow, "Delete", 36)
         
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDataDictionary initialized with btnDeleteRow")

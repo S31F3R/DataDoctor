@@ -40,9 +40,9 @@ class uiOptions(QDialog):
         self.chkbEnableSQL = self.findChild(QCheckBox, 'chkbEnableSQL')
 
         # Set button style
-        Utils.buttonStyle(self.btnShowPassword)
-        Utils.buttonStyle(self.btnShowUSGSKey)
-        Utils.buttonStyle(self.btnShowOraclePassword)
+        Utils.buttonStyle(self.btnShowPassword, None, None)
+        Utils.buttonStyle(self.btnShowUSGSKey, None, None)
+        Utils.buttonStyle(self.btnShowOraclePassword, None, None)
 
         # Timers for password and key show
         self.lastCharTimer = QTimer(self)

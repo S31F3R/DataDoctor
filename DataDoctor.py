@@ -51,12 +51,25 @@ class uiMain(QMainWindow):
         self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
         self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')        
 
-        # Set button style
-        for btn in [self.btnPublicQuery, self.btnDataDictionary, self.btnExportCSV,
-                    self.btnOptions, self.btnInfo, self.btnInternalQuery, self.btnUndo, 
-                    self.btnRefresh, self.btnRunQuery, self.btnSaveSnippet, self.btnDeleteSnippet]:
+        # Map button style
+        buttonIcons = [
+                        (self.btnPublicQuery, "PublicQuery", 36),
+                        (self.btnDataDictionary, "Book", 36),
+                        (self.btnExportCSV, "ExportCSV", 36),
+                        (self.btnOptions, "Options", 36),
+                        (self.btnInfo, "Info", 36),
+                        (self.btnInternalQuery, "InternalQuery", 36),
+                        (self.btnUndo, "Reset", 36),
+                        (self.btnRefresh, "Refresh", 36),
+                        (self.btnRunQuery, "Play", 36),
+                        (self.btnSaveSnippet, "StarPlus", 36),
+                        (self.btnDeleteSnippet, "StarMinus", 36)
+                      ]
+
+        # Set button style        
+        for btn, iconName, iconSize in buttonIcons:
             if btn:
-                Utils.buttonStyle(btn)
+                Utils.buttonStyle(btn, iconName, iconSize=iconSize)
 
         # Set up layout
         centralLayout = self.centralWidget().layout()
@@ -766,6 +779,42 @@ class uiMain(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setApplicationName("Data Doctor")
+
+    # Apply global stylesheet for default button effects and tab close buttons
+    app.setStyleSheet("""
+        QPushButton {
+            border: none;
+            background: transparent;
+        }
+        QPushButton:hover {
+            background: rgba(200, 200, 200, 50);  /* Light gray tint for hover */
+        }
+        QPushButton:pressed {
+            background: rgba(150, 150, 150, 50);  /* Darker gray for pressed */
+            padding-top: 1px;  /* Slight shift for 'pressed' feel */
+        }
+        QPushButton:focus {
+            outline: none;
+        }
+
+        QTabBar::close-button {
+            image: url(ui/icons/Tab-close-dark.png); /* Dark */
+            border-radius: 8px; /* Full circle for square size */
+            background: transparent; /* Transparent bg */
+            subcontrol-position: right;
+            width: 16px;
+            height: 16px;
+        }
+        QTabBar::close-button:hover {
+            image: url(ui/icons/Tab-close-light.png); /* Light invert */
+        }
+        QTabBar::close-button:pressed {
+            image: url(ui/icons/Tab-close-dark.png); /* Darker for press */
+        }
+    """)
+
+    if Config.debug:
+        Logic.logMessage("DEBUG", "Applied global app stylesheet with default button effects and tab close styles")
 
     # Init logging early to capture all events
     Logic.initLogging()  
