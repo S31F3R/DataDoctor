@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 
 REM Get the directory where the CMD is running
 set "exeDirectory=%~dp0"
-set "requirementsPath=%exeDirectory%\Project Files\requirements.txt"
+set "requirementsPath=%exeDirectory%\src\requirements.txt"
 
 REM Run pip install
 echo Installing dependencies from requirements.txt...
