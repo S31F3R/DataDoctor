@@ -1,8 +1,9 @@
 # uiDataDictionary.py
 
 import sqlite3
-from PyQt6.QtWidgets import QMainWindow, QTableWidget, QPushButton
+from PyQt6.QtWidgets import QMainWindow, QTableWidget, QPushButton, QLineEdit
 from PyQt6 import uic
+from PyQt6.QtCore import QTimer
 from core import Logic, Utils, Config
 
 class uiDataDictionary(QMainWindow):
@@ -17,12 +18,19 @@ class uiDataDictionary(QMainWindow):
         self.btnSave = self.findChild(QPushButton, 'btnSave')
         self.btnAddRow = self.findChild(QPushButton, 'btnAddRow')
         self.btnDeleteRow = self.findChild(QPushButton, 'btnDeleteRow')
-        
+        self.qleSearch = self.findChild(QLineEdit, 'qleSearch') # Find the search QLineEdit
+
+        # Set up debounce timer for search
+        self.searchTimer = QTimer(self)
+        self.searchTimer.setSingleShot(True)
+        self.searchTimer.timeout.connect(self.performFilter)
+
         # Create events
         self.btnSave.clicked.connect(self.btnSavePressed)
         self.btnAddRow.clicked.connect(self.btnAddRowPressed)
         self.btnDeleteRow.clicked.connect(self.btnDeleteRowPressed)
-        
+        self.qleSearch.textChanged.connect(self.debounceFilter) # Connect textChanged for debounced filtering
+
         # Set button style
         Utils.buttonStyle(self.btnSave, "Save", 36)
         Utils.buttonStyle(self.btnAddRow, "Plus", 36)
@@ -110,3 +118,23 @@ class uiDataDictionary(QMainWindow):
         else:
             if Config.debug:
                 Logic.logMessage("DEBUG", "No row selected for removal in DataDictionary")
+
+    def debounceFilter(self, text):
+        """Debounce the filter to avoid running on every keystroke."""
+        if self.searchTimer.isActive():
+            self.searchTimer.stop()
+        self.searchTimer.start(300) # 300ms delay before filtering
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"debounceFilter: Timer started for text '{text}'")
+
+    def performFilter(self):
+        """Perform the actual table filtering after debounce delay."""
+        text = self.qleSearch.text()
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"performFilter: Applying filter with text '{text}'")
+        Logic.filterTable(self.mainTable, text, ['dataID', 'siteID', 'siteName', 'commonName'])
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", "performFilter: Filtering completed")
