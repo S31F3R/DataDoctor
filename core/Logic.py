@@ -538,3 +538,55 @@ def getUtcOffsetInt(utcOffsetStr):
         if Config.debug:
             logMessage("ERROR", "getUtcOffsetInt: Failed to parse '{}': {}. Returning 0".format(utcOffsetStr, e))
         return 0.0
+    
+def filterTable(table, searchText, searchableColumns):
+    """Modular function to filter QTableWidget rows based on search text in specified columns."""
+    if Config.debug:
+        logMessage("DEBUG", f"filterTable: Processing table with {table.rowCount()} rows, search '{searchText}', columns {searchableColumns}")
+
+    # Map column names to indices (case-sensitive match to headers)
+    columnMap = {table.horizontalHeaderItem(c).text().strip(): c for c in range(table.columnCount())}
+    searchableIndices = [columnMap[col] for col in searchableColumns if col in columnMap]
+
+    if not searchableIndices:
+        if Config.debug:
+            logMessage("WARN", "filterTable: No matching searchable columns found—showing all rows")
+        for r in range(table.rowCount()):
+            table.setRowHidden(r, False)
+        return
+
+    if not searchText.strip():
+        # Empty search: Show all rows
+        for r in range(table.rowCount()):
+            table.setRowHidden(r, False)
+        if Config.debug:
+            logMessage("DEBUG", "filterTable: Empty search—showing all rows")
+        return
+
+    # Split search into keywords (space-separated, AND logic)
+    keywords = [kw.lower() for kw in searchText.strip().split() if kw]
+    visibleCount = 0
+
+    for r in range(table.rowCount()):
+        matches = True
+
+        for kw in keywords:
+            kwMatched = False
+
+            for c in searchableIndices:
+                item = table.item(r, c)
+                cellText = item.text().strip().lower() if item else ''
+
+                if kw in cellText:
+                    kwMatched = True
+                    break
+            if not kwMatched:
+                matches = False
+                break
+        table.setRowHidden(r, not matches)
+
+        if matches:
+            visibleCount += 1
+
+    if Config.debug:
+        logMessage("DEBUG", f"filterTable: Filtered to {visibleCount} visible rows out of {table.rowCount()}")
