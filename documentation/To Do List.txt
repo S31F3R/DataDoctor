@@ -3,6 +3,7 @@
 -Search feature for dataID lookup
 -Handle on data dictionary too small, make it more bigger
 -Update masking to un-mask characters as they are typed in for a brief period, not the whole string
+-Header sort or undo button break Overlay code formatting
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
