@@ -1,9 +1,11 @@
 -See if there is a way to get trace errors to show up in logs
 -See if there is a way to get QT_LOGGING_RULES to show up in logs
--Search feature for dataID lookup
 -Handle on data dictionary too small, make it more bigger
 -Update masking to un-mask characters as they are typed in for a brief period, not the whole string
 -Header sort or undo button break Overlay code formatting
+-Have query search feature just return dataID, database, and common name in the table, but still use same search logic
+-Need a export complete message
+-End times are truncating down if on a full interval (check with even hours on HOUR data)
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
