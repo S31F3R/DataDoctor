@@ -14,14 +14,15 @@ class uiQuery(QMainWindow):
     """Query window: Builds and executes public/internal API calls."""
     def __init__(self, winMain=None):
         super().__init__(parent=winMain)
-        ui_path = Logic.resourcePath('ui/winQuery.ui')
+        uiPath = Logic.resourcePath('ui/winQuery.ui')
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Loading UI file: {ui_path}")
-            if not os.path.exists(ui_path):
-                Logic.logMessage("ERROR", f"UI file not found: {ui_path}")
+            Logic.logMessage("DEBUG", f"Loading UI file: {uiPath}")
+            
+            if not os.path.exists(uiPath):
+                Logic.logMessage("ERROR", f"UI file not found: {uiPath}")
         try:
-            uic.loadUi(ui_path, self)
+            uic.loadUi(uiPath, self)
         except Exception as e:
             Logic.logMessage("ERROR", f"Failed to load UI file: {e}")
             raise
