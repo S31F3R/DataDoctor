@@ -3,7 +3,6 @@
 -Handle on data dictionary too small, make it more bigger
 -Update masking to un-mask characters as they are typed in for a brief period, not the whole string
 -Header sort or undo button break Overlay code formatting
--Have query search feature just return dataID, database, and common name in the table, but still use same search logic
 -Need a export complete message
 -End times are truncating down if on a full interval (check with even hours on HOUR data)
 -Update tab index on all windows
