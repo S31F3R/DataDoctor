@@ -1,3 +1,14 @@
+QPushButton:hover {
+    background: rgba(200, 200, 200, 50);  /* Light gray tint for hover */
+}
+QPushButton:pressed {
+    background: rgba(150, 150, 150, 50);  /* Darker gray for pressed */
+    padding-top: 1px;  /* Slight shift for 'pressed' feel */
+}
+QPushButton:focus {
+    outline: none;
+}
+
 QTabBar::close-button {
     image: url(ui/icons/Tab-close-dark.png); /* Dark */
     border-radius: 8px; /* Full circle for square size */

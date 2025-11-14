@@ -780,39 +780,6 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setApplicationName("Data Doctor")
 
-    # Apply global stylesheet for default button effects and tab close buttons
-    app.setStyleSheet("""
-        QPushButton {
-            border: none;
-            background: transparent;
-        }
-        QPushButton:hover {
-            background: rgba(200, 200, 200, 50);  /* Light gray tint for hover */
-        }
-        QPushButton:pressed {
-            background: rgba(150, 150, 150, 50);  /* Darker gray for pressed */
-            padding-top: 1px;  /* Slight shift for 'pressed' feel */
-        }
-        QPushButton:focus {
-            outline: none;
-        }
-
-        QTabBar::close-button {
-            image: url(ui/icons/Tab-close-dark.png); /* Dark */
-            border-radius: 8px; /* Full circle for square size */
-            background: transparent; /* Transparent bg */
-            subcontrol-position: right;
-            width: 16px;
-            height: 16px;
-        }
-        QTabBar::close-button:hover {
-            image: url(ui/icons/Tab-close-light.png); /* Light invert */
-        }
-        QTabBar::close-button:pressed {
-            image: url(ui/icons/Tab-close-dark.png); /* Darker for press */
-        }
-    """)
-
     if Config.debug:
         Logic.logMessage("DEBUG", "Applied global app stylesheet with default button effects and tab close styles")
 
