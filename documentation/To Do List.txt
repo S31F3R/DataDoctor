@@ -6,6 +6,7 @@
 -Have query search feature just return dataID, database, and common name in the table, but still use same search logic
 -Need a export complete message
 -End times are truncating down if on a full interval (check with even hours on HOUR data)
+-Update tab index on all windows
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
