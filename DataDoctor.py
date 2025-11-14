@@ -794,7 +794,7 @@ if __name__ == '__main__':
     winQuery = uiQuery(winMain)
     winDataDictionary = uiDataDictionary(winMain)
     winOptions = uiOptions(winMain)
-    winAbout = uiAbout(winMain)
+    winAbout = uiAbout(winMain)  
     winMain.winQuery = winQuery
     winMain.winDataDictionary = winDataDictionary  
     winMain.winOptions = winOptions

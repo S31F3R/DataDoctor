@@ -1,4 +1,4 @@
-# py
+# Logic.py
 
 import os
 import sys
@@ -73,14 +73,19 @@ def logMessage(level, message):
     else:
         logger.warning(f"Unknown log level '{level}': {message}")
 
-def buildDataDictionary(table):
+def buildDataDictionary(table, columns=None, whereClause=None):
     table.clear()
     dbPath = resourcePath('core/bunker.db')
 
     try:
         with sqlite3.connect(dbPath) as conn:
             cur = conn.cursor()
-            cur.execute("SELECT * FROM dataDictionary")
+            selectCols = '*' if columns is None else ','.join(columns)
+            query = f"SELECT {selectCols} FROM dataDictionary"
+            
+            if whereClause:
+                query += f" WHERE {whereClause}"
+            cur.execute(query)
             rows = cur.fetchall()
 
             if not rows:

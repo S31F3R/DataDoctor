@@ -8,6 +8,7 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
+from ui.uiSearch import uiSearch
 
 class uiQuery(QMainWindow):
     """Query window: Builds and executes public/internal API calls."""
@@ -57,8 +58,9 @@ class uiQuery(QMainWindow):
         self.btnDown15 = self.findChild(QPushButton, 'btnDown15')
         self.btnDown5 = self.findChild(QPushButton, 'btnDown5')
         self.btnDown1 = self.findChild(QPushButton, 'btnDown1')
-        self.btnSearch = self.findChild(QPushButton, 'btnSearch')
+        self.btnSearch.clicked.connect(self.showSearch)
         self.btnQueryOptionsInfo = self.findChild(QPushButton, 'btnQueryOptionsInfo')
+        self.uiSearch = None
 
         # Group radio buttons
         self.radioGroup = QButtonGroup(self)
@@ -120,7 +122,6 @@ class uiQuery(QMainWindow):
         self.btnDown15.clicked.connect(self.btnDown15Pressed)
         self.btnDown5.clicked.connect(self.btnDown5Pressed)
         self.btnDown1.clicked.connect(self.btnDown1Pressed)
-        self.btnSearch.clicked.connect(self.btnSearchPressed)
         self.btnQueryOptionsInfo.clicked.connect(self.btnQueryOptionsInfoPressed)
 
         # Install event filters
@@ -543,13 +544,16 @@ class uiQuery(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", "btnDown1Pressed: Moved selected items down by 1")
 
-    def btnSearchPressed(self):
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnSearchPressed: Search functionality not implemented")
-        QMessageBox.information(self, "Search", "Search functionality is not yet implemented.")
-
     def btnQueryOptionsInfoPressed(self):
         QMessageBox.information(self, "Query Options Info",
                                 "Delta: Calculate and display the change between consecutive values.\n\nOverlay: Display multiple datasets in a single view for comparison.")
         if Config.debug:
             Logic.logMessage("DEBUG", "btnQueryOptionsInfoPressed: Showed Query Options info dialog")
+
+    def showSearch(self):
+        if self.uiSearch is None:
+            self.uiSearch = uiSearch(self)
+        self.uiSearch.show()
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", "showSearch: Opened uiSearch window")

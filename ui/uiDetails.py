@@ -8,8 +8,7 @@ from datetime import datetime
 from core import Logic, Config
 
 class uiDetails(QWidget):
-    """Details window: Displays metadata or overlay info for a specific timeseries cell."""
-    
+    """Details window: Displays metadata or overlay info for a specific timeseries cell."""    
     def __init__(self, parent=None):
         super().__init__(parent)
         
