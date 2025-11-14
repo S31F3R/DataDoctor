@@ -1,0 +1,55 @@
+alter user 
+$UserName 
+identified by 
+"$NewPassword" 
+replace 
+"$OldPassword"
+
+
+
+
+'Create new command
+command = New OracleCommand()
+
+'Set the connection to the active Oracle connection
+command.Connection = activeConnnection.Connection
+
+'Stored procedure name
+command.CommandText = "MODIFY_R_BASE"
+command.CommandType = CommandType.StoredProcedure
+
+'Procedure parameters
+With command.Parameters
+    .Add(New OracleParameter("SITE_DATATYPE_ID", OracleDbType.Int32, 10, CInt(parseData(0)), ParameterDirection.Input))
+    .Add(New OracleParameter("INTERVAL", OracleDbType.Varchar2, parseData(1), ParameterDirection.Input))
+    .Add(New OracleParameter("START_DATE_TIME", OracleDbType.[Date], CDate(parseData(2)), ParameterDirection.Input))
+    .Add(New OracleParameter("END_DATE_TIME", OracleDbType.[Date], DBNull.Value, ParameterDirection.Input))
+    .Add(New OracleParameter("VALUE", OracleDbType.[Decimal], CDec(parseData(3)), ParameterDirection.Input))
+    .Add(New OracleParameter("AGEN_ID", OracleDbType.Int32, 7, ParameterDirection.Input))
+
+    If overwriteFlag = True Then
+        .Add(New OracleParameter("OVERWRITE_FLAG", OracleDbType.Varchar2, "O", ParameterDirection.Input))
+    Else
+        .Add(New OracleParameter("OVERWRITE_FLAG", OracleDbType.Varchar2, DBNull.Value, ParameterDirection.Input))
+    End If
+
+    .Add(New OracleParameter("VALIDATION", OracleDbType.Varchar2, "Z", ParameterDirection.Input))
+    .Add(New OracleParameter("COLLECTION_SYSTEM_ID", OracleDbType.Varchar2, 13, ParameterDirection.Input))
+    .Add(New OracleParameter("LOADING_APPLICATION_ID", OracleDbType.Varchar2, 132, ParameterDirection.Input))
+    .Add(New OracleParameter("METHOD_ID", OracleDbType.Varchar2, 13, ParameterDirection.Input))
+    .Add(New OracleParameter("COMPUTATION_ID", OracleDbType.Varchar2, 1, ParameterDirection.Input))
+
+    If CBool(parseData(4)) = True Then
+        .Add(New OracleParameter("DO_UPDATE_Y_OR_N", OracleDbType.Varchar2, "Y", ParameterDirection.Input))
+    Else
+        .Add(New OracleParameter("DO_UPDATE_Y_OR_N", OracleDbType.Varchar2, "N", ParameterDirection.Input))
+    End If
+
+    If parseData(5) = "" Then
+        .Add(New OracleParameter("DATA_FLAGS", OracleDbType.Varchar2, DBNull.Value, ParameterDirection.Input))
+    Else
+        .Add(New OracleParameter("DATA_FLAGS", OracleDbType.Varchar2, parseData(5), ParameterDirection.Input))
+    End If
+
+    .Add(New OracleParameter("TIME_ZONE", OracleDbType.Varchar2, DBNull.Value, ParameterDirection.Input))
+End With
