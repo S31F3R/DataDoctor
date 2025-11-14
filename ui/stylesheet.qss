@@ -8,7 +8,6 @@ QPushButton:pressed {
 QPushButton:focus {
     outline: none;
 }
-
 QTabBar::close-button {
     image: url(ui/icons/Tab-close-dark.png); /* Dark */
     border-radius: 8px; /* Full circle for square size */
