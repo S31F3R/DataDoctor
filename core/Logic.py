@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import QTableWidgetItem, QFileDialog, QSplitter, QTreeView
 from core import Config, Utils
 
 # Flag to prevent multiple initializations (module-level for encapsulation)
-_logging_initialized = False
+loggingInitialized = False
 
 def resourcePath(relativePath):
     """Get absolute path to resource, works for dev and PyInstaller"""
@@ -24,9 +24,9 @@ def resourcePath(relativePath):
     return os.path.normpath(os.path.join(basePath, relativePath))
 
 def initLogging():
-    global _logging_initialized
+    global loggingInitialized
 
-    if _logging_initialized:
+    if loggingInitialized:
         return # Already initialized
     
     logDir = Utils.getLogDir()
@@ -51,7 +51,7 @@ def initLogging():
     fileHandler.setFormatter(fileFormatter)
     logger.addHandler(fileHandler)
     
-    _logging_initialized = True
+    loggingInitialized = True
     
     if Config.debug:
         logger.debug("initLogging: Logging initialized with console level {} and file at {}".format(logging.getLevelName(consoleLevel), filePath))
@@ -82,7 +82,7 @@ def buildDataDictionary(table, columns=None, whereClause=None):
             cur = conn.cursor()
             selectCols = '*' if columns is None else ','.join(columns)
             query = f"SELECT {selectCols} FROM dataDictionary"
-            
+
             if whereClause:
                 query += f" WHERE {whereClause}"
             cur.execute(query)
