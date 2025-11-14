@@ -3,10 +3,138 @@
 import os
 import json
 import configparser
-from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
+from PyQt6.QtWidgets import QWidget, QLineEdit
 from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
+
+class customPasswordEdit(QLineEdit):
+    """Custom QLineEdit for password fields that briefly shows new input before masking it."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.realText = ''
+        self.revealed = False
+        self.timer = QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.timeout.connect(self.fullMask)
+        self.maskChar = '●' 
+        self.setEchoMode(QLineEdit.EchoMode.Normal) 
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", "customPasswordEdit initialized")
+
+    def text(self):
+        return self.realText
+
+    def setText(self, text):
+        self.realText = text
+
+        if self.revealed:
+            super().setText(self.realText)
+        else:
+            super().setText(self.maskChar * len(self.realText))
+
+    def keyPressEvent(self, event):
+        if self.revealed:
+            super().keyPressEvent(event)
+            self.realText = super().text()
+            return
+        pos = self.cursorPosition()
+
+        if self.hasSelectedText():
+            selStart = self.selectionStart()
+            selLen = self.selectionLength()
+            self.realText = self.realText[:selStart] + self.realText[selStart + selLen:]
+            pos = selStart
+
+        if event.key() == Qt.Key.Key_Backspace:
+            if pos > 0:
+                self.realText = self.realText[:pos - 1] + self.realText[pos:]
+                pos -= 1
+            super().setText(self.maskChar * len(self.realText))
+            self.setCursorPosition(pos)
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Backspace handled, updated realText")
+            return
+        elif event.key() == Qt.Key.Key_Delete:
+            if pos < len(self.realText):
+                self.realText = self.realText[:pos] + self.realText[pos + 1:]
+            super().setText(self.maskChar * len(self.realText))
+            self.setCursorPosition(pos)
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Delete handled, updated realText")
+            return
+        elif event.text() and event.text().isprintable() and not event.isAutoRepeat():
+            newChar = event.text()
+            self.realText = self.realText[:pos] + newChar + self.realText[pos:]
+
+            # Briefly show the new character in clear text
+            displayed = self.maskChar * pos + newChar + self.maskChar * (len(self.realText) - pos - 1)
+            super().setText(displayed)
+            self.setCursorPosition(pos + 1)
+            self.timer.start(2000)
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Key press detected, briefly showing new character")
+            return
+
+        super().keyPressEvent(event)
+
+    def inputMethodEvent(self, event):
+        if self.revealed:
+            super().inputMethodEvent(event)
+            self.realText = super().text()
+            return
+
+        pos = self.cursorPosition()
+        if self.hasSelectedText():
+            selStart = self.selectionStart()
+            selLen = self.selectionLength()
+            self.realText = self.realText[:selStart] + self.realText[selStart + selLen:]
+            pos = selStart
+
+        if event.commitString():
+            newText = event.commitString()
+            self.realText = self.realText[:pos] + newText + self.realText[pos:]
+
+            # Briefly show the new input in clear text
+            displayed = self.maskChar * pos + newText + self.maskChar * (len(self.realText) - pos - len(newText))
+            super().setText(displayed)
+            self.setCursorPosition(pos + len(newText))
+            self.timer.start(2000)
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Input method event (e.g., paste), briefly showing new input")
+            return
+
+        super().inputMethodEvent(event)
+
+    def fullMask(self):
+        if not self.revealed:
+            pos = self.cursorPosition()
+            super().setText(self.maskChar * len(self.realText))
+            self.setCursorPosition(pos)
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Timeout reached, fully masking the field")
+
+    def toggleReveal(self):
+        self.revealed = not self.revealed
+        pos = self.cursorPosition()
+
+        if self.revealed:
+            super().setText(self.realText)
+            self.timer.stop()
+        else:
+            super().setText(self.maskChar * len(self.realText))
+        self.setCursorPosition(pos)
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Reveal toggled, now revealed: {self.revealed}")
+
+    def isRevealed(self):
+        return self.revealed
 
 def applyStylesAndFonts(app, mainTable, queryList):
     """Apply stylesheet and retro font if enabled."""

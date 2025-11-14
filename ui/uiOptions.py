@@ -21,8 +21,57 @@ class uiOptions(QDialog):
         self.cbUTCOffset = self.findChild(QComboBox, 'cbUTCOffset')
         self.qleAQServer = self.findChild(QLineEdit, 'qleAQServer')
         self.qleAQUser = self.findChild(QLineEdit, 'qleAQUser')
-        self.qleAQPassword = self.findChild(QLineEdit, 'qleAQPassword')
-        self.qleUSGSAPIKey = self.findChild(QLineEdit, 'qleUSGSAPIKey')
+
+        # Replace qleAQPassword with customPasswordEdit
+        oldAQPassword = self.findChild(QLineEdit, 'qleAQPassword')
+
+        if oldAQPassword:
+            parent = oldAQPassword.parent()
+            layout = parent.layout() if parent else None
+
+            if layout:
+                index = layout.indexOf(oldAQPassword)
+
+                if index != -1:
+                    self.qleAQPassword = Utils.customPasswordEdit(parent)
+                    self.qleAQPassword.setObjectName('qleAQPassword')
+                    self.qleAQPassword.setPlaceholderText(oldAQPassword.placeholderText())
+                    self.qleAQPassword.setMaxLength(oldAQPassword.maxLength())
+                    self.qleAQPassword.setAlignment(oldAQPassword.alignment())
+                    self.qleAQPassword.setStyleSheet(oldAQPassword.styleSheet())
+                    self.qleAQPassword.setEnabled(oldAQPassword.isEnabled())
+                    layout.replaceWidget(oldAQPassword, self.qleAQPassword)
+                    oldAQPassword.deleteLater()
+
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "Replaced qleAQPassword with customPasswordEdit using layout")
+                else:
+                    if Config.debug:
+                        Logic.logMessage("WARN", "No index for qleAQPassword in layout, using geometry fallback")
+            else:
+                if Config.debug:
+                    Logic.logMessage("WARN", "No layout for qleAQPassword parent, using geometry fallback")
+
+            if not layout or index == -1:
+                geom = oldAQPassword.geometry()
+                self.qleAQPassword = Utils.customPasswordEdit(parent)
+                self.qleAQPassword.setObjectName('qleAQPassword')
+                self.qleAQPassword.setPlaceholderText(oldAQPassword.placeholderText())
+                self.qleAQPassword.setMaxLength(oldAQPassword.maxLength())
+                self.qleAQPassword.setAlignment(oldAQPassword.alignment())
+                self.qleAQPassword.setStyleSheet(oldAQPassword.styleSheet())
+                self.qleAQPassword.setEnabled(oldAQPassword.isEnabled())
+                self.qleAQPassword.setGeometry(geom)
+                oldAQPassword.hide()
+                oldAQPassword.deleteLater()
+                self.qleAQPassword.show()
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Replaced qleAQPassword with customPasswordEdit at geometry {geom.x()},{geom.y()},{geom.width()},{geom.height()}")
+        else:
+            if Config.debug:
+                Logic.logMessage("ERROR", "qleAQPassword not found, cannot replace")
+
         self.qleTNSNames = self.findChild(QLineEdit, 'qleTNSNames')
         self.rbBOP = self.findChild(QRadioButton, 'rbBOP')
         self.rbEOP = self.findChild(QRadioButton, 'rbEOP')
@@ -33,43 +82,123 @@ class uiOptions(QDialog):
         self.chkbDebug = self.findChild(QCheckBox, 'chkbDebug')
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
         self.btnShowPassword = self.findChild(QPushButton, 'btnShowPassword')
-        self.btnShowUSGSKey = self.findChild(QPushButton, 'btnShowUSGSKey')
-        self.qleOracleUser = self.findChild(QLineEdit, 'qleOracleUser')
-        self.qleOraclePassword = self.findChild(QLineEdit, 'qleOraclePassword')
         self.btnShowOraclePassword = self.findChild(QPushButton, 'btnShowOraclePassword')
+        self.qleOracleUser = self.findChild(QLineEdit, 'qleOracleUser')
+
+        # Replace qleOraclePassword with customPasswordEdit
+        oldOraclePassword = self.findChild(QLineEdit, 'qleOraclePassword')
+
+        if oldOraclePassword:
+            parent = oldOraclePassword.parent()
+            layout = parent.layout() if parent else None
+
+            if layout:
+                index = layout.indexOf(oldOraclePassword)
+
+                if index != -1:
+                    self.qleOraclePassword = Utils.customPasswordEdit(parent)
+                    self.qleOraclePassword.setObjectName('qleOraclePassword')
+                    self.qleOraclePassword.setPlaceholderText(oldOraclePassword.placeholderText())
+                    self.qleOraclePassword.setMaxLength(oldOraclePassword.maxLength())
+                    self.qleOraclePassword.setAlignment(oldOraclePassword.alignment())
+                    self.qleOraclePassword.setStyleSheet(oldOraclePassword.styleSheet())
+                    self.qleOraclePassword.setEnabled(oldOraclePassword.isEnabled())
+                    layout.replaceWidget(oldOraclePassword, self.qleOraclePassword)
+                    oldOraclePassword.deleteLater()
+
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "Replaced qleOraclePassword with customPasswordEdit using layout")
+                else:
+                    if Config.debug:
+                        Logic.logMessage("WARN", "No index for qleOraclePassword in layout, using geometry fallback")
+            else:
+                if Config.debug:
+                    Logic.logMessage("WARN", "No layout for qleOraclePassword parent, using geometry fallback")
+
+            if not layout or index == -1:
+                geom = oldOraclePassword.geometry()
+                self.qleOraclePassword = Utils.customPasswordEdit(parent)
+                self.qleOraclePassword.setObjectName('qleOraclePassword')
+                self.qleOraclePassword.setPlaceholderText(oldOraclePassword.placeholderText())
+                self.qleOraclePassword.setMaxLength(oldOraclePassword.maxLength())
+                self.qleOraclePassword.setAlignment(oldOraclePassword.alignment())
+                self.qleOraclePassword.setStyleSheet(oldOraclePassword.styleSheet())
+                self.qleOraclePassword.setEnabled(oldOraclePassword.isEnabled())
+                self.qleOraclePassword.setGeometry(geom)
+                oldOraclePassword.hide()
+                oldOraclePassword.deleteLater()
+                self.qleOraclePassword.show()
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Replaced qleOraclePassword with customPasswordEdit at geometry {geom.x()},{geom.y()},{geom.width()},{geom.height()}")
+        else:
+            if Config.debug:
+                Logic.logMessage("ERROR", "qleOraclePassword not found, cannot replace")
+
         self.chkbEnableSQL = self.findChild(QCheckBox, 'chkbEnableSQL')
+
+        # Replace qleUSGSAPIKey with customPasswordEdit
+        oldUSGSAPIKey = self.findChild(QLineEdit, 'qleUSGSAPIKey')
+
+        if oldUSGSAPIKey:
+            parent = oldUSGSAPIKey.parent()
+            layout = parent.layout() if parent else None
+
+            if layout:
+                index = layout.indexOf(oldUSGSAPIKey)
+
+                if index != -1:
+                    self.qleUSGSAPIKey = Utils.customPasswordEdit(parent)
+                    self.qleUSGSAPIKey.setObjectName('qleUSGSAPIKey')
+                    self.qleUSGSAPIKey.setPlaceholderText(oldUSGSAPIKey.placeholderText())
+                    self.qleUSGSAPIKey.setMaxLength(oldUSGSAPIKey.maxLength())
+                    self.qleUSGSAPIKey.setAlignment(oldUSGSAPIKey.alignment())
+                    self.qleUSGSAPIKey.setStyleSheet(oldUSGSAPIKey.styleSheet())
+                    self.qleUSGSAPIKey.setEnabled(oldUSGSAPIKey.isEnabled())
+                    layout.replaceWidget(oldUSGSAPIKey, self.qleUSGSAPIKey)
+                    oldUSGSAPIKey.deleteLater()
+
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "Replaced qleUSGSAPIKey with customPasswordEdit using layout")
+                else:
+                    if Config.debug:
+                        Logic.logMessage("WARN", "No index for qleUSGSAPIKey in layout, using geometry fallback")
+            else:
+                if Config.debug:
+                    Logic.logMessage("WARN", "No layout for qleUSGSAPIKey parent, using geometry fallback")
+
+            if not layout or index == -1:
+                geom = oldUSGSAPIKey.geometry()
+                self.qleUSGSAPIKey = Utils.customPasswordEdit(parent)
+                self.qleUSGSAPIKey.setObjectName('qleUSGSAPIKey')
+                self.qleUSGSAPIKey.setPlaceholderText(oldUSGSAPIKey.placeholderText())
+                self.qleUSGSAPIKey.setMaxLength(oldUSGSAPIKey.maxLength())
+                self.qleUSGSAPIKey.setAlignment(oldUSGSAPIKey.alignment())
+                self.qleUSGSAPIKey.setStyleSheet(oldUSGSAPIKey.styleSheet())
+                self.qleUSGSAPIKey.setEnabled(oldUSGSAPIKey.isEnabled())
+                self.qleUSGSAPIKey.setGeometry(geom)
+                oldUSGSAPIKey.hide()
+                oldUSGSAPIKey.deleteLater()
+                self.qleUSGSAPIKey.show()
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Replaced qleUSGSAPIKey with customPasswordEdit at geometry {geom.x()},{geom.y()},{geom.width()},{geom.height()}")
+        else:
+            if Config.debug:
+                Logic.logMessage("ERROR", "qleUSGSAPIKey not found, cannot replace")
+
+        self.btnShowUSGSKey = self.findChild(QPushButton, 'btnShowUSGSKey')
 
         # Set button style
         Utils.buttonStyle(self.btnShowPassword, None, None)
         Utils.buttonStyle(self.btnShowUSGSKey, None, None)
         Utils.buttonStyle(self.btnShowOraclePassword, None, None)
 
-        # Timers for password and key show
-        self.lastCharTimer = QTimer(self)
-        self.lastCharTimer.setSingleShot(True)
-        self.lastCharTimer.timeout.connect(self.maskLastChar)
-        self.lastCharTimerUSGS = QTimer(self)
-        self.lastCharTimerUSGS.setSingleShot(True)
-        self.lastCharTimerUSGS.timeout.connect(self.maskLastCharUSGS)
-        self.lastCharTimerOracle = QTimer(self)
-        self.lastCharTimerOracle.setSingleShot(True)
-        self.lastCharTimerOracle.timeout.connect(self.maskLastCharOracle)
-
         # Create events
         self.btnbOptions.accepted.connect(self.onSavePressed)
         self.btnShowPassword.clicked.connect(self.togglePasswordVisibility)
         self.btnShowUSGSKey.clicked.connect(self.toggleUSGSKeyVisibility)
         self.btnShowOraclePassword.clicked.connect(self.toggleOraclePasswordVisibility)
-
-        # Mask password and key
-        self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)
-        self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Password)
-        self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Password)
-
-        # Install event filters
-        self.qleAQPassword.installEventFilter(self)
-        self.qleUSGSAPIKey.installEventFilter(self)
-        self.qleOraclePassword.installEventFilter(self)
 
         # Populate UTC offset combobox
         self.cbUTCOffset.addItem("UTC-12:00 | Baker Island")
@@ -118,136 +247,51 @@ class uiOptions(QDialog):
     def showEvent(self, event):
         if Config.debug:
             Logic.logMessage("DEBUG", f"uiOptions showEvent")
-
         Utils.centerWindowToParent(self)
         super().showEvent(event)
         self.loadSettings()
         self.tabWidget.setCurrentIndex(0)
 
         if Config.debug:
-            Logic.logMessage("DEBUG", "uiOptions showEvent")
-
-    def eventFilter(self, obj, event):
-        if obj == self.qleAQPassword and event.type() == QEvent.Type.KeyPress:
-            if self.lastCharTimer.isActive():
-                self.lastCharTimer.stop()
-
-            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.lastCharTimer.start(500)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "AQ password keypress, showing temporarily")
-        elif obj == self.qleUSGSAPIKey and event.type() == QEvent.Type.KeyPress:
-            if self.lastCharTimerUSGS.isActive():
-                self.lastCharTimerUSGS.stop()
-
-            self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.lastCharTimerUSGS.start(500)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "USGS API key keypress, showing temporarily")
-        elif obj == self.qleOraclePassword and event.type() == QEvent.Type.KeyPress:
-            if self.lastCharTimerOracle.isActive():
-                self.lastCharTimerOracle.stop()
-
-            self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.lastCharTimerOracle.start(500)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Oracle password keypress, showing temporarily")
-        elif obj == self.qleAQPassword and event.type() == QEvent.Type.InputMethod:
-            if self.lastCharTimer.isActive():
-                self.lastCharTimer.stop()
-
-            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.lastCharTimer.start(500)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "AQ password paste, showing temporarily")
-        elif obj == self.qleUSGSAPIKey and event.type() == QEvent.Type.InputMethod:
-            if self.lastCharTimerUSGS.isActive():
-                self.lastCharTimerUSGS.stop()
-
-            self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.lastCharTimerUSGS.start(500)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "USGS API key paste, showing temporarily")
-        elif obj == self.qleOraclePassword and event.type() == QEvent.Type.InputMethod:
-            if self.lastCharTimerOracle.isActive():
-                self.lastCharTimerOracle.stop()
-
-            self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.lastCharTimerOracle.start(500)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Oracle password paste, showing temporarily")
-        return super().eventFilter(obj, event)
-
-    def maskLastChar(self):
-        self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", "AQ password re-masked")
-
-    def maskLastCharUSGS(self):
-        self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Password)
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", "USGS API key re-masked")
-
-    def maskLastCharOracle(self):
-        self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Password)
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", "Oracle password re-masked")
+            Logic.logMessage("DEBUG", "uiOptions showEvent")    
 
     def togglePasswordVisibility(self):
-        if self.lastCharTimer.isActive():
-            self.lastCharTimer.stop()
-
-        if self.qleAQPassword.echoMode() == QLineEdit.EchoMode.Password:
-            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Normal)
+        self.qleAQPassword.toggleReveal()
+        
+        if self.qleAQPassword.isRevealed():
             self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "AQ password shown via button")
         else:
-            self.qleAQPassword.setEchoMode(QLineEdit.EchoMode.Password)
             self.btnShowPassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "AQ password masked via button")
 
     def toggleUSGSKeyVisibility(self):
-        if self.lastCharTimerUSGS.isActive():
-            self.lastCharTimerUSGS.stop()
+        self.qleUSGSAPIKey.toggleReveal()
 
-        if self.qleUSGSAPIKey.echoMode() == QLineEdit.EchoMode.Password:
-            self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Normal)
+        if self.qleUSGSAPIKey.isRevealed():
             self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "USGS API key shown via button")
         else:
-            self.qleUSGSAPIKey.setEchoMode(QLineEdit.EchoMode.Password)
             self.btnShowUSGSKey.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "USGS API key masked via button")
 
     def toggleOraclePasswordVisibility(self):
-        if self.lastCharTimerOracle.isActive():
-            self.lastCharTimerOracle.stop()
+        self.qleOraclePassword.toggleReveal()
 
-        if self.qleOraclePassword.echoMode() == QLineEdit.EchoMode.Password:
-            self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Normal)
+        if self.qleOraclePassword.isRevealed():
             self.btnShowOraclePassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Visible.png')))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "Oracle password shown via button")
         else:
-            self.qleOraclePassword.setEchoMode(QLineEdit.EchoMode.Password)
             self.btnShowOraclePassword.setIcon(QIcon(Logic.resourcePath('ui/icons/Hidden.png')))
 
             if Config.debug:
@@ -279,27 +323,26 @@ class uiOptions(QDialog):
 
             if Config.debug:
                 Logic.logMessage("DEBUG", "utcOffset '{}' not found, set to default UTC+00:00".format(utcOffset))
-
         self.chkbRetroMode.setChecked(bool(config.get('retroMode', True)))
+
         if Config.debug:
-            Logic.logMessage("DEBUG", "Set chkbRetroMode to: {}".format(self.chkbRetroMode.isChecked()))
-            
+            Logic.logMessage("DEBUG", "Set chkbRetroMode to: {}".format(self.chkbRetroMode.isChecked()))            
         self.chkbQAQC.setChecked(bool(config.get('qaqc', True)))
+
         if Config.debug:
             Logic.logMessage("DEBUG", "Set chkbQAQC to: {}".format(self.chkbQAQC.isChecked()))
-
         self.chkbRawData.setChecked(bool(config.get('rawData', False)))
+
         if Config.debug:
             Logic.logMessage("DEBUG", "Set chkbRawData to: {}".format(self.chkbRawData.isChecked()))
-
         self.chkbDebug.setChecked(bool(config.get('debugMode', False)))
+
         if Config.debug:
             Logic.logMessage("DEBUG", "Set chkbDebug to: {}".format(self.chkbDebug.isChecked()))
-
         self.chkbEnableSQL.setChecked(bool(config.get('enableSQL', False)))
+
         if Config.debug:
             Logic.logMessage("DEBUG", "Set chkbEnableSQL to: {}".format(self.chkbEnableSQL.isChecked()))
-
         tnsPath = config.get('tnsNamesLocation', '')
 
         if tnsPath.startswith(Config.appRoot):
@@ -357,7 +400,6 @@ class uiOptions(QDialog):
                     Logic.logMessage("DEBUG", "Read existing user.config: {}".format(config))
             except Exception as e:
                 Logic.logMessage("ERROR", "Failed to load user.config for save: {}".format(e))
-
         previousRetro = config.get('retroMode', True)
         previousEnableSQL = config.get('enableSQL', False)
         newRetro = self.chkbRetroMode.isChecked()
