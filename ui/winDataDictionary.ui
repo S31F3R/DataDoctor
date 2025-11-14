@@ -85,6 +85,9 @@
          <property name="maxLength">
           <number>32767</number>
          </property>
+         <property name="placeholderText">
+          <string>Search...</string>
+         </property>
         </widget>
        </item>
        <item row="1" column="1">
