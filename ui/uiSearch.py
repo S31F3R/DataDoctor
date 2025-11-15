@@ -1,10 +1,8 @@
 # uiSearch.py
 
 import os
-import sqlite3
 from PyQt6.QtWidgets import QMainWindow, QLineEdit, QTableWidget, QMenu
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QIcon
 from PyQt6 import uic
 from core import Logic, Utils, Config
 
@@ -16,6 +14,7 @@ class uiSearch(QMainWindow):
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"Loading UI file: {uiPath}")
+            
             if not os.path.exists(uiPath):
                 Logic.logMessage("ERROR", f"UI file not found: {uiPath}")
         try:
