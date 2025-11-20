@@ -256,10 +256,12 @@ def combineParameters(data, newData):
 
 def getDataDictionaryItem(table, dataId):
     idCol = getColByName(table, 'dataID')
+
     if idCol == -1:
         return -1
     for r in range(table.rowCount()):
         item = table.item(r, idCol)
+
         if item and item.text().strip() == dataId.strip():
             return r
     return -1
@@ -267,6 +269,7 @@ def getDataDictionaryItem(table, dataId):
 def getColByName(table, name):
     for c in range(table.columnCount()):
         header = table.horizontalHeaderItem(c)
+
         if header and header.text().strip() == name:
             return c
     if Config.debug:
@@ -506,10 +509,12 @@ def qaqc(table, dataDictionaryTable, lookupIds):
         for r in range(table.rowCount()):
             for c in range(table.columnCount()):
                 item = table.item(r, c)
+
                 if item:
                     item.setBackground(QColor(0, 0, 0, 0))
         return
     now = datetime.now()
+
     for col, lookupId in enumerate(lookupIds):
         if Config.debug:
             Logic.logMessage("DEBUG", "qaqc: Processing column {} for lookupId {}".format(col, lookupId))
@@ -519,40 +524,52 @@ def qaqc(table, dataDictionaryTable, lookupIds):
         cutoffMin = None
         cutoffMax = None
         rateOfChange = None
+
         if rowIndex != -1:
             expectedMinCol = getColByName(dataDictionaryTable, 'expectedMin')
             expectedMinItem = dataDictionaryTable.item(rowIndex, expectedMinCol) if expectedMinCol != -1 else None
+
             if expectedMinItem and expectedMinItem.text().strip():
                 expectedMin = float(expectedMinItem.text().strip())
             expectedMaxCol = getColByName(dataDictionaryTable, 'expectedMax')
             expectedMaxItem = dataDictionaryTable.item(rowIndex, expectedMaxCol) if expectedMaxCol != -1 else None
+
             if expectedMaxItem and expectedMaxItem.text().strip():
                 expectedMax = float(expectedMaxItem.text().strip())
             cutoffMinCol = getColByName(dataDictionaryTable, 'cuttoffMin')
             cutoffMinItem = dataDictionaryTable.item(rowIndex, cutoffMinCol) if cutoffMinCol != -1 else None
+
             if cutoffMinItem and cutoffMinItem.text().strip():
                 cutoffMin = float(cutoffMinItem.text().strip())
             cutoffMaxCol = getColByName(dataDictionaryTable, 'cutoffMax')
             cutoffMaxItem = dataDictionaryTable.item(rowIndex, cutoffMaxCol) if cutoffMaxCol != -1 else None
+
             if cutoffMaxItem and cutoffMaxItem.text().strip():
                 cutoffMax = float(cutoffMaxItem.text().strip())
             rateOfChangeCol = getColByName(dataDictionaryTable, 'rateOfChange')
             rateOfChangeItem = dataDictionaryTable.item(rowIndex, rateOfChangeCol) if rateOfChangeCol != -1 else None
+
             if rateOfChangeItem and rateOfChangeItem.text().strip():
                 rateOfChange = float(rateOfChangeItem.text().strip())
         prevVal = None
+
         for r in range(table.rowCount()):
             item = table.item(r, col)
+
             if not item:
                 continue
             item.setData(Qt.ItemDataRole.ForegroundRole, None)
             cellText = item.text().strip()
+
             if cellText == '':
                 tsItem = table.verticalHeaderItem(r)
+
                 if tsItem:
                     tsStr = tsItem.text()
+
                     try:
                         tsDt = datetime.strptime(tsStr, '%m/%d/%y %H:%M:00')
+
                         if tsDt <= now:
                             item.setBackground(QColor(100, 195, 247))
                     except ValueError:
@@ -588,11 +605,13 @@ def qaqc(table, dataDictionaryTable, lookupIds):
 
 def customSortTable(table, col, dataDictionaryTable):
     pool = QThreadPool.globalInstance()
+
     if pool.activeThreadCount() > 0:
         return
     table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
     header = table.horizontalHeader()
     header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+
     if col not in Config.sortState:
         Config.sortState[col] = True
     else:
@@ -600,6 +619,7 @@ def customSortTable(table, col, dataDictionaryTable):
     ascending = Config.sortState[col]
     numRows = table.rowCount()
     rows = []
+
     for rowIdx in range(numRows):
         timestamp = table.verticalHeaderItem(rowIdx).text() if table.verticalHeaderItem(rowIdx) else ''
         rowData = [table.item(rowIdx, c).text() if table.item(rowIdx, c) else '' for c in range(table.columnCount())]
@@ -612,12 +632,15 @@ def customSortTable(table, col, dataDictionaryTable):
 
 def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col):
     table.setSortingEnabled(False)
+
     for rowIdx, row in enumerate(sortedRows):
         table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row[0]))
+
         for c in range(table.columnCount()):
             cellText = row[c + 1] if c + 1 < len(row) else ''
             item = QTableWidgetItem(cellText)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+
             if not Config.rawData and cellText.strip():
                 item.setText(Logic.valuePrecision(cellText))
             table.setItem(rowIdx, c, item)
@@ -625,12 +648,14 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
         Logic.logMessage("DEBUG", "Updated table after sort; widths not locked.")
     headerLabels = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
     dataIds = [label.split('\n')[-1].strip() for label in headerLabels]
+
     if Config.qaqcEnabled:
         qaqc(table, dataDictionaryTable, dataIds)
     else:
         for r in range(table.rowCount()):
             for c in range(table.columnCount()):
                 item = table.item(r, c)
+
                 if item:
                     item.setBackground(QColor(0, 0, 0, 0))
         if Config.debug:
@@ -642,6 +667,7 @@ def timestampSortTable(table, dataDictionaryTable):
         Logic.logMessage("DEBUG", "timestampSortTable: Starting sort by timestamps.")
     numRows = table.rowCount()
     rows = []
+
     for rowIdx in range(numRows):
         timestamp = table.verticalHeaderItem(rowIdx).text() if table.verticalHeaderItem(rowIdx) else ''
         rowData = [table.item(rowIdx, c).text() if table.item(rowIdx, c) else '' for c in range(table.columnCount())]
@@ -656,6 +682,7 @@ def timestampSortTable(table, dataDictionaryTable):
     worker = sortWorker(rows, -1, True)
     worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, -1))
     pool.start(worker)
+    
     if Config.debug:
         Logic.logMessage("DEBUG", "Timestamp sort worker started.")
 
