@@ -33,6 +33,10 @@
         -/AQUARIUS/Publish/v2/GetParameterList?format=json
     -Need to combine aquarius parameters to HDB data types for formatting rules
 -modify and test for day, month, year, and water year queries
+    -Aquarius daily from UC is comingin as 2300, that's whack
+    -Data review tool shows 00:00, so my query might be whack
+    -Issue is tied to how Aquarius handles different timezones. Daily data is getting offset based on the location timezone and the UTC offset sent in query
+     meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme
