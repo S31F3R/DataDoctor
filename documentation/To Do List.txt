@@ -5,6 +5,9 @@
 -Update tab index on all windows
 -Aquairus context menu is broken when querying Aquarius only data
     -Aquarius only with overlay works
+-HDB headers are using commonName only, needs to be commonName - datatype
+-Data Check (Overlay) crashes if right clicking on a cell with USGS-NWIS data
+-Save quick look dialog needs to be wider by about 60px
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
@@ -37,6 +40,7 @@
     -Data review tool shows 00:00, so my query might be whack
     -Issue is tied to how Aquarius handles different timezones. Daily data is getting offset based on the location timezone and the UTC offset sent in query
      meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
+-Max/min context menu on headers need to show timestamp for max/min value
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme
