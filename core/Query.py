@@ -314,10 +314,12 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
                 if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
                     fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USGS in dict, header {i}: {fullLabel}")
                 else:
                     fullLabel = f"{baseLabel} \n{intervalStr}"
+                    
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
             elif database == 'AQUARIUS':
@@ -333,6 +335,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                         Logic.logMessage("DEBUG", f"buildTable: USBR in dict with MRID, header {i}: {fullLabel}")
                 else:
                     fullLabel = f"{baseLabel} \n{dataId}"
+
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USBR in dict, header {i}: {fullLabel}")
         else:
@@ -361,10 +364,12 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             else:
                 if mrid and mrid != '0':
                     fullLabel = f"{dataId}-{mrid} \n{intervalStr}"
+
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USBR not in dict with MRID, header {i}: {fullLabel}")
                 else:
                     fullLabel = f"{dataId} \n{intervalStr}"
+
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USBR not in dict, header {i}: {fullLabel}")
         processedHeaders.append(fullLabel)
