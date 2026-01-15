@@ -8,6 +8,9 @@
 -HDB headers are using commonName only, needs to be commonName - datatype
 -Data Check (Overlay) crashes if right clicking on a cell with USGS-NWIS data
 -Save quick look dialog needs to be wider by about 60px
+-Changes to multiple tabs in options don't all save
+    -Tested this with general and Aquarius tab. General was selected when hit save, it saved but Aquarius tab did not. Might be tied to turning retro mode on
+-Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
