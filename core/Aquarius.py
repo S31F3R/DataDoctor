@@ -75,7 +75,6 @@ def apiRead(dataIDs, startDate, endDate, interval):
                 if Config.debug:
                     Logic.logMessage("DEBUG", "No certificate found at '{}', skipping to unverified.".format(certPath))
                 continue
-
             verifyMode = certPath if attempt == 'custom_cert' else False if attempt == 'unverified' else True
             authResponse = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=authData, verify=verifyMode)
             authResponse.raise_for_status()
@@ -95,7 +94,6 @@ def apiRead(dataIDs, startDate, endDate, interval):
     else:
         Logic.logMessage("ERROR", f"Aquarius authentication failed after all attempts.")
         return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
-
     token = authResponse.text.strip('"')
     headers = {'X-Authentication-Token': token}
 
@@ -173,7 +171,6 @@ def apiRead(dataIDs, startDate, endDate, interval):
             Logic.logMessage("WARN", f"Aquarius fetch failed for UID '{uid}' in thread {threadId}, range {subStart} to {subEnd}: {e}")
             resultQueue.put((uid, {'data': [], 'label': uid, 'rawResponse': {}}))
             return
-
         location = readFile.get('LocationIdentifier', uid)
         label = readFile.get('Label', '')
         fullLabel = f'{label} \n{location}'

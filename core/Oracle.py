@@ -45,12 +45,13 @@ class oracleConnection:
             os.environ['LD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('LD_LIBRARY_PATH', '')}"
         elif system == "darwin":
             os.environ['DYLD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
-
         oracledb.init_oracle_client(lib_dir=str(clientDir))
+
         if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
 
         # Setup TNS_ADMIN: use env if exists (user's tnsnames and sqlnet if present), program's dir if not (no copy)
         envTns = os.environ.get('TNS_ADMIN')
+
         if envTns:
             os.environ['TNS_ADMIN'] = envTns
             if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Using env TNS_ADMIN: {envTns} (no copy)")

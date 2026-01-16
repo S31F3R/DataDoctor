@@ -275,6 +275,7 @@ def getColByName(table, name):
     if Config.debug:
         Logic.logMessage("DEBUG", f"Available DataDictionary columns: {[table.horizontalHeaderItem(c).text().strip() for c in range(table.columnCount()) if table.horizontalHeaderItem(c)]}")
     Logic.logMessage("WARN", "IColumn not found in DataDictionary: {name}")  
+    
     return -1
 
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None):
