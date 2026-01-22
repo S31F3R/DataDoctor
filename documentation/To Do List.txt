@@ -13,6 +13,8 @@
 -Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
 -Building rows works on the data doctor status query window, but only when 1 database source is queried
 -Double Aquariys query doesn't yield individual meta data when using Overlay
+-Aquarius data might be rounding. Need to validate flow from Aquarius to HDB, see what's causing the values to be different. Issue looks to be on the Aquarius API side
+    -UPDATE: This is tied to the raw data option. Aquarius data gets formatted but HDB does not. Need to have HDB format, based on rules when raw data is unchecked
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
