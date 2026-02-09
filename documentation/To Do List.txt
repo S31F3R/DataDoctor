@@ -15,6 +15,8 @@
 -Double Aquariys query doesn't yield individual meta data when using Overlay
 -Aquarius data might be rounding. Need to validate flow from Aquarius to HDB, see what's causing the values to be different. Issue looks to be on the Aquarius API side
     -UPDATE: This is tied to the raw data option. Aquarius data gets formatted but HDB does not. Need to have HDB format, based on rules when raw data is unchecked
+-HDB query won't show meta data if there is a value in rbase but not interval. Need to make it flag not in interval but show rbase data
+-QAQC is not working in overlaly mode, need to fix this and base it off of output data, meaning data displayed in column
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
@@ -49,6 +51,7 @@
     -Issue is tied to how Aquarius handles different timezones. Daily data is getting offset based on the location timezone and the UTC offset sent in query
      meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
 -Max/min context menu on headers need to show timestamp for max/min value
+-Aquarius meta data needs to show Aquarius label as first item. Lable currently isn't setup
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme
