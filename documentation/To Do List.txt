@@ -20,6 +20,7 @@
     -Sorting by any column will fix this but break overlay logic. Need to set a priority order so both logic can run. Use QAQC logic first, then override with overlay logic
 -Beginning period offset doesn't seem to work on USBR data
 -Options saving is buggy. Not able to pin point what the issue is. Validate EVERYTHING in all options tabs gets saved when save button is hit
+    -Password code (at least in USBR) will wipe out password if copy and pasted in while masking is on. If masking is off, it seems to work
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
