@@ -18,6 +18,8 @@
 -HDB query won't show meta data if there is a value in rbase but not interval. Need to make it flag not in interval but show rbase data
 -QAQC is not working in overlaly mode, need to fix this and base it off of output data, meaning data displayed in column
     -Sorting by any column will fix this but break overlay logic. Need to set a priority order so both logic can run. Use QAQC logic first, then override with overlay logic
+-Beginning period offset doesn't seem to work on USBR data
+-Options saving is buggy. Not able to pin point what the issue is. Validate EVERYTHING in all options tabs gets saved when save button is hit
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
