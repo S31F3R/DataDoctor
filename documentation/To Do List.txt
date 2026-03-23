@@ -21,6 +21,7 @@
 -Beginning period offset doesn't seem to work on USBR data
 -Options saving is buggy. Not able to pin point what the issue is. Validate EVERYTHING in all options tabs gets saved when save button is hit
     -Password code (at least in USBR) will wipe out password if copy and pasted in while masking is on. If masking is off, it seems to work
+-Remove large data set warning
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
