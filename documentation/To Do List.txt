@@ -22,6 +22,7 @@
 -Options saving is buggy. Not able to pin point what the issue is. Validate EVERYTHING in all options tabs gets saved when save button is hit
     -Password code (at least in USBR) will wipe out password if copy and pasted in while masking is on. If masking is off, it seems to work
 -Remove large data set warning
+-Need to catch "wrong user/password" for HDB login so multiple attempts don't lock the account
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
