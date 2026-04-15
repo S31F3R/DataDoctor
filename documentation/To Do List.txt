@@ -23,6 +23,7 @@
     -Password code (at least in USBR) will wipe out password if copy and pasted in while masking is on. If masking is off, it seems to work
 -Remove large data set warning
 -Need to catch "wrong user/password" for HDB login so multiple attempts don't lock the account
+-Figure out how to change taskbar icon
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
