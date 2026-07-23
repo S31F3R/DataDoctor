@@ -1,6 +1,4 @@
 ####### CURRENT BUGS #######
--Header sort or undo button break Overlay code formatting
--Need a export complete message
 -Update tab index on all windows
 -Aquairus context menu is broken when querying Aquarius only data
     -Aquarius only with overlay works
@@ -15,10 +13,6 @@
 -Aquarius data might be rounding. Need to validate flow from Aquarius to HDB, see what's causing the values to be different. Issue looks to be on the Aquarius API side
     -UPDATE: This is tied to the raw data option. Aquarius data gets formatted but HDB does not. Need to have HDB format, based on rules when raw data is unchecked
 -HDB query won't show meta data if there is a value in rbase but not interval. Need to make it flag not in interval but show rbase data
--QAQC is not working in overlaly mode, need to fix this and base it off of output data, meaning data displayed in column
-    -Sorting by any column will fix this but break overlay logic. Need to set a priority order so both logic can run. Use QAQC logic first, then override with overlay logic
--Options saving is buggy. Not able to pin point what the issue is. Validate EVERYTHING in all options tabs gets saved when save button is hit
-    -Password code (at least in USBR) will wipe out password if copy and pasted in while masking is on. If masking is off, it seems to work
 -Remove large data set warning
 -Need to catch "wrong user/password" for HDB login so multiple attempts don't lock the account
 -Figure out how to change taskbar icon
