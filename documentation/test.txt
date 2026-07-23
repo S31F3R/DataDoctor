@@ -7,16 +7,12 @@ Still need testing (code changed; not yet confirmed):
         (with Timestamp column from row headers).
      b. Enable SQL, run a SQL query, leave SQL tab selected → Export.
      EXPECT: exports sqlTable (column headers only, no forced Timestamp).
-
-2) Large dataset warning removed
-   Steps: Query a range that returns > 10,000 rows (if practical).
-   EXPECT: no Yes/No "Large Dataset Warning" dialog; table builds (may be slow).
+     2026-07-23: This still doesn't work. Export to .csv pops up with a window saying no data to export. This was tested on a fresh open with just the SQL Query Builder window open.
+     Ran test again with Data Query tab open. Selected SQL Query Builder tab, hit export to csv. Window came up to show exported csv and save location. Saved file, opened it. The data
+     was the data from Data Query tab, not the currently selected tab.
 
 3) HDB headers = commonName - dataType
    Steps: Query USBR/HDB series that exist in the data dictionary with a dataType.
    EXPECT: header top line like "Some Site - Flow" (commonName - dataType),
            not commonName alone.
-
-4) Stacked header sort (regression)
-   Steps: Run a query, click the same column header several times.
-   EXPECT: one sort flip per click (not multi-sort / glitchy multiple sorts).
+      2026-07-23: This isn't working still
