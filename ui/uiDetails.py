@@ -433,32 +433,126 @@ class uiDetails(QWidget):
             Logic.logMessage("DEBUG", f"Populated USBR metadata with {len(tags)} tags for {matchKey}")
     
     def populateUSGS(self, timestampStr, response, table=None):
-        """Internal method to populate for USGS response (placeholder based on typical structure)."""
+        """
+        Populate USGS metadata (2-column Type/Value, same style as USBR).
+
+        OGC (new time_series_id method):
+          response = {
+            'kind': 'ogc',
+            'seriesMeta': {friendly tags...},
+            'points': [{Timestamp, Value, ...}, ...]
+          }
+
+        Legacy (numeric methodID): blanks / note only — no rich metadata stored.
+        """
         if table is None:
             table = self.detailsTable
-        
-        # Assuming response is dict with 'value', 'dateTime', 'qualifiers' (list), etc.
-        # Parse timestamp for comparisons if needed
+
+        # Series-level tags (OGC time-series-metadata + monitoring-locations)
+        seriesTags = [
+            "Time Series ID",
+            "Monitoring Location ID",
+            "Site Name",
+            "Site Type",
+            "Site Type Code",
+            "Agency",
+            "Parameter Name",
+            "Parameter Description",
+            "Parameter Code",
+            "Statistic ID",
+            "Unit of Measure",
+            "Sublocation",
+            "Computation",
+            "Computation Period",
+            "Series Begin (UTC)",
+            "Series End (UTC)",
+            "State",
+            "County",
+            "HUC",
+            "Time Zone",
+            "Uses Daylight Savings",
+            "Altitude",
+            "Vertical Datum",
+            "Data Gap Interval",
+            "Web Description",
+            "Thresholds",
+            "Series Last Modified",
+        ]
+        # Point-level tags for the clicked timestamp
+        pointTags = [
+            "Value",
+            "Time (UTC)",
+            "Unit of Measure",
+            "Approval Status",
+            "Qualifier",
+            "Last Modified",
+            "Parameter Code",
+            "Statistic ID",
+            "Time Series ID",
+            "Monitoring Location ID",
+        ]
+
         try:
-            timestamp = self.parseDateTime(timestampStr)
-        except ValueError as e:
-            Logic.logMessage("ERROR", f"Failed to parse timestamp {timestampStr}: {e}")
-            return
-        
-        # Find matching point (assuming 'timeSeries' or similar; simplify to direct fields for placeholder)
-        value = response.get('value', 'N/A')
-        dateTime = response.get('dateTime', 'N/A')
-        
-        # Add basic rows
-        self.addRow("Parameter Code", response.get('parameterCd', 'N/A'), table=table)
-        self.addRow("Value", str(value), dateTime, table=table)
-        
-        # Array for qualifiers (similar to Aquarius)
-        self.addArrayRows("Qualifier", response.get('qualifiers', []), timestamp, 
-                        lambda item: f"Code: {item.get('code', 'N/A')} | Description: {item.get('description', 'N/A')}", table=table)
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", "populateUSGS: Populated basic USGS metadata (placeholder)")
+            if not isinstance(response, dict):
+                self.addRow("Note", "No USGS metadata available", table=table)
+                return
+
+            kind = (response.get("kind") or "").lower()
+            seriesMeta = response.get("seriesMeta") or {}
+            points = response.get("points") or []
+
+            # Legacy numeric methodID path: keep menu usable, show blanks
+            if kind == "legacy" or (not seriesMeta and not points and kind != "ogc"):
+                self.addRow("Note", "Metadata not available for legacy USGS method IDs", table=table)
+                for tag in seriesTags + pointTags:
+                    self.addRow(tag, "", table=table)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "populateUSGS: legacy/blank metadata shown")
+                return
+
+            # Match point by table vertical-header timestamp
+            matchingPoint = None
+            if timestampStr and isinstance(points, list):
+                matchingPoint = next(
+                    (p for p in points if isinstance(p, dict) and p.get("Timestamp") == timestampStr),
+                    None,
+                )
+
+            for tag in seriesTags:
+                value = seriesMeta.get(tag)
+                valStr = str(value) if value is not None else ""
+                self.addRow(tag, valStr, table=table)
+
+            if matchingPoint:
+                for tag in pointTags:
+                    value = matchingPoint.get(tag)
+                    # Respect rawData for numeric Value display
+                    if tag == "Value" and value not in (None, "") and not Config.rawData:
+                        try:
+                            valStr = Logic.valuePrecision(float(value))
+                        except (ValueError, TypeError):
+                            valStr = str(value)
+                    else:
+                        valStr = str(value) if value is not None else ""
+                    self.addRow(tag, valStr, table=table)
+            else:
+                self.addRow("Note", "No point metadata for this timestamp", table=table)
+                for tag in pointTags:
+                    self.addRow(tag, "", table=table)
+
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"populateUSGS: kind={kind}, series fields={len(seriesMeta)}, "
+                    f"points={len(points) if isinstance(points, list) else 0}, "
+                    f"matched={matchingPoint is not None}",
+                )
+        except Exception as e:
+            Logic.logException("populateUSGS failed", e)
+            try:
+                self.addRow("Note", f"Failed to load USGS metadata: {e}", table=table)
+            except Exception:
+                pass
 
     def addRow(self, metaType, details, startTime="", endTime="", table=None):
         """Add a single row to the table (defaults for 2-column modes)."""

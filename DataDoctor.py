@@ -658,8 +658,19 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
             
-            # Normalize seriesLabel for lookup to match seriesResponses keys
-            normalizedLabel = seriesLabel.replace('\n', ' ').strip() if db == 'AQUARIUS' else seriesLabel.split('\n')[-1].strip()
+            # Normalize lookup key for seriesResponses.
+            # USGS headers are "site-param \\n interval" — use full DataID from columnMetadata.
+            if db == 'AQUARIUS':
+                normalizedLabel = seriesLabel.replace('\n', ' ').strip()
+            elif db == 'USGS-NWIS':
+                if isinstance(lookupId, str) and lookupId:
+                    normalizedLabel = lookupId.strip()
+                else:
+                    # Fallback: DataID is first segment of queryInfos
+                    qInfo = (self.columnMetadata[col].get('queryInfos') or ['|'])[0] if col < len(self.columnMetadata) else '|'
+                    normalizedLabel = qInfo.split('|')[0].strip() if qInfo else seriesLabel.split('\n')[-1].strip()
+            else:
+                normalizedLabel = seriesLabel.split('\n')[-1].strip()
             response = self.seriesResponses.get(normalizedLabel) if normalizedLabel else None
             
             if Config.debug:
@@ -686,12 +697,14 @@ class uiMain(QMainWindow):
                     
                     if Config.debug:
                         Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USBR")
-                elif db == 'USGS-NWIS' and isinstance(response, dict):
+                elif db == 'USGS-NWIS':
+                    # Always offer details for internal USGS (OGC full meta, legacy blanks)
+                    usgsResponse = response if isinstance(response, dict) else {"kind": "legacy", "seriesMeta": {}, "points": []}
                     detailsAction = menu.addAction("Show details")
-                    detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USGS', interval))
+                    detailsAction.triggered.connect(lambda r=row, c=col, ts=timestampStr, sl=seriesLabel, resp=usgsResponse, iv=interval: self.showMetadataDetails(r, c, ts, sl, resp, 'USGS', iv))
                     
                     if Config.debug:
-                        Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USGS")
+                        Logic.logMessage("DEBUG", f"showCellContextMenu: Added 'Show details' for USGS (kind={usgsResponse.get('kind')})")
             
             # Add single action for overlay columns
             isOverlay = colType == 'overlay'
@@ -742,16 +755,25 @@ class uiMain(QMainWindow):
                     else:
                         # Use seriesResponses for DB tabs
                         if i-1 < len(lookupIds): # i-1 since overlay is first
-                            normLabel = lookupIds[i-1].replace('\n', ' ').strip()
+                            lid = lookupIds[i-1]
+                            if isinstance(lid, list):
+                                lid = lid[0] if lid else ''
+                            normLabel = str(lid).replace('\n', ' ').strip()
                             dbResponse = self.seriesResponses.get(normLabel, {})
+                            # USGS-NWIS: ensure details never receive a non-dict (overlay crash guard)
+                            if isinstance(t, str) and t.upper().startswith('USGS') and not isinstance(dbResponse, dict):
+                                dbResponse = {"kind": "legacy", "seriesMeta": {}, "points": []}
                             responsesList.append(dbResponse)
                             
                             # Extract interval from queryInfos
                             qInfo = meta['queryInfos'][i-1] if i-1 < len(meta['queryInfos']) else '|'
-                            dbInterval = qInfo.split('|')[1] if '|' in qInfo else 'HOUR'
+                            if isinstance(qInfo, list):
+                                qInfo = qInfo[0] if qInfo else '|'
+                            dbInterval = str(qInfo).split('|')[1] if '|' in str(qInfo) else 'HOUR'
                             intervalsList.append(dbInterval)
                         else:
-                            responsesList.append({})
+                            blank = {"kind": "legacy", "seriesMeta": {}, "points": []} if isinstance(t, str) and t.upper().startswith('USGS') else {}
+                            responsesList.append(blank)
                             intervalsList.append('HOUR')
                             if Config.debug:
                                 Logic.logMessage("DEBUG", f"showMetadataDetails: No lookupId/queryInfo for type {t} at index {i-1}")

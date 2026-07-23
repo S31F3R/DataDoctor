@@ -125,7 +125,10 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
             classified = classifyUid(uid)
             if not classified or classified[0] != "legacy":
                 Logic.logMessage("WARN", "Invalid or non-numeric method uid skipped in legacy path: {}".format(uid))
-                resultDict[uid] = []
+                resultDict[uid] = {
+                    "data": [],
+                    "rawResponse": emptyLegacyRawResponse(),
+                }
                 continue
             _, site, method, param = classified
             params.append(param)
@@ -210,13 +213,19 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
 
         if timeSeriesList is None:
             for uid in groupUids:
-                resultDict.setdefault(uid, [])
+                resultDict.setdefault(
+                    uid,
+                    {"data": [], "rawResponse": emptyLegacyRawResponse()},
+                )
             continue
 
         for uid in groupUids:
             site, method, param = uidMap.get(uid, (None, None, None))
             if not site:
-                resultDict[uid] = []
+                resultDict[uid] = {
+                    "data": [],
+                    "rawResponse": emptyLegacyRawResponse(),
+                }
                 continue
 
             matchingSeries = None
@@ -247,7 +256,10 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                         uid, site, param, method
                     ),
                 )
-                resultDict[uid] = []
+                resultDict[uid] = {
+                    "data": [],
+                    "rawResponse": emptyLegacyRawResponse(),
+                }
                 continue
 
             dataPoints = matchingSeries["values"][0]["value"]
@@ -272,7 +284,10 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                         "Invalid point ts skipped for '{}': {} - {}".format(uid, dateTimeStr, e),
                     )
 
-            resultDict[uid] = Query.gapCheck(timestamps, outputData, uid)
+            resultDict[uid] = {
+                "data": Query.gapCheck(timestamps, outputData, uid),
+                "rawResponse": emptyLegacyRawResponse(),
+            }
 
     return resultDict
 
@@ -410,18 +425,152 @@ def fetchFeatures(url, headers):
 
 
 def buildCollectionUrl(collection, timeSeriesIds, timeStart, timeEnd):
+    # Request full feature properties (needed for internal query context-menu metadata).
+    # skipGeometry keeps payloads smaller; site lat/lon comes from monitoring-locations.
     params = {
         "f": "json",
         "time_series_id": ",".join(timeSeriesIds),
         "time": "{}/{}".format(timeStart, timeEnd),
         "limit": pageLimit,
         "skipGeometry": "true",
-        "properties": "time_series_id,time,value",
     }
     return "{}/{}/items?{}".format(baseUrl, collection, urlencode(params))
 
 
+def emptyLegacyRawResponse():
+    """Legacy (numeric methodID) path: no rich metadata — details UI shows blanks."""
+    return {"kind": "legacy", "seriesMeta": {}, "points": []}
+
+
+def emptyOgcRawResponse():
+    return {"kind": "ogc", "seriesMeta": {}, "points": []}
+
+
+def formatThresholds(thresholds):
+    """Turn time-series-metadata thresholds array into a short display string."""
+    if not thresholds:
+        return ""
+    lines = []
+    try:
+        for item in thresholds:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("Name") or item.get("name") or "Threshold"
+            periods = item.get("Periods") or item.get("periods") or []
+            ref = ""
+            if periods and isinstance(periods[0], dict):
+                refVal = periods[0].get("ReferenceValue")
+                if refVal is not None:
+                    ref = str(refVal)
+            if ref:
+                lines.append("{}: {}".format(name, ref))
+            else:
+                lines.append(str(name))
+    except Exception:
+        return ""
+    return "; ".join(lines)
+
+
+def fetchJsonFeatures(url, headers):
+    """GET a single OGC items page and return feature list (best-effort)."""
+    try:
+        response = requests.get(url, headers=headers, timeout=requestTimeout)
+        if response.status_code == 429:
+            time.sleep(2)
+            response = requests.get(url, headers=headers, timeout=requestTimeout)
+        response.raise_for_status()
+        payload = response.json()
+        return payload.get("features") or []
+    except Exception as e:
+        Logic.logMessage("WARN", "USGS metadata fetch failed for {}: {}".format(url, e))
+        return []
+
+
+def fetchTimeSeriesMetadata(tsid, headers, cache):
+    """Series-level metadata from time-series-metadata collection."""
+    key = (tsid or "").lower()
+    if key in cache:
+        return cache[key]
+    props = {}
+    if key:
+        url = "{}/time-series-metadata/items?{}".format(
+            baseUrl, urlencode({"f": "json", "id": key, "limit": "1"})
+        )
+        features = fetchJsonFeatures(url, headers)
+        if features:
+            props = features[0].get("properties") or {}
+    cache[key] = props
+    return props
+
+
+def fetchMonitoringLocation(site, headers, cache):
+    """Site-level metadata from monitoring-locations collection."""
+    site = (site or "").strip()
+    mid = site if site.upper().startswith("USGS-") else "USGS-{}".format(site)
+    if mid in cache:
+        return cache[mid]
+    props = {}
+    if site:
+        url = "{}/monitoring-locations/items?{}".format(
+            baseUrl, urlencode({"f": "json", "id": mid, "limit": "1"})
+        )
+        features = fetchJsonFeatures(url, headers)
+        if features:
+            props = features[0].get("properties") or {}
+    cache[mid] = props
+    return props
+
+
+def buildSeriesMeta(site, tsid, param, seriesProps, locationProps):
+    """Friendly series/site tags for context menu (USBR-style Type/Value rows)."""
+    seriesProps = seriesProps or {}
+    locationProps = locationProps or {}
+    mid = locationProps.get("id") or seriesProps.get("monitoring_location_id") or (
+        "USGS-{}".format(site) if site else ""
+    )
+    return {
+        "Time Series ID": seriesProps.get("id") or tsid or "",
+        "Monitoring Location ID": mid or "",
+        "Site Name": locationProps.get("monitoring_location_name") or "",
+        "Site Type": locationProps.get("site_type") or "",
+        "Site Type Code": locationProps.get("site_type_code") or "",
+        "Agency": locationProps.get("agency_name") or locationProps.get("agency_code") or "",
+        "Parameter Name": seriesProps.get("parameter_name") or "",
+        "Parameter Description": seriesProps.get("parameter_description") or "",
+        "Parameter Code": seriesProps.get("parameter_code") or param or "",
+        "Statistic ID": seriesProps.get("statistic_id") or "",
+        "Unit of Measure": seriesProps.get("unit_of_measure") or "",
+        "Sublocation": seriesProps.get("sublocation_identifier") or "",
+        "Computation": seriesProps.get("computation_identifier") or "",
+        "Computation Period": seriesProps.get("computation_period_identifier") or "",
+        "Series Begin (UTC)": seriesProps.get("begin_utc") or seriesProps.get("begin") or "",
+        "Series End (UTC)": seriesProps.get("end_utc") or seriesProps.get("end") or "",
+        "State": locationProps.get("state_name") or seriesProps.get("state_name") or "",
+        "County": locationProps.get("county_name") or "",
+        "HUC": locationProps.get("hydrologic_unit_code")
+        or seriesProps.get("hydrologic_unit_code")
+        or "",
+        "Time Zone": locationProps.get("time_zone_abbreviation") or "",
+        "Uses Daylight Savings": locationProps.get("uses_daylight_savings") or "",
+        "Altitude": ""
+        if locationProps.get("altitude") is None
+        else str(locationProps.get("altitude")),
+        "Vertical Datum": locationProps.get("vertical_datum_name")
+        or locationProps.get("vertical_datum")
+        or "",
+        "Data Gap Interval": seriesProps.get("data_gap_interval") or "",
+        "Web Description": seriesProps.get("web_description") or "",
+        "Thresholds": formatThresholds(seriesProps.get("thresholds")),
+        "Series Last Modified": seriesProps.get("last_modified") or "",
+    }
+
+
 def featuresToOutput(features, timeSeriesId, interval, offsetHours):
+    """
+    Convert OGC features to:
+      - output lines: 'mm/dd/yy HH:MM:00,value'
+      - point meta list: dicts with Timestamp + per-observation fields
+    """
     points = []
     for feature in features:
         props = feature.get("properties") or {}
@@ -439,7 +588,23 @@ def featuresToOutput(features, timeSeriesId, interval, offsetHours):
             else:
                 localDt = utcToLocal(apiDt, offsetHours)
             formattedTs = localDt.strftime("%m/%d/%y %H:%M:00")
-            points.append((localDt, "{},{}".format(formattedTs, value)))
+            qualifier = props.get("qualifier")
+            if qualifier is None:
+                qualifier = ""
+            pointMeta = {
+                "Timestamp": formattedTs,
+                "Value": str(value),
+                "Time (UTC)": str(timeStr),
+                "Unit of Measure": props.get("unit_of_measure") or "",
+                "Approval Status": props.get("approval_status") or "",
+                "Qualifier": str(qualifier) if qualifier != "" else "",
+                "Last Modified": props.get("last_modified") or "",
+                "Parameter Code": props.get("parameter_code") or "",
+                "Statistic ID": props.get("statistic_id") or "",
+                "Time Series ID": tsid or "",
+                "Monitoring Location ID": props.get("monitoring_location_id") or "",
+            }
+            points.append((localDt, "{},{}".format(formattedTs, value), pointMeta))
         except (ValueError, TypeError) as e:
             Logic.logMessage(
                 "WARN",
@@ -449,10 +614,15 @@ def featuresToOutput(features, timeSeriesId, interval, offsetHours):
             )
 
     points.sort(key=lambda p: p[0])
-    deduped = {}
-    for dt, line in points:
-        deduped[dt] = line
-    return [deduped[k] for k in sorted(deduped.keys())]
+    dedupedLines = {}
+    dedupedMeta = {}
+    for dt, line, meta in points:
+        dedupedLines[dt] = line
+        dedupedMeta[dt] = meta
+    orderedKeys = sorted(dedupedLines.keys())
+    outputData = [dedupedLines[k] for k in orderedKeys]
+    pointList = [dedupedMeta[k] for k in orderedKeys]
+    return outputData, pointList
 
 
 def apiReadNewMethod(dataID, interval, startDate, endDate):
@@ -504,9 +674,28 @@ def apiReadNewMethod(dataID, interval, startDate, endDate):
         uidMap[uid] = (site, tsid, param)
 
     validUids = [u for u, p in uidMap.items() if p]
-    resultDict = {uid: [] for uid in dataID}
+    resultDict = {
+        uid: {"data": [], "rawResponse": emptyOgcRawResponse()} for uid in dataID
+    }
     if not validUids:
         return resultDict
+
+    seriesCache = {}
+    locationCache = {}
+
+    def packResult(uid, site, tsid, param, outputData, pointList):
+        seriesProps = fetchTimeSeriesMetadata(tsid, headers, seriesCache)
+        locationProps = fetchMonitoringLocation(site, headers, locationCache)
+        seriesMeta = buildSeriesMeta(site, tsid, param, seriesProps, locationProps)
+        rawResponse = {
+            "kind": "ogc",
+            "seriesMeta": seriesMeta,
+            "points": pointList or [],
+        }
+        resultDict[uid] = {
+            "data": Query.gapCheck(timestamps, outputData, uid),
+            "rawResponse": rawResponse,
+        }
 
     if collection == "daily":
         timeStart = startLocal.strftime("%Y-%m-%d")
@@ -520,8 +709,10 @@ def apiReadNewMethod(dataID, interval, startDate, endDate):
                 Logic.logMessage("DEBUG", "Fetching USGS OGC daily URL: {}".format(url))
             features = fetchFeatures(url, headers)
             for uid in batchUids:
-                _, tsid, _ = uidMap[uid]
-                outputData = featuresToOutput(features, tsid, interval, offsetHours)
+                site, tsid, param = uidMap[uid]
+                outputData, pointList = featuresToOutput(
+                    features, tsid, interval, offsetHours
+                )
                 if Config.debug:
                     Logic.logMessage(
                         "DEBUG",
@@ -529,13 +720,13 @@ def apiReadNewMethod(dataID, interval, startDate, endDate):
                             len(outputData), uid, outputData[:3]
                         ),
                     )
-                resultDict[uid] = Query.gapCheck(timestamps, outputData, uid)
+                packResult(uid, site, tsid, param, outputData, pointList)
     else:
         startUtc = localToUtc(startLocal, offsetHours)
         endUtc = localToUtc(endLocal, offsetHours)
 
         for uid in validUids:
-            _, tsid, _ = uidMap[uid]
+            site, tsid, param = uidMap[uid]
             allFeatures = []
             for chunkStart, chunkEnd in chunkDateRange(startUtc, endUtc, maxContinuousDays):
                 timeStart = chunkStart.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -546,7 +737,9 @@ def apiReadNewMethod(dataID, interval, startDate, endDate):
                 features = fetchFeatures(url, headers)
                 allFeatures.extend(features)
 
-            outputData = featuresToOutput(allFeatures, tsid, interval, offsetHours)
+            outputData, pointList = featuresToOutput(
+                allFeatures, tsid, interval, offsetHours
+            )
             if Config.debug:
                 Logic.logMessage(
                     "DEBUG",
@@ -561,7 +754,7 @@ def apiReadNewMethod(dataID, interval, startDate, endDate):
                         uid, tsid
                     ),
                 )
-            resultDict[uid] = Query.gapCheck(timestamps, outputData, uid)
+            packResult(uid, site, tsid, param, outputData, pointList)
 
     return resultDict
 
@@ -594,7 +787,10 @@ def apiRead(dataID, interval, startDate, endDate):
                 "Invalid USGS uid '{}' — expected Site-Method-Parameter "
                 "(Method = numeric methodID or 32-char hex time_series_id).".format(uid),
             )
-            resultDict[uid] = []
+            resultDict[uid] = {
+                "data": [],
+                "rawResponse": emptyLegacyRawResponse(),
+            }
             continue
         kind = classified[0]
         if kind == "ogc":
@@ -616,7 +812,7 @@ def apiRead(dataID, interval, startDate, endDate):
             resultDict.update(ogcResult)
         else:
             for uid in ogcIds:
-                resultDict[uid] = []
+                resultDict[uid] = {"data": [], "rawResponse": emptyOgcRawResponse()}
 
     if legacyIds:
         legacyResult = apiReadOldMethod(legacyIds, interval, startDate, endDate)
@@ -624,10 +820,15 @@ def apiRead(dataID, interval, startDate, endDate):
             resultDict.update(legacyResult)
         else:
             for uid in legacyIds:
-                resultDict[uid] = []
+                resultDict[uid] = {
+                    "data": [],
+                    "rawResponse": emptyLegacyRawResponse(),
+                }
 
     # Preserve input order keys even if a path returned incomplete
     for uid in dataID:
-        resultDict.setdefault(uid, [])
+        resultDict.setdefault(
+            uid, {"data": [], "rawResponse": emptyLegacyRawResponse()}
+        )
 
     return resultDict
