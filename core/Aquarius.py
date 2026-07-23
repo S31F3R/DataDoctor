@@ -69,13 +69,13 @@ def apiRead(dataIDs, startDate, endDate, interval):
     certPath = Logic.resourcePath('certs/aquarius.pem')
     verifyMode = True
 
-    for attempt in ['system', 'custom_cert', 'unverified']:
+    for attempt in ['system', 'customCert', 'unverified']:
         try:
-            if attempt == 'custom_cert' and not os.path.exists(certPath):
+            if attempt == 'customCert' and not os.path.exists(certPath):
                 if Config.debug:
                     Logic.logMessage("DEBUG", "No certificate found at '{}', skipping to unverified.".format(certPath))
                 continue
-            verifyMode = certPath if attempt == 'custom_cert' else False if attempt == 'unverified' else True
+            verifyMode = certPath if attempt == 'customCert' else False if attempt == 'unverified' else True
             authResponse = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=authData, verify=verifyMode)
             authResponse.raise_for_status()
 

@@ -38,7 +38,7 @@ class sortWorker(QRunnable):
         self.rows.sort(key=sortKey, reverse=not self.ascending)
         self.signals.sortDone.emit(self.rows, self.ascending)
 
-def _captureTableRows(table):
+def captureTableRows(table):
     """Capture row data including formatting so sort/undo preserve overlay and QAQC state."""
     rows = []
     for rowIdx in range(table.rowCount()):
@@ -655,7 +655,7 @@ def customSortTable(table, col, dataDictionaryTable):
     else:
         Config.sortState[col] = not Config.sortState[col]
     ascending = Config.sortState[col]
-    rows = _captureTableRows(table)
+    rows = captureTableRows(table)
     worker = sortWorker(rows, col, ascending, byTimestamp=False)
     worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, col))
     pool.start(worker)
@@ -705,7 +705,7 @@ def timestampSortTable(table, dataDictionaryTable):
 
     if pool.activeThreadCount() > 0:
         return
-    rows = _captureTableRows(table)
+    rows = captureTableRows(table)
     worker = sortWorker(rows, -1, True, byTimestamp=True)
     worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, -1))
     pool.start(worker)
@@ -1094,8 +1094,8 @@ def roundDownToInterval(dt, interval):
         # Round down to nearest 15-minute interval
         try:
             n = 15
-            minutes_down = (dt.minute // n) * n
-            dt = dt.replace(minute=minutes_down, second=0, microsecond=0)
+            minutesDown = (dt.minute // n) * n
+            dt = dt.replace(minute=minutesDown, second=0, microsecond=0)
         except ValueError:
             if Config.debug:
                 Logic.logMessage("WARN", f"Error rounding INSTANT:15, no rounding applied")

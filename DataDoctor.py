@@ -41,7 +41,7 @@ class uiMain(QMainWindow):
         self.lastStartDate = None
         self.lastEndDate = None
         self.columnMetadata = []
-        self.seriesResponses = {} # Dict to store {seriesLabel: response_dict} post-query
+        self.seriesResponses = {} # Dict to store {seriesLabel: responseDict} post-query
         self.currentQueryType = "" # str: "AQUARIUS", etc., set post-query
         self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
         self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')

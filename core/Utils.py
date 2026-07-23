@@ -28,16 +28,16 @@ class customPasswordEdit(QLineEdit):
 
     def setText(self, text):
         super().setText(text if text is not None else '')
-        self._applyEchoMode()
+        self.applyEchoMode()
 
-    def _applyEchoMode(self):
+    def applyEchoMode(self):
         self.setEchoMode(
             QLineEdit.EchoMode.Normal if self.revealed else QLineEdit.EchoMode.Password
         )
 
     def toggleReveal(self):
         self.revealed = not self.revealed
-        self._applyEchoMode()
+        self.applyEchoMode()
 
         if Config.debug:
             Logic.logMessage(
@@ -176,8 +176,8 @@ def buttonStyle(button, iconName=None, iconSize=None):
         """)
 
         if Config.debug:
-            size_info = f" with resized: {iconSize}x{iconSize}" if iconSize else ""
-            Logic.logMessage("DEBUG", f"Applied hover/pressed icon swaps to button with icon: {iconName}{size_info}")
+            sizeInfo = f" with resized: {iconSize}x{iconSize}" if iconSize else ""
+            Logic.logMessage("DEBUG", f"Applied hover/pressed icon swaps to button with icon: {iconName}{sizeInfo}")
     else:
         button.setStyleSheet("""
             QPushButton {

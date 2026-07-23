@@ -14,9 +14,9 @@ class oracleConnection:
     def __init__(self, dsn: str):
         self.dsn = dsn
         self.connection = None
-        self._setup()
+        self.setup()
 
-    def _setup(self):
+    def setup(self):
         """Set up bundled Instant Client and TNS_ADMIN."""
         system = platform.system().lower()
         if platform.architecture()[0] != "64bit": raise RuntimeError("Only 64-bit platforms supported.")
@@ -33,10 +33,10 @@ class oracleConnection:
 
         requiredFiles = expectedFiles.get(system)
         if not requiredFiles: raise RuntimeError(f"Unsupported platform: {system}")
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Checking for platform-specific files in {clientDir}: {requiredFiles}")
+        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.setup: Checking for platform-specific files in {clientDir}: {requiredFiles}")
         filesExist = all((clientDir / f).exists() for f in requiredFiles)
         if not filesExist: raise FileNotFoundError(f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. Please download and unzip the correct Instant Client 23.9 for your platform into oracle/client.")
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Validated Instant Client files for {system}")
+        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.setup: Validated Instant Client files for {system}")
 
         # Set platform-specific library path
         if system == "windows":
@@ -47,18 +47,18 @@ class oracleConnection:
             os.environ['DYLD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
         oracledb.init_oracle_client(lib_dir=str(clientDir))
 
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Initialized oracledb with clientDir {clientDir}")
+        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.setup: Initialized oracledb with clientDir {clientDir}")
 
         # Setup TNS_ADMIN: use env if exists (user's tnsnames and sqlnet if present), program's dir if not (no copy)
         envTns = os.environ.get('TNS_ADMIN')
 
         if envTns:
             os.environ['TNS_ADMIN'] = envTns
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Using env TNS_ADMIN: {envTns} (no copy)")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.setup: Using env TNS_ADMIN: {envTns} (no copy)")
         else:
             resourceAdmin = Logic.resourcePath('oracle/network/admin')
             os.environ['TNS_ADMIN'] = resourceAdmin
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection._setup: Set TNS_ADMIN to program's path: {resourceAdmin} (no copy)")
+            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.setup: Set TNS_ADMIN to program's path: {resourceAdmin} (no copy)")
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""

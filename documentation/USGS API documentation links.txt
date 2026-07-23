@@ -1,12 +1,24 @@
+https://api.waterdata.usgs.gov/docs/ogcapi/
 https://api.waterdata.usgs.gov/docs/ogcapi/keys/
+https://api.waterdata.usgs.gov/docs/ogcapi/efficiency/
+https://api.waterdata.usgs.gov/signup/
 https://doi-usgs.github.io/dataRetrieval/
+https://doi-usgs.github.io/dataRetrieval/articles/read_waterdata_functions.html
 https://waterdata.usgs.gov/blog/intro-data-collection-categories/
+https://waterdata.usgs.gov/blog/api-whats-new-wdfn-apis/
 https://api.waterdata.usgs.gov/ogcapi/v0/openapi?f=html#/daily/describeDailyCollection
 https://api.waterdata.usgs.gov/ogcapi/v0/openapi?f=html#/continuous/describeContinuousCollection
 https://dashboard.waterdata.usgs.gov/app/nwd/en/
 
+# Collections used by DataDoctor
+# continuous (HOUR/INSTANT): https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items
+# daily (DAY):               https://api.waterdata.usgs.gov/ogcapi/v0/collections/daily/items
 https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&monitoring_location_id=USGS-09428500
 
-
+# Limits (research 2026-07):
+# - ~100 requests/hour per IP without API key; higher with X-Api-Key (api.data.gov)
+# - 50,000 records max per page; follow rel=next links
+# - Continuous: max ~1100 days per request (DataDoctor chunks at 1000)
+# - Continuous: prefer per time_series_id queries (high volume / 15-min data)
 
 https://waterdata.usgs.gov/blog/introducing-hyswap/

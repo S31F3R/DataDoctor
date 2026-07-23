@@ -1,0 +1,115 @@
+DataDoctor — session handoff / where the hell we left off
+============================================================
+File: documentation/status.grok
+For: Future Grok (hi) + Seifer
+Branch when we stopped: staging
+Remote: origin (https://github.com/S31F3R/DataDoctor.git)
+Last known tip before all the bug smashing: 5158d7a (same as main)
+Working tree had uncommitted fix work — check git status before you do anything dumb.
+
+
+What this app is (30-second brain reload)
+-----------------------------------------
+PyQt6 desktop hydrology tool. Pulls time series from USBR/HDB (API + Oracle),
+AQUARIUS, and USGS NWIS. Local catalog in core/bunker.db. Overlay/delta compare,
+QAQC colors, quick looks, optional SQL tab, CSV export, keyring creds.
+Entry: DataDoctor.py. Guts: core/. Pretty buttons: ui/.
+
+
+Branch story (so you don't "wait we were on main?")
+--------------------------------------------------
+- Started conversation on main.
+- User switched to staging and pulled main into it (fast-forward).
+- staging == main at 5158d7a when fixes began.
+- All fix work was done ON staging, mostly uncommitted unless Seifer committed later.
+- Other branches exist (bug-smashing, overlay-context-menu-overhaul, etc.) — don't
+  casually merge them; they're older side quests.
+
+
+Confirmed FIXED by Seifer (do not re-fix unless something regressed)
+--------------------------------------------------------------------
+[x] End timestamps exclusive end (HOUR end on the hour dropped last point)
+    -> core/Query.py buildTimestamps: while current <= end
+[x] BOP/EOP Options radios not wired to Config.periodOffset
+    -> Utils.resolvePeriodOffset + Options save writes both hourTimestampMethod
+       and periodOffset (EOP=True, BOP=False)
+[x] Header sort / Undo smashed Overlay formatting
+    -> sort captures UserRole + colors; restore after sort (no rebuild wipe)
+[x] QAQC vs Overlay fight club
+    -> overlay merges first, then QAQC on final display, then overlay color
+       overrides only for mismatch/missing (delta==0 keeps QAQC)
+[x] Password paste while masked = chaos
+    -> customPasswordEdit now uses Qt native EchoMode.Password / Normal
+       (no more dual realText + fake bullets). Brief "show last typed char" is GONE.
+[x] Export complete message
+    -> success QMessageBox after CSV write
+
+
+Code changed but NOT confirmed by Seifer yet (test.txt has the checklist)
+-------------------------------------------------------------------------
+[ ] Export CSV respects active tab (Data Query mainTable vs SQL sqlTable)
+[ ] Large dataset warning removed (>10k row Yes/No dialog gone from buildTable)
+[ ] HDB headers: commonName - dataType (not commonName alone)
+[ ] Header sort not stacked (sectionClicked no longer re-connected every query)
+
+See: documentation/test.txt
+
+
+Docs we touched / care about
+----------------------------
+documentation/To Do List.txt  — master bug/feature backlog (keep honest)
+documentation/test.txt        — Seifer's remaining test checklist for THIS pass
+documentation/notes.txt       — venv/git crumbs only, not bugs
+documentation/status.grok     — this file (you are here)
+
+
+Intentionally NOT fixed this pass (still open / hard / needs live data)
+-----------------------------------------------------------------------
+- Aquarius-only context menu (overlay path works; label/key lookup is spicy)
+- Double Aquarius + Overlay individual metadata
+- USGS-NWIS cell right-click crash in overlay/details
+- Options multi-tab save weirdness / retro restart on Windows
+- Multi-source "Building rows" progress only feels happy with 1 DB
+- HDB meta when r_base has value but interval doesn't
+- SQL Query Builder freezes UI (needs background thread)
+- Oracle wrong password shouldn't spam-lock the account
+- Taskbar icon, quick look dialog width, plots, log viewer, etc.
+  (see To Do List for the full carnival)
+
+
+Key files if you pick up coding again
+-------------------------------------
+core/Query.py       timestamps, sort/undo, buildTable headers, executeQuery QAQC order
+core/QueryUtils.py  overlay merge + applyOverlayColorOverrides
+core/Utils.py       customPasswordEdit, resolvePeriodOffset, config load/reload
+ui/uiOptions.py     save hourTimestampMethod + periodOffset together
+DataDoctor.py       export complete + export active tab
+
+
+How to run (when the stars align)
+---------------------------------
+Python 3.13-ish. Prefer project .venv if packages are there; system python
+had PyQt6 last time .venv didn't.
+  pip install -r requirements.txt
+  python DataDoctor.py
+
+
+Seifer humor / standing orders
+------------------------------
+- Don't "fix" what he hasn't confirmed. Leave it on To Do + test.txt.
+- When he confirms: delete from To Do, move to [x] on test.txt, update this file.
+- Prefer high-certainty fixes over multi-source folklore until he can hit APIs.
+- notes.txt is not the bug list. To Do List is. test.txt is the homework.
+- If you open this and git status is a crime scene, stop and ask.
+
+
+Resume checklist for next session
+---------------------------------
+1. git status / branch (expect staging unless he says otherwise)
+2. Skim documentation/test.txt — anything still unchecked?
+3. Skim documentation/To Do List.txt CURRENT BUGS
+4. Ask Seifer what he wants next (more tests, commit, next bug cluster)
+5. Don't force-push. Don't invent commits he didn't ask for.
+
+
+End of handoff. Go fix water data, not the timeline.

@@ -355,7 +355,15 @@ class uiQuery(QMainWindow):
             Logic.logMessage("DEBUG", "btnClearQueryPressed: Cleared query list")
 
     def btnDataIdInfoPressed(self):
-        QMessageBox.information(self, "DataID Formats", "AQUARIUS Format: \nUID \n\nUSBR Format: \nSDID \nSDID-MRID \n\nUSGS Format: \nSite-Method-Parameter")
+        QMessageBox.information(
+            self,
+            "DataID Formats",
+            "AQUARIUS Format:\nUID\n\n"
+            "USBR Format:\nSDID\nSDID-MRID\n\n"
+            "USGS Format:\nSite-Method-Parameter\n"
+            "  Method = numeric methodID (legacy waterservices)\n"
+            "  or 32-char hex time_series_id (modern OGC API)",
+        )
         if Config.debug:
             Logic.logMessage("DEBUG", "Data ID info displayed")
 
