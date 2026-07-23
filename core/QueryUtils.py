@@ -182,32 +182,24 @@ def processDelta(primaryVals, secondaryVals):
     return deltas
 
 def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, queryInfos, pairIndex):
+    """Merge secondary into primary column. Colors are applied later (after QAQC) via applyOverlayColorOverrides."""
     for r in range(numRows):
         item = table.item(r, pIdx)
         if item:
-            # Dynamically get vals for hasP/hasS/d
-            primaryVal = float(item.text()) if item.text() else np.nan
+            try:
+                primaryVal = float(item.text()) if item.text() else np.nan
+            except ValueError:
+                primaryVal = np.nan
             sItem = table.item(r, sIdx)
-            secondaryVal = float(sItem.text()) if sItem and sItem.text() else np.nan
+            try:
+                secondaryVal = float(sItem.text()) if sItem and sItem.text() else np.nan
+            except ValueError:
+                secondaryVal = np.nan
             hasP = np.isfinite(primaryVal)
             hasS = np.isfinite(secondaryVal)
             d = deltas[r]
 
-            if hasP and hasS:
-                if d != 0:
-                    item.setForeground(QColor(255, 0, 0)) # Red
-                    item.setBackground(QColor(0, 0, 0, 0)) # System default
-                else:
-                    item.setForeground(Config.systemTextColor) # System default
-                    item.setBackground(QColor(0, 0, 0, 0)) # System default
-            elif not hasP and hasS:
-                item.setBackground(QColor(221, 160, 221)) # Light purple
-                item.setForeground(QColor(0, 0, 0)) # Black
-            elif hasP and not hasS:
-                item.setBackground(QColor(255, 182, 193)) # Light pink
-                item.setForeground(QColor(0, 0, 0)) # Black
-
-            # Set data for details
+            # Set data for details (do not paint yet — QAQC runs first on final display values)
             pStr = Logic.valuePrecision(str(primaryVal)) if hasP and not Config.rawData else str(primaryVal) if hasP else ''
             sStr = Logic.valuePrecision(str(secondaryVal)) if hasS and not Config.rawData else str(secondaryVal) if hasS else ''
             dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
@@ -218,7 +210,8 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
                 'dataId1': dataIds[pairIndex*2],
                 'dataId2': dataIds[pairIndex*2+1],
                 'db1': databases[pairIndex*2],
-                'db2': databases[pairIndex*2+1]
+                'db2': databases[pairIndex*2+1],
+                'overlay': True
             })
 
             # Update text to display (use p if available, else s)
@@ -227,6 +220,44 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
 
     # Remove sIdx column
     table.removeColumn(sIdx)
+
+def applyOverlayColorOverrides(table):
+    """
+    Apply overlay coloring after QAQC.
+    Priority: QAQC first (already on cells), then overlay overrides for mismatch / missing pairs.
+    Matching values (delta == 0) keep QAQC colors.
+    """
+    for c in range(table.columnCount()):
+        for r in range(table.rowCount()):
+            item = table.item(r, c)
+            if not item:
+                continue
+            data = item.data(Qt.ItemDataRole.UserRole)
+            if not isinstance(data, dict) or not data.get('overlay'):
+                continue
+
+            pStr = str(data.get('primaryVal', '') or '').strip()
+            sStr = str(data.get('secondaryVal', '') or '').strip()
+            dStr = str(data.get('delta', '') or '').strip()
+
+            hasP = pStr != ''
+            hasS = sStr != ''
+            try:
+                d = float(dStr) if dStr else np.nan
+            except ValueError:
+                d = np.nan
+
+            if hasP and hasS:
+                if np.isfinite(d) and d != 0:
+                    item.setForeground(QColor(255, 0, 0))  # Red for mismatch
+                    # Leave background so QAQC band can remain visible under red text if set
+                # delta == 0: keep QAQC colors
+            elif not hasP and hasS:
+                item.setBackground(QColor(221, 160, 221))  # Light purple — secondary only
+                item.setForeground(QColor(0, 0, 0))
+            elif hasP and not hasS:
+                item.setBackground(QColor(255, 182, 193))  # Light pink — primary only
+                item.setForeground(QColor(0, 0, 0))
 
 def computeDeltas(primaryVals, secondaryVals):
     deltas = np.subtract(primaryVals, secondaryVals)

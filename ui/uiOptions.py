@@ -408,6 +408,7 @@ class uiOptions(QDialog):
 
         if '%AppRoot%' in tnsPath:
             tnsPath = tnsPath.replace('%AppRoot%', Config.appRoot)
+        hourMethod = 'EOP' if self.rbEOP.isChecked() else 'BOP'
         config.update({
             'utcOffset': self.cbUTCOffset.currentText(),
             'retroMode': newRetro,
@@ -416,7 +417,9 @@ class uiOptions(QDialog):
             'debugMode': self.chkbDebug.isChecked(),
             'enableSQL': newEnableSQL,
             'tnsNamesLocation': tnsPath,
-            'hourTimestampMethod': 'EOP' if self.rbEOP.isChecked() else 'BOP',
+            'hourTimestampMethod': hourMethod,
+            # Keep periodOffset in sync: EOP = True (end-of-period), BOP = False
+            'periodOffset': hourMethod == 'EOP',
             'lastExportPath': config.get('lastExportPath', '')
         })
 

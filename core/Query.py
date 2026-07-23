@@ -13,21 +13,52 @@ class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)
 
 class sortWorker(QRunnable):
-    def __init__(self, rows, col, ascending):
+    def __init__(self, rows, col, ascending, byTimestamp=False):
         super().__init__()
         self.signals = sortWorkerSignals()
         self.rows = rows
         self.col = col
         self.ascending = ascending
+        self.byTimestamp = byTimestamp
 
     def run(self):
         def sortKey(row):
+            # row = {'ts': str, 'cells': [cellDict|None, ...]}
+            if self.byTimestamp:
+                try:
+                    return datetime.strptime(row['ts'], '%m/%d/%y %H:%M:00')
+                except ValueError:
+                    return datetime.min
             try:
-                return float(row[self.col + 1])
-            except ValueError:
+                cell = row['cells'][self.col] if self.col < len(row['cells']) else None
+                text = cell['text'] if cell else ''
+                return float(text)
+            except (ValueError, TypeError, KeyError):
                 return 0
         self.rows.sort(key=sortKey, reverse=not self.ascending)
         self.signals.sortDone.emit(self.rows, self.ascending)
+
+def _captureTableRows(table):
+    """Capture row data including formatting so sort/undo preserve overlay and QAQC state."""
+    rows = []
+    for rowIdx in range(table.rowCount()):
+        timestamp = table.verticalHeaderItem(rowIdx).text() if table.verticalHeaderItem(rowIdx) else ''
+        cells = []
+        for c in range(table.columnCount()):
+            item = table.item(rowIdx, c)
+            if item:
+                cells.append({
+                    'text': item.text(),
+                    'userData': item.data(Qt.ItemDataRole.UserRole),
+                    'bg': item.background(),
+                    'fg': item.foreground(),
+                    'fgRole': item.data(Qt.ItemDataRole.ForegroundRole),
+                    'align': item.textAlignment(),
+                })
+            else:
+                cells.append(None)
+        rows.append({'ts': timestamp, 'cells': cells})
+    return rows
 
 class queryWorkerSignals(QObject):
     progressSignal = pyqtSignal(int, str)
@@ -177,10 +208,13 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
         return []
     timestamps = []
     current = start
-    while current < end:
+    # Inclusive end so a full-interval end time (e.g. 14:00 on HOUR) is not dropped
+    while current <= end:
         ts = current.strftime('%m/%d/%y %H:%M:00')
         timestamps.append(ts)
         current += delta
+        if delta.total_seconds() <= 0:
+            break
     if Config.debug:
         Logic.logMessage("DEBUG", "Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
     return timestamps
@@ -329,13 +363,19 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"buildTable: Aquarius in dict, using dict label, header {i}: {fullLabel}")
             else:
+                # USBR / HDB: commonName - dataType
+                dataTypeCol = getColByName(dataDictionaryTable, 'dataType')
+                dataTypeItem = dataDictionaryTable.item(dictRow, dataTypeCol) if dataTypeCol != -1 else None
+                dataType = dataTypeItem.text().strip() if dataTypeItem and dataTypeItem.text().strip() else ''
+                nameLabel = f"{baseLabel} - {dataType}" if dataType else baseLabel
+
                 if mrid and mrid != '0':
-                    fullLabel = f"{baseLabel} \n{dataId}-{mrid}"
+                    fullLabel = f"{nameLabel} \n{dataId}-{mrid}"
 
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USBR in dict with MRID, header {i}: {fullLabel}")
                 else:
-                    fullLabel = f"{baseLabel} \n{dataId}"
+                    fullLabel = f"{nameLabel} \n{dataId}"
 
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USBR in dict, header {i}: {fullLabel}")
@@ -379,14 +419,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     numCols = len(headers)
     numRows = len(data)
 
-    if numRows > 10000:
-        reply = QMessageBox.warning(None, "Large Dataset Warning",
-                                    f"Query returned {numRows} rows, which may slow down the UI. Consider a smaller date range or coarser interval (e.g., HOUR instead of INSTANT:1). Continue?",
-                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.No:
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"buildTable: User canceled due to large dataset ({numRows} rows)")
-            return
     if Config.debug:
         Logic.logMessage("DEBUG", f"buildTable: Setting table to {numRows} rows, {numCols} columns")
     table.setRowCount(numRows)
@@ -453,7 +485,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: Re-enabled table updates after population")
-    table.horizontalHeader().sectionClicked.connect(lambda col: customSortTable(table, col, dataDictionaryTable))
+    # Sort is connected once on the main window; do not re-connect here (would stack handlers)
     header = table.horizontalHeader()
     vHeader = table.verticalHeader()
     table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -623,72 +655,61 @@ def customSortTable(table, col, dataDictionaryTable):
     else:
         Config.sortState[col] = not Config.sortState[col]
     ascending = Config.sortState[col]
-    numRows = table.rowCount()
-    rows = []
-
-    for rowIdx in range(numRows):
-        timestamp = table.verticalHeaderItem(rowIdx).text() if table.verticalHeaderItem(rowIdx) else ''
-        rowData = [table.item(rowIdx, c).text() if table.item(rowIdx, c) else '' for c in range(table.columnCount())]
-        rows.append([timestamp] + rowData)
-    pool = QThreadPool.globalInstance()
-    worker = sortWorker(rows, col, ascending)
+    rows = _captureTableRows(table)
+    worker = sortWorker(rows, col, ascending, byTimestamp=False)
     worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, col))
     pool.start(worker)
     header.setSortIndicator(col, Qt.SortOrder.AscendingOrder if ascending else Qt.SortOrder.DescendingOrder)
 
 def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col):
+    """Restore rows after sort, preserving cell UserRole and colors (overlay / QAQC)."""
     table.setSortingEnabled(False)
 
     for rowIdx, row in enumerate(sortedRows):
-        table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row[0]))
+        table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row['ts']))
+        cells = row.get('cells', [])
 
         for c in range(table.columnCount()):
-            cellText = row[c + 1] if c + 1 < len(row) else ''
-            item = QTableWidgetItem(cellText)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            cell = cells[c] if c < len(cells) else None
 
-            if not Config.rawData and cellText.strip():
-                item.setText(Logic.valuePrecision(cellText))
+            if cell is None:
+                table.setItem(rowIdx, c, None)
+                continue
+            item = QTableWidgetItem(cell.get('text', ''))
+            align = cell.get('align')
+            if align is not None:
+                item.setTextAlignment(align)
+            else:
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            userData = cell.get('userData')
+            if userData is not None:
+                item.setData(Qt.ItemDataRole.UserRole, userData)
+            bg = cell.get('bg')
+            if bg is not None:
+                item.setBackground(bg)
+            fg = cell.get('fg')
+            if fg is not None:
+                item.setForeground(fg)
+            fgRole = cell.get('fgRole')
+            if fgRole is not None:
+                item.setData(Qt.ItemDataRole.ForegroundRole, fgRole)
             table.setItem(rowIdx, c, item)
     if Config.debug:
-        Logic.logMessage("DEBUG", "Updated table after sort; widths not locked.")
-    headerLabels = [table.horizontalHeaderItem(c).text() for c in range(table.columnCount())]
-    dataIds = [label.split('\n')[-1].strip() for label in headerLabels]
-
-    if Config.qaqcEnabled:
-        qaqc(table, dataDictionaryTable, dataIds)
-    else:
-        for r in range(table.rowCount()):
-            for c in range(table.columnCount()):
-                item = table.item(r, c)
-
-                if item:
-                    item.setBackground(QColor(0, 0, 0, 0))
-        if Config.debug:
-            Logic.logMessage("DEBUG", "updateTableAfterSort: QAQC skipped, cleared cell backgrounds")
+        Logic.logMessage("DEBUG", "Updated table after sort; preserved cell formatting and UserRole data.")
     table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
 
 def timestampSortTable(table, dataDictionaryTable):
     if Config.debug:
         Logic.logMessage("DEBUG", "timestampSortTable: Starting sort by timestamps.")
-    numRows = table.rowCount()
-    rows = []
-
-    for rowIdx in range(numRows):
-        timestamp = table.verticalHeaderItem(rowIdx).text() if table.verticalHeaderItem(rowIdx) else ''
-        rowData = [table.item(rowIdx, c).text() if table.item(rowIdx, c) else '' for c in range(table.columnCount())]
-        rows.append([timestamp] + rowData)
-    def sortKey(row):
-        try:
-            return datetime.strptime(row[0], '%m/%d/%y %H:%M:00')
-        except ValueError:
-            return datetime.min
-    rows.sort(key=sortKey)
     pool = QThreadPool.globalInstance()
-    worker = sortWorker(rows, -1, True)
+
+    if pool.activeThreadCount() > 0:
+        return
+    rows = _captureTableRows(table)
+    worker = sortWorker(rows, -1, True, byTimestamp=True)
     worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, -1))
     pool.start(worker)
-    
+
     if Config.debug:
         Logic.logMessage("DEBUG", "Timestamp sort worker started.")
 
@@ -981,7 +1002,22 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
         # Modify table if query tools are checked
         if deltaChecked or overlayChecked:
-            QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, lookupIds, mainWindow=mainWindow)   
+            QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, lookupIds, mainWindow=mainWindow)
+
+            # QAQC on final displayed columns, then overlay color overrides (mismatch / missing only)
+            finalLookupIds = []
+            for meta in getattr(mainWindow, 'columnMetadata', []) or []:
+                lid = meta.get('lookupId')
+                if isinstance(lid, list):
+                    # Overlay/delta: QAQC against primary series rules
+                    finalLookupIds.append(lid[0] if lid else '')
+                else:
+                    finalLookupIds.append(lid if lid is not None else '')
+
+            if Config.qaqcEnabled and finalLookupIds:
+                qaqc(mainWindow.mainTable, dataDictionaryTable, finalLookupIds)
+            if overlayChecked:
+                QueryUtils.applyOverlayColorOverrides(mainWindow.mainTable)
         else:    
             mainWindow.columnMetadata = []
             mergedDataIds = [[id] for id in originalDataIds] # Derived from originalDataIds

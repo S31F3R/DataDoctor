@@ -458,7 +458,17 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", "showDataDictionary: Opened data dictionary")        
 
     def btnExportCSVPressed(self):
-        if self.mainTable.rowCount() == 0:
+        # Export the table on the active tab (Data Query vs SQL Query Builder)
+        sqlTab = self.findChild(QWidget, 'tabSQL')
+        currentWidget = self.tabWidget.currentWidget() if self.tabWidget else None
+        exportTable = self.mainTable
+        useSqlTimestamps = False
+
+        if sqlTab is not None and currentWidget is sqlTab and self.sqlTable is not None:
+            exportTable = self.sqlTable
+            useSqlTimestamps = True
+
+        if exportTable is None or exportTable.rowCount() == 0:
             QMessageBox.warning(self, "Export CSV", "No data to export.")
 
             if Config.debug:
@@ -482,24 +492,36 @@ class uiMain(QMainWindow):
             with open(fileName, 'w', newline='', encoding='utf-8-sig') as csvFile:
                 writer = csv.writer(csvFile)
 
-                # Write headers
-                headers = [self.mainTable.horizontalHeaderItem(c).text() for c in range(self.mainTable.columnCount())]
-                writer.writerow(['Timestamp'] + headers)
+                headers = []
+                for c in range(exportTable.columnCount()):
+                    headerItem = exportTable.horizontalHeaderItem(c)
+                    headers.append(headerItem.text() if headerItem else f"Column {c}")
 
-                # Write data
-                for row in range(self.mainTable.rowCount()):
-                    rowData = [self.mainTable.verticalHeaderItem(row).text()]
-
-                    for col in range(self.mainTable.columnCount()):
-                        item = self.mainTable.item(row, col)
-                        rowData.append(item.text() if item else '')
-                    writer.writerow(rowData)
+                # Data Query uses vertical header timestamps; SQL results use table columns only
+                if useSqlTimestamps or not exportTable.verticalHeaderItem(0):
+                    writer.writerow(headers)
+                    for row in range(exportTable.rowCount()):
+                        rowData = []
+                        for col in range(exportTable.columnCount()):
+                            item = exportTable.item(row, col)
+                            rowData.append(item.text() if item else '')
+                        writer.writerow(rowData)
+                else:
+                    writer.writerow(['Timestamp'] + headers)
+                    for row in range(exportTable.rowCount()):
+                        tsItem = exportTable.verticalHeaderItem(row)
+                        rowData = [tsItem.text() if tsItem else '']
+                        for col in range(exportTable.columnCount()):
+                            item = exportTable.item(row, col)
+                            rowData.append(item.text() if item else '')
+                        writer.writerow(rowData)
             config['lastExportPath'] = os.path.dirname(fileName)
 
             with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
                 json.dump(config, configFile, indent=2)
             if Config.debug:
                 Logic.logMessage("DEBUG", f"btnExportCSVPressed: Exported table to {fileName}")
+            QMessageBox.information(self, "Export Complete", f"CSV exported successfully to:\n{fileName}")
         except Exception as e:
             Logic.logMessage("ERROR", f"btnExportCSVPressed: Failed to export CSV: {e}")                
             QMessageBox.warning(self, "Export Error", f"Failed to export CSV: {e}")

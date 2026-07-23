@@ -136,6 +136,36 @@ class customPasswordEdit(QLineEdit):
     def isRevealed(self):
         return self.revealed
 
+    def insertFromMimeData(self, source):
+        """Handle paste (Ctrl+V) so realText stays in sync while masked."""
+        if self.revealed:
+            super().insertFromMimeData(source)
+            self.realText = super().text()
+            return
+
+        if source is None or not source.hasText():
+            return
+
+        newText = source.text()
+        if newText is None:
+            return
+
+        pos = self.cursorPosition()
+        if self.hasSelectedText():
+            selStart = self.selectionStart()
+            selLen = self.selectionLength()
+            self.realText = self.realText[:selStart] + self.realText[selStart + selLen:]
+            pos = selStart
+
+        self.realText = self.realText[:pos] + newText + self.realText[pos:]
+        displayed = self.maskChar * pos + newText + self.maskChar * (len(self.realText) - pos - len(newText))
+        super().setText(displayed)
+        self.setCursorPosition(pos + len(newText))
+        self.timer.start(2000)
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", "insertFromMimeData: paste applied to realText while masked")
+
 def applyStylesAndFonts(app, mainTable, queryList):
     """Apply stylesheet and retro font if enabled."""
     with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
@@ -143,7 +173,7 @@ def applyStylesAndFonts(app, mainTable, queryList):
     config = loadConfig()
     Config.debug = config['debugMode']
     Config.utcOffset = config['utcOffset']
-    Config.periodOffset = config['periodOffset']
+    Config.periodOffset = resolvePeriodOffset(config)
     Config.retroMode = config.get('retroMode', True)
     if Config.retroMode:
         fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
@@ -382,6 +412,17 @@ def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQuery
         if Config.debug:
             Logic.logMessage("DEBUG", "Reverted to base stylesheet")
 
+def resolvePeriodOffset(config):
+    """
+    BOP/EOP UI saves hourTimestampMethod; runtime USBR code uses Config.periodOffset.
+    EOP (end of period) => periodOffset True; BOP => False.
+    Prefer hourTimestampMethod when present so Options radios drive behavior.
+    """
+    method = config.get('hourTimestampMethod')
+    if method in ('EOP', 'BOP'):
+        return method == 'EOP'
+    return bool(config.get('periodOffset', True))
+
 def loadConfig():
     convertConfigToJson()
     configPath = getConfigPath()
@@ -390,6 +431,7 @@ def loadConfig():
         'debugMode': False,
         'utcOffset': 'UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London',
         'periodOffset': True,
+        'hourTimestampMethod': 'EOP',
         'retroMode': False,
         'qaqc': True,
         'rawData': False,
@@ -608,14 +650,14 @@ def reloadGlobals():
     settings = loadConfig()
     Config.debug = settings['debugMode']
     Config.utcOffset = settings['utcOffset']
-    Config.periodOffset = settings['periodOffset']
+    Config.periodOffset = resolvePeriodOffset(settings)
     Config.retroMode = settings['retroMode']
     Config.qaqcEnabled = settings['qaqc']
     Config.rawData = settings['rawData']
     Config.enableSQL = settings['enableSQL']
 
     if Config.debug:
-        Logic.logMessage("DEBUG", f"Globals reloaded from user.config, enableSQL={Config.enableSQL}")
+        Logic.logMessage("DEBUG", f"Globals reloaded from user.config, enableSQL={Config.enableSQL}, periodOffset={Config.periodOffset}, hourTimestampMethod={settings.get('hourTimestampMethod')}")
 
 def getConfigDir():
     configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
