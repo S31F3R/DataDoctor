@@ -76,12 +76,12 @@ class oracleConnection:
             password = None
             return self.connection
         except oracledb.Error as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Error connecting to Oracle: {e}")
+            Logic.logException(f"oracleConnection.connect: Error connecting to Oracle ({self.dsn})", e)
             user = None
             password = None
             raise
         except Exception as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Unexpected error: {e}")
+            Logic.logException(f"oracleConnection.connect: Unexpected error ({self.dsn})", e)
             user = None
             password = None
             raise

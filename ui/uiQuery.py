@@ -192,67 +192,71 @@ class uiQuery(QMainWindow):
         return super().eventFilter(obj, event)
 
     def btnQueryPressed(self):
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnQueryPressed: Starting query process, queryType={}".format(self.queryType))
-        startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
-        endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
-        queryItems = []
-
-        for i in range(self.listQueryList.count()):
-            itemText = self.listQueryList.item(i).text().strip()
-            parts = itemText.split('|')
-
+        try:
             if Config.debug:
-                Logic.logMessage("DEBUG", f"Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
-            if len(parts) != 3:
-                Logic.logMessage("WARN", f"Invalid item skipped: {itemText}")
-                continue
+                Logic.logMessage("DEBUG", "btnQueryPressed: Starting query process, queryType={}".format(self.queryType))
+            startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
+            endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
+            queryItems = []
 
-            dataId, interval, database = parts
-            mrid = '0'
-            sdid = dataId
+            for i in range(self.listQueryList.count()):
+                itemText = self.listQueryList.item(i).text().strip()
+                parts = itemText.split('|')
 
-            if database.startswith('USBR-') and '-' in dataId:
-                sdid, mrid = dataId.rsplit('-', 1)
-            queryItems.append((dataId, interval, database, mrid, i))
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
+                if len(parts) != 3:
+                    Logic.logMessage("WARN", f"Invalid item skipped: {itemText}")
+                    continue
 
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Added queryItem: {(dataId, interval, database, mrid, i)}")
-        if not queryItems and self.qleDataID.text().strip():
-            dataId = self.qleDataID.text().strip()
-            interval = self.cbInterval.currentText()
-            database = self.cbDatabase.currentText()
-            mrid = '0'
-            sdid = dataId
+                dataId, interval, database = parts
+                mrid = '0'
+                sdid = dataId
 
-            if database.startswith('USBR-') and '-' in dataId:
-                sdid, mrid = dataId.rsplit('-', 1)
-            queryItems.append((dataId, interval, database, mrid, 0))
+                if database.startswith('USBR-') and '-' in dataId:
+                    sdid, mrid = dataId.rsplit('-', 1)
+                queryItems.append((dataId, interval, database, mrid, i))
 
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Added single query: {(dataId, interval, database, mrid, 0)}")
-        elif not queryItems:
-            Logic.logMessage("WARN", "No valid query items.")
-            return
-        deltaChecked = self.chkbDelta.isChecked()
-        overlayChecked = self.chkbOverlay.isChecked()
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Added queryItem: {(dataId, interval, database, mrid, i)}")
+            if not queryItems and self.qleDataID.text().strip():
+                dataId = self.qleDataID.text().strip()
+                interval = self.cbInterval.currentText()
+                database = self.cbDatabase.currentText()
+                mrid = '0'
+                sdid = dataId
 
-        if self.winMain:
-            self.winMain.lastQueryType = self.queryType
-            self.winMain.lastQueryItems = queryItems
-            self.winMain.lastStartDate = startDate
-            self.winMain.lastEndDate = endDate
-            self.winMain.lastDatabase = self.cbDatabase.currentText() if not queryItems else None
-            self.winMain.lastInterval = self.cbInterval.currentText() if not queryItems else None
+                if database.startswith('USBR-') and '-' in dataId:
+                    sdid, mrid = dataId.rsplit('-', 1)
+                queryItems.append((dataId, interval, database, mrid, 0))
 
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Stored last query as {}".format(self.queryType))
-            Query.executeQuery(self.winMain, queryItems, startDate, endDate,
-                              self.queryType == 'internal', self.winMain.winDataDictionary.mainTable, deltaChecked, overlayChecked)
-            self.close()
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Added single query: {(dataId, interval, database, mrid, 0)}")
+            elif not queryItems:
+                Logic.logMessage("WARN", "No valid query items.")
+                return
+            deltaChecked = self.chkbDelta.isChecked()
+            overlayChecked = self.chkbOverlay.isChecked()
 
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Query window closed after query.")
+            if self.winMain:
+                self.winMain.lastQueryType = self.queryType
+                self.winMain.lastQueryItems = queryItems
+                self.winMain.lastStartDate = startDate
+                self.winMain.lastEndDate = endDate
+                self.winMain.lastDatabase = self.cbDatabase.currentText() if not queryItems else None
+                self.winMain.lastInterval = self.cbInterval.currentText() if not queryItems else None
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "Stored last query as {}".format(self.queryType))
+                Query.executeQuery(self.winMain, queryItems, startDate, endDate,
+                                  self.queryType == 'internal', self.winMain.winDataDictionary.mainTable, deltaChecked, overlayChecked)
+                self.close()
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "Query window closed after query.")
+        except Exception as e:
+            Logic.logException("btnQueryPressed failed", e)
+            QMessageBox.warning(self, "Query Error", f"Failed to run query:\n{e}")
 
     def btnSaveQuickLookPressed(self):
         if Config.debug:

@@ -5,6 +5,9 @@ import sys
 import json
 import sqlite3
 import logging
+import traceback
+import threading
+import faulthandler
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
 from PyQt6.QtCore import QThreadPool, QDir
@@ -13,6 +16,8 @@ from core import Config, Utils
 
 # Flag to prevent multiple initializations (module-level for encapsulation)
 loggingInitialized = False
+_faultLogFile = None
+_exceptionHooksInstalled = False
 
 def resourcePath(relativePath):
     """Get absolute path to resource, works for dev and PyInstaller"""
@@ -52,26 +57,138 @@ def initLogging():
     logger.addHandler(fileHandler)
     
     loggingInitialized = True
-    
+
+    # Capture hard crashes (segfaults, etc.) into the same log when possible
+    _enableFaultHandler(filePath)
+
     if Config.debug:
         logger.debug("initLogging: Logging initialized with console level {} and file at {}".format(logging.getLevelName(consoleLevel), filePath))
 
-def logMessage(level, message):
-    logger = logging.getLogger('Data Doctor')
-    level = level.upper()
+def _enableFaultHandler(filePath):
+    """Dump fatal interpreter/native faults into app.log (best-effort)."""
+    global _faultLogFile
+    try:
+        if _faultLogFile is not None:
+            return
+        _faultLogFile = open(filePath, 'a', encoding='utf-8')
+        faulthandler.enable(file=_faultLogFile, all_threads=True)
+    except Exception:
+        try:
+            faulthandler.enable(all_threads=True)
+        except Exception:
+            pass
 
-    if level == 'DEBUG':
-        logger.debug(message)
-    elif level == 'INFO':
-        logger.info(message)
-    elif level == 'WARN':
-        logger.warning(message)
-    elif level == 'ERROR':
-        logger.error(message)
-    elif level == 'CRITICAL':
-        logger.critical(message)
-    else:
-        logger.warning(f"Unknown log level '{level}': {message}")
+def logMessage(level, message):
+    """Log a message. Safe to call even if initLogging has not run yet."""
+    try:
+        if not loggingInitialized:
+            # Best-effort early logging to stderr before handlers exist
+            print(f"[{level.upper()}] {message}", file=sys.stderr)
+            return
+        logger = logging.getLogger('Data Doctor')
+        level = level.upper()
+
+        if level == 'DEBUG':
+            logger.debug(message)
+        elif level == 'INFO':
+            logger.info(message)
+        elif level == 'WARN':
+            logger.warning(message)
+        elif level == 'ERROR':
+            logger.error(message)
+        elif level == 'CRITICAL':
+            logger.critical(message)
+        else:
+            logger.warning(f"Unknown log level '{level}': {message}")
+    except Exception:
+        # Never let logging itself crash the app
+        try:
+            print(f"[{level}] {message}", file=sys.stderr)
+        except Exception:
+            pass
+
+def logException(context, exc=None):
+    """
+    Always log an exception with full traceback at ERROR level.
+    Use this for catch-and-recover paths so crashes are recorded even when debug is off.
+    """
+    try:
+        if exc is not None:
+            tbText = ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+            logMessage("ERROR", f"{context}: {exc}\n{tbText}")
+        else:
+            tbText = traceback.format_exc()
+            logMessage("ERROR", f"{context}\n{tbText}")
+    except Exception:
+        try:
+            print(f"ERROR: {context}: {exc}", file=sys.stderr)
+        except Exception:
+            pass
+
+def installExceptionHooks(showDialog=True):
+    """
+    Install global handlers so uncaught exceptions are logged and do not tear down the process.
+    KeyboardInterrupt / SystemExit still propagate normally.
+    """
+    global _exceptionHooksInstalled
+    if _exceptionHooksInstalled:
+        return
+
+    def exceptionHook(excType, excValue, excTb):
+        if issubclass(excType, (KeyboardInterrupt, SystemExit)):
+            sys.__excepthook__(excType, excValue, excTb)
+            return
+        try:
+            tbText = ''.join(traceback.format_exception(excType, excValue, excTb))
+            logMessage("CRITICAL", f"Uncaught exception:\n{tbText}")
+        except Exception:
+            try:
+                sys.__excepthook__(excType, excValue, excTb)
+            except Exception:
+                pass
+            return
+
+        if not showDialog:
+            return
+        try:
+            from PyQt6.QtWidgets import QApplication, QMessageBox
+            app = QApplication.instance()
+            if app is None:
+                return
+            # Avoid dialog storms if many exceptions fire
+            if getattr(app, '_dataDoctorShowingErrorDialog', False):
+                return
+            app._dataDoctorShowingErrorDialog = True
+            try:
+                QMessageBox.critical(
+                    None,
+                    "Unexpected Error",
+                    "An unexpected error occurred and was logged.\n\n"
+                    f"{excType.__name__}: {excValue}\n\n"
+                    "The application will continue if possible.\n"
+                    "See app.log for details."
+                )
+            finally:
+                app._dataDoctorShowingErrorDialog = False
+        except Exception:
+            pass
+
+    sys.excepthook = exceptionHook
+
+    if hasattr(threading, 'excepthook'):
+        def threadExceptionHook(args):
+            if issubclass(args.exc_type, (SystemExit, KeyboardInterrupt)):
+                return
+            try:
+                tbText = ''.join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+                logMessage("CRITICAL", f"Uncaught thread exception in {getattr(args.thread, 'name', '?')}:\n{tbText}")
+            except Exception:
+                pass
+        threading.excepthook = threadExceptionHook
+
+    _exceptionHooksInstalled = True
+    if Config.debug:
+        logMessage("DEBUG", "installExceptionHooks: Global exception hooks installed")
 
 def buildDataDictionary(table, columns=None, whereClause=None):
     table.clear()
@@ -106,7 +223,7 @@ def buildDataDictionary(table, columns=None, whereClause=None):
                     item = QTableWidgetItem(valStr)
                     table.setItem(r, c, item)
     except Exception as e:
-        logMessage("ERROR", f"Failed to build DataDictionary from DB: {e}")
+        logException("Failed to build DataDictionary from DB", e)
         return
     for c in range(table.columnCount()):
         table.resizeColumnToContents(c)

@@ -22,21 +22,24 @@ class sortWorker(QRunnable):
         self.byTimestamp = byTimestamp
 
     def run(self):
-        def sortKey(row):
-            # row = {'ts': str, 'cells': [cellDict|None, ...]}
-            if self.byTimestamp:
+        try:
+            def sortKey(row):
+                # row = {'ts': str, 'cells': [cellDict|None, ...]}
+                if self.byTimestamp:
+                    try:
+                        return datetime.strptime(row['ts'], '%m/%d/%y %H:%M:00')
+                    except ValueError:
+                        return datetime.min
                 try:
-                    return datetime.strptime(row['ts'], '%m/%d/%y %H:%M:00')
-                except ValueError:
-                    return datetime.min
-            try:
-                cell = row['cells'][self.col] if self.col < len(row['cells']) else None
-                text = cell['text'] if cell else ''
-                return float(text)
-            except (ValueError, TypeError, KeyError):
-                return 0
-        self.rows.sort(key=sortKey, reverse=not self.ascending)
-        self.signals.sortDone.emit(self.rows, self.ascending)
+                    cell = row['cells'][self.col] if self.col < len(row['cells']) else None
+                    text = cell['text'] if cell else ''
+                    return float(text)
+                except (ValueError, TypeError, KeyError):
+                    return 0
+            self.rows.sort(key=sortKey, reverse=not self.ascending)
+            self.signals.sortDone.emit(self.rows, self.ascending)
+        except Exception as e:
+            Logic.logException("sortWorker.run failed", e)
 
 def captureTableRows(table):
     """Capture row data including formatting so sort/undo preserve overlay and QAQC state."""
@@ -83,9 +86,9 @@ class queryWorker(QRunnable):
         groupRawResponses = {}  # Always dict to support USBR metadata
         usbrGroups = defaultdict(list)
 
-        for origIndex, dataID, SDID, itemDb, interval, mrid in self.groupItems:
-            usbrGroups[(itemDb, interval, mrid)].append((origIndex, dataID, SDID))
         try:
+            for origIndex, dataID, SDID, itemDb, interval, mrid in self.groupItems:
+                usbrGroups[(itemDb, interval, mrid)].append((origIndex, dataID, SDID))
             for (itemDb, interval, mrid), items in usbrGroups.items():
                 SDIDs = [item[2] for item in items]
                 result = {} # Initialize result here to avoid UnboundLocalError
@@ -105,8 +108,7 @@ class queryWorker(QRunnable):
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: USBR result for SDIDs {SDIDs}: {result}")
                     except Exception as e:
-                        if Config.debug:
-                            Logic.logMessage("DEBUG", f"queryWorker: USBR apiRead failed for SDIDs {SDIDs}: {e}")
+                        Logic.logException(f"queryWorker: USBR read failed for SDIDs {SDIDs}", e)
                         result = {}
                 elif db == 'AQUARIUS' and self.isInternal:
                     try:
@@ -115,8 +117,7 @@ class queryWorker(QRunnable):
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
                     except Exception as e:
-                        if Config.debug:
-                            Logic.logMessage("DEBUG", f"queryWorker: Aquarius apiRead failed for SDIDs {SDIDs}: {e}")
+                        Logic.logException(f"queryWorker: Aquarius apiRead failed for SDIDs {SDIDs}", e)
                         result = {}
                 elif db == 'USGS-NWIS':
                     try:
@@ -125,13 +126,12 @@ class queryWorker(QRunnable):
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: USGS result for SDIDs {SDIDs}: {result}")
                     except Exception as e:
-                        if Config.debug:
-                            Logic.logMessage("DEBUG", f"queryWorker: USGS apiRead failed for SDIDs {SDIDs}: {e}")
+                        Logic.logException(f"queryWorker: USGS apiRead failed for SDIDs {SDIDs}", e)
                         result = {}
                 else:
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"queryWorker: Unknown db skipped: {db}")
-                        continue
+                    continue
                 for idx, (origIndex, dataID, SDID) in enumerate(items):
                     if SDID in result and result[SDID]:
                         res = result[SDID]
@@ -161,14 +161,16 @@ class queryWorker(QRunnable):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"queryWorker: Completed group {self.groupKey} with {len(groupResult)} items")
         except Exception as e:
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"queryWorker: Failed for group {self.groupKey}: {e}")
-            for _, dataID, _ in items:
+            Logic.logException(f"queryWorker: Failed for group {self.groupKey}", e)
+            for _, dataID, _, _, _, _ in self.groupItems:
                 groupResult[dataID] = self.defaultBlanks
 
-                if db == 'AQUARIUS':
+                if db == 'AQUARIUS' and groupLabels is not None:
                     groupLabels[dataID] = dataID
-        self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels, groupRawResponses))
+        try:
+            self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels, groupRawResponses))
+        except Exception as e:
+            Logic.logException(f"queryWorker: Failed to emit result for group {self.groupKey}", e)
 
 def buildTimestamps(startDateStr, endDateStr, intervalStr):
     if Config.debug:
@@ -642,445 +644,478 @@ def qaqc(table, dataDictionaryTable, lookupIds):
             Logic.logMessage("DEBUG", "qaqc: Processed column {} for lookupId {}".format(col, lookupId))
 
 def customSortTable(table, col, dataDictionaryTable):
-    pool = QThreadPool.globalInstance()
+    try:
+        pool = QThreadPool.globalInstance()
 
-    if pool.activeThreadCount() > 0:
-        return
-    table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-    header = table.horizontalHeader()
-    header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+        if pool.activeThreadCount() > 0:
+            return
+        table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        header = table.horizontalHeader()
+        header.setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
 
-    if col not in Config.sortState:
-        Config.sortState[col] = True
-    else:
-        Config.sortState[col] = not Config.sortState[col]
-    ascending = Config.sortState[col]
-    rows = captureTableRows(table)
-    worker = sortWorker(rows, col, ascending, byTimestamp=False)
-    worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, col))
-    pool.start(worker)
-    header.setSortIndicator(col, Qt.SortOrder.AscendingOrder if ascending else Qt.SortOrder.DescendingOrder)
+        if col not in Config.sortState:
+            Config.sortState[col] = True
+        else:
+            Config.sortState[col] = not Config.sortState[col]
+        ascending = Config.sortState[col]
+        rows = captureTableRows(table)
+        worker = sortWorker(rows, col, ascending, byTimestamp=False)
+        worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, col))
+        pool.start(worker)
+        header.setSortIndicator(col, Qt.SortOrder.AscendingOrder if ascending else Qt.SortOrder.DescendingOrder)
+    except Exception as e:
+        Logic.logException(f"customSortTable failed for col {col}", e)
+        try:
+            table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        except Exception:
+            pass
 
 def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col):
     """Restore rows after sort, preserving cell UserRole and colors (overlay / QAQC)."""
-    table.setSortingEnabled(False)
+    try:
+        table.setSortingEnabled(False)
 
-    for rowIdx, row in enumerate(sortedRows):
-        table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row['ts']))
-        cells = row.get('cells', [])
+        for rowIdx, row in enumerate(sortedRows):
+            table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row['ts']))
+            cells = row.get('cells', [])
 
-        for c in range(table.columnCount()):
-            cell = cells[c] if c < len(cells) else None
+            for c in range(table.columnCount()):
+                cell = cells[c] if c < len(cells) else None
 
-            if cell is None:
-                table.setItem(rowIdx, c, None)
-                continue
-            item = QTableWidgetItem(cell.get('text', ''))
-            align = cell.get('align')
-            if align is not None:
-                item.setTextAlignment(align)
-            else:
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-            userData = cell.get('userData')
-            if userData is not None:
-                item.setData(Qt.ItemDataRole.UserRole, userData)
-            bg = cell.get('bg')
-            if bg is not None:
-                item.setBackground(bg)
-            fg = cell.get('fg')
-            if fg is not None:
-                item.setForeground(fg)
-            fgRole = cell.get('fgRole')
-            if fgRole is not None:
-                item.setData(Qt.ItemDataRole.ForegroundRole, fgRole)
-            table.setItem(rowIdx, c, item)
-    if Config.debug:
-        Logic.logMessage("DEBUG", "Updated table after sort; preserved cell formatting and UserRole data.")
-    table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+                if cell is None:
+                    table.setItem(rowIdx, c, None)
+                    continue
+                item = QTableWidgetItem(cell.get('text', ''))
+                align = cell.get('align')
+                if align is not None:
+                    item.setTextAlignment(align)
+                else:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+                userData = cell.get('userData')
+                if userData is not None:
+                    item.setData(Qt.ItemDataRole.UserRole, userData)
+                bg = cell.get('bg')
+                if bg is not None:
+                    item.setBackground(bg)
+                fg = cell.get('fg')
+                if fg is not None:
+                    item.setForeground(fg)
+                fgRole = cell.get('fgRole')
+                if fgRole is not None:
+                    item.setData(Qt.ItemDataRole.ForegroundRole, fgRole)
+                table.setItem(rowIdx, c, item)
+        if Config.debug:
+            Logic.logMessage("DEBUG", "Updated table after sort; preserved cell formatting and UserRole data.")
+    except Exception as e:
+        Logic.logException("updateTableAfterSort failed", e)
+    finally:
+        try:
+            table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        except Exception:
+            pass
 
 def timestampSortTable(table, dataDictionaryTable):
-    if Config.debug:
-        Logic.logMessage("DEBUG", "timestampSortTable: Starting sort by timestamps.")
-    pool = QThreadPool.globalInstance()
+    try:
+        if Config.debug:
+            Logic.logMessage("DEBUG", "timestampSortTable: Starting sort by timestamps.")
+        pool = QThreadPool.globalInstance()
 
-    if pool.activeThreadCount() > 0:
-        return
-    rows = captureTableRows(table)
-    worker = sortWorker(rows, -1, True, byTimestamp=True)
-    worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, -1))
-    pool.start(worker)
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", "Timestamp sort worker started.")
-
-def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable, deltaChecked=False, overlayChecked=False):
-    Config.deltaChecked = deltaChecked
-    Config.overlayChecked = overlayChecked
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", "executeQuery: isInternal={}, items={}, deltaChecked={}, overlayChecked={}".format(isInternal, len(queryItems), deltaChecked, overlayChecked))
-    if not isInternal:
-        queryItems = [item for item in queryItems if item[2] != 'AQUARIUS']
-    if Config.debug:
-        Logic.logMessage("DEBUG", "executeQuery: Filtered AQUARIUS for public query, remaining items={}".format(len(queryItems)))
-    if not queryItems:
-        QMessageBox.warning(mainWindow, "No Valid Items", "No valid query items (AQUARIUS not allowed in public queries).")
+        if pool.activeThreadCount() > 0:
+            return
+        rows = captureTableRows(table)
+        worker = sortWorker(rows, -1, True, byTimestamp=True)
+        worker.signals.sortDone.connect(lambda sortedRows, asc: updateTableAfterSort(table, sortedRows, asc, dataDictionaryTable, -1))
+        pool.start(worker)
 
         if Config.debug:
-            Logic.logMessage("DEBUG", "executeQuery: No valid items after filtering, aborting")
-        return
-    progressDialog = QProgressDialog(f"Querying data... (0/{len(set(item[2] for item in queryItems))} complete)", "Cancel", 0, 100, mainWindow)
-    progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
-    progressDialog.setAutoReset(False)
-    progressDialog.setAutoClose(False)
-    progressDialog.setFixedSize(400, 100)
-    progressDialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.MSWindowsFixedSizeDialogHint)
-    progressDialog.show()
-    progressDialog.setValue(10)
-    progressDialog.repaint()
+            Logic.logMessage("DEBUG", "Timestamp sort worker started.")
+    except Exception as e:
+        Logic.logException("timestampSortTable failed", e)
 
-    if Config.debug:
-        Logic.logMessage("DEBUG", "executeQuery: Initialized and showed progress dialog")
+def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable, deltaChecked=False, overlayChecked=False):
+    progressDialog = None
+    try:
+        Config.deltaChecked = deltaChecked
+        Config.overlayChecked = overlayChecked
 
-    # Convert to datetime for rounding if necessary
-    if not isinstance(startDate, datetime):
-        startDate = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
-    if not isinstance(endDate, datetime):
-        endDate = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"executeQuery: Ensured dates are datetime for rounding: start={startDate}, end={endDate}")
-    queryItems.sort(key=lambda x: x[4])
-    firstInterval = queryItems[0][1]
-    firstDb = queryItems[0][2]
+        if Config.debug:
+            Logic.logMessage("DEBUG", "executeQuery: isInternal={}, items={}, deltaChecked={}, overlayChecked={}".format(isInternal, len(queryItems), deltaChecked, overlayChecked))
+        if not isInternal:
+            queryItems = [item for item in queryItems if item[2] != 'AQUARIUS']
+        if Config.debug:
+            Logic.logMessage("DEBUG", "executeQuery: Filtered AQUARIUS for public query, remaining items={}".format(len(queryItems)))
+        if not queryItems:
+            QMessageBox.warning(mainWindow, "No Valid Items", "No valid query items (AQUARIUS not allowed in public queries).")
 
-    if firstInterval == 'INSTANT':
-        if firstDb.startswith('USBR-'):
-            firstInterval = 'INSTANT:60'
-        elif firstDb == 'USGS-NWIS':
-            firstInterval = 'INSTANT:15'
-        elif firstDb == 'AQUARIUS':
-            firstInterval = 'INSTANT:1'
-
-    # Round down startDate to nearest firstInterval
-    startDate = roundDownToInterval(startDate, firstInterval)
-
-    # Convert back to str for buildTimestamps
-    startDateStr = startDate.strftime('%Y-%m-%d %H:%M')
-    endDateStr = endDate.strftime('%Y-%m-%d %H:%M')
-    timestamps = buildTimestamps(startDateStr, endDateStr, firstInterval)
-
-    if not timestamps:
-        progressDialog.cancel()
-        QMessageBox.warning(mainWindow, "Date Error", "Invalid dates or interval.")
-        return
-    progressDialog.setValue(20)
-    progressDialog.repaint()
-    QCoreApplication.processEvents()
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", "executeQuery: Setup complete, progress at 20%")
-    defaultBlanks = [''] * len(timestamps)
-    labelsDict = {} # Always dict, populated only if isInternal
-    groups = defaultdict(list)
-
-    for dataID, interval, db, mrid, origIndex in queryItems:
-        if interval == 'INSTANT':
-            if db.startswith('USBR-'):
-                interval = 'INSTANT:60'
-            elif db == 'USGS-NWIS':
-                interval = 'INSTANT:15'
-            elif db == 'AQUARIUS':
-                interval = 'INSTANT:1'
-        groupKey = (db.split('-')[0] if db.startswith('USBR-') else db, None, None)
-        baseDataID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
-        groups[groupKey].append((origIndex, dataID, baseDataID, db, interval, mrid))
-    pool = QThreadPool.globalInstance()
-    resultQueue = queue.Queue()
-    maxDbThreads = 3
-    numGroups = len(groups)
-    numThreads = min(maxDbThreads, numGroups)
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"Starting {numThreads} threads for {numGroups} groups in background")
-    threadsStarted = 0
-    valueDict = {}
-    rawResponses = {}
-    collected = 0
-    processedGroups = set()
-
-    def handleResult(result):
-        nonlocal collected
-        groupKey, groupResult, groupLabels, groupRawResponses = result
-
-        if groupKey in processedGroups:
             if Config.debug:
-                Logic.logMessage("DEBUG", f"executeQuery: Duplicate group {groupKey}, skipping")
+                Logic.logMessage("DEBUG", "executeQuery: No valid items after filtering, aborting")
             return
-        processedGroups.add(groupKey)
+        progressDialog = QProgressDialog(f"Querying data... (0/{len(set(item[2] for item in queryItems))} complete)", "Cancel", 0, 100, mainWindow)
+        progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
+        progressDialog.setAutoReset(False)
+        progressDialog.setAutoClose(False)
+        progressDialog.setFixedSize(400, 100)
+        progressDialog.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.MSWindowsFixedSizeDialogHint)
+        progressDialog.show()
+        progressDialog.setValue(10)
+        progressDialog.repaint()
 
-        if all(all(v == '' for v in values) for values in groupResult.values()):
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"executeQuery: Skipping empty group {groupKey}, no data")
+        if Config.debug:
+            Logic.logMessage("DEBUG", "executeQuery: Initialized and showed progress dialog")
+
+        # Convert to datetime for rounding if necessary
+        if not isinstance(startDate, datetime):
+            startDate = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
+        if not isinstance(endDate, datetime):
+            endDate = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"executeQuery: Ensured dates are datetime for rounding: start={startDate}, end={endDate}")
+        queryItems.sort(key=lambda x: x[4])
+        firstInterval = queryItems[0][1]
+        firstDb = queryItems[0][2]
+
+        if firstInterval == 'INSTANT':
+            if firstDb.startswith('USBR-'):
+                firstInterval = 'INSTANT:60'
+            elif firstDb == 'USGS-NWIS':
+                firstInterval = 'INSTANT:15'
+            elif firstDb == 'AQUARIUS':
+                firstInterval = 'INSTANT:1'
+
+        # Round down startDate to nearest firstInterval
+        startDate = roundDownToInterval(startDate, firstInterval)
+
+        # Convert back to str for buildTimestamps
+        startDateStr = startDate.strftime('%Y-%m-%d %H:%M')
+        endDateStr = endDate.strftime('%Y-%m-%d %H:%M')
+        timestamps = buildTimestamps(startDateStr, endDateStr, firstInterval)
+
+        if not timestamps:
+            progressDialog.cancel()
+            QMessageBox.warning(mainWindow, "Date Error", "Invalid dates or interval.")
+            return
+        progressDialog.setValue(20)
+        progressDialog.repaint()
+        QCoreApplication.processEvents()
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", "executeQuery: Setup complete, progress at 20%")
+        defaultBlanks = [''] * len(timestamps)
+        labelsDict = {} # Always dict, populated only if isInternal
+        groups = defaultdict(list)
+
+        for dataID, interval, db, mrid, origIndex in queryItems:
+            if interval == 'INSTANT':
+                if db.startswith('USBR-'):
+                    interval = 'INSTANT:60'
+                elif db == 'USGS-NWIS':
+                    interval = 'INSTANT:15'
+                elif db == 'AQUARIUS':
+                    interval = 'INSTANT:1'
+            groupKey = (db.split('-')[0] if db.startswith('USBR-') else db, None, None)
+            baseDataID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
+            groups[groupKey].append((origIndex, dataID, baseDataID, db, interval, mrid))
+        pool = QThreadPool.globalInstance()
+        resultQueue = queue.Queue()
+        maxDbThreads = 3
+        numGroups = len(groups)
+        numThreads = min(maxDbThreads, numGroups)
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Starting {numThreads} threads for {numGroups} groups in background")
+        threadsStarted = 0
+        valueDict = {}
+        rawResponses = {}
+        collected = 0
+        processedGroups = set()
+
+        def handleResult(result):
+            nonlocal collected
+            groupKey, groupResult, groupLabels, groupRawResponses = result
+
+            if groupKey in processedGroups:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"executeQuery: Duplicate group {groupKey}, skipping")
+                return
+            processedGroups.add(groupKey)
+
+            if all(all(v == '' for v in values) for values in groupResult.values()):
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"executeQuery: Skipping empty group {groupKey}, no data")
+                collected += 1
+
+                if not progressDialog.wasCanceled():
+                    progressDialog.setValue(20 + int(50 * collected / numGroups))
+                    progressDialog.setLabelText(f"Completed {groupKey[0]} query ({collected}/{numGroups})")
+                    progressDialog.repaint()
+                    QCoreApplication.processEvents()
+                return
+            valueDict.update(groupResult)
+
+            if groupLabels and labelsDict is not None:
+                labelsDict.update(groupLabels)
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
+            if groupRawResponses:
+                rawResponses.update(groupRawResponses)
             collected += 1
 
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"executeQuery: Collected results for group {groupKey} with {len(groupResult)} items ({collected}/{numGroups})")
             if not progressDialog.wasCanceled():
                 progressDialog.setValue(20 + int(50 * collected / numGroups))
                 progressDialog.setLabelText(f"Completed {groupKey[0]} query ({collected}/{numGroups})")
                 progressDialog.repaint()
                 QCoreApplication.processEvents()
-            return
-        valueDict.update(groupResult)
+        for i, groupKey in enumerate(groups.keys()):
+            signals = queryWorkerSignals()
 
-        if groupLabels and labelsDict is not None:
-            labelsDict.update(groupLabels)
+            # Pass str dates to queryWorker if it expects str; assuming it does based on original
+            worker = queryWorker(groupKey, groups[groupKey], signals, startDateStr, endDateStr, isInternal, timestamps, defaultBlanks)
+            signals.resultSignal.connect(lambda result, i=i: [Logic.logMessage("DEBUG", f"executeQuery: Signal received for group {result[0]}") if Config.debug else None, resultQueue.put(result), handleResult(result)][-1])
+            pool.start(worker)
+            threadsStarted += 1
 
             if Config.debug:
-                Logic.logMessage("DEBUG", f"executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
-        if groupRawResponses:
-            rawResponses.update(groupRawResponses)
-        collected += 1
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"executeQuery: Collected results for group {groupKey} with {len(groupResult)} items ({collected}/{numGroups})")
+                Logic.logMessage("DEBUG", f"Started background worker {i} for group {groupKey}")
         if not progressDialog.wasCanceled():
-            progressDialog.setValue(20 + int(50 * collected / numGroups))
-            progressDialog.setLabelText(f"Completed {groupKey[0]} query ({collected}/{numGroups})")
+            progressDialog.setLabelText(f"Querying data... (0/{numGroups} complete)")
             progressDialog.repaint()
-            QCoreApplication.processEvents()
-    for i, groupKey in enumerate(groups.keys()):
-        signals = queryWorkerSignals()
+        timeoutSeconds = 600
+        startTime = time.time()
+        timer = QTimer()
+        timer.setSingleShot(False)
 
-        # Pass str dates to queryWorker if it expects str; assuming it does based on original
-        worker = queryWorker(groupKey, groups[groupKey], signals, startDateStr, endDateStr, isInternal, timestamps, defaultBlanks)
-        signals.resultSignal.connect(lambda result, i=i: [Logic.logMessage("DEBUG", f"executeQuery: Signal received for group {result[0]}") if Config.debug else None, resultQueue.put(result), handleResult(result)][-1])
-        pool.start(worker)
-        threadsStarted += 1
+        def checkQueueAndProgress():
+            nonlocal collected
+            elapsed = time.time() - startTime
+
+            if collected >= numGroups and resultQueue.empty() and pool.activeThreadCount() == 0 or elapsed > timeoutSeconds:
+                timer.stop()
+
+                if elapsed > timeoutSeconds:
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", f"executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")      
+                    Logic.logMessage("WARN", f"Query timeout after {timeoutSeconds} seconds; some data may be missing")
+                    progressDialog.cancel()
+                    QMessageBox.warning(mainWindow, "Query Timeout", "Query timed out; some data may be missing.")
+                return
+            if not progressDialog.wasCanceled():
+                while not resultQueue.empty():
+                    try:
+                        result = resultQueue.get_nowait()
+
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"executeQuery: Retrieved result from queue: {result[0]}")
+                        handleResult(result)
+                    except queue.Empty:
+                        break
+                progressDialog.setLabelText(f"Querying data... ({collected}/{numGroups} complete)")
+                progressDialog.repaint()
+                QCoreApplication.processEvents()
+        timer.timeout.connect(checkQueueAndProgress)
+        timer.start(100)
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Started background worker {i} for group {groupKey}")
-    if not progressDialog.wasCanceled():
-        progressDialog.setLabelText(f"Querying data... (0/{numGroups} complete)")
-        progressDialog.repaint()
-    timeoutSeconds = 600
-    startTime = time.time()
-    timer = QTimer()
-    timer.setSingleShot(False)
-
-    def checkQueueAndProgress():
-        nonlocal collected
-        elapsed = time.time() - startTime
-
-        if collected >= numGroups and resultQueue.empty() and pool.activeThreadCount() == 0 or elapsed > timeoutSeconds:
-            timer.stop()
-
-            if elapsed > timeoutSeconds:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"executeQuery: Timeout after {timeoutSeconds} seconds, collected {collected}/{numGroups}")      
-                Logic.logMessage("WARN", f"Query timeout after {timeoutSeconds} seconds; some data may be missing")
-                progressDialog.cancel()
-                QMessageBox.warning(mainWindow, "Query Timeout", "Query timed out; some data may be missing.")
-            return
-        if not progressDialog.wasCanceled():
+            Logic.logMessage("DEBUG", "executeQuery: Started timer for progress updates")
+        while (collected < numGroups or not resultQueue.empty() or pool.activeThreadCount() > 0) and not progressDialog.wasCanceled():
+            time.sleep(0.05)
+            QCoreApplication.processEvents()
+        if collected >= numGroups:
             while not resultQueue.empty():
                 try:
                     result = resultQueue.get_nowait()
 
                     if Config.debug:
-                        Logic.logMessage("DEBUG", f"executeQuery: Retrieved result from queue: {result[0]}")
+                        Logic.logMessage("DEBUG", f"executeQuery: Processed extra queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
                     handleResult(result)
                 except queue.Empty:
                     break
-            progressDialog.setLabelText(f"Querying data... ({collected}/{numGroups} complete)")
-            progressDialog.repaint()
-            QCoreApplication.processEvents()
-    timer.timeout.connect(checkQueueAndProgress)
-    timer.start(100)
+            maxRetries = 5
+            retryCount = 0
 
-    if Config.debug:
-        Logic.logMessage("DEBUG", "executeQuery: Started timer for progress updates")
-    while (collected < numGroups or not resultQueue.empty() or pool.activeThreadCount() > 0) and not progressDialog.wasCanceled():
-        time.sleep(0.05)
+            while not resultQueue.empty() and retryCount < maxRetries:
+                try:
+                    result = resultQueue.get_nowait()
+
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", f"executeQuery: Processed final queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
+                    handleResult(result)
+                except queue.Empty:
+                    break
+                retryCount += 1
+            if retryCount >= maxRetries:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"executeQuery: Max retries ({maxRetries}) reached for final queue flush, queue size {resultQueue.qsize()}")
+        timer.stop()
+
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"executeQuery: Timer stopped, wait loop ended, final collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
         QCoreApplication.processEvents()
-    if collected >= numGroups:
-        while not resultQueue.empty():
-            try:
-                result = resultQueue.get_nowait()
 
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"executeQuery: Processed extra queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
-                handleResult(result)
-            except queue.Empty:
-                break
-        maxRetries = 5
-        retryCount = 0
-
-        while not resultQueue.empty() and retryCount < maxRetries:
-            try:
-                result = resultQueue.get_nowait()
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"executeQuery: Processed final queued result, collected {collected}/{numGroups}, queue size {resultQueue.qsize()}")
-                handleResult(result)
-            except queue.Empty:
-                break
-            retryCount += 1
-        if retryCount >= maxRetries:
+        if progressDialog.wasCanceled():
             if Config.debug:
-                Logic.logMessage("DEBUG", f"executeQuery: Max retries ({maxRetries}) reached for final queue flush, queue size {resultQueue.qsize()}")
-    timer.stop()
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"executeQuery: Timer stopped, wait loop ended, final collected {collected}/{numGroups}, queue size {resultQueue.qsize()}, active threads {pool.activeThreadCount()}")
-    QCoreApplication.processEvents()
-
-    if progressDialog.wasCanceled():
+                Logic.logMessage("DEBUG", f"executeQuery: User canceled via progress dialog")
+            progressDialog.cancel()
+            return
         if Config.debug:
-            Logic.logMessage("DEBUG", f"executeQuery: User canceled via progress dialog")
-        progressDialog.cancel()
-        return
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"executeQuery: All {collected} groups merged")
-    progressDialog.setLabelText("Merging results...")
-    progressDialog.setValue(70)
-    progressDialog.repaint()
-    QCoreApplication.processEvents()
-
-    for dataID, _, _, _, _ in queryItems:
-        if dataID not in valueDict:
-            valueDict[dataID] = defaultBlanks
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Added empty result for dataID {dataID}")
-    originalDataIds = [item[0] for item in queryItems]
-    originalIntervals = [item[1] for item in queryItems]
-    databases = [item[2] for item in queryItems]
-    lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
-    data = []
-
-    for r in range(len(timestamps)):
-        rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
-        data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
-
-        if r % 100 == 0 or r % 10 == 0: # Update more frequently for small tables
-            progressDialog.setLabelText(f"Building rows... ({r}/{len(timestamps)} rows)")
-            progressDialog.setValue(70 + int(20 * r / len(timestamps))) # Adjusted to 70-90 for rows
-            progressDialog.repaint()
-            QCoreApplication.processEvents()
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"executeQuery: Building row {r}/{len(timestamps)}")
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"executeQuery: Built {len(data)} rows for table")
-    if not progressDialog.wasCanceled():
-        progressDialog.setLabelText("Building table...")
-        progressDialog.setValue(90)
+            Logic.logMessage("DEBUG", f"executeQuery: All {collected} groups merged")
+        progressDialog.setLabelText("Merging results...")
+        progressDialog.setValue(70)
         progressDialog.repaint()
         QCoreApplication.processEvents()
-        mainWindow.mainTable.clear()
-        mainWindow.mainTable.setRowCount(0)
-        mainWindow.mainTable.setColumnCount(0) # Fully reset table to prevent freeze on column count change
-        QCoreApplication.processEvents() # Ensure UI refresh after reset
 
-        # Add tab before building table
+        for dataID, _, _, _, _ in queryItems:
+            if dataID not in valueDict:
+                valueDict[dataID] = defaultBlanks
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Added empty result for dataID {dataID}")
+        originalDataIds = [item[0] for item in queryItems]
+        originalIntervals = [item[1] for item in queryItems]
+        databases = [item[2] for item in queryItems]
+        lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
+        data = []
+
+        for r in range(len(timestamps)):
+            rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
+            data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
+
+            if r % 100 == 0 or r % 10 == 0: # Update more frequently for small tables
+                progressDialog.setLabelText(f"Building rows... ({r}/{len(timestamps)} rows)")
+                progressDialog.setValue(70 + int(20 * r / len(timestamps))) # Adjusted to 70-90 for rows
+                progressDialog.repaint()
+                QCoreApplication.processEvents()
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"executeQuery: Building row {r}/{len(timestamps)}")
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"executeQuery: Built {len(data)} rows for table")
+        if not progressDialog.wasCanceled():
+            progressDialog.setLabelText("Building table...")
+            progressDialog.setValue(90)
+            progressDialog.repaint()
+            QCoreApplication.processEvents()
+            mainWindow.mainTable.clear()
+            mainWindow.mainTable.setRowCount(0)
+            mainWindow.mainTable.setColumnCount(0) # Fully reset table to prevent freeze on column count change
+            QCoreApplication.processEvents() # Ensure UI refresh after reset
+
+            # Add tab before building table
+            if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
+                mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
+
+            # Build the table
+            buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
+
+            # Remap rawResponses keys to fullLabel (guard for labelsDict None/empty)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"executeQuery: Remapping rawResponses keys, labelsDict type={type(labelsDict)}, keys={list(labelsDict.keys())}")
+            if labelsDict:
+                rawResponses = {labelsDict.get(k, k): v for k, v in rawResponses.items()}
+            # Else keep as-is for non-Aquarius (e.g., public USBR keys are SDIDs)
+
+            # Store rawResponses for Aquarius
+            mainWindow.storeQueryData(rawResponses, 'internal' if isInternal else 'public')
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Stored {len(rawResponses)} rawResponses for Aquarius")
+
+            # Modify table if query tools are checked
+            if deltaChecked or overlayChecked:
+                QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, lookupIds, mainWindow=mainWindow)
+
+                # QAQC on final displayed columns, then overlay color overrides (mismatch / missing only)
+                finalLookupIds = []
+                for meta in getattr(mainWindow, 'columnMetadata', []) or []:
+                    lid = meta.get('lookupId')
+                    if isinstance(lid, list):
+                        # Overlay/delta: QAQC against primary series rules
+                        finalLookupIds.append(lid[0] if lid else '')
+                    else:
+                        finalLookupIds.append(lid if lid is not None else '')
+
+                if Config.qaqcEnabled and finalLookupIds:
+                    qaqc(mainWindow.mainTable, dataDictionaryTable, finalLookupIds)
+                if overlayChecked:
+                    QueryUtils.applyOverlayColorOverrides(mainWindow.mainTable)
+            else:    
+                mainWindow.columnMetadata = []
+                mergedDataIds = [[id] for id in originalDataIds] # Derived from originalDataIds
+                mergedDbs = [[db] for db in databases] # List for consistency
+                mergedQueryInfos = [[f"{item[0]}|{item[1]}|{item[2]}"] for item in queryItems] # List of lists
+                mergedHeaders = originalDataIds # Or processedHeaders if set earlier
+
+                for col in range(len(mergedHeaders)):  
+                    dataId = mergedDataIds[col][0] if mergedDataIds[col] else None
+                    db = mergedDbs[col][0]
+                    lookupId = labelsDict.get(dataId, dataId) if db == 'AQUARIUS' else dataId
+                    metadata = {
+                        'type': 'normal',
+                        'dataIds': mergedDataIds[col], 
+                        'dbs': mergedDbs[col], 
+                        'queryInfos': mergedQueryInfos[col], 
+                        'lookupId': lookupId  
+                    }
+
+                    mainWindow.columnMetadata.append(metadata)
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "executeQuery: Set columnMetadata for non-overlay with lists: {repr(mainWindow.columnMetadata)}")
+            progressDialog.setValue(100)
+            progressDialog.repaint()
+            QCoreApplication.processEvents()
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"executeQuery: Table built, progress dialog completed")
+        if progressDialog.wasCanceled():
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"executeQuery: User canceled during table building")
+            progressDialog.cancel()
+            return
         if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
             mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
-
-        # Build the table
-        buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
-
-        # Remap rawResponses keys to fullLabel (guard for labelsDict None/empty)
         if Config.debug:
-            Logic.logMessage("DEBUG", f"executeQuery: Remapping rawResponses keys, labelsDict type={type(labelsDict)}, keys={list(labelsDict.keys())}")
-        if labelsDict:
-            rawResponses = {labelsDict.get(k, k): v for k, v in rawResponses.items()}
-        # Else keep as-is for non-Aquarius (e.g., public USBR keys are SDIDs)
+            Logic.logMessage("DEBUG", "Query executed and table updated.")
 
-        # Store rawResponses for Aquarius
-        mainWindow.storeQueryData(rawResponses, 'internal' if isInternal else 'public')
+        # Store last delta and overlay states for refresh using globals
+        Config.lastDeltaChecked = deltaChecked
+        Config.lastOverlayChecked = overlayChecked
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Stored {len(rawResponses)} rawResponses for Aquarius")
-
-        # Modify table if query tools are checked
-        if deltaChecked or overlayChecked:
-            QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, lookupIds, mainWindow=mainWindow)
-
-            # QAQC on final displayed columns, then overlay color overrides (mismatch / missing only)
-            finalLookupIds = []
-            for meta in getattr(mainWindow, 'columnMetadata', []) or []:
-                lid = meta.get('lookupId')
-                if isinstance(lid, list):
-                    # Overlay/delta: QAQC against primary series rules
-                    finalLookupIds.append(lid[0] if lid else '')
-                else:
-                    finalLookupIds.append(lid if lid is not None else '')
-
-            if Config.qaqcEnabled and finalLookupIds:
-                qaqc(mainWindow.mainTable, dataDictionaryTable, finalLookupIds)
-            if overlayChecked:
-                QueryUtils.applyOverlayColorOverrides(mainWindow.mainTable)
-        else:    
-            mainWindow.columnMetadata = []
-            mergedDataIds = [[id] for id in originalDataIds] # Derived from originalDataIds
-            mergedDbs = [[db] for db in databases] # List for consistency
-            mergedQueryInfos = [[f"{item[0]}|{item[1]}|{item[2]}"] for item in queryItems] # List of lists
-            mergedHeaders = originalDataIds # Or processedHeaders if set earlier
-            
-            for col in range(len(mergedHeaders)):  
-                dataId = mergedDataIds[col][0] if mergedDataIds[col] else None
-                db = mergedDbs[col][0]
-                lookupId = labelsDict.get(dataId, dataId) if db == 'AQUARIUS' else dataId
-                metadata = {
-                    'type': 'normal',
-                    'dataIds': mergedDataIds[col], 
-                    'dbs': mergedDbs[col], 
-                    'queryInfos': mergedQueryInfos[col], 
-                    'lookupId': lookupId  
-                }
-
-                mainWindow.columnMetadata.append(metadata)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "executeQuery: Set columnMetadata for non-overlay with lists: {repr(mainWindow.columnMetadata)}")
-        progressDialog.setValue(100)
-        progressDialog.repaint()
-        QCoreApplication.processEvents()
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"executeQuery: Table built, progress dialog completed")
-    if progressDialog.wasCanceled():
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"executeQuery: User canceled during table building")
+            Logic.logMessage("DEBUG", f"executeQuery: Stored lastDeltaChecked={deltaChecked}, lastOverlayChecked={overlayChecked}")
         progressDialog.cancel()
-        return
-    if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
-        mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
-    if Config.debug:
-        Logic.logMessage("DEBUG", "Query executed and table updated.")
 
-    # Store last delta and overlay states for refresh using globals
-    Config.lastDeltaChecked = deltaChecked
-    Config.lastOverlayChecked = overlayChecked
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"executeQuery: Stored lastDeltaChecked={deltaChecked}, lastOverlayChecked={overlayChecked}")
-    progressDialog.cancel()
-
-    # Show Data Query tab at index 0, moving if necessary
-    index = mainWindow.tabWidget.indexOf(mainWindow.tabMain)
-    
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"tabMain index during executeQuery: {index}")
-    if index != 0:
-        if index != -1:
-            mainWindow.tabWidget.removeTab(index)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Removed tabMain from index {index} to move to 0")
-        mainWindow.tabWidget.insertTab(0, mainWindow.tabMain, mainWindow.dataQueryTitle)
-        mainWindow.tabWidget.setCurrentIndex(0)
+        # Show Data Query tab at index 0, moving if necessary
+        index = mainWindow.tabWidget.indexOf(mainWindow.tabMain)
 
         if Config.debug:
-            Logic.logMessage("DEBUG", "Inserted tabMain at index 0 after query")
-    QCoreApplication.processEvents()
+            Logic.logMessage("DEBUG", f"tabMain index during executeQuery: {index}")
+        if index != 0:
+            if index != -1:
+                mainWindow.tabWidget.removeTab(index)
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Removed tabMain from index {index} to move to 0")
+            mainWindow.tabWidget.insertTab(0, mainWindow.tabMain, mainWindow.dataQueryTitle)
+            mainWindow.tabWidget.setCurrentIndex(0)
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Inserted tabMain at index 0 after query")
+        QCoreApplication.processEvents()
+
+    except Exception as e:
+        Logic.logException("executeQuery failed", e)
+        try:
+            QMessageBox.warning(mainWindow, "Query Error", f"Query failed:\n{e}")
+        except Exception:
+            pass
+    finally:
+        if progressDialog is not None:
+            try:
+                progressDialog.close()
+            except Exception:
+                pass
+
 
 def roundDownToInterval(dt, interval):
     """Round down datetime to the nearest specified interval."""

@@ -248,38 +248,46 @@ class uiMain(QMainWindow):
 
     def closeEvent(self, event):
         """Override closeEvent to save splitter sizes if SQL tab is enabled and present."""
-        sqlTab = self.findChild(QWidget, 'tabSQL')
+        try:
+            sqlTab = self.findChild(QWidget, 'tabSQL')
 
-        if Config.enableSQL and sqlTab and self.tabWidget.indexOf(sqlTab) != -1:
-            config = Utils.loadConfig()
-            config['sqlVerticalSizes'] = self.findChild(QSplitter, 'sqlSplitter').sizes()
-            config['sqlHorizontalSizes'] = self.findChild(QSplitter, 'mainSplitter').sizes()
+            if Config.enableSQL and sqlTab and self.tabWidget.indexOf(sqlTab) != -1:
+                sqlSplitter = self.findChild(QSplitter, 'sqlSplitter')
+                mainSplitter = self.findChild(QSplitter, 'mainSplitter')
+                if sqlSplitter is not None and mainSplitter is not None:
+                    config = Utils.loadConfig()
+                    config['sqlVerticalSizes'] = sqlSplitter.sizes()
+                    config['sqlHorizontalSizes'] = mainSplitter.sizes()
 
-            try:
-                with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
-                    json.dump(config, configFile, indent=2)
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Saved splitter sizes to config: vertical={config['sqlVerticalSizes']}, horizontal={config['sqlHorizontalSizes']}")
-            except Exception as e:
-                if Config.debug:
-                    Logic.logMessage("ERROR", f"Failed to save splitter sizes: {e}")
+                    try:
+                        with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
+                            json.dump(config, configFile, indent=2)
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"Saved splitter sizes to config: vertical={config['sqlVerticalSizes']}, horizontal={config['sqlHorizontalSizes']}")
+                    except Exception as e:
+                        Logic.logException("Failed to save splitter sizes", e)
+        except Exception as e:
+            Logic.logException("closeEvent failed", e)
         super().closeEvent(event)
 
     def loadSnippets(self):
         """Load SQL snippets from quickLook/sql into listSnippets."""
-        sqlDir = Utils.getSqlSnippetDir()
+        try:
+            sqlDir = Utils.getSqlSnippetDir()
 
-        if self.listSnippets:
-            self.listSnippets.clear()
-
-            for file in sorted(os.listdir(sqlDir)):
-                if file.endswith(".sql"):
-                    self.listSnippets.addItem(file[:-4]) # Add name without .sql
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Loaded {self.listSnippets.count()} SQL snippets")
-        else:
-            if Config.debug:
-                Logic.logMessage("WARN", "listSnippets not found, skipping loadSnippets")
+            if self.listSnippets:
+                self.listSnippets.clear()
+                if os.path.isdir(sqlDir):
+                    for file in sorted(os.listdir(sqlDir)):
+                        if file.endswith(".sql"):
+                            self.listSnippets.addItem(file[:-4]) # Add name without .sql
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Loaded {self.listSnippets.count()} SQL snippets")
+            else:
+                if Config.debug:
+                    Logic.logMessage("WARN", "listSnippets not found, skipping loadSnippets")
+        except Exception as e:
+            Logic.logException("loadSnippets failed", e)
 
     def saveSnippet(self):
         """Save current pteSQL content as .sql snippet."""
@@ -410,29 +418,31 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"runCustomQuery: Populated sqlTable with {len(results)} rows, {len(columns)} columns")
         except Exception as e:
+            Logic.logException("runCustomQuery: Failed to execute", e)
             QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
-            if Config.debug:
-                Logic.logMessage("ERROR", f"runCustomQuery: Failed to execute: {e}")
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
-        normalizedResponses = {}
+        try:
+            normalizedResponses = {}
 
-        for k, v in responses.items():
-            key = str(k).strip()
-            if isinstance(v, dict) and 'label' in v:
-                v['label'] = v['label'].replace('\n', ' ').replace('\u00a0', ' ')
-                v['label'] = ' '.join(v['label'].split()).strip()
-            normalizedResponses[key] = v
+            for k, v in responses.items():
+                key = str(k).strip()
+                if isinstance(v, dict) and 'label' in v:
+                    v['label'] = v['label'].replace('\n', ' ').replace('\u00a0', ' ')
+                    v['label'] = ' '.join(v['label'].split()).strip()
+                normalizedResponses[key] = v
 
-        # Normalize keys to remove \n for consistency
-        normalizedResponses = {k.replace('\n', ' ').strip(): v for k, v in normalizedResponses.items()}
+            # Normalize keys to remove \n for consistency
+            normalizedResponses = {k.replace('\n', ' ').strip(): v for k, v in normalizedResponses.items()}
 
-        self.seriesResponses = normalizedResponses
-        self.currentQueryType = queryType
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Stored query data: {len(normalizedResponses)} series, type {queryType}, keys={[repr(k) for k in normalizedResponses.keys()]}")
+            self.seriesResponses = normalizedResponses
+            self.currentQueryType = queryType
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Stored query data: {len(normalizedResponses)} series, type {queryType}, keys={[repr(k) for k in normalizedResponses.keys()]}")
+        except Exception as e:
+            Logic.logException("storeQueryData failed", e)
 
     def btnPublicQueryPressed(self):
         if self.winQuery:
@@ -541,202 +551,223 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", "btnInfoPressed: Opened about dialog")
 
     def btnRefreshPressed(self):
-        if self.lastQueryType and self.lastQueryItems:
-            # Retrieve last delta and overlay states from globals, default to False if not set
-            deltaChecked = getattr(Config, 'lastDeltaChecked', False)
-            overlayChecked = getattr(Config, 'lastOverlayChecked', False)
+        try:
+            if self.lastQueryType and self.lastQueryItems:
+                # Retrieve last delta and overlay states from globals, default to False if not set
+                deltaChecked = getattr(Config, 'lastDeltaChecked', False)
+                overlayChecked = getattr(Config, 'lastOverlayChecked', False)
 
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"btnRefreshPressed: Refreshing with deltaChecked={deltaChecked}, overlayChecked={overlayChecked}")
-            Query.executeQuery(self, self.lastQueryItems, self.lastStartDate, self.lastEndDate,
-                            self.lastQueryType == 'internal', self.winDataDictionary.mainTable,
-                            deltaChecked=deltaChecked, overlayChecked=overlayChecked)
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnRefreshPressed: Refreshed query with last parameters")
-        else:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnRefreshPressed: No previous query to refresh")
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"btnRefreshPressed: Refreshing with deltaChecked={deltaChecked}, overlayChecked={overlayChecked}")
+                Query.executeQuery(self, self.lastQueryItems, self.lastStartDate, self.lastEndDate,
+                                self.lastQueryType == 'internal', self.winDataDictionary.mainTable,
+                                deltaChecked=deltaChecked, overlayChecked=overlayChecked)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "btnRefreshPressed: Refreshed query with last parameters")
+            else:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "btnRefreshPressed: No previous query to refresh")
+        except Exception as e:
+            Logic.logException("btnRefreshPressed failed", e)
+            QMessageBox.warning(self, "Refresh Error", f"Failed to refresh query:\n{e}")
 
     def btnUndoPressed(self):
-        if self.mainTable.rowCount() == 0:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnUndoPressed: No data to sort")
-            QMessageBox.information(self, "Undo", "No data to sort.")
-            return
-        Query.timestampSortTable(self.mainTable, self.winDataDictionary.mainTable)
+        try:
+            if self.mainTable.rowCount() == 0:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "btnUndoPressed: No data to sort")
+                QMessageBox.information(self, "Undo", "No data to sort.")
+                return
+            Query.timestampSortTable(self.mainTable, self.winDataDictionary.mainTable)
 
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnUndoPressed: Called timestampSortTable")
+            if Config.debug:
+                Logic.logMessage("DEBUG", "btnUndoPressed: Called timestampSortTable")
+        except Exception as e:
+            Logic.logException("btnUndoPressed failed", e)
 
     def showHeaderContextMenu(self, pos):
         """Show context menu for header right-click to display full query info using uiDetails."""
-        header = self.mainTable.horizontalHeader()
-        col = header.logicalIndexAt(pos)
+        try:
+            header = self.mainTable.horizontalHeader()
+            col = header.logicalIndexAt(pos)
 
-        if col < 0 or col >= len(self.columnMetadata):
+            if col < 0 or col >= len(self.columnMetadata):
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "showHeaderContextMenu: Invalid column {} clicked".format(col))
+                return
+            meta = self.columnMetadata[col]
+            meta['col'] = col # Add col for stats computation
+            menu = QMenu(self)
+            
+            if meta['type'] == 'normal':
+                action = menu.addAction("Show Query Info")
+                action.triggered.connect(lambda: self.showHeaderDetails("headerNormal", meta))
+            elif meta['type'] == 'delta':
+                action = menu.addAction("Show details")
+                action.triggered.connect(lambda: self.showHeaderDetails("headerDelta", meta))
+            elif meta['type'] == 'overlay':
+                action = menu.addAction("Show details")
+                action.triggered.connect(lambda: self.showHeaderDetails("headerOverlay", meta))
+            
+            menu.exec(header.mapToGlobal(pos))
             if Config.debug:
-                Logic.logMessage("DEBUG", "showHeaderContextMenu: Invalid column {} clicked".format(col))
-            return
-        meta = self.columnMetadata[col]
-        meta['col'] = col # Add col for stats computation
-        menu = QMenu(self)
-        
-        if meta['type'] == 'normal':
-            action = menu.addAction("Show Query Info")
-            action.triggered.connect(lambda: self.showHeaderDetails("headerNormal", meta))
-        elif meta['type'] == 'delta':
-            action = menu.addAction("Show details")
-            action.triggered.connect(lambda: self.showHeaderDetails("headerDelta", meta))
-        elif meta['type'] == 'overlay':
-            action = menu.addAction("Show details")
-            action.triggered.connect(lambda: self.showHeaderDetails("headerOverlay", meta))
-        
-        menu.exec(header.mapToGlobal(pos))
-        if Config.debug:
-            Logic.logMessage("DEBUG", "showHeaderContextMenu: Displayed menu for column {}, type {}".format(col, meta['type']))
+                Logic.logMessage("DEBUG", "showHeaderContextMenu: Displayed menu for column {}, type {}".format(col, meta['type']))
+        except Exception as e:
+            Logic.logException("showHeaderContextMenu failed", e)
 
     def showHeaderDetails(self, queryType, meta):
         """Open uiDetails for header metadata."""
-        seriesLabel = self.mainTable.horizontalHeaderItem(meta['col']).text() if self.mainTable.horizontalHeaderItem(meta['col']) else ""
-        detailsWin = uiDetails(parent=self)
-        detailsWin.populateDetails(queryType, seriesLabel, "", meta)
-        detailsWin.show()
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"showHeaderDetails: Opened details for {seriesLabel}")
+        try:
+            seriesLabel = self.mainTable.horizontalHeaderItem(meta['col']).text() if self.mainTable.horizontalHeaderItem(meta['col']) else ""
+            detailsWin = uiDetails(parent=self)
+            detailsWin.populateDetails(queryType, seriesLabel, "", meta)
+            detailsWin.show()
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"showHeaderDetails: Opened details for {seriesLabel}")
+        except Exception as e:
+            Logic.logException("showHeaderDetails failed", e)
+            QMessageBox.warning(self, "Details Error", f"Failed to show details:\n{e}")
 
     def showCellContextMenu(self, pos):
         """Show context menu for cell right-click: Metadata details (internal only, non-overlay) + overlay if applicable."""
-        index = self.mainTable.indexAt(pos)
+        try:
+            index = self.mainTable.indexAt(pos)
 
-        if not index.isValid():
-            return        
-        row = index.row()
-        col = index.column()
-        
-        # Get timestamp and series (from headers)
-        timestampStr = self.mainTable.verticalHeaderItem(row).text() if self.mainTable.verticalHeaderItem(row) else ""
-        seriesLabel = self.mainTable.horizontalHeaderItem(col).text() if self.mainTable.horizontalHeaderItem(col) else ""
-        
-        if not timestampStr or not seriesLabel:
-            Logic.logMessage("WARN", "Invalid cell: No timestamp or series label")
-            return
-        
-        # Get lookupId and db from columnMetadata
-        lookupId = self.columnMetadata[col].get('lookupId') if col < len(self.columnMetadata) else None
-        db = self.columnMetadata[col].get('dbs') if col < len(self.columnMetadata) else None
-        
-        # Normalize db to string if it's a list (for single-db normal columns)
-        if isinstance(db, list) and len(db) > 0:
-            db = db[0]
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
-        
-        # Normalize seriesLabel for lookup to match seriesResponses keys
-        normalizedLabel = seriesLabel.replace('\n', ' ').strip() if db == 'AQUARIUS' else seriesLabel.split('\n')[-1].strip()
-        response = self.seriesResponses.get(normalizedLabel) if normalizedLabel else None
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")              
-        menu = QMenu(self)
-        
-        # Add metadata details if internal query, normal type
-        colType = self.columnMetadata[col].get('type') if col < len(self.columnMetadata) else None
-        if self.currentQueryType == 'internal' and colType == 'normal':
-
-            # Extract interval from queryInfos (e.g., '20179|HOUR|USBR-LCHDB' -> 'HOUR')
-            queryInfo = self.columnMetadata[col].get('queryInfos', ['|'])[0]
-            interval = queryInfo.split('|')[1] if '|' in queryInfo else 'HOUR' # Default to HOUR if missing
+            if not index.isValid():
+                return        
+            row = index.row()
+            col = index.column()
             
-            if db == 'AQUARIUS' and isinstance(response, dict):
-                detailsAction = menu.addAction("Show details")
-                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'AQUARIUS', interval))
+            # Get timestamp and series (from headers)
+            timestampStr = self.mainTable.verticalHeaderItem(row).text() if self.mainTable.verticalHeaderItem(row) else ""
+            seriesLabel = self.mainTable.horizontalHeaderItem(col).text() if self.mainTable.horizontalHeaderItem(col) else ""
+            
+            if not timestampStr or not seriesLabel:
+                Logic.logMessage("WARN", "Invalid cell: No timestamp or series label")
+                return
+            
+            # Get lookupId and db from columnMetadata
+            lookupId = self.columnMetadata[col].get('lookupId') if col < len(self.columnMetadata) else None
+            db = self.columnMetadata[col].get('dbs') if col < len(self.columnMetadata) else None
+            
+            # Normalize db to string if it's a list (for single-db normal columns)
+            if isinstance(db, list) and len(db) > 0:
+                db = db[0]
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
+            
+            # Normalize seriesLabel for lookup to match seriesResponses keys
+            normalizedLabel = seriesLabel.replace('\n', ' ').strip() if db == 'AQUARIUS' else seriesLabel.split('\n')[-1].strip()
+            response = self.seriesResponses.get(normalizedLabel) if normalizedLabel else None
+            
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")              
+            menu = QMenu(self)
+            
+            # Add metadata details if internal query, normal type
+            colType = self.columnMetadata[col].get('type') if col < len(self.columnMetadata) else None
+            if self.currentQueryType == 'internal' and colType == 'normal':
 
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for AQUARIUS")
-            elif db.startswith('USBR') and isinstance(response, list):
-                detailsAction = menu.addAction("Show details")
-                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USBR', interval))
+                # Extract interval from queryInfos (e.g., '20179|HOUR|USBR-LCHDB' -> 'HOUR')
+                queryInfo = self.columnMetadata[col].get('queryInfos', ['|'])[0]
+                interval = queryInfo.split('|')[1] if '|' in queryInfo else 'HOUR' # Default to HOUR if missing
+                
+                if db == 'AQUARIUS' and isinstance(response, dict):
+                    detailsAction = menu.addAction("Show details")
+                    detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'AQUARIUS', interval))
+
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for AQUARIUS")
+                elif db and str(db).startswith('USBR') and isinstance(response, list):
+                    detailsAction = menu.addAction("Show details")
+                    detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USBR', interval))
+                    
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USBR")
+                elif db == 'USGS-NWIS' and isinstance(response, dict):
+                    detailsAction = menu.addAction("Show details")
+                    detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USGS', interval))
+                    
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USGS")
+            
+            # Add single action for overlay columns
+            isOverlay = colType == 'overlay'
+            
+            if isOverlay:
+                # Get types from columnMetadata (e.g., ['overlay', 'USBR', 'AQUARIUS'])
+                meta = self.columnMetadata[col]
+                types = ['overlay'] + meta.get('dbs', []) # Overlay first, then DBs in order
                 
                 if Config.debug:
-                    Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USBR")
-            elif db == 'USGS-NWIS' and isinstance(response, dict):
+                    Logic.logMessage("DEBUG", f"showCellContextMenu: Overlay types for col {col}: {types}")
+                
+                # Add single action
                 detailsAction = menu.addAction("Show details")
-                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USGS', interval))
+                detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'overlay', multiTypes=types))
+            
+            if menu.actions(): # Only show if actions added
+                menu.exec(self.mainTable.viewport().mapToGlobal(pos))
                 
                 if Config.debug:
-                    Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USGS")
-        
-        # Add single action for overlay columns
-        isOverlay = colType == 'overlay'
-        
-        if isOverlay:
-            # Get types from columnMetadata (e.g., ['overlay', 'USBR', 'AQUARIUS'])
-            meta = self.columnMetadata[col]
-            types = ['overlay'] + meta.get('dbs', []) # Overlay first, then DBs in order
-            
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"showCellContextMenu: Overlay types for col {col}: {types}")
-            
-            # Add single action
-            detailsAction = menu.addAction("Show details")
-            detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'overlay', multiTypes=types))
-        
-        if menu.actions(): # Only show if actions added
-            menu.exec(self.mainTable.viewport().mapToGlobal(pos))
-            
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"showCellContextMenu: Displayed menu for cell ({row}, {col}) with {len(menu.actions())} actions")
-        else:
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"showCellContextMenu: No actions for cell ({row}, {col})")
+                    Logic.logMessage("DEBUG", f"showCellContextMenu: Displayed menu for cell ({row}, {col}) with {len(menu.actions())} actions")
+            else:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"showCellContextMenu: No actions for cell ({row}, {col})")
+        except Exception as e:
+            Logic.logException("showCellContextMenu failed", e)
 
     def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType, interval=None, multiTypes=None):
         """Open uiDetails for metadata (Aquarius or USBR)."""
-        # For multiTypes, gather responses and intervals for each type
-        responsesList = None
-        intervalsList = None
+        try:
+            # For multiTypes, gather responses and intervals for each type
+            responsesList = None
+            intervalsList = None
 
-        if multiTypes:
-            meta = self.columnMetadata[col]
-            lookupIds = meta.get('lookupId', [])
-            responsesList = []
-            intervalsList = []
-            
-            for i, t in enumerate(multiTypes):
-                if t == 'overlay':
-                    # Use cell data for overlay tab
-                    item = self.mainTable.item(row, col)
-                    cellData = item.data(Qt.ItemDataRole.UserRole) if item else {}
-                    responsesList.append(cellData)
-                    intervalsList.append(None) # No interval for overlay
-                else:
-                    # Use seriesResponses for DB tabs
-                    if i-1 < len(lookupIds): # i-1 since overlay is first
-                        normLabel = lookupIds[i-1].replace('\n', ' ').strip()
-                        dbResponse = self.seriesResponses.get(normLabel, {})
-                        responsesList.append(dbResponse)
-                        
-                        # Extract interval from queryInfos
-                        qInfo = meta['queryInfos'][i-1] if i-1 < len(meta['queryInfos']) else '|'
-                        dbInterval = qInfo.split('|')[1] if '|' in qInfo else 'HOUR'
-                        intervalsList.append(dbInterval)
+            if multiTypes:
+                meta = self.columnMetadata[col]
+                lookupIds = meta.get('lookupId', [])
+                responsesList = []
+                intervalsList = []
+                
+                for i, t in enumerate(multiTypes):
+                    if t == 'overlay':
+                        # Use cell data for overlay tab
+                        item = self.mainTable.item(row, col)
+                        cellData = item.data(Qt.ItemDataRole.UserRole) if item else {}
+                        responsesList.append(cellData)
+                        intervalsList.append(None) # No interval for overlay
                     else:
-                        responsesList.append({})
-                        intervalsList.append('HOUR')
-                        if Config.debug:
-                            Logic.logMessage("DEBUG", f"showMetadataDetails: No lookupId/queryInfo for type {t} at index {i-1}")
+                        # Use seriesResponses for DB tabs
+                        if i-1 < len(lookupIds): # i-1 since overlay is first
+                            normLabel = lookupIds[i-1].replace('\n', ' ').strip()
+                            dbResponse = self.seriesResponses.get(normLabel, {})
+                            responsesList.append(dbResponse)
+                            
+                            # Extract interval from queryInfos
+                            qInfo = meta['queryInfos'][i-1] if i-1 < len(meta['queryInfos']) else '|'
+                            dbInterval = qInfo.split('|')[1] if '|' in qInfo else 'HOUR'
+                            intervalsList.append(dbInterval)
+                        else:
+                            responsesList.append({})
+                            intervalsList.append('HOUR')
+                            if Config.debug:
+                                Logic.logMessage("DEBUG", f"showMetadataDetails: No lookupId/queryInfo for type {t} at index {i-1}")
+                
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"showMetadataDetails: Gathered {len(responsesList)} responses and intervals for multiTypes {multiTypes}")
+            
+            detailsWin = uiDetails(parent=self)
+            detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response, interval, multiTypes=multiTypes, responsesList=responsesList, intervalsList=intervalsList)
+            detailsWin.show()
             
             if Config.debug:
-                Logic.logMessage("DEBUG", f"showMetadataDetails: Gathered {len(responsesList)} responses and intervals for multiTypes {multiTypes}")
-        
-        detailsWin = uiDetails(parent=self)
-        detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response, interval, multiTypes=multiTypes, responsesList=responsesList, intervalsList=intervalsList)
-        detailsWin.show()
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"showMetadataDetails: Opened details for {timestampStr} - {seriesLabel} ({dbType}), multiTypes={multiTypes}")
+                Logic.logMessage("DEBUG", f"showMetadataDetails: Opened details for {timestampStr} - {seriesLabel} ({dbType}), multiTypes={multiTypes}")
+        except Exception as e:
+            Logic.logException("showMetadataDetails failed", e)
+            QMessageBox.warning(self, "Details Error", f"Failed to show details:\n{e}")
 
     def onTabCloseRequested(self, index):
         self.tabWidget.removeTab(index)
@@ -799,41 +830,64 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", "Refreshed snippets list")
 
 if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    app.setApplicationName("Data Doctor")
+    app = None
+    try:
+        app = QApplication(sys.argv)
+        app.setApplicationName("Data Doctor")
 
-    if Config.debug:
-        Logic.logMessage("DEBUG", "Applied global app stylesheet with default button effects and tab close styles")
+        # Init logging early, then install hooks so uncaught errors are logged and non-fatal
+        Logic.initLogging()
+        Logic.installExceptionHooks(showDialog=True)
 
-    # Init logging early to capture all events
-    Logic.initLogging()  
+        if Config.debug:
+            Logic.logMessage("DEBUG", "Applied global app stylesheet with default button effects and tab close styles")
 
-    # Grab system font color and save as global
-    Config.systemTextColor = app.palette().color(QPalette.ColorRole.Text)
+        # Grab system font color and save as global
+        Config.systemTextColor = app.palette().color(QPalette.ColorRole.Text)
 
-    # Create instances
-    winMain = uiMain()
-    winQuery = uiQuery(winMain)
-    winDataDictionary = uiDataDictionary(winMain)
-    winOptions = uiOptions(winMain)
-    winAbout = uiAbout(winMain)  
-    winMain.winQuery = winQuery
-    winMain.winDataDictionary = winDataDictionary  
-    winMain.winOptions = winOptions
-    winMain.winAbout = winAbout
+        # Create instances
+        winMain = uiMain()
+        winQuery = uiQuery(winMain)
+        winDataDictionary = uiDataDictionary(winMain)
+        winOptions = uiOptions(winMain)
+        winAbout = uiAbout(winMain)  
+        winMain.winQuery = winQuery
+        winMain.winDataDictionary = winDataDictionary  
+        winMain.winOptions = winOptions
+        winMain.winAbout = winAbout
 
-    # Apply styles and fonts
-    Utils.applyStylesAndFonts(app, winMain.mainTable, winQuery.listQueryList)
+        # Apply styles and fonts
+        Utils.applyStylesAndFonts(app, winMain.mainTable, winQuery.listQueryList)
 
-    # Load data dictionary and quick looks
-    Utils.loadDataDictionary(winDataDictionary.mainTable)
-    Utils.loadQuickLooks(winQuery.cbQuickLook)
+        # Load data dictionary and quick looks (best-effort; do not block startup)
+        try:
+            Utils.loadDataDictionary(winDataDictionary.mainTable)
+        except Exception as e:
+            Logic.logException("Startup: loadDataDictionary failed", e)
+        try:
+            Utils.loadQuickLooks(winQuery.cbQuickLook)
+        except Exception as e:
+            Logic.logException("Startup: loadQuickLooks failed", e)
 
-    # Show main window
-    winMain.show()
+        # Show main window
+        winMain.show()
 
-    # Convert legacy quickLooks
-    Logic.convertLegacyQuickLooks()
-    
-    # Start application
-    sys.exit(app.exec())
+        # Convert legacy quickLooks
+        try:
+            Logic.convertLegacyQuickLooks()
+        except Exception as e:
+            Logic.logException("Startup: convertLegacyQuickLooks failed", e)
+        
+        # Start application
+        sys.exit(app.exec())
+    except Exception as e:
+        try:
+            Logic.logException("Fatal startup error", e)
+        except Exception:
+            print(f"Fatal startup error: {e}", file=sys.stderr)
+        try:
+            if app is not None:
+                QMessageBox.critical(None, "Startup Error", f"Data Doctor failed to start:\n{e}")
+        except Exception:
+            pass
+        sys.exit(1)

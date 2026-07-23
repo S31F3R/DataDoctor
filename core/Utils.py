@@ -404,13 +404,16 @@ def loadConfig():
 
             return config
         except Exception as e:
-            if Config.debug:
-                Logic.logMessage("ERROR", f"Failed to load user.config: {e}")
+            Logic.logException("Failed to load user.config; using defaults", e)
+            return defaults
     else:
-        with open(configPath, 'w', encoding='utf-8') as configFile:
-            json.dump(defaults, configFile, indent=2)
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Created default user.config with defaults: {defaults}")
+        try:
+            with open(configPath, 'w', encoding='utf-8') as configFile:
+                json.dump(defaults, configFile, indent=2)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Created default user.config with defaults: {defaults}")
+        except Exception as e:
+            Logic.logException("Failed to create default user.config", e)
         return defaults
 
 def getConfigPath():

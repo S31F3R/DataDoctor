@@ -88,145 +88,153 @@ class uiDetails(QWidget):
         - responsesList: list (optional, matching multiTypes order) for per-tab data.
         - intervalsList: list (optional, matching multiTypes order) for per-tab intervals.
         """        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Populating details for queryType: {queryType}, series: {seriesLabel}, timestamp: {timestampStr}, multiTypes={multiTypes}")
-        
-        # Set title using first line of seriesLabel only (no timestamp for headers)
-        titleLabel = seriesLabel.split('\n')[0] if '\n' in seriesLabel else seriesLabel
-        if timestampStr:
-            self.lblTitle.setText(f" Details for {timestampStr} - {titleLabel}")
-        else:
-            self.lblTitle.setText(f" Details for {titleLabel}")
-        
-        # Clear existing rows and set columns dynamically
-        self.detailsTable.setRowCount(0)
-        
-        if queryType in ["overlay", "headerNormal", "headerDelta", "headerOverlay", "USBR", "USGS"]:
-            self.detailsTable.setColumnCount(2)
-            self.detailsTable.setHorizontalHeaderLabels(["Type", "Value"])
-        else:
-            self.detailsTable.setColumnCount(4)
-            self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
-        
-        self.detailsTable.horizontalHeader().setStretchLastSection(True)
-        
-        # Handler dictionary for database-specific metadata (easy to add USGS)
-        metadataHandlers = {
-            "AQUARIUS": lambda ts, resp, interval=None, table=None: self.populateAquarius(ts, resp, table=table), # Ignore interval
-            "USGS": lambda ts, resp, interval=None, table=None: self.populateUSGS(ts, resp, table=table), # Ignore interval
-            "USBR": lambda ts, resp, interval=None, table=None: self.populateUSBR(ts, resp, interval, table=table),
-        }
-        
-        # If multiTypes provided (e.g., for overlay cell), use tabs
-        if multiTypes and len(multiTypes) > 1:
-            # Create QTabWidget if not exists
-            if not hasattr(self, 'tabWidget') or not self.tabWidget:
-                self.tabWidget = QTabWidget(self)
-                layout = self.layout() # Assuming QVBoxLayout or similar from .ui
-
-                if layout:
-                    layout.addWidget(self.tabWidget)
-                self.detailsTable.hide() # Hide original table, use per-tab tables
-                self.tabWidget.currentChanged.connect(self.resizeToCurrentTab) # Connect here if created
-            
-            # Clear existing tabs
-            while self.tabWidget.count() > 0:
-                self.tabWidget.removeTab(0)
-            
-            # Add tabs in order (Overlay first, then DBs)
-            for i, t in enumerate(multiTypes):
-                # Normalize t for handlers (e.g., 'USBR-LCHDB' -> 'USBR')
-                normT = t.split('-')[0] if '-' in t else t                
-                tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
-                tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'                
-                tabWidget = QWidget()
-                tabLayout = QVBoxLayout(tabWidget)
-                tabLayout.setContentsMargins(0, 0, 0, 0) # Zero margins to remove gaps
-                tabTable = QTableWidget(tabWidget) # New table per tab
-                tabTable.setSortingEnabled(True)
-                tabTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-                tabTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-                tabTable.verticalHeader().setVisible(False)
-                tabTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding) # Expand to fill layout
-                tabTable.horizontalScrollBar().setVisible(False) # Hide horizontal scrollbar
-                tabTable.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # Always off to avoid space reservation
-                
-                # Set columns/headers based on type
-                if normT in ["overlay", "USBR", "USGS"]:
-                    tabTable.setColumnCount(2)
-                    tabTable.setHorizontalHeaderLabels(["Type", "Value"])
-                else:
-                    tabTable.setColumnCount(4)
-                    tabTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
-                tabTable.horizontalHeader().setStretchLastSection(True)
-                
-                # Populate per type
-                if normT == 'overlay':
-                    self.populateOverlay(timestampStr, tabResp, table=tabTable) # Pass custom table
-                elif normT in metadataHandlers:
-                    metadataHandlers[normT](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
-                else:
-                    Logic.logMessage("WARN", f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab")
-                    continue                
-                tabLayout.addWidget(tabTable)
-                
-                # Tab name: Uppercase abbreviations/suffixes, capitalize "Details"
-                if t.upper() in ['USBR', 'USGS'] or '-' in t:
-                    tabName = t.upper() + " Details"
-                else:
-                    tabName = t.capitalize() + " Details"
-                if i > 0: # For DB tabs
-                    if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                        tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
-                self.tabWidget.addTab(tabWidget, tabName)
-                
-                # Initial resize table (final resize on tab change)
-                tabTable.resizeColumnsToContents()
-                tabTable.resizeRowsToContents()
-            
-            if self.tabWidget.count() == 0:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "populateDetails: No tabs created for multiTypes")
-            
+        try:
             if Config.debug:
-                Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes")
-            
-            # Initial resize to first tab
-            self.resizeToCurrentTab(0)
-        else:
-            # Single-type: Use original table (no tabs)
-            if hasattr(self, 'tabWidget') and self.tabWidget:
-                self.tabWidget.hide()
-                self.detailsTable.show()
-            
-            if queryType == "overlay":
-                self.populateOverlay(timestampStr, response)
-            elif queryType == "headerNormal":
-                self.populateHeaderNormal(response)
-            elif queryType == "headerDelta":
-                self.populateHeaderDelta(response)
-            elif queryType == "headerOverlay":
-                self.populateHeaderOverlay(response)
-            elif queryType in metadataHandlers:
-                metadataHandlers[queryType](timestampStr, response, interval=interval)
+                Logic.logMessage("DEBUG", f"Populating details for queryType: {queryType}, series: {seriesLabel}, timestamp: {timestampStr}, multiTypes={multiTypes}")
+
+            # Set title using first line of seriesLabel only (no timestamp for headers)
+            titleLabel = seriesLabel.split('\n')[0] if '\n' in seriesLabel else seriesLabel
+            if timestampStr:
+                self.lblTitle.setText(f" Details for {timestampStr} - {titleLabel}")
             else:
-                Logic.logMessage("WARN", f"Unknown queryType: {queryType} - No details populated")
-                return
-        
-            # Resize table to contents
-            self.detailsTable.resizeColumnsToContents()
-            self.detailsTable.resizeRowsToContents()
-            
-            # Manually calculate and set window size to fit content exactly (no scroll bars)
-            self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
-            self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
-            width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding for borders/margins
-            height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30 # Reduced buffer to avoid extra row
-            self.resize(width, height)
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Populated {self.detailsTable.rowCount()} rows (or tabs)")
-    
+                self.lblTitle.setText(f" Details for {titleLabel}")
+
+            # Clear existing rows and set columns dynamically
+            self.detailsTable.setRowCount(0)
+
+            if queryType in ["overlay", "headerNormal", "headerDelta", "headerOverlay", "USBR", "USGS"]:
+                self.detailsTable.setColumnCount(2)
+                self.detailsTable.setHorizontalHeaderLabels(["Type", "Value"])
+            else:
+                self.detailsTable.setColumnCount(4)
+                self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
+
+            self.detailsTable.horizontalHeader().setStretchLastSection(True)
+
+            # Handler dictionary for database-specific metadata (easy to add USGS)
+            metadataHandlers = {
+                "AQUARIUS": lambda ts, resp, interval=None, table=None: self.populateAquarius(ts, resp, table=table), # Ignore interval
+                "USGS": lambda ts, resp, interval=None, table=None: self.populateUSGS(ts, resp, table=table), # Ignore interval
+                "USBR": lambda ts, resp, interval=None, table=None: self.populateUSBR(ts, resp, interval, table=table),
+            }
+
+            # If multiTypes provided (e.g., for overlay cell), use tabs
+            if multiTypes and len(multiTypes) > 1:
+                # Create QTabWidget if not exists
+                if not hasattr(self, 'tabWidget') or not self.tabWidget:
+                    self.tabWidget = QTabWidget(self)
+                    layout = self.layout() # Assuming QVBoxLayout or similar from .ui
+
+                    if layout:
+                        layout.addWidget(self.tabWidget)
+                    self.detailsTable.hide() # Hide original table, use per-tab tables
+                    self.tabWidget.currentChanged.connect(self.resizeToCurrentTab) # Connect here if created
+
+                # Clear existing tabs
+                while self.tabWidget.count() > 0:
+                    self.tabWidget.removeTab(0)
+
+                # Add tabs in order (Overlay first, then DBs)
+                for i, t in enumerate(multiTypes):
+                    # Normalize t for handlers (e.g., 'USBR-LCHDB' -> 'USBR')
+                    normT = t.split('-')[0] if '-' in t else t                
+                    tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
+                    tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'                
+                    tabWidget = QWidget()
+                    tabLayout = QVBoxLayout(tabWidget)
+                    tabLayout.setContentsMargins(0, 0, 0, 0) # Zero margins to remove gaps
+                    tabTable = QTableWidget(tabWidget) # New table per tab
+                    tabTable.setSortingEnabled(True)
+                    tabTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+                    tabTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+                    tabTable.verticalHeader().setVisible(False)
+                    tabTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding) # Expand to fill layout
+                    tabTable.horizontalScrollBar().setVisible(False) # Hide horizontal scrollbar
+                    tabTable.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # Always off to avoid space reservation
+
+                    # Set columns/headers based on type
+                    if normT in ["overlay", "USBR", "USGS"]:
+                        tabTable.setColumnCount(2)
+                        tabTable.setHorizontalHeaderLabels(["Type", "Value"])
+                    else:
+                        tabTable.setColumnCount(4)
+                        tabTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
+                    tabTable.horizontalHeader().setStretchLastSection(True)
+
+                    # Populate per type
+                    if normT == 'overlay':
+                        self.populateOverlay(timestampStr, tabResp, table=tabTable) # Pass custom table
+                    elif normT in metadataHandlers:
+                        metadataHandlers[normT](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
+                    else:
+                        Logic.logMessage("WARN", f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab")
+                        continue                
+                    tabLayout.addWidget(tabTable)
+
+                    # Tab name: Uppercase abbreviations/suffixes, capitalize "Details"
+                    if t.upper() in ['USBR', 'USGS'] or '-' in t:
+                        tabName = t.upper() + " Details"
+                    else:
+                        tabName = t.capitalize() + " Details"
+                    if i > 0: # For DB tabs
+                        if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
+                            tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
+                    self.tabWidget.addTab(tabWidget, tabName)
+
+                    # Initial resize table (final resize on tab change)
+                    tabTable.resizeColumnsToContents()
+                    tabTable.resizeRowsToContents()
+
+                if self.tabWidget.count() == 0:
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "populateDetails: No tabs created for multiTypes")
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes")
+
+                # Initial resize to first tab
+                self.resizeToCurrentTab(0)
+            else:
+                # Single-type: Use original table (no tabs)
+                if hasattr(self, 'tabWidget') and self.tabWidget:
+                    self.tabWidget.hide()
+                    self.detailsTable.show()
+
+                if queryType == "overlay":
+                    self.populateOverlay(timestampStr, response)
+                elif queryType == "headerNormal":
+                    self.populateHeaderNormal(response)
+                elif queryType == "headerDelta":
+                    self.populateHeaderDelta(response)
+                elif queryType == "headerOverlay":
+                    self.populateHeaderOverlay(response)
+                elif queryType in metadataHandlers:
+                    metadataHandlers[queryType](timestampStr, response, interval=interval)
+                else:
+                    Logic.logMessage("WARN", f"Unknown queryType: {queryType} - No details populated")
+                    return
+
+                # Resize table to contents
+                self.detailsTable.resizeColumnsToContents()
+                self.detailsTable.resizeRowsToContents()
+
+                # Manually calculate and set window size to fit content exactly (no scroll bars)
+                self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
+                self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
+                width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding for borders/margins
+                height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30 # Reduced buffer to avoid extra row
+                self.resize(width, height)
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Populated {self.detailsTable.rowCount()} rows (or tabs)")
+
+        except Exception as e:
+            Logic.logException(f"populateDetails failed for queryType={queryType!r}", e)
+            try:
+                self.lblTitle.setText(f" Details error: {e}")
+            except Exception:
+                pass
+
     def populateOverlay(self, timestampStr, data, table=None):
         """Internal method to populate for overlay cell data."""
         if table is None:
