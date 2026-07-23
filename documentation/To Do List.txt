@@ -1,7 +1,6 @@
 ####### CURRENT BUGS #######
 -Header sort or undo button break Overlay code formatting
 -Need a export complete message
--End times are truncating down if on a full interval (check with even hours on HOUR data)
 -Update tab index on all windows
 -Aquairus context menu is broken when querying Aquarius only data
     -Aquarius only with overlay works
@@ -18,7 +17,6 @@
 -HDB query won't show meta data if there is a value in rbase but not interval. Need to make it flag not in interval but show rbase data
 -QAQC is not working in overlaly mode, need to fix this and base it off of output data, meaning data displayed in column
     -Sorting by any column will fix this but break overlay logic. Need to set a priority order so both logic can run. Use QAQC logic first, then override with overlay logic
--Beginning period offset doesn't seem to work on USBR data
 -Options saving is buggy. Not able to pin point what the issue is. Validate EVERYTHING in all options tabs gets saved when save button is hit
     -Password code (at least in USBR) will wipe out password if copy and pasted in while masking is on. If masking is off, it seems to work
 -Remove large data set warning
