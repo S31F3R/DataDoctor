@@ -9,162 +9,44 @@ from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
 
 class customPasswordEdit(QLineEdit):
-    """Custom QLineEdit for password fields that briefly shows new input before masking it."""
+    """Password field using Qt's native echo modes (no dual realText/display bookkeeping).
+
+    Masked   -> EchoMode.Password  (paste, type, backspace all handled by Qt; never clear text)
+    Revealed -> EchoMode.Normal
+
+    Previous approach manually painted mask characters while keeping EchoMode.Normal.
+    On some platforms paste still wrote clear text into the widget without updating the
+    parallel realText store, so typing/backspace then wiped or desynced the password.
+    """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.realText = ''
         self.revealed = False
-        self.timer = QTimer(self)
-        self.timer.setSingleShot(True)
-        self.timer.timeout.connect(self.fullMask)
-        self.maskChar = '●' 
-        self.setEchoMode(QLineEdit.EchoMode.Normal) 
+        self.setEchoMode(QLineEdit.EchoMode.Password)
 
         if Config.debug:
-            Logic.logMessage("DEBUG", "customPasswordEdit initialized")
-
-    def text(self):
-        return self.realText
+            Logic.logMessage("DEBUG", "customPasswordEdit initialized (native Password echo mode)")
 
     def setText(self, text):
-        self.realText = text
+        super().setText(text if text is not None else '')
+        self._applyEchoMode()
 
-        if self.revealed:
-            super().setText(self.realText)
-        else:
-            super().setText(self.maskChar * len(self.realText))
-
-    def keyPressEvent(self, event):
-        if self.revealed:
-            super().keyPressEvent(event)
-            self.realText = super().text()
-            return
-        pos = self.cursorPosition()
-
-        if self.hasSelectedText():
-            selStart = self.selectionStart()
-            selLen = self.selectionLength()
-            self.realText = self.realText[:selStart] + self.realText[selStart + selLen:]
-            pos = selStart
-
-        if event.key() == Qt.Key.Key_Backspace:
-            if pos > 0:
-                self.realText = self.realText[:pos - 1] + self.realText[pos:]
-                pos -= 1
-            super().setText(self.maskChar * len(self.realText))
-            self.setCursorPosition(pos)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Backspace handled, updated realText")
-            return
-        elif event.key() == Qt.Key.Key_Delete:
-            if pos < len(self.realText):
-                self.realText = self.realText[:pos] + self.realText[pos + 1:]
-            super().setText(self.maskChar * len(self.realText))
-            self.setCursorPosition(pos)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Delete handled, updated realText")
-            return
-        elif event.text() and event.text().isprintable() and not event.isAutoRepeat():
-            newChar = event.text()
-            self.realText = self.realText[:pos] + newChar + self.realText[pos:]
-
-            # Briefly show the new character in clear text
-            displayed = self.maskChar * pos + newChar + self.maskChar * (len(self.realText) - pos - 1)
-            super().setText(displayed)
-            self.setCursorPosition(pos + 1)
-            self.timer.start(2000)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Key press detected, briefly showing new character")
-            return
-
-        super().keyPressEvent(event)
-
-    def inputMethodEvent(self, event):
-        if self.revealed:
-            super().inputMethodEvent(event)
-            self.realText = super().text()
-            return
-
-        pos = self.cursorPosition()
-        if self.hasSelectedText():
-            selStart = self.selectionStart()
-            selLen = self.selectionLength()
-            self.realText = self.realText[:selStart] + self.realText[selStart + selLen:]
-            pos = selStart
-
-        if event.commitString():
-            newText = event.commitString()
-            self.realText = self.realText[:pos] + newText + self.realText[pos:]
-
-            # Briefly show the new input in clear text
-            displayed = self.maskChar * pos + newText + self.maskChar * (len(self.realText) - pos - len(newText))
-            super().setText(displayed)
-            self.setCursorPosition(pos + len(newText))
-            self.timer.start(2000)
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Input method event (e.g., paste), briefly showing new input")
-            return
-
-        super().inputMethodEvent(event)
-
-    def fullMask(self):
-        if not self.revealed:
-            pos = self.cursorPosition()
-            super().setText(self.maskChar * len(self.realText))
-            self.setCursorPosition(pos)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Timeout reached, fully masking the field")
+    def _applyEchoMode(self):
+        self.setEchoMode(
+            QLineEdit.EchoMode.Normal if self.revealed else QLineEdit.EchoMode.Password
+        )
 
     def toggleReveal(self):
         self.revealed = not self.revealed
-        pos = self.cursorPosition()
-
-        if self.revealed:
-            super().setText(self.realText)
-            self.timer.stop()
-        else:
-            super().setText(self.maskChar * len(self.realText))
-        self.setCursorPosition(pos)
+        self._applyEchoMode()
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Reveal toggled, now revealed: {self.revealed}")
+            Logic.logMessage(
+                "DEBUG",
+                f"Reveal toggled: revealed={self.revealed}, len={len(self.text())}"
+            )
 
     def isRevealed(self):
         return self.revealed
-
-    def insertFromMimeData(self, source):
-        """Handle paste (Ctrl+V) so realText stays in sync while masked."""
-        if self.revealed:
-            super().insertFromMimeData(source)
-            self.realText = super().text()
-            return
-
-        if source is None or not source.hasText():
-            return
-
-        newText = source.text()
-        if newText is None:
-            return
-
-        pos = self.cursorPosition()
-        if self.hasSelectedText():
-            selStart = self.selectionStart()
-            selLen = self.selectionLength()
-            self.realText = self.realText[:selStart] + self.realText[selStart + selLen:]
-            pos = selStart
-
-        self.realText = self.realText[:pos] + newText + self.realText[pos:]
-        displayed = self.maskChar * pos + newText + self.maskChar * (len(self.realText) - pos - len(newText))
-        super().setText(displayed)
-        self.setCursorPosition(pos + len(newText))
-        self.timer.start(2000)
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", "insertFromMimeData: paste applied to realText while masked")
 
 def applyStylesAndFonts(app, mainTable, queryList):
     """Apply stylesheet and retro font if enabled."""
