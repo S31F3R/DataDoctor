@@ -3,12 +3,12 @@
 from PyQt6.QtWidgets import QDialog, QLabel, QTextBrowser, QPushButton
 from PyQt6.QtCore import Qt, QUrl, QSize
 from PyQt6.QtGui import QPixmap, QFont, QFontDatabase, QIcon
-from PyQt6.QtMultimedia import QSoundEffect
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import uic
 from core import Logic, Utils
 
 class uiAbout(QDialog):
-    """About dialog: Retro PNG bg with transparent info overlay and looping sound."""
+    """About dialog: Retro PNG bg with transparent info overlay and looping music."""
     def __init__(self, winMain=None):
         super().__init__(parent=winMain)
         uic.loadUi(Logic.resourcePath('ui/winAbout.ui'), self)
@@ -56,16 +56,43 @@ class uiAbout(QDialog):
         self.textInfo.setStyleSheet("background-color: transparent; border: none;")
         self.textInfo.setGeometry(70, 140, 800, 200)
         self._setupSecretButton()
-        self.soundEffect = None
+        # QMediaPlayer (music role) instead of QSoundEffect (event role): better for a
+        # long looping track, and avoids PipeWire/Pulse muting "event" streams on Linux.
+        # Same Qt6 APIs on Windows/macOS/Linux — keep audioOutput alive on self.
+        self.mediaPlayer = None
+        self.audioOutput = None
+        self._setupMusic()
 
+    def _setupMusic(self):
+        """Load looping About music. Safe no-op if multimedia backend is unavailable."""
         try:
             wavPath = Logic.resourcePath('ui/sounds/8-Bit-Perplexion.wav')
-            self.soundEffect = QSoundEffect(self)
-            self.soundEffect.setSource(QUrl.fromLocalFile(wavPath))
-            self.soundEffect.setLoopCount(-2)
-            self.soundEffect.setVolume(0.8)
+            self.audioOutput = QAudioOutput(self)
+            self.audioOutput.setVolume(0.8)
+            self.mediaPlayer = QMediaPlayer(self)
+            self.mediaPlayer.setAudioOutput(self.audioOutput)
+            self.mediaPlayer.setSource(QUrl.fromLocalFile(wavPath))
+            # -1 == QMediaPlayer.Loops.Infinite (literal avoids enum quirks across PyQt builds)
+            self.mediaPlayer.setLoops(-1)
+            self.mediaPlayer.errorOccurred.connect(self._onMusicError)
         except Exception as e:
-            Logic.logMessage("WARN", f"Failed to load sound effect: {e}")
+            self.mediaPlayer = None
+            self.audioOutput = None
+            Logic.logMessage("WARN", f"Failed to load about music: {e}")
+
+    def _onMusicError(self, error, errorString):
+        Logic.logMessage("WARN", f"About music error: {error} {errorString}")
+
+    def _startMusic(self):
+        if not self.mediaPlayer:
+            return
+        # Restart cleanly when the dialog is reopened
+        self.mediaPlayer.setPosition(0)
+        self.mediaPlayer.play()
+
+    def _stopMusic(self):
+        if self.mediaPlayer:
+            self.mediaPlayer.stop()
 
     def _setupSecretButton(self):
         """
@@ -101,13 +128,10 @@ class uiAbout(QDialog):
     
     def showEvent(self, event):        
         Logic.logMessage("WARN", f"uiAbout showEvent")
-        Utils.centerWindowToParent(self)     
-        
-        if self.soundEffect:
-            self.soundEffect.play()
+        Utils.centerWindowToParent(self)
+        self._startMusic()
         super().showEvent(event)
     
     def closeEvent(self, event):
-        if self.soundEffect:
-            self.soundEffect.stop()
+        self._stopMusic()
         super().closeEvent(event)
