@@ -20,17 +20,3 @@ Still need testing (code changed; not yet confirmed):
 4) Stacked header sort (regression)
    Steps: Run a query, click the same column header several times.
    EXPECT: one sort flip per click (not multi-sort / glitchy multiple sorts).
-
-Not in this pass (still open bugs / features — see To Do List.txt):
---------------------------------------------------------------------------------
-  - Aquarius-only context menu
-  - USGS overlay cell right-click crash
-  - Options multi-tab save issues
-  - Retro mode restart on Windows
-  - Multi-source "Building rows" progress
-  - Double Aquarius overlay metadata
-  - HDB r_base vs interval metadata
-  - SQL builder UI freeze (needs background thread)
-  - Oracle wrong password lock protection
-  - Taskbar icon
-  - etc.
