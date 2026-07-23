@@ -1,0 +1,36 @@
+Still need testing (code changed; not yet confirmed):
+--------------------------------------------------------------------------------
+
+1) Export CSV uses active tab
+   Steps:
+     a. Data Query tab with data → Export → should export main results
+        (with Timestamp column from row headers).
+     b. Enable SQL, run a SQL query, leave SQL tab selected → Export.
+     EXPECT: exports sqlTable (column headers only, no forced Timestamp).
+
+2) Large dataset warning removed
+   Steps: Query a range that returns > 10,000 rows (if practical).
+   EXPECT: no Yes/No "Large Dataset Warning" dialog; table builds (may be slow).
+
+3) HDB headers = commonName - dataType
+   Steps: Query USBR/HDB series that exist in the data dictionary with a dataType.
+   EXPECT: header top line like "Some Site - Flow" (commonName - dataType),
+           not commonName alone.
+
+4) Stacked header sort (regression)
+   Steps: Run a query, click the same column header several times.
+   EXPECT: one sort flip per click (not multi-sort / glitchy multiple sorts).
+
+Not in this pass (still open bugs / features — see To Do List.txt):
+--------------------------------------------------------------------------------
+  - Aquarius-only context menu
+  - USGS overlay cell right-click crash
+  - Options multi-tab save issues
+  - Retro mode restart on Windows
+  - Multi-source "Building rows" progress
+  - Double Aquarius overlay metadata
+  - HDB r_base vs interval metadata
+  - SQL builder UI freeze (needs background thread)
+  - Oracle wrong password lock protection
+  - Taskbar icon
+  - etc.
