@@ -1,8 +1,8 @@
 # uiAbout.py
 
-from PyQt6.QtWidgets import QDialog, QLabel, QTextBrowser
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QPixmap, QFont, QFontDatabase
+from PyQt6.QtWidgets import QDialog, QLabel, QTextBrowser, QPushButton
+from PyQt6.QtCore import Qt, QUrl, QSize
+from PyQt6.QtGui import QPixmap, QFont, QFontDatabase, QIcon
 from PyQt6.QtMultimedia import QSoundEffect
 from PyQt6 import uic
 from core import Logic, Utils
@@ -17,6 +17,7 @@ class uiAbout(QDialog):
         # Define controls
         self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
+        self.buttonSecret = self.findChild(QPushButton, 'buttonSecret')
         self.setFixedSize(900, 479)
         self.setWindowTitle('About Data Doctor')
         
@@ -53,7 +54,8 @@ class uiAbout(QDialog):
         self.textInfo.setHtml(htmlContent)
         self.textInfo.setOpenExternalLinks(True)
         self.textInfo.setStyleSheet("background-color: transparent; border: none;")
-        self.textInfo.setGeometry(70, 140, 800, 200)        
+        self.textInfo.setGeometry(70, 140, 800, 200)
+        self._setupSecretButton()
         self.soundEffect = None
 
         try:
@@ -64,6 +66,38 @@ class uiAbout(QDialog):
             self.soundEffect.setVolume(0.8)
         except Exception as e:
             Logic.logMessage("WARN", f"Failed to load sound effect: {e}")
+
+    def _setupSecretButton(self):
+        """
+        Tiny easter-egg control — The Net (1995) π backdoor icon, bottom-right
+        (same corner as the movie). Hook action up later.
+        """
+        if not self.buttonSecret:
+            return
+        # Stay above the background art; bottom-right like Angela's screen
+        self.buttonSecret.raise_()
+        self.buttonSecret.setGeometry(900 - 26, 479 - 26, 22, 22)
+        self.buttonSecret.setText("")
+        self.buttonSecret.setFlat(True)
+        self.buttonSecret.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.buttonSecret.setToolTip("")
+        self.buttonSecret.setStyleSheet(
+            "QPushButton { border: none; background: transparent; padding: 0; }"
+            "QPushButton:hover { background: rgba(255, 255, 255, 25); border-radius: 2px; }"
+            "QPushButton:pressed { background: rgba(255, 255, 255, 40); }"
+        )
+        iconPath = Logic.resourcePath('ui/icons/Secret.png')
+        icon = QIcon(iconPath)
+        self.buttonSecret.setIcon(icon)
+        # Movie pi is small and quiet in the corner
+        self.buttonSecret.setIconSize(QSize(16, 16))
+        # No-op for now — wire secret behavior when you're ready
+        self.buttonSecret.clicked.connect(self.buttonSecretPressed)
+
+    def buttonSecretPressed(self):
+        """Placeholder for the secret action (attach later)."""
+        if hasattr(Logic, 'logMessage'):
+            Logic.logMessage("DEBUG", "buttonSecretPressed: secret button clicked (no action wired yet)")
     
     def showEvent(self, event):        
         Logic.logMessage("WARN", f"uiAbout showEvent")

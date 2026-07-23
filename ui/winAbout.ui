@@ -57,6 +57,28 @@
     </rect>
    </property>
   </widget>
+  <widget class="QPushButton" name="buttonSecret">
+   <property name="geometry">
+    <rect>
+     <x>874</x>
+     <y>453</y>
+     <width>22</width>
+     <height>22</height>
+    </rect>
+   </property>
+   <property name="toolTip">
+    <string/>
+   </property>
+   <property name="text">
+    <string/>
+   </property>
+   <property name="flat">
+    <bool>true</bool>
+   </property>
+   <property name="cursor">
+    <cursorShape>PointingHandCursor</cursorShape>
+   </property>
+  </widget>
  </widget>
  <resources/>
  <connections/>
