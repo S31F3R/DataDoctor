@@ -484,14 +484,28 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     for task in tasks: taskQueue.put(task)
     threads = []
 
+    workerErrors = []
+
     def worker(threadId):
         while True:
             try:
                 SDID, subStartStr, subEndStr = taskQueue.get_nowait()
-                queryTask(SDID, subStartStr, subEndStr, threadId)
-                taskQueue.task_done()
             except queue.Empty:
                 break
+            try:
+                queryTask(SDID, subStartStr, subEndStr, threadId)
+            except Exception as e:
+                # Do not kill the whole process from a worker thread (e.g. old PATH bloat)
+                Logic.logException(
+                    f"sqlRead worker {threadId} failed for SDID {SDID} range {subStartStr}-{subEndStr}",
+                    e,
+                )
+                workerErrors.append(e)
+            finally:
+                try:
+                    taskQueue.task_done()
+                except Exception:
+                    pass
 
     for i in range(numThreads):
         t = threading.Thread(target=worker, args=(i,))
@@ -509,6 +523,16 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         SDIDStr = str(SDID)
         resultDict[SDIDStr]['data'].extend(partial['data'])
         resultDict[SDIDStr]['rawResponse'].extend(partial['rawResponse'])
+
+    if workerErrors and not resultDict:
+        # Nothing succeeded — surface the first worker failure (e.g. client setup)
+        raise workerErrors[0]
+    if workerErrors and Config.debug:
+        Logic.logMessage(
+            "WARN",
+            f"sqlRead: {len(workerErrors)} worker task(s) failed; continuing with partial results "
+            f"for {len(resultDict)} SDIDs",
+        )
 
     # Sort per SDID
     for SDIDStr in resultDict:

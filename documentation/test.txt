@@ -10,71 +10,34 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
-1) Large query "Building table..." finishes in reasonable time
-   Steps: Run a wide/long query (many timestamps, e.g. INSTANT over weeks or multi-series HOUR year).
-   EXPECT: Progress advances past Building rows / Building table; table appears without
-           multi-minute freeze. Debug mode should not log every single row.
-   Notes: sorting disabled during fill; less processEvents; sample widths once;
-          progress every 100–500 rows instead of every 10.
-          Bug, See Below:
+1) Large multi-source query does not crash on Oracle PATH (Windows)
+   Steps: Internal query ~2 years, many series across USGS + USBR-LCHDB + USBR-YAOHDB
+          + Aquarius (same shape that failed before).
+   EXPECT: No ValueError "environment variable is longer than 32767 characters".
+           Query completes or fails cleanly without process crash mid-Oracle setup.
+   Notes: 2026-07-24 FAIL — every oracleConnection() prepended Instant Client to PATH;
+          multi-thread HDB (SDID × date chunks) blew past Windows 32k env limit.
+          FIX: ensureOracleClientReady() once per process; PATH prepend only if missing.
+          2-day control still OK (few tasks → PATH never hit the ceiling).
 
-          Exception has occurred: ValueError
-the environment variable is longer than 32767 characters
-  File "C:\Data Doctor\core\Oracle.py", line 91, in setup
-    os.environ['PATH'] = f"{clientDir};{os.environ.get('PATH', '')}"
-    ~~~~~~~~~~^^^^^^^^
-  File "C:\Data Doctor\core\Oracle.py", line 65, in __init__
-    self.setup()
-    ~~~~~~~~~~^^
-  File "C:\Data Doctor\core\USBR.py", line 389, in queryTask
-    oracleConn = Oracle.oracleConnection(dsn)
-  File "C:\Data Doctor\core\USBR.py", line 491, in worker
-    queryTask(SDID, subStartStr, subEndStr, threadId)
-    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-ValueError: the environment variable is longer than 32767 characters
-
-2) Data Dictionary window larger + resize grip
-   Steps: Open Data Dictionary.
-   EXPECT: ~1280×720 default (min 900×500); status-bar size grip visible for resize.
-      2026-07-24 Not fixed. It's the vertical scroll bar, the up down one, the thing to grab a very tiny. THis is due to the 40k rows that are populated into the table from the sqllite file. I need that grab thing thicker so it can actually be grabbed.
-
-3) Tab order (main + query)
-   Steps: Tab through main toolbar and Query window fields with keyboard.
-   EXPECT: Public → Internal → Dictionary → Export → Options → Info … then SQL controls;
-           Query: database → interval → data ID → add → dates → options → list → quick looks → Query.
-            2026-07-24 FIXED!
+2) Data Dictionary vertical scrollbar grip usable with ~40k rows
+   Steps: Open Data Dictionary (full load).
+   EXPECT: vertical scrollbar handle is thick enough to grab (min-height ~48px, track ~20px).
 
 
-Confirmed (do not re-break)
+Confirmed recently
 --------------------------------------------------------------------------------
+[x] Tab order main + query
 [x] Options remask secrets on close
-[x] SQL Query Builder background thread (UI not frozen)
+[x] SQL Query Builder background thread
 [x] Aquarius Label = Label only
-[x] About secret π icon
-[x] Header Max/Min show timestamps
-[x] HDB r_base fallback coloring
-[x] Export CSV uses active tab
-[x] HDB headers = commonName - datatype
-[x] Details max 16 rows + themed scrollbar
-[x] Overlay/HDB no ghost 3rd column
-[x] USGS meta / Site Name headers
-[x] Save Quick Look wider / Query window wider
-[x] Raw data deltas fixed-point
-[x] End timestamps exclusive end
-[x] BOP/EOP Options radios
-[x] Header sort / Undo preserves Overlay
-[x] QAQC vs Overlay order
-[x] Password paste while masked
-[x] Export complete message
-[x] Wrong Oracle password fail-fast (auth)
+[x] (prior bug-smash cluster — export, headers, meta, rbase, auth, etc.)
 
 
 Deferred / external
 --------------------------------------------------------------------------------
-[!] Windows taskbar icon when launched via VB.NET → Python (launcher-side)
-[!] USGS monthly/yearly time series — OGC API has only continuous + daily
-    (no monthly/yearly collections). Documented in code; not implementable as
-    first-class USGS series without client-side aggregation.
-[!] Retro restart Windows / Windows text truncation (need Windows machine)
-[!] Aquarius daily 2300 TZ (needs live Aquarius design choice)
-[!] Features: plots, log viewer, goat, formatting rules DB, git/readme
+[!] Windows taskbar icon when launched via VB.NET → Python
+[!] USGS monthly/yearly — OGC has continuous + daily only
+[!] Retro restart Windows / Windows text truncation
+[!] Aquarius daily 2300 TZ
+[!] Features: plots, log viewer, goat, formatting rules, git/readme

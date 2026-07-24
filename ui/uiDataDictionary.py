@@ -43,6 +43,38 @@ class uiDataDictionary(QMainWindow):
         if sb is not None:
             sb.setSizeGripEnabled(True)
             sb.show()
+
+        # 40k+ dictionary rows shrink the vertical scrollbar grip to a few pixels;
+        # force a thick track + min handle so it can actually be grabbed.
+        if self.mainTable is not None:
+            self.mainTable.setStyleSheet("""
+                QScrollBar:vertical {
+                    width: 20px;
+                    margin: 0px;
+                    background: #2a2a2a;
+                }
+                QScrollBar::handle:vertical {
+                    min-height: 48px;
+                    background: #6a6a6a;
+                    border-radius: 4px;
+                    margin: 2px;
+                }
+                QScrollBar::handle:vertical:hover {
+                    background: #8a8a8a;
+                }
+                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                    height: 0px;
+                }
+                QScrollBar:horizontal {
+                    height: 16px;
+                    background: #2a2a2a;
+                }
+                QScrollBar::handle:horizontal {
+                    min-width: 48px;
+                    background: #6a6a6a;
+                    border-radius: 4px;
+                }
+            """)
         
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDataDictionary initialized with btnDeleteRow")
