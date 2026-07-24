@@ -28,10 +28,12 @@ class uiAbout(QDialog):
         scaledPixmap = pixmap.scaled(900, 479, Qt.AspectRatioMode.KeepAspectRatio)
         self.backgroundLabel.setPixmap(scaledPixmap)
         self.backgroundLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)     
-        # Bundled pixel font + platform-resolved size (same pipeline as main UI)
-        fontFamily = Utils.ensureRetroFontLoaded() or "Courier"
-        pt = max(8, int(getattr(Config, 'fontSize', 10) or 10))
-        retroFontObj = QFont(fontFamily, pt)
+        # About always uses the pixel font (CRT look), with roomy line-height
+        aboutFont = Utils.makeFontForRole('about')
+        # Prefer Press Start when available even if retro is off
+        fam = Utils.ensureRetroFontLoaded() or aboutFont.family()
+        pt = Utils.rolePointSize('about', retro=True)
+        retroFontObj = QFont(fam, pt)
         retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
         self.textInfo.setFont(retroFontObj)
         
@@ -44,8 +46,8 @@ class uiAbout(QDialog):
         ]
 
         htmlContent = (
-            f'<html><body style="color: white; font-family: \'{fontFamily}\'; '
-            f'font-size: {pt}pt; padding-left: 50px; white-space: nowrap; line-height: 2.0;">'
+            f'<html><body style="color: white; font-family: \'{fam}\'; '
+            f'font-size: {pt}pt; padding-left: 50px; white-space: nowrap; line-height: 2.2;">'
         )
 
         for label, content in infoList:

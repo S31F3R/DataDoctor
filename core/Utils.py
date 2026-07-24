@@ -5,13 +5,41 @@ import sys
 import json
 import configparser
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
-from PyQt6.QtWidgets import QWidget, QLineEdit
+from PyQt6.QtWidgets import (
+    QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
+    QListWidget, QTreeView, QPushButton,
+)
 from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
 
-# Cached result of loading ui/fonts/PressStart2P-Regular.ttf (None = not tried yet)
-_retroFontFamilyCache = None
+# Bundled fonts (cross-platform):
+#   non-retro → Noto Sans  (matches Seifer's Linux system UI font)
+#   retro     → Press Start 2P
+_defaultFontFamilyCache = None   # Noto Sans
+_defaultFontLoadAttempted = False
+_retroFontFamilyCache = None     # Press Start 2P
 _retroFontLoadAttempted = False
+
+# Point sizes by control role: (non-retro, retro)
+# Non-retro: 10pt Noto Sans — matches this machine's GNOME/Qt default.
+# Retro: buttons stay at 6 (width/fit tuned); other roles larger so labels/lists/logs aren't tiny.
+FONT_ROLE_SIZES = {
+    'ui':     (10, 8),   # labels, checkboxes, radios, combos, tabs, general
+    'button': (10, 6),   # QPushButton — retro size kept at tuned 6pt
+    'list':   (10, 8),   # list widgets / snippets / quick looks
+    'table':  (10, 8),   # data tables
+    'log':    (10, 10),  # log viewer
+    'code':   (10, 9),   # SQL / plain text editors
+    'about':  (10, 9),   # about dialog body (About always forces Press Start)
+}
+
+# Bundled default (non-retro) font faces — all register as family "Noto Sans"
+_DEFAULT_FONT_FILES = (
+    'ui/fonts/NotoSans-Regular.ttf',
+    'ui/fonts/NotoSans-Bold.ttf',
+    'ui/fonts/NotoSans-Italic.ttf',
+    'ui/fonts/NotoSans-BoldItalic.ttf',
+)
 
 class customPasswordEdit(QLineEdit):
     """Password field using Qt's native echo modes (no dual realText/display bookkeeping).
@@ -58,135 +86,187 @@ class customPasswordEdit(QLineEdit):
     def isRevealed(self):
         return self.revealed
 
+def _registerBundledFont(relativePath, label):
+    """
+    Register one TTF/OTF from the app bundle. Returns family name or None.
+    Safe to call repeatedly for the same path (Qt may return a new id; we cache outside).
+    """
+    fontPath = Logic.resourcePath(relativePath)
+    if not os.path.isfile(fontPath):
+        Logic.logMessage("ERROR", f"{label} font file missing: {fontPath}")
+        return None
+
+    fontId = QFontDatabase.addApplicationFont(fontPath)
+    if fontId == -1:
+        Logic.logMessage("ERROR", f"Failed to register {label} font (addApplicationFont=-1): {fontPath}")
+        return None
+
+    families = QFontDatabase.applicationFontFamilies(fontId)
+    if not families:
+        Logic.logMessage("ERROR", f"{label} font registered but returned no families: {fontPath}")
+        return None
+
+    family = families[0]
+    Logic.logMessage("INFO", f"Loaded {label} font family {family!r} from {fontPath}")
+    return family
+
+
+def ensureDefaultFontLoaded():
+    """
+    Bundled Noto Sans — non-retro default so Linux/Windows/macOS look the same.
+    Registers Regular/Bold/Italic/BoldItalic; returns the family name or None.
+    Falls back to the OS UI font only if every file fails to load.
+    """
+    global _defaultFontFamilyCache, _defaultFontLoadAttempted
+    if _defaultFontLoadAttempted:
+        return _defaultFontFamilyCache
+    _defaultFontLoadAttempted = True
+
+    family = None
+    for rel in _DEFAULT_FONT_FILES:
+        loaded = _registerBundledFont(rel, 'default (Noto Sans)')
+        if loaded and not family:
+            family = loaded
+
+    _defaultFontFamilyCache = family
+    Config.defaultFontLoaded = bool(family)
+    if not family:
+        Logic.logMessage(
+            "WARN",
+            "Bundled Noto Sans failed to load; non-retro will use the OS UI font",
+        )
+    return family
+
+
 def ensureRetroFontLoaded():
-    """
-    Register bundled Press Start 2P once. Returns family name or None on failure.
-    Logs clearly so Windows diagnosis is easy (missing file vs register failure).
-    """
+    """Bundled Press Start 2P — retro mode only."""
     global _retroFontFamilyCache, _retroFontLoadAttempted
     if _retroFontLoadAttempted:
         return _retroFontFamilyCache
     _retroFontLoadAttempted = True
 
-    fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
-    if not os.path.isfile(fontPath):
-        Logic.logMessage("ERROR", f"Retro font file missing: {fontPath}")
-        Config.retroFontLoaded = False
-        return None
-
-    fontId = QFontDatabase.addApplicationFont(fontPath)
-    if fontId == -1:
-        Logic.logMessage("ERROR", f"Failed to register retro font (addApplicationFont=-1): {fontPath}")
-        Config.retroFontLoaded = False
-        return None
-
-    families = QFontDatabase.applicationFontFamilies(fontId)
-    if not families:
-        Logic.logMessage("ERROR", f"Retro font registered but returned no families: {fontPath}")
-        Config.retroFontLoaded = False
-        return None
-
-    _retroFontFamilyCache = families[0]
-    Config.retroFontLoaded = True
-    Logic.logMessage(
-        "INFO",
-        f"Loaded retro font family {_retroFontFamilyCache!r} from {fontPath}",
+    family = _registerBundledFont(
+        'ui/fonts/PressStart2P-Regular.ttf',
+        'retro (Press Start 2P)',
     )
-    return _retroFontFamilyCache
+    _retroFontFamilyCache = family
+    Config.retroFontLoaded = bool(family)
+    return family
 
 
-def uiPointSize(retro=None):
+def activeFontFamily():
     """
-    Point size that fits fixed-size layouts across platforms.
-
-    Linux was tuned at 10pt (Terminess / Press Start look correct there).
-    Windows (Segoe UI + common 125%/150% DPI, and chunkier pixel-font metrics)
-    needs a smaller base so Query buttons and list items are not truncated.
+    Family for the current mode.
+    Retro → bundled Press Start 2P.
+    Default → bundled Noto Sans (cross-platform); '' only if load failed.
     """
+    if Config.retroMode:
+        return ensureRetroFontLoaded() or ''
+    return ensureDefaultFontLoaded() or ''
+
+
+def rolePointSize(role='ui', retro=None):
+    """Point size for a control role (see FONT_ROLE_SIZES)."""
     if retro is None:
         retro = bool(getattr(Config, 'retroMode', False))
+    defaultPt, retroPt = FONT_ROLE_SIZES.get(role, FONT_ROLE_SIZES['ui'])
+    size = retroPt if retro else defaultPt
 
-    if sys.platform == 'win32':
-        # Press Start 2P is wide/tall at the same pt as proportional UI fonts
-        size = 8 if retro else 9
-    else:
-        size = 10
-
-    # Extra step-down only on high-DPI desktop scaling (150%+)
-    try:
-        screen = QGuiApplication.primaryScreen()
-        if screen is not None and screen.logicalDotsPerInch() >= 140:
-            size = max(7, size - 1)
-    except Exception:
-        pass
-
+    # HiDPI: step down slightly so dense pixel fonts / tables stay readable
+    if size > 0:
+        try:
+            screen = QGuiApplication.primaryScreen()
+            if screen is not None and screen.logicalDotsPerInch() >= 140:
+                size = max(5, size - 1)
+        except Exception:
+            pass
     return size
 
 
-def resolveUiFont():
-    """
-    Resolve (family, pointSize) for the current mode.
-    family '' means use the platform default family at the given size.
-    """
-    size = uiPointSize()
-    Config.fontSize = size
-    if Config.retroMode:
-        family = ensureRetroFontLoaded() or ''
-        Config.uiFontFamily = family
-        return family, size
-    Config.uiFontFamily = ''
-    Config.retroFontLoaded = Config.retroFontLoaded  # leave last load state
-    return '', size
+def uiPointSize(retro=None):
+    """Base UI point size (role 'ui'). Kept for About / older call sites."""
+    return rolePointSize('ui', retro=retro)
 
 
-def makeUiFont(pointSize=None):
-    """Build the QFont used app-wide (or for a specific point size override)."""
-    family, size = resolveUiFont()
+def makeFontForRole(role='ui', pointSize=None):
+    """
+    Build a QFont for a control role.
+    Roles: ui, button, list, table, log, code, about — see FONT_ROLE_SIZES.
+    Non-retro: bundled Noto Sans at role size (fallback OS font if missing).
+    Retro: bundled Press Start 2P, no antialias.
+    """
+    family = activeFontFamily()
     if pointSize is not None:
         size = int(pointSize)
+    else:
+        size = rolePointSize(role)
+
     if family:
-        font = QFont(family, size)
-        # Pixel font: crisp edges, no greyscale blur
-        font.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
+        pt = size if size > 0 else (6 if Config.retroMode else 10)
+        font = QFont(family, pt)
+        if Config.retroMode:
+            font.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
         return font
+
+    # Fallback: OS UI font (only if bundled default failed to load)
     font = QFont()
-    font.setPointSize(size)
+    if size > 0:
+        font.setPointSize(size)
     return font
 
 
-def buildFontStylesheet():
-    """
-    Global QSS font rules. Critical on Windows: .ui files used to hardcode
-    TerminessTTF at 12pt; widget stylesheets override app.setFont(), so we
-    must set family/size in the app stylesheet (and clear designer overrides).
-    """
-    family, size = resolveUiFont()
-    # Slightly tighter control padding on Windows reduces the "extra padding"
-    # look around button/list text with the native style.
-    if sys.platform == 'win32':
-        pad = "padding-top: 1px; padding-bottom: 1px;"
-    else:
-        pad = ""
+def makeUiFont(pointSize=None):
+    """App-wide default font (UI role)."""
+    font = makeFontForRole('ui', pointSize=pointSize)
+    Config.uiFontFamily = activeFontFamily() or ''
+    Config.fontSize = font.pointSize() if font.pointSize() > 0 else rolePointSize('ui')
+    return font
 
-    if family:
-        # Escape family for QSS (Press Start 2P has spaces)
-        fam = family.replace('"', '\\"')
-        return (
-            f'* {{ font-family: "{fam}"; font-size: {size}pt; }}\n'
-            f'QPushButton, QComboBox, QListWidget, QListView, QLineEdit, '
-            f'QLabel, QCheckBox, QRadioButton, QTabBar::tab, QGroupBox {{ '
-            f'font-family: "{fam}"; font-size: {size}pt; {pad} }}\n'
-        )
-    return (
-        f'* {{ font-size: {size}pt; }}\n'
-        f'QPushButton, QComboBox, QListWidget, QListView, QLineEdit, '
-        f'QLabel, QCheckBox, QRadioButton, QTabBar::tab, QGroupBox {{ '
-        f'font-size: {size}pt; {pad} }}\n'
-    )
+
+def retroSpacingStylesheet():
+    """
+    Extra vertical room for dense pixel fonts (Press Start looks like -2 line gap).
+    Only list/table/checkbox spacing — never QTabBar/QPushButton padding (Windows
+    native metrics break if those go into stylesheet mode).
+    """
+    if not Config.retroMode:
+        return ""
+    return """
+    QListWidget::item, QListView::item {
+        padding-top: 5px;
+        padding-bottom: 5px;
+        padding-left: 3px;
+        padding-right: 3px;
+        min-height: 1.2em;
+    }
+    QTableWidget::item, QTableView::item {
+        padding-top: 4px;
+        padding-bottom: 4px;
+        padding-left: 3px;
+        padding-right: 3px;
+    }
+    QCheckBox, QRadioButton {
+        spacing: 10px;
+        min-height: 1.3em;
+    }
+    QComboBox {
+        padding-top: 2px;
+        padding-bottom: 2px;
+        min-height: 1.2em;
+    }
+    QLabel {
+        padding-top: 1px;
+        padding-bottom: 1px;
+    }
+    """
 
 
 def readBaseStylesheet():
-    """Base qss file + resolved UI font rules."""
+    """
+    Base qss (hover, tab close) + optional retro item spacing.
+    Fonts are applied via QFont (not QSS font-size on tabs/buttons) so Windows
+    keeps native tab/button chrome.
+    """
     path = Logic.resourcePath('ui/stylesheet.qss')
     try:
         with open(path, 'r', encoding='utf-8') as f:
@@ -194,34 +274,109 @@ def readBaseStylesheet():
     except Exception as e:
         Logic.logMessage("ERROR", f"Could not read stylesheet {path}: {e}")
         base = ""
-    return base + "\n" + buildFontStylesheet()
+    return base + "\n" + retroSpacingStylesheet()
+
+
+def propagateUiFont(app, font=None):
+    """
+    Apply base UI font to the app default and every existing widget, then
+    upgrade specific control types to role sizes (log larger, etc.).
+    """
+    if font is None:
+        font = makeUiFont()
+    app.setFont(font)
+    try:
+        widgets = list(app.allWidgets())
+    except Exception:
+        widgets = list(app.topLevelWidgets())
+    for w in widgets:
+        try:
+            w.setFont(font)
+        except Exception:
+            pass
+    applyRoleFonts(app)
+    return font
+
+
+def applyRoleFonts(app=None, root=None):
+    """
+    Set role-specific sizes: buttons stay smaller in retro; log/code larger, etc.
+    Call after new windows open if they create tables/editors themselves.
+    """
+    buttonFont = makeFontForRole('button')
+    logFont = makeFontForRole('log')
+    tableFont = makeFontForRole('table')
+    listFont = makeFontForRole('list')
+    codeFont = makeFontForRole('code')
+
+    if root is not None:
+        widgets = [root] + list(root.findChildren(QWidget))
+    elif app is not None:
+        try:
+            widgets = list(app.allWidgets())
+        except Exception:
+            widgets = list(app.topLevelWidgets())
+    else:
+        return
+
+    for w in widgets:
+        try:
+            if isinstance(w, QPushButton):
+                # Keep retro button size at the tuned width/fit (smaller than labels)
+                w.setFont(buttonFont)
+            elif isinstance(w, (QPlainTextEdit, QTextEdit)):
+                name = (w.objectName() or '').lower()
+                if 'log' in name:
+                    w.setFont(logFont)
+                else:
+                    w.setFont(codeFont)
+            elif isinstance(w, QTableWidget):
+                w.setFont(tableFont)
+                try:
+                    w.horizontalHeader().setFont(tableFont)
+                    w.verticalHeader().setFont(tableFont)
+                except Exception:
+                    pass
+            elif isinstance(w, QListWidget):
+                w.setFont(listFont)
+            elif isinstance(w, QTreeView):
+                w.setFont(listFont)
+        except Exception:
+            pass
 
 
 def applyStylesAndFonts(app, mainTable, queryList):
-    """Apply stylesheet and platform-correct UI font (retro or system)."""
+    """Load config, stylesheet, and bundled UI fonts (Noto Sans or Press Start)."""
     config = loadConfig()
     Config.debug = config['debugMode']
     Config.utcOffset = config['utcOffset']
     Config.periodOffset = resolvePeriodOffset(config)
     Config.retroMode = config.get('retroMode', True)
 
-    app.setStyleSheet(readBaseStylesheet())
-    appFont = makeUiFont()
-    app.setFont(appFont)
+    # Pre-register the font for the active mode (and About always wants Press Start)
+    if Config.retroMode:
+        ensureRetroFontLoaded()
+    else:
+        ensureDefaultFontLoaded()
+        ensureRetroFontLoaded()  # About dialog always uses pixel font
 
-    # Log what actually resolved — answers "is retro applying on Windows?"
+    app.setStyleSheet(readBaseStylesheet())
+    appFont = propagateUiFont(app)
+
     try:
         info = QFontInfo(appFont)
         Logic.logMessage(
             "INFO",
             "UI font: platform={} retroMode={} requested={!r} actual={!r} "
-            "pointSize={} exactMatch={} retroLoaded={}".format(
+            "uiPt={} buttonPt={} logPt={} defaultLoaded={} retroLoaded={}".format(
                 sys.platform,
                 Config.retroMode,
-                Config.uiFontFamily or '(system)',
+                Config.uiFontFamily or '(system fallback)',
                 info.family(),
-                Config.fontSize,
-                appFont.exactMatch() if Config.uiFontFamily else True,
+                rolePointSize('ui'),
+                rolePointSize('button'),
+                rolePointSize('log'),
+                Config.defaultFontLoaded,
                 Config.retroFontLoaded,
             ),
         )
@@ -391,13 +546,14 @@ def centerWindowToParent(ui):
 
 def applyRetroFont(widget, pointSize=None):
     """
-    Apply the current UI font (retro or system) to a widget tree.
-    pointSize=None uses the platform-resolved app size.
+    Apply the current UI font (bundled Noto Sans or Press Start) to a widget tree.
+    pointSize=None uses the UI role size for the active mode.
     """
     font = makeUiFont(pointSize)
     widget.setFont(font)
     for child in widget.findChildren(QWidget):
         child.setFont(font)
+    applyRoleFonts(root=widget)
     if Config.debug:
         Logic.logMessage(
             "DEBUG",

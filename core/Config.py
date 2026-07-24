@@ -6,9 +6,10 @@ utcOffset = ""
 retroMode = False
 qaqcEnabled = True
 rawData = False
-fontSize = 10  # Resolved app-wide point size (platform-aware at startup)
-uiFontFamily = ""  # Active UI font family after resolve ('' = system default)
-retroFontLoaded = False  # True if Press Start 2P registered successfully
+fontSize = 0  # Active base UI point size
+uiFontFamily = ""  # Active UI font family
+defaultFontLoaded = False  # True if bundled Noto Sans registered
+retroFontLoaded = False  # True if Press Start 2P registered
 periodOffset = True
 sortState = {}
 appRoot = ""

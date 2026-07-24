@@ -141,6 +141,8 @@ class uiQuery(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", "uiQuery showEvent: queryType={}".format(self.queryType))
         Utils.centerWindowToParent(self)
+        # Re-apply role fonts (list/code sizes) after show — fixed layouts need retro sizing
+        Utils.applyRoleFonts(root=self)
         Logic.loadLastQuickLook(self.cbQuickLook)
         Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
 

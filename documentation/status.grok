@@ -1,27 +1,99 @@
 DataDoctor — session handoff
 ============================================================
-Branch: bug-smashing
-
-Verified by Seifer (recent)
----------------------------
-Options remask on close, SQL background thread, Aquarius label-only,
-meta/export/headers/rbase/max-min/π/raw deltas/password auth fail-fast, etc.
+Date: 2026-07-24
+Branch: bug-smashing (tracks origin/bug-smashing)
+Workflow: To Do List.txt = backlog | test.txt = retest checklist | this file = handoff
 
 
-In flight (test.txt)
+WHERE WE LEFT OFF
+-----------------
+Active focus: **fonts** — package default + retro so they look the same on every OS.
+Non-retro first (make solid on Linux, then Windows); retro polish after.
+
+Font model (round 5):
+  • **Non-retro (default):** bundled **Noto Sans 10pt**
+      ui/fonts/NotoSans-Regular.ttf
+      ui/fonts/NotoSans-Bold.ttf
+      ui/fonts/NotoSans-Italic.ttf
+      ui/fonts/NotoSans-BoldItalic.ttf
+      ui/fonts/LICENSE-NotoSans.txt  (Apache 2.0)
+    This is Seifer's Linux system UI font (GNOME/Qt). Bundling it means
+    Windows/macOS render the same family/size instead of Segoe UI / SF Pro.
+  • **Retro:** bundled **Press Start 2P** only
+      ui/fonts/PressStart2P-Regular.ttf + LICENSE-PressStart2P.txt
+  • **Terminess:** removed (was unused; mistaken .ui hardcode from earlier).
+
+Retro role sizes (`core/Utils.py` → `FONT_ROLE_SIZES`):
+  button  6pt   ← Seifer: width/fit PERFECT — keep
+  ui/list 8pt
+  table   8pt
+  code    9pt
+  log    10pt
+  about   9pt   (About always forces Press Start even if retro is off)
+
+Non-retro role sizes: all **10pt** Noto Sans (matches this machine).
+
+Retro spacing (looks good per Seifer):
+  • List/table/checkbox item padding via QSS (`retroSpacingStylesheet`) —
+    never put font-size/padding on QTabBar::tab or general QPushButton chrome
+    (Windows native metrics collapse if you do).
+  • Log viewer line height ~155% retro / ~125% non-retro.
+
+Log viewer crash FIXED:
+  PyQt6: `setLineHeight(height, int)` needs
+  `int(QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)`
+
+
+CODE CHANGES THIS SESSION
+-------------------------
+core/Utils.py
+  - ensureDefaultFontLoaded() registers all four Noto Sans faces
+  - activeFontFamily() → Noto Sans (non-retro) or Press Start (retro)
+  - FONT_ROLE_SIZES non-retro side set to 10
+  - applyStylesAndFonts logs defaultLoaded + retroLoaded
+core/Config.py
+  - defaultFontLoaded flag
+ui/fonts/
+  - added NotoSans-*.ttf + LICENSE-NotoSans.txt
+  - removed TerminessNerdFont + its license
+
+
+IMMEDIATE NEXT
+--------------
+1) Seifer retests Linux non-retro (test.txt):
+     a. Main, Query, Options, tables, SQL, log — Noto Sans 10, Designer-like layout
+     b. Log INFO: requested='Noto Sans' actual='Noto Sans' defaultLoaded=True
+     c. Sign off "looks perfect on my machine" before Windows pass
+2) Windows retest same non-retro (bundled faces travel with the app)
+3) Then retro re-tune if needed (don't change button 6 without ask)
+4) Still open bugs:
+     - Retro mode toggle restart fails on Windows (works Linux)
+     - Windows taskbar icon via VB.NET launcher (launcher-side)
+     - Aquarius daily 2300 TZ
+     - Features backlog in To Do List.txt
+
+
+KEY CODE MAP
+------------
+core/Utils.py     FONT_ROLE_SIZES, ensureDefaultFontLoaded, ensureRetroFontLoaded,
+                  makeFontForRole, applyRoleFonts, propagateUiFont, applyStylesAndFonts
+core/Config.py    retroMode, uiFontFamily, fontSize, defaultFontLoaded, retroFontLoaded
+DataDoctor.py     tabLog, populateLogViewer, appendLogEntry, btnViewLogPressed
+ui/stylesheet.qss hover + tab close only (no font-size on tabs)
+ui/fonts/         NotoSans-*.ttf + PressStart2P-Regular.ttf + licenses
+
+
+DO NOT
+------
+• Re-introduce Terminess as default
+• Re-add global QSS font-size/padding on QTabBar::tab / QPushButton (Windows pain)
+• Re-add Oracle SDID batch path A without Seifer ask
+• Change retro button size from 6 without explicit request
+• Jump to Windows font polish before Seifer signs off Linux non-retro
+
+
+NOTES FOR NEXT AGENT
 --------------------
-1) Large-table build performance
-2) Data Dictionary bigger + size grip
-3) Tab order main + query windows
-
-
-Deferred
---------
-Windows taskbar via VB launcher, USGS monthly/yearly (API has none),
-retro Windows restart, Windows text size, Aquarius TZ daily, features.
-
-
-Code notes
-----------
-buildTable: sorting OFF during fill; less processEvents; sample widths once.
-USGS OGC collections = continuous + daily only (confirmed against API list).
+User continues here; non-retro is the priority.
+Ask before broad UI redesign; prefer small FONT_ROLE_SIZES / line-height tweaks.
+Git: confirm before commit if asked.

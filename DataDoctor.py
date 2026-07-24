@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
                              QVBoxLayout, QHBoxLayout, QSplitter, QLabel)
 from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QColor, QTextCursor, QFont
+from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
 from ui.uiAbout import uiAbout
@@ -1023,6 +1023,13 @@ class uiMain(QMainWindow):
         self.tabWidget.setCurrentIndex(idx)
         self.populateLogViewer()
 
+    def _logViewerLineHeight(self):
+        """
+        Block line height % — Press Start has near-zero internal leading so lines
+        blur together; open that up. System font still gets a little air.
+        """
+        return 155.0 if Config.retroMode else 125.0
+
     def _logViewerFormat(self, level):
         """QTextCharFormat for a log level (shared by full load and live append)."""
         level = (level or 'INFO').upper()
@@ -1035,23 +1042,26 @@ class uiMain(QMainWindow):
             'DEBUG': QColor(108, 113, 120),
         }
         defaultColor = QColor(200, 200, 200) if Config.retroMode else QColor(40, 40, 40)
-        # Prefer active UI font; fall back to portable monospace (Terminess is Linux-only)
-        family = getattr(Config, 'uiFontFamily', '') or ''
-        pt = int(getattr(Config, 'fontSize', 10) or 10)
-        if family:
-            mono = QFont(family, pt)
-        else:
-            mono = QFont("Consolas", pt)
-            if not mono.exactMatch():
-                mono = QFont("Courier New", pt)
-            if not mono.exactMatch():
-                mono = QFont("monospace", pt)
+        # Role 'log' is intentionally larger than UI (especially in retro)
+        mono = Utils.makeFontForRole('log')
         fmt = QTextCharFormat()
         fmt.setForeground(levelColors.get(level, defaultColor))
         fmt.setFont(mono)
         if level in ('ERROR', 'CRITICAL'):
             fmt.setFontWeight(QFont.Weight.Bold)
         return fmt
+
+    def _insertLogLine(self, cursor, text, level):
+        """Insert one log record with role font + extra line spacing."""
+        blockFmt = QTextBlockFormat()
+        # PyQt6 expects heightType as int, not the LineHeightTypes enum object
+        blockFmt.setLineHeight(
+            self._logViewerLineHeight(),
+            int(QTextBlockFormat.LineHeightTypes.ProportionalHeight.value),
+        )
+        cursor.setBlockFormat(blockFmt)
+        line = text if text.endswith('\n') else text + '\n'
+        cursor.insertText(line, self._logViewerFormat(level))
 
     def appendLogEntry(self, level, text):
         """
@@ -1079,8 +1089,7 @@ class uiMain(QMainWindow):
 
         cursor = self.pteLog.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
-        line = text if text.endswith('\n') else text + '\n'
-        cursor.insertText(line, self._logViewerFormat(level))
+        self._insertLogLine(cursor, text, level)
 
         if wasAtTop:
             self.pteLog.moveCursor(QTextCursor.MoveOperation.Start)
@@ -1094,15 +1103,19 @@ class uiMain(QMainWindow):
         entries = Logic.loadAllAppLogEntries(newestFirst=True)
         self.pteLog.clear()
         self.pteLog.setUndoRedoEnabled(False)
+        # Role font on the widget itself (default char format for any plain inserts)
+        logFont = Utils.makeFontForRole('log')
+        self.pteLog.setFont(logFont)
+        self.pteLog.document().setDefaultFont(logFont)
 
         cursor = self.pteLog.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
 
         if not entries:
-            fmt = self._logViewerFormat('INFO')
-            cursor.insertText(
-                f"(No log entries found in {Utils.getLogDir()})\n",
-                fmt,
+            self._insertLogLine(
+                cursor,
+                f"(No log entries found in {Utils.getLogDir()})",
+                'INFO',
             )
             self.pteLog.setTextCursor(cursor)
             if Config.debug:
@@ -1112,7 +1125,7 @@ class uiMain(QMainWindow):
         for entry in entries:
             level = (entry.get('level') or 'INFO').upper()
             text = entry.get('text') or ''
-            cursor.insertText(text + '\n', self._logViewerFormat(level))
+            self._insertLogLine(cursor, text, level)
 
         # Keep view at top (newest)
         self.pteLog.moveCursor(QTextCursor.MoveOperation.Start)

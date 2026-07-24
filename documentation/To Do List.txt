@@ -1,8 +1,10 @@
 ####### CURRENT BUGS #######
 -Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
--Text size / retro font on Windows (fix applied — retest)
-    -Cause: .ui files hardcoded TerminessTTF Nerd Font @ 12pt (Linux-only). Widget stylesheet overrode app.setFont(Press Start 2P).
-    -Fix: strip Terminess from .ui; load bundled Press Start 2P; apply via app font + QSS; Windows uses smaller pt (8 retro / 9 normal).
+-Text / fonts (round 5 — bundled Noto Sans for non-retro)
+    -Default = bundled Noto Sans 10pt (ui/fonts/NotoSans-*.ttf) — same on Linux/Windows/Mac
+    -Retro = Press Start; buttons stay 6pt; other roles larger (ui/list 8, log 10, code 9)
+    -Log crash: setLineHeight needs int enum value (fixed)
+    -Terminess removed (was unused mistaken hardcode)
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
 -Oracle HDB speed: C connection reuse kept (good enough); A batch tried & reverted

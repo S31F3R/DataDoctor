@@ -10,16 +10,14 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
-[ ] Windows UI font size + retro font
-   Steps (on Windows):
-     a. Start with retroMode ON. Open Log Viewer; look for INFO line:
-        "Loaded retro font family 'Press Start 2P' ..."
-        and "UI font: platform=win32 retroMode=True requested='Press Start 2P' actual='Press Start 2P' ..."
-     b. If actual is NOT Press Start 2P, font file failed to load (path/bundle).
-     c. Query window: button labels not truncated; quicklook list readable.
-     d. Turn retroMode OFF, restart: text still fits (should be ~9pt system font, not 12pt Terminess fallback).
-     e. Compare Linux: still ~10pt, no regression.
-   Notes: Utils.ensureRetroFontLoaded / uiPointSize / buildFontStylesheet; .ui Terminess removed.
+[ ] Fonts: bundled Noto Sans (non-retro) + Press Start (retro) — Linux first
+   Steps:
+     a. retro OFF: UI is bundled Noto Sans 10pt (same look as this Linux machine).
+        Check main window, Query, Options, Data Dictionary, tables, SQL editor.
+        Log INFO line should show requested='Noto Sans' actual='Noto Sans' defaultLoaded=True.
+     b. retro ON: buttons stay ~6pt Press Start; labels/lists/checkboxes ~8; log ~10 + line height.
+        Open Log Viewer — must not crash (setLineHeight int fix).
+     c. After Linux looks solid → Windows retest (same Noto Sans faces are in ui/fonts/).
 
 [x] Log Viewer tab
    Steps:
