@@ -536,7 +536,8 @@ def retroSpacingStylesheet():
     # Hover for close is a 2nd image (same pattern as default dark/light pair).
     green = RETRO_NEON_GREEN
     return f"""
-    /* Retro tabs: neon green (scrollbar green) + black label text */
+    /* Retro tabs: neon green + black text. NO tab:hover fill — that lit the whole
+       tab and stole hover from the close button. Only close-button:hover changes. */
     QTabBar::tab {{
         background: {green};
         color: #000000;
@@ -553,29 +554,39 @@ def retroSpacingStylesheet():
         font-weight: bold;
         border: 1px solid #003300;
     }}
-    QTabBar::tab:hover {{
-        background: #66FF66;
-        color: #000000;
-    }}
     QTabBar::tab:!selected {{
         background: #00cc00;
         color: #000000;
     }}
-    /* Close: black disc + green X; -10px X (margin-right moves left from tab edge) */
+    /* Keep tab fill stable under mouse (no whole-tab brighten) */
+    QTabBar::tab:hover,
+    QTabBar::tab:selected:hover {{
+        background: {green};
+        color: #000000;
+    }}
+    QTabBar::tab:!selected:hover {{
+        background: #00cc00;
+        color: #000000;
+    }}
+    /* Close only: black disc + green X; hover = 2nd image (brighter X) */
     QTabBar::close-button {{
         image: url(ui/icons/Tab-close-retro.png);
         background: transparent;
+        border: none;
         border-radius: 8px;
         subcontrol-position: right;
+        subcontrol-origin: padding;
         width: 16px;
         height: 16px;
         margin-right: 10px;
     }}
     QTabBar::close-button:hover {{
         image: url(ui/icons/Tab-close-retro-hover.png);
+        background: transparent;
     }}
     QTabBar::close-button:pressed {{
         image: url(ui/icons/Tab-close-retro-pressed.png);
+        background: transparent;
     }}
     /* List item air (vertical); keep horizontal small */
     QListWidget::item, QListView::item {{

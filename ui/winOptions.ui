@@ -46,7 +46,7 @@
     </rect>
    </property>
    <property name="currentIndex">
-    <number>0</number>
+    <number>3</number>
    </property>
    <widget class="QWidget" name="tabGeneral">
     <attribute name="title">
@@ -394,7 +394,7 @@
       <rect>
        <x>210</x>
        <y>0</y>
-       <width>141</width>
+       <width>281</width>
        <height>22</height>
       </rect>
      </property>
@@ -407,7 +407,7 @@
       <rect>
        <x>350</x>
        <y>0</y>
-       <width>131</width>
+       <width>141</width>
        <height>22</height>
       </rect>
      </property>
@@ -510,6 +510,16 @@
       </rect>
      </property>
     </widget>
+    <zorder>rbBOP</zorder>
+    <zorder>lblTNSNames</zorder>
+    <zorder>lblTimeStampMethod</zorder>
+    <zorder>lblOraclePassword</zorder>
+    <zorder>lblOracleUserName</zorder>
+    <zorder>qleOraclePassword</zorder>
+    <zorder>btnShowOraclePassword</zorder>
+    <zorder>qleTNSNames</zorder>
+    <zorder>qleOracleUser</zorder>
+    <zorder>rbEOP</zorder>
    </widget>
   </widget>
  </widget>
