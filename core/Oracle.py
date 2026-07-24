@@ -6,6 +6,7 @@ import os
 import keyring
 import time
 import re
+import threading
 from pathlib import Path
 from typing import List, Any, Optional
 from core import Logic, Config
@@ -13,6 +14,13 @@ from core import Logic, Config
 # After a bad password, refuse further connect attempts for this process so we
 # do not spam Oracle and lock the account (multi-thread HDB / multi-DSN queries).
 _authFailureMessage = None
+
+# Instant Client + env must be configured once. sqlRead creates many connections
+# (per SDID × date chunk × thread). Old code prepended clientDir to PATH on every
+# construct → after enough HDB tasks Windows hit: ValueError environment variable
+# longer than 32767 characters.
+_clientInitLock = threading.Lock()
+_clientInitialized = False
 
 
 class OracleAuthError(RuntimeError):
@@ -58,55 +66,147 @@ def isAuthError(exc) -> bool:
     return False
 
 
+def _pathHasDir(envValue, directory, sep):
+    """True if directory already appears as a PATH-style entry."""
+    if not envValue:
+        return False
+    dirNorm = os.path.normcase(os.path.normpath(str(directory)))
+    for part in envValue.split(sep):
+        if not part:
+            continue
+        if os.path.normcase(os.path.normpath(part)) == dirNorm:
+            return True
+    return False
+
+
+def _ensureClientOnPath(clientDir):
+    """Prepend Instant Client to the process library path at most once."""
+    system = platform.system().lower()
+    clientStr = str(clientDir)
+
+    if system == "windows":
+        sep = ';'
+        key = 'PATH'
+    elif system == "linux":
+        sep = ':'
+        key = 'LD_LIBRARY_PATH'
+    elif system == "darwin":
+        sep = ':'
+        key = 'DYLD_LIBRARY_PATH'
+    else:
+        raise RuntimeError(f"Unsupported platform: {system}")
+
+    current = os.environ.get(key, '')
+    if _pathHasDir(current, clientStr, sep):
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"oracleConnection: {key} already includes Instant Client")
+        return
+
+    # Guard Windows 32k env limit even if PATH is already huge for other reasons
+    candidate = f"{clientStr}{sep}{current}" if current else clientStr
+    if system == "windows" and len(candidate) > 32767:
+        # Prefer putting client first by dropping duplicate-looking noise only if needed
+        # Last resort: set PATH to client + truncated original (keep as much as fits)
+        maxOrig = 32767 - len(clientStr) - 1
+        trimmed = current[:maxOrig] if maxOrig > 0 else ''
+        candidate = f"{clientStr}{sep}{trimmed}" if trimmed else clientStr
+        Logic.logMessage(
+            "WARN",
+            f"oracleConnection: {key} would exceed 32767 chars; trimmed to fit Instant Client"
+        )
+    os.environ[key] = candidate
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"oracleConnection: Prepended Instant Client to {key} (len={len(candidate)})")
+
+
+def ensureOracleClientReady():
+    """
+    One-time Instant Client init + TNS_ADMIN. Safe to call from any thread;
+    concurrent callers block until the first setup finishes.
+    """
+    global _clientInitialized
+    if _clientInitialized:
+        return
+
+    with _clientInitLock:
+        if _clientInitialized:
+            return
+
+        system = platform.system().lower()
+        if platform.architecture()[0] != "64bit":
+            raise RuntimeError("Only 64-bit platforms supported.")
+
+        clientDirPath = "oracle/client"
+        clientDir = Path(Logic.resourcePath(clientDirPath))
+        if not clientDir.exists():
+            raise FileNotFoundError(
+                f"Oracle Instant Client directory not found: {clientDir}. "
+                "Please download and unzip the Instant Client 23.9 for your platform into oracle/client."
+            )
+
+        expectedFiles = {
+            "windows": ["oci.dll"],
+            "linux": ["libociei.so"],
+            "darwin": ["libociei.dylib"],
+        }
+        requiredFiles = expectedFiles.get(system)
+        if not requiredFiles:
+            raise RuntimeError(f"Unsupported platform: {system}")
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"oracleConnection.setup: Checking for platform-specific files in {clientDir}: {requiredFiles}",
+            )
+        filesExist = all((clientDir / f).exists() for f in requiredFiles)
+        if not filesExist:
+            raise FileNotFoundError(
+                f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. "
+                "Please download and unzip the correct Instant Client 23.9 for your platform into oracle/client."
+            )
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"oracleConnection.setup: Validated Instant Client files for {system}")
+
+        _ensureClientOnPath(clientDir)
+
+        try:
+            oracledb.init_oracle_client(lib_dir=str(clientDir))
+        except Exception as e:
+            # Already initialized in this process is fine
+            msg = str(e).lower()
+            if "already been initialized" in msg or "has already been called" in msg:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "oracleConnection.setup: Instant Client already initialized")
+            else:
+                raise
+
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"oracleConnection.setup: Initialized oracledb with clientDir {clientDir}",
+            )
+
+        # TNS_ADMIN: prefer existing env (user tnsnames), else bundled admin
+        envTns = os.environ.get('TNS_ADMIN')
+        if envTns:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"oracleConnection.setup: Using env TNS_ADMIN: {envTns} (no copy)")
+        else:
+            resourceAdmin = Logic.resourcePath('oracle/network/admin')
+            os.environ['TNS_ADMIN'] = resourceAdmin
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.setup: Set TNS_ADMIN to program's path: {resourceAdmin} (no copy)",
+                )
+
+        _clientInitialized = True
+
+
 class oracleConnection:
     def __init__(self, dsn: str):
         self.dsn = dsn
         self.connection = None
-        self.setup()
-
-    def setup(self):
-        """Set up bundled Instant Client and TNS_ADMIN."""
-        system = platform.system().lower()
-        if platform.architecture()[0] != "64bit": raise RuntimeError("Only 64-bit platforms supported.")
-        clientDirPath = "oracle/client"
-        clientDir = Path(Logic.resourcePath(clientDirPath))
-        if not clientDir.exists(): raise FileNotFoundError(f"Oracle Instant Client directory not found: {clientDir}. Please download and unzip the Instant Client 23.9 for your platform into oracle/client.")
-        
-        # Validate platform-specific files
-        expectedFiles = {
-            "windows": ["oci.dll"],
-            "linux": ["libociei.so"],
-            "darwin": ["libociei.dylib"]
-        }
-
-        requiredFiles = expectedFiles.get(system)
-        if not requiredFiles: raise RuntimeError(f"Unsupported platform: {system}")
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.setup: Checking for platform-specific files in {clientDir}: {requiredFiles}")
-        filesExist = all((clientDir / f).exists() for f in requiredFiles)
-        if not filesExist: raise FileNotFoundError(f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. Please download and unzip the correct Instant Client 23.9 for your platform into oracle/client.")
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.setup: Validated Instant Client files for {system}")
-
-        # Set platform-specific library path
-        if system == "windows":
-            os.environ['PATH'] = f"{clientDir};{os.environ.get('PATH', '')}"
-        elif system == "linux":
-            os.environ['LD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('LD_LIBRARY_PATH', '')}"
-        elif system == "darwin":
-            os.environ['DYLD_LIBRARY_PATH'] = f"{clientDir}:{os.environ.get('DYLD_LIBRARY_PATH', '')}"
-        oracledb.init_oracle_client(lib_dir=str(clientDir))
-
-        if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.setup: Initialized oracledb with clientDir {clientDir}")
-
-        # Setup TNS_ADMIN: use env if exists (user's tnsnames and sqlnet if present), program's dir if not (no copy)
-        envTns = os.environ.get('TNS_ADMIN')
-
-        if envTns:
-            os.environ['TNS_ADMIN'] = envTns
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.setup: Using env TNS_ADMIN: {envTns} (no copy)")
-        else:
-            resourceAdmin = Logic.resourcePath('oracle/network/admin')
-            os.environ['TNS_ADMIN'] = resourceAdmin
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.setup: Set TNS_ADMIN to program's path: {resourceAdmin} (no copy)")
+        ensureOracleClientReady()
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""
