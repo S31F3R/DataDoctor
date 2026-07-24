@@ -1155,7 +1155,17 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     progressDialog.setValue(97)
                     progressDialog.repaint()
                     QCoreApplication.processEvents()
-                QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, lookupIds, mainWindow=mainWindow)
+                QueryUtils.modifyTable(
+                    mainWindow.mainTable,
+                    deltaChecked,
+                    overlayChecked,
+                    databases,
+                    queryItems,
+                    labelsDict,
+                    lookupIds,
+                    mainWindow=mainWindow,
+                    progressDialog=progressDialog,
+                )
 
                 # QAQC on final displayed columns, then overlay color overrides (mismatch / missing only)
                 finalLookupIds = []
@@ -1182,7 +1192,14 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         progressDialog=progressDialog,
                     )
                 if overlayChecked:
-                    QueryUtils.applyOverlayColorOverrides(mainWindow.mainTable)
+                    if progressDialog is not None:
+                        progressDialog.setLabelText("Applying overlay colors...")
+                        progressDialog.setValue(99)
+                        progressDialog.repaint()
+                        QCoreApplication.processEvents()
+                    QueryUtils.applyOverlayColorOverrides(
+                        mainWindow.mainTable, progressDialog=progressDialog
+                    )
             else:    
                 mainWindow.columnMetadata = []
                 mergedDataIds = [[id] for id in originalDataIds] # Derived from originalDataIds
@@ -1224,7 +1241,14 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     )
 
             # After QAQC/overlay: blue box + black text for HDB r_base fills (no interval)
-            QueryUtils.applyUsbrRbaseFallbackColors(mainWindow.mainTable, mainWindow)
+            if progressDialog is not None:
+                progressDialog.setLabelText("Applying HDB r_base colors...")
+                progressDialog.setValue(99)
+                progressDialog.repaint()
+                QCoreApplication.processEvents()
+            QueryUtils.applyUsbrRbaseFallbackColors(
+                mainWindow.mainTable, mainWindow, progressDialog=progressDialog
+            )
 
             progressDialog.setValue(100)
             progressDialog.repaint()
