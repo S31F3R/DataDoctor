@@ -1,94 +1,67 @@
 Button / control layout inventory
 =================================
-Captured: 2026-07-24
-Purpose: Baseline ABS positions before Seifer moves controls for default (Noto) font.
-Workflow: Seifer adjusts default-mode buttons → we note which ones moved →
-          those same controls get a second set of coords for retro mode.
+Updated: 2026-07-24
+Code map: core/Utils.py → CONTROL_LAYOUTS + applyModeControlLayouts()
+Applied on: applyStylesAndFonts, uiQuery.showEvent, uiOptions.showEvent
 
-Layout types
-------------
-  LAY = layout-managed (auto position; usually no per-mode move needed)
-  ABS = absolute geometry in .ui (likely need default vs retro coordinates)
-
-
-winMain.ui
-----------
-  LAY  btnPublicQuery, btnInternalQuery, btnDataDictionary, btnExportCSV,
-       btnOptions, btnViewLog, btnInfo
-  ABS  btnRefresh         x=26  y=10  w=32  h=32   (Data Query tab overlay)
-  ABS  btnUndo            x=76  y=10  w=32  h=32
-  ABS  btnRunQuery        x=10  y=10  w=32  h=32   (SQL tab — reparented into splitter layout at runtime)
-  ABS  btnSaveSnippet     x=50  y=10  w=32  h=32
-  ABS  btnDeleteSnippet   x=90  y=10  w=32  h=32
+Modes
+-----
+  default = Noto Sans (retro OFF) — Seifer-tuned positions
+  retro   = Press Start baseline (pre-Noto) until retro layout pass
 
 
-winQuery.ui  (largest ABS surface — most likely to need Noto vs Press Start tweaks)
------------
-  ABS  btnDataIdInfo          x=382  y=5    w=31   h=20
-  ABS  btnIntervalInfo        x=110  y=76   w=31   h=20
-  ABS  btnSearch              x=730  y=65   w=32   h=32
-  ABS  btnAddQuery            x=770  y=65   w=141  h=31
-  ABS  btnUpMax               x=300  y=230  w=31   h=20
-  ABS  btnUp15                x=300  y=260  w=31   h=20
-  ABS  btnUp5                 x=300  y=290  w=31   h=20
-  ABS  btnUp1                 x=300  y=320  w=31   h=20
-  ABS  btnRemoveQuery         x=300  y=355  w=31   h=20
-  ABS  btnDown1               x=300  y=390  w=31   h=20
-  ABS  btnDown5               x=300  y=420  w=31   h=20
-  ABS  btnDown15              x=300  y=450  w=31   h=20
-  ABS  btnDownMax             x=300  y=480  w=31   h=20
-  ABS  btnQueryOptionsInfo    x=124  y=401  w=31   h=20
-  ABS  rbCustomDateTime       x=20   y=310  w=261  h=22
-  ABS  rbPrevDayToCurrent     x=20   y=340  w=261  h=22
-  ABS  rbPrevWeekToCurrent    x=20   y=370  w=261  h=22
-  ABS  chkbDelta              x=20   y=424  w=131  h=22
-  ABS  chkbOverlay            x=150  y=424  w=131  h=22
-  ABS  btnLoadQuickLook       x=20   y=520  w=128  h=30
-  ABS  btnClearQuery          x=155  y=520  w=136  h=31
-  ABS  btnSaveQuickLook       x=20   y=560  w=128  h=31
-  ABS  btnDeleteQuickLook     x=155  y=560  w=136  h=31
-  ABS  btnQuery               x=20   y=600  w=271  h=30
+DEFAULT (Noto) — set whenever retro is OFF
+------------------------------------------
+winMain
+  btnRefresh            (22, 6, 32, 32)     was (26, 10, 32, 32)
+  btnUndo               (70, 6, 32, 32)     was (76, 10, 32, 32)
+
+winOptions (Application tab checkboxes)
+  chkbRawData           (74, 60, 21, 22)    was (84, 60, 21, 22)
+  chkbQAQC              (156, 90, 21, 22)   was (178, 90, 21, 22)
+  chkbRetroMode         (88, 120, 21, 22)   was (100, 120, 21, 22)
+  chkbDebug             (96, 150, 21, 22)   was (110, 150, 21, 22)
+  chkbEnableSQL         (128, 180, 21, 22)  was (150, 180, 21, 22)
+
+winQuery (info icons)
+  btnDataIdInfo         (376, 5, 31, 20)    was (382, 5, 31, 20)
+  btnIntervalInfo       (100, 76, 31, 20)   was (110, 76, 31, 20)
+  btnQueryOptionsInfo   (110, 401, 31, 20)  was (124, 401, 31, 20)
 
 
-winOptions.ui
--------------
-  ABS  rbBOP / rbEOP          y=0 band
-  ABS  btnShowUSGSKey         x=460  y=20   w=41   h=31
-  ABS  chkbRawData            x=84   y=60
-  ABS  chkbQAQC               x=178  y=90
-  ABS  chkbRetroMode          x=100  y=120
-  ABS  btnShowPassword        x=456  y=140  w=41   h=31
-  ABS  chkbDebug              x=110  y=150
-  ABS  btnShowOraclePassword  x=456  y=170  w=41   h=31
-  ABS  chkbEnableSQL          x=150  y=180
-  ABS  btnbOptions            x=10   y=260  w=501  h=41
+RETRO (Press Start) — current = pre-Noto baseline (tune later)
+-------------------------------------------------------------
+winMain
+  btnRefresh            (26, 10, 32, 32)
+  btnUndo               (76, 10, 32, 32)
+
+winOptions
+  chkbRawData           (84, 60, 21, 22)
+  chkbQAQC              (178, 90, 21, 22)
+  chkbRetroMode         (100, 120, 21, 22)
+  chkbDebug             (110, 150, 21, 22)
+  chkbEnableSQL         (150, 180, 21, 22)
+
+winQuery
+  btnDataIdInfo         (382, 5, 31, 20)
+  btnIntervalInfo       (110, 76, 31, 20)
+  btnQueryOptionsInfo   (124, 401, 31, 20)
 
 
-winDataDictionary.ui
---------------------
-  LAY  btnSave, btnAddRow, btnDeleteRow
+Other controls (not mode-switched yet)
+--------------------------------------
+  LAY main toolbar icons, Data Dictionary buttons
+  ABS remaining Query/Options buttons at .ui geometry for both modes
 
 
-winAbout.ui
------------
-  ABS  buttonSecret           x=874  y=453  w=22   h=22  (runtime may override)
+List row padding (Windows non-retro only)
+-----------------------------------------
+  listSnippets   — SQL tab quick-look / snippet list (right pane)
+  listQueryList  — Query window dataID list
+  Utils.applyCompactListStyle → 0 vertical item padding on win32 when retro OFF
+  Retro: uses global retroSpacingStylesheet (extra pad for Press Start)
 
 
-DEFAULT (Noto) moves — fill in after Seifer repositions
-------------------------------------------------------
-(control name)  old (x,y,w,h)  →  new (x,y,w,h)   notes
-
-(empty — waiting on Seifer)
-
-RETRO (Press Start) moves — same controls as default set
--------------------------------------------------------
-(empty — apply after default set is known)
-
-
-Row padding (tables) — code, not .ui
-------------------------------------
-core/Utils.py → tableDefaultRowHeight / applyTableRowMetrics
-  non-retro Linux:  fontHeight + 10
-  non-retro Windows: fontHeight + 4  + QSS item padding 0
-  retro all:        fontHeight + 10  + retroSpacingStylesheet
-core/Query.py buildTable sets default section size BEFORE setRowCount
+Log Viewer tab
+--------------
+  Always opens as the LAST tab (addTab / move to end). Not next to active tab.

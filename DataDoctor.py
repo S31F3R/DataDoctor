@@ -1010,15 +1010,18 @@ class uiMain(QMainWindow):
 
         idx = self.tabWidget.indexOf(self.tabLog)
         if idx == -1:
-            # Insert after Data Query if present, else at end
-            insertAt = self.tabWidget.count()
-            dataIdx = self.tabWidget.indexOf(self.tabMain)
-            if dataIdx != -1:
-                insertAt = dataIdx + 1
-            self.tabWidget.insertTab(insertAt, self.tabLog, self.logTitle)
+            # Always open Log Viewer as the last tab (not next to the active tab)
+            self.tabWidget.addTab(self.tabLog, self.logTitle)
             idx = self.tabWidget.indexOf(self.tabLog)
             if Config.debug:
-                Logic.logMessage("DEBUG", f"btnViewLogPressed: added tabLog at {idx}")
+                Logic.logMessage("DEBUG", f"btnViewLogPressed: added tabLog at end index {idx}")
+        elif idx != self.tabWidget.count() - 1:
+            # Already open but not last (e.g. other tabs added after) — move to end
+            self.tabWidget.removeTab(idx)
+            self.tabWidget.addTab(self.tabLog, self.logTitle)
+            idx = self.tabWidget.indexOf(self.tabLog)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"btnViewLogPressed: moved tabLog to end index {idx}")
 
         self.tabWidget.setCurrentIndex(idx)
         self.populateLogViewer()

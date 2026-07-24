@@ -41,6 +41,44 @@ _DEFAULT_FONT_FILES = (
     'ui/fonts/NotoSans-BoldItalic.ttf',
 )
 
+# Absolute geometries that differ by font mode: (x, y, width, height)
+# Default = Noto (Seifer-tuned 2026-07-24). Retro = pre-Noto baseline until tuned.
+# Only controls listed here are moved; everything else stays at .ui geometry.
+CONTROL_LAYOUTS = {
+    'default': {
+        # winMain — Data Query tab overlay icons
+        'btnRefresh': (22, 6, 32, 32),
+        'btnUndo': (70, 6, 32, 32),
+        # winOptions — Application tab checkboxes (nudged left under Noto labels)
+        'chkbRawData': (74, 60, 21, 22),
+        'chkbQAQC': (156, 90, 21, 22),
+        'chkbRetroMode': (88, 120, 21, 22),
+        'chkbDebug': (96, 150, 21, 22),
+        'chkbEnableSQL': (128, 180, 21, 22),
+        # winQuery — info icons next to labels
+        'btnDataIdInfo': (376, 5, 31, 20),
+        'btnIntervalInfo': (100, 76, 31, 20),
+        'btnQueryOptionsInfo': (110, 401, 31, 20),
+    },
+    'retro': {
+        # Pre-Noto baseline (Press Start tuning TBD — update these when retro layout starts)
+        'btnRefresh': (26, 10, 32, 32),
+        'btnUndo': (76, 10, 32, 32),
+        'chkbRawData': (84, 60, 21, 22),
+        'chkbQAQC': (178, 90, 21, 22),
+        'chkbRetroMode': (100, 120, 21, 22),
+        'chkbDebug': (110, 150, 21, 22),
+        'chkbEnableSQL': (150, 180, 21, 22),
+        'btnDataIdInfo': (382, 5, 31, 20),
+        'btnIntervalInfo': (110, 76, 31, 20),
+        'btnQueryOptionsInfo': (124, 401, 31, 20),
+    },
+}
+
+# Query-style lists that need tight item rows on Windows non-retro
+# (SQL snippet list + Query dataID list only — not every QListWidget)
+COMPACT_LIST_OBJECT_NAMES = frozenset({'listSnippets', 'listQueryList'})
+
 class customPasswordEdit(QLineEdit):
     """Password field using Qt's native echo modes (no dual realText/display bookkeeping).
 
@@ -267,12 +305,13 @@ def applyTableRowMetrics(table, font=None):
 def nonRetroPlatformStylesheet():
     """
     Non-retro (Noto) spacing tweaks that differ by platform.
-    Only list/table item padding — never QTabBar/QPushButton chrome.
+    Table item padding only here — listSnippets/listQueryList use applyCompactListStyle.
+    Never QTabBar/QPushButton chrome.
     """
     if Config.retroMode:
         return ""
     if sys.platform == 'win32':
-        # Kill the extra native item margins that make rows look airy on Windows
+        # Optional table tightening (harmless; row height is the main table control)
         return """
     QTableWidget::item, QTableView::item {
         padding-top: 0px;
@@ -280,14 +319,94 @@ def nonRetroPlatformStylesheet():
         padding-left: 3px;
         padding-right: 3px;
     }
-    QListWidget::item, QListView::item {
-        padding-top: 1px;
-        padding-bottom: 1px;
-        padding-left: 3px;
-        padding-right: 3px;
-    }
     """
     return ""
+
+
+def applyCompactListStyle(listWidget):
+    """
+    Tighten vertical item padding on SQL snippet list + Query dataID list.
+    Windows non-retro only (Linux Noto list density was already fine).
+    Retro keeps global retroSpacingStylesheet on these lists.
+    """
+    if listWidget is None:
+        return
+    name = listWidget.objectName() or ''
+    if name not in COMPACT_LIST_OBJECT_NAMES:
+        return
+    try:
+        if Config.retroMode:
+            # Clear widget-local override so app-level retro list padding applies
+            # (don't wipe thick scrollbar styles if any were set only here)
+            existing = listWidget.styleSheet() or ''
+            if '/*compact-list*/' in existing:
+                listWidget.setStyleSheet('')
+            listWidget.setSpacing(0)
+            return
+        if sys.platform == 'win32':
+            listWidget.setSpacing(0)
+            listWidget.setStyleSheet("""
+                /*compact-list*/
+                QListWidget::item {
+                    padding-top: 0px;
+                    padding-bottom: 0px;
+                    padding-left: 2px;
+                    padding-right: 2px;
+                    min-height: 0px;
+                }
+            """)
+        else:
+            # Linux/macOS non-retro: leave native metrics (looked correct)
+            listWidget.setSpacing(0)
+            existing = listWidget.styleSheet() or ''
+            if '/*compact-list*/' in existing:
+                listWidget.setStyleSheet('')
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"applyCompactListStyle({name}) failed: {e}")
+
+
+def applyModeControlLayouts(app=None, root=None):
+    """
+    Move mode-specific absolute controls (default Noto vs retro Press Start).
+    Call after UI load / on mode apply. Unknown names are skipped.
+    """
+    mode = 'retro' if Config.retroMode else 'default'
+    coords = CONTROL_LAYOUTS.get(mode) or {}
+    if not coords:
+        return
+
+    if root is not None:
+        widgets = [root] + list(root.findChildren(QWidget))
+    elif app is not None:
+        try:
+            widgets = list(app.allWidgets())
+        except Exception:
+            widgets = list(app.topLevelWidgets())
+    else:
+        return
+
+    byName = {}
+    for w in widgets:
+        n = w.objectName()
+        if n and n in coords:
+            byName[n] = w
+
+    for name, (x, y, w, h) in coords.items():
+        widget = byName.get(name)
+        if widget is None:
+            continue
+        try:
+            widget.setGeometry(x, y, w, h)
+        except Exception as e:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"applyModeControlLayouts {name}: {e}")
+
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"applyModeControlLayouts: mode={mode} applied={len(byName)}/{len(coords)}",
+        )
 
 
 def retroSpacingStylesheet():
@@ -407,6 +526,7 @@ def applyRoleFonts(app=None, root=None):
                 applyTableRowMetrics(w, tableFont)
             elif isinstance(w, QListWidget):
                 w.setFont(listFont)
+                applyCompactListStyle(w)
             elif isinstance(w, QTreeView):
                 w.setFont(listFont)
         except Exception:
@@ -430,6 +550,8 @@ def applyStylesAndFonts(app, mainTable, queryList):
 
     app.setStyleSheet(readBaseStylesheet())
     appFont = propagateUiFont(app)
+    # Mode-specific ABS button/checkbox positions (default Noto vs retro)
+    applyModeControlLayouts(app=app)
 
     try:
         info = QFontInfo(appFont)
@@ -452,6 +574,13 @@ def applyStylesAndFonts(app, mainTable, queryList):
         Logic.logMessage("WARN", f"UI font diagnostics failed: {e}")
 
     setRetroStyles(app, bool(Config.retroMode), mainTable, queryList)
+    # setRetroStyles may clear listQueryList stylesheet — re-apply compact list padding
+    try:
+        for w in app.allWidgets():
+            if isinstance(w, QListWidget):
+                applyCompactListStyle(w)
+    except Exception:
+        pass
 
 def loadDataDictionary(table):
     """Load the data dictionary into the provided table."""

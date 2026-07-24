@@ -10,14 +10,12 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
-[ ] Fonts: bundled Noto Sans (non-retro) + Press Start (retro)
+[ ] Fonts/layout: Noto default + list pad + mode ABS positions
    Steps:
-     a. Linux retro OFF: Noto Sans 10; table row density still perfect (height+10).
-        Log: requested='Noto Sans' actual='Noto Sans' defaultLoaded=True.
-     b. Windows retro OFF: same Noto font; table rows should NOT look overly padded
-        (height+4 + zero item padding). Compare main table + data dictionary + lists.
-     c. After padding OK: Seifer moves ABS buttons for default Noto; report which moved.
-     d. retro ON later: same buttons as (c); sizes button 6 / ui 8 / log 10.
+     a. Linux retro OFF: Noto 10; default positions (Refresh/Undo, Options checks, Query info icons).
+     b. Windows: listSnippets (SQL right) + listQueryList (Query) row spacing tight, not airy.
+     c. Log Viewer always opens as LAST tab (not next to current tab).
+     d. Retro later: CONTROL_LAYOUTS['retro'] for same 10 controls.
 
 [x] Log Viewer tab
    Steps:

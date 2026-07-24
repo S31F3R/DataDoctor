@@ -7,12 +7,10 @@ Workflow: To Do List.txt = backlog | test.txt = retest checklist | this file = h
 
 WHERE WE LEFT OFF
 -----------------
-Active focus: **fonts / layout** — non-retro Noto first; platform row padding + button ABS coords.
-Workflow Seifer confirmed:
-  1) Fix Windows row padding (done in code — needs Windows retest)
-  2) Seifer moves buttons for default (Noto) on Linux until perfect
-  3) We note which buttons moved → store as default-font locations
-  4) Retro later: same buttons get Press Start offsets
+Active focus: **fonts / layout** — non-retro Noto first.
+Seifer: list padding issue was ONLY listSnippets + listQueryList (not tables).
+He moved default-mode controls (recorded in CONTROL_LAYOUTS).
+Log Viewer must always open as last tab (fixed).
 
 Font model (round 5):
   • **Non-retro (default):** bundled **Noto Sans 10pt**
@@ -68,21 +66,31 @@ documentation/button-layout-inventory.txt
   - ABS/LAY inventory of all buttons (baseline before Seifer moves)
 
 
-ROW PADDING (non-retro Noto)
-----------------------------
-  Linux:  fontHeight + 10  (unchanged — Seifer: perfect)
-  Windows: fontHeight + 4 + QSS item padding 0 (native styles over-pad)
-  Retro:  fontHeight + 10 + retroSpacingStylesheet (unchanged)
+LIST PADDING (the real issue)
+-----------------------------
+  Only listSnippets (SQL right pane) + listQueryList (Query dataIDs).
+  Windows non-retro: applyCompactListStyle → 0 vertical item pad.
+  Linux non-retro: leave native (was fine).
+  Table row height platform tweak kept (Seifer: not bad).
+
+CONTROL_LAYOUTS (Utils) — apply when mode applies / Query+Options show
+---------------------------------------------------------------------
+  default: 2 main (Refresh/Undo), 5 options checks, 3 query info buttons
+  retro: pre-Noto baseline (tune when retro layout starts)
+  See documentation/button-layout-inventory.txt
+
+LOG TAB
+-------
+  Always last tab (addTab / move to end). Not after Data Query.
 
 
 IMMEDIATE NEXT
 --------------
-1) Seifer retests Linux non-retro still looks perfect (padding unchanged on Linux)
-2) Seifer retests Windows table row density (should be tighter now)
-3) Seifer moves buttons for default Noto until Query/Options look right
-4) Tell Grok which buttons moved → fill DEFAULT section in button-layout-inventory.txt
-5) Retro later: same control list, second coordinate set
-6) Still open bugs:
+1) Windows: confirm listSnippets + listQueryList density
+2) Confirm default positions of moved controls with retro OFF
+3) Log Viewer always last tab
+4) Retro layout pass later (same 10 controls)
+5) Still open bugs:
      - Retro mode toggle restart fails on Windows (works Linux)
      - Windows taskbar icon via VB.NET launcher (launcher-side)
      - Aquarius daily 2300 TZ

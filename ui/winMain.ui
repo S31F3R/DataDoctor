@@ -213,7 +213,7 @@
        </size>
       </property>
       <property name="currentIndex">
-       <number>2</number>
+       <number>0</number>
       </property>
       <property name="tabsClosable">
        <bool>true</bool>
@@ -253,8 +253,8 @@
        <widget class="QPushButton" name="btnRefresh">
         <property name="geometry">
          <rect>
-          <x>26</x>
-          <y>10</y>
+          <x>22</x>
+          <y>6</y>
           <width>32</width>
           <height>32</height>
          </rect>
@@ -279,8 +279,8 @@
        <widget class="QPushButton" name="btnUndo">
         <property name="geometry">
          <rect>
-          <x>76</x>
-          <y>10</y>
+          <x>70</x>
+          <y>6</y>
           <width>32</width>
           <height>32</height>
          </rect>
