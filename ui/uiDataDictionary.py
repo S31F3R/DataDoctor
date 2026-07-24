@@ -44,44 +44,26 @@ class uiDataDictionary(QMainWindow):
             sb.setSizeGripEnabled(True)
             sb.show()
 
-        # 40k+ dictionary rows shrink the vertical scrollbar grip to a few pixels;
-        # force a thick track + min handle so it can actually be grabbed.
-        if self.mainTable is not None:
-            self.mainTable.setStyleSheet("""
-                QScrollBar:vertical {
-                    width: 20px;
-                    margin: 0px;
-                    background: #2a2a2a;
-                }
-                QScrollBar::handle:vertical {
-                    min-height: 48px;
-                    background: #6a6a6a;
-                    border-radius: 4px;
-                    margin: 2px;
-                }
-                QScrollBar::handle:vertical:hover {
-                    background: #8a8a8a;
-                }
-                QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                    height: 0px;
-                }
-                QScrollBar:horizontal {
-                    height: 16px;
-                    background: #2a2a2a;
-                }
-                QScrollBar::handle:horizontal {
-                    min-width: 48px;
-                    background: #6a6a6a;
-                    border-radius: 4px;
-                }
-            """)
+        self.applyDictionaryScrollStyle()
         
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDataDictionary initialized with btnDeleteRow")
+
+    def applyDictionaryScrollStyle(self):
+        """Thick grip + retro green (or neutral) so 40k-row tables stay theme-consistent."""
+        if self.mainTable is None:
+            return
+        # Prefer Config.retroMode; fall back to True (app default)
+        retro = bool(getattr(Config, 'retroMode', True))
+        self.mainTable.setStyleSheet(Utils.thickScrollBarStyle(retro=retro, minHandle=48, track=20))
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"DataDictionary scrollbar style applied (retro={retro})")
     
     def showEvent(self, event):
         if Config.debug:
             Logic.logMessage("DEBUG", f"uiDataDictionary showEvent")
+        # Re-apply in case retro mode changed while window was closed
+        self.applyDictionaryScrollStyle()
         Utils.centerWindowToParent(self)
         super().showEvent(event)
     

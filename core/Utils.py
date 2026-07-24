@@ -261,17 +261,69 @@ def applyRetroFont(widget, pointSize=10):
         if Config.debug:
             Logic.logMessage("DEBUG", f"Reverted widget {widget.objectName()} to system font")
 
+def thickScrollBarStyle(retro=None, minHandle=48, track=20):
+    """
+    Scrollbar stylesheet with a grab-able handle (needed for tables with tens of
+    thousands of rows). Uses neon green when retro mode is on.
+    """
+    if retro is None:
+        retro = bool(getattr(Config, 'retroMode', True))
+    handle = "#00FF00" if retro else "#6a6a6a"
+    handleHover = "#66FF66" if retro else "#8a8a8a"
+    trackBg = "#333333" if retro else "#2a2a2a"
+    return f"""
+        QScrollBar:vertical {{
+            width: {track}px;
+            margin: 0px;
+            background: {trackBg};
+        }}
+        QScrollBar::handle:vertical {{
+            min-height: {minHandle}px;
+            background: {handle};
+            border-radius: 4px;
+            margin: 2px;
+        }}
+        QScrollBar::handle:vertical:hover {{
+            background: {handleHover};
+        }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            height: 0px;
+        }}
+        QScrollBar:horizontal {{
+            height: {max(track - 4, 14)}px;
+            background: {trackBg};
+        }}
+        QScrollBar::handle:horizontal {{
+            min-width: {minHandle}px;
+            background: {handle};
+            border-radius: 4px;
+        }}
+        QScrollBar::handle:horizontal:hover {{
+            background: {handleHover};
+        }}
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+            width: 0px;
+        }}
+    """
+
+
 def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQueryList=None):
     """Apply or remove retro mode styles (e.g., scroll bars) dynamically."""
+    # Global app scrollbars: neon green, slightly thicker than stock for grab-ability
     retroStyles = """
         QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
             background: #00FF00; /* Neon green handle */
             border-radius: 4px;
+            min-height: 24px;
+            min-width: 24px;
         }
-        QScrollBar:vertical, QScrollBar:horizontal {
+        QScrollBar:vertical {
             background: #333333; /* Dark track for contrast */
-            width: 12px;
-            height: 12px;
+            width: 14px;
+        }
+        QScrollBar:horizontal {
+            background: #333333;
+            height: 14px;
         }
     """
     if enable:
