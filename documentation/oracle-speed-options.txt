@@ -32,12 +32,14 @@ A) Batch SDIDs in one SQL (WHERE site_datatype_id IN (...))
 B) Fewer / smarter date chunks  — REMOVED
    - Too risky (timeouts, huge result sets).
 
-C) Connection reuse per worker (or per sqlRead)
+C) Connection reuse per worker (or per sqlRead)  — IMPLEMENTED (retest)
    - Worker opens one connection and reuses it for many tasks instead of
      connect/close per (SDID, chunk).
    - Cuts login/handshake cost a lot over the internet.
    - Must be thread-safe (one connection per thread only).
    DECISION: Prefer this first when we pick up Oracle speed work on bug-smashing.
+   CODE: USBR.sqlRead worker() opens oracleConnection once; queryTask uses
+         executeCustomQueryWithRetry; close in finally after queue empty.
 
 D) Connection pool (oracledb pool)
    - Acquire/release instead of full connect each time.

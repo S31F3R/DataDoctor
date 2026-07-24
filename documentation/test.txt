@@ -7,42 +7,36 @@ Workflow:
   - FAIL → note here; Grok re-fixes
 
 
-GATE before staging push
+Need retest (this pass) — Oracle connection reuse (option C)
 --------------------------------------------------------------------------------
 
-V1) Large multi-source query finishes through overlay/delta + table display
-   Steps: 2-year mega query (USGS + multi-HDB + Aquarius, many series), with Overlay
-          and/or Delta if that is how you normally run it.
+1) HDB multi-task reuse: fewer logins, still correct data
+   Steps:
+     a. Internal query with several HDB series over a multi-day range (enough to
+        create multiple SDID × chunk tasks — e.g. week+ of HOUR, or 2-year mega).
+     b. Optionally watch debug log: each worker should log "opened reusable
+        connection" once and "closed connection after N task(s)" with N > 1.
    EXPECT:
-     - Building table... shows row progress (does not freeze forever).
-     - At 97%: "Overlay/delta: reading... / computing pairs... / writing..." updates
-       (NOT a silent hang on "Applying overlay/delta").
-     - Then QAQC / overlay colors if enabled; table appears.
-   Notes:
-     2026-07-24 PATH crash FIXED.
-     2026-07-24 buildTable hang improved; then hung on Applying overlay/delta @ 97%.
-     Cause: processOverlay called removeColumn for every pair on 10k+ row tables —
-             each remove shifts every remaining cell (O(pairs × rows × cols)).
-     FIX: offline extract → compute merges/deltas → single table rewrite; progress
-          yields; no removeColumn loop. Retest mega query with overlay/delta on.
+     - Results match previous behavior (values, meta/details still work).
+     - Wall time lower than connect-per-task (esp. over WAN); no auth spam.
+     - Wrong password still fails fast (one clear login error).
+   Notes: sqlRead workers open 1 Oracle session each, run many tasks, then close.
+          executeCustomQueryWithRetry reconnects once on dropped connections.
 
 
-Confirmed recently
+GATE / already confirmed (staging)
 --------------------------------------------------------------------------------
-[x] Data Dictionary scrollbar thick + retro theme
-[x] Large multi-source query: no Oracle PATH 32767 crash
-[x] Tab order main + query
-[x] Options remask secrets on close
-[x] SQL Query Builder background thread
-[x] Aquarius Label = Label only
-[x] (prior bug-smash cluster)
+[x] V1 large multi-source build table + overlay/delta finishes (not hang)
+[x] PATH Instant Client env limit
+[x] Data Dictionary scrollbar retro
+[x] Prior bug-smash cluster
 
 
-Deferred / external
+Deferred
 --------------------------------------------------------------------------------
-[!] Oracle HDB speed after staging (C connection reuse first)
-[!] Windows taskbar icon via VB.NET launcher
+[!] Oracle A batch SDIDs + D pool (after C validated)
+[!] Windows taskbar via VB launcher
 [!] USGS monthly/yearly — OGC continuous + daily only
-[!] Retro restart Windows / Windows text truncation
+[!] Retro restart Windows / Windows text
 [!] Aquarius daily 2300 TZ
-[!] Features: plots, log viewer, goat, formatting rules, git/readme
+[!] Features: plots, log viewer, etc.
