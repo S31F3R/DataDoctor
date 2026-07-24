@@ -7,37 +7,49 @@ Workflow:
   - FAIL → note here; Grok re-fixes
 
 
-Need retest (this pass)
+GATE before staging push
 --------------------------------------------------------------------------------
 
-1) Large multi-source query does not crash on Oracle PATH (Windows)
-   Steps: Internal query ~2 years, many series across USGS + USBR-LCHDB + USBR-YAOHDB
-          + Aquarius (same shape that failed before).
-   EXPECT: No ValueError "environment variable is longer than 32767 characters".
-           Query completes or fails cleanly without process crash mid-Oracle setup.
-   Notes: 2026-07-24 FAIL — every oracleConnection() prepended Instant Client to PATH;
-          multi-thread HDB (SDID × date chunks) blew past Windows 32k env limit.
-          FIX: ensureOracleClientReady() once per process; PATH prepend only if missing.
-          2-day control still OK (few tasks → PATH never hit the ceiling).
-
-2) Data Dictionary vertical scrollbar grip usable with ~40k rows
-   Steps: Open Data Dictionary (full load).
-   EXPECT: vertical scrollbar handle is thick enough to grab (min-height ~48px, track ~20px).
+V1) Large multi-source “Building table…” must finish (not hang)
+   Steps: 2-year mega query (USGS + multi-HDB + Aquarius, many series) as before.
+          After fetch completes, watch progress during Building table / QAQC.
+   EXPECT:
+     - Progress label updates: "Building table... (row/total rows, N cols)"
+       then "Applying QAQC colors..." if QAQC on.
+     - Windows does NOT stay "Not Responding" forever; UI yields during fill.
+     - Table eventually appears (minutes may still be OK for ~1M+ cells; hang/crash is fail).
+   Notes:
+     2026-07-24 PATH crash FIXED; then build hung ("program is not responding").
+     Root causes of hang:
+       - Vertical header ResizeToContents on every row (Qt scans all rows)
+       - Million+ QTableWidgetItem inserts with rare/no processEvents
+       - Re-enabling updates mid-fill forced expensive paints
+       - QAQC + disabled-QAQC paths walked every cell; dict lookup was O(rows) per series
+     FIX (retest this):
+       - No ResizeToContents on large fills
+       - processEvents every ~200–1000 rows while updates stay OFF
+       - Live progress % 90–98 during cell fill
+       - O(1) data-dictionary index; QAQC once after overlay/delta only
+       - Skip useless full-table background clear when QAQC off
 
 
 Confirmed recently
 --------------------------------------------------------------------------------
+[x] Data Dictionary scrollbar thick + retro theme
+[x] Large multi-source query: no Oracle PATH 32767 crash
 [x] Tab order main + query
 [x] Options remask secrets on close
 [x] SQL Query Builder background thread
 [x] Aquarius Label = Label only
-[x] (prior bug-smash cluster — export, headers, meta, rbase, auth, etc.)
+[x] (prior bug-smash cluster)
 
 
 Deferred / external
 --------------------------------------------------------------------------------
-[!] Windows taskbar icon when launched via VB.NET → Python
-[!] USGS monthly/yearly — OGC has continuous + daily only
+[!] Oracle HDB speed after staging (C connection reuse first)
+    See documentation/oracle-speed-options.txt
+[!] Windows taskbar icon via VB.NET launcher
+[!] USGS monthly/yearly — OGC continuous + daily only
 [!] Retro restart Windows / Windows text truncation
 [!] Aquarius daily 2300 TZ
 [!] Features: plots, log viewer, goat, formatting rules, git/readme

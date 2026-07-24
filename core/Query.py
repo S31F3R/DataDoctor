@@ -301,17 +301,40 @@ def combineParameters(data, newData):
         data[d] = f'{data[d]},{parseLine[1]}'
     return data
 
-def getDataDictionaryItem(table, dataId):
+def getDataDictionaryItem(table, dataId, idIndex=None):
+    """Find dictionary row for dataId. Prefer idIndex from buildDataDictionaryIndex()."""
+    if idIndex is not None:
+        return idIndex.get(dataId.strip() if dataId else '', -1)
     idCol = getColByName(table, 'dataID')
 
     if idCol == -1:
         return -1
+    target = dataId.strip() if dataId else ''
     for r in range(table.rowCount()):
         item = table.item(r, idCol)
 
-        if item and item.text().strip() == dataId.strip():
+        if item and item.text().strip() == target:
             return r
     return -1
+
+def buildDataDictionaryIndex(table):
+    """
+    One-pass map dataID -> row index for O(1) lookups.
+    Scanning 40k rows per series column was a major cost on wide queries.
+    """
+    index = {}
+    if table is None:
+        return index
+    idCol = getColByName(table, 'dataID')
+    if idCol == -1:
+        return index
+    for r in range(table.rowCount()):
+        item = table.item(r, idCol)
+        if item:
+            key = item.text().strip()
+            if key and key not in index:
+                index[key] = r
+    return index
 
 def getColByName(table, name):
     """Find a DataDictionary column by header name (case-insensitive).
@@ -346,7 +369,7 @@ def usgsHeaderFromSiteName(siteName, intervalStr, fallback=None):
     # Single segment: name on top, interval underneath
     return f"{parts[0]} \n{intervalStr}"
 
-def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None):
+def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None, progressDialog=None):
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
     table.clear()
@@ -358,6 +381,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     if isinstance(buildHeader, str):
         buildHeader = [h.strip() for h in buildHeader.split(',')]
     processedHeaders = []
+    # O(1) dictionary row lookup (40k linear scans per column freezes wide queries)
+    dictIndex = buildDataDictionaryIndex(dataDictionaryTable) if dataDictionaryTable else {}
 
     for i, h in enumerate(buildHeader):
         dataId = h.strip()
@@ -366,7 +391,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if intervalStr.startswith('INSTANT:'):
             intervalStr = 'INSTANT'
         database = databases[i] if databases and i < len(databases) else None
-        dictRow = getDataDictionaryItem(dataDictionaryTable, lookupIds[i] if lookupIds else dataId)
+        dictKey = lookupIds[i] if lookupIds else dataId
+        dictRow = getDataDictionaryItem(dataDictionaryTable, dictKey, idIndex=dictIndex)
         mrid = None
 
         if database and database.startswith('USBR-') and '-' in dataId:
@@ -470,31 +496,46 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     skipDateCol = dataDictionaryTable is not None
     numCols = len(headers)
     numRows = len(data)
+    totalCells = numRows * numCols
 
     if Config.debug:
-        Logic.logMessage("DEBUG", f"buildTable: Setting table to {numRows} rows, {numCols} columns")
+        Logic.logMessage("DEBUG", f"buildTable: Setting table to {numRows} rows, {numCols} columns ({totalCells} cells)")
+
+    # Freeze UI work before allocating — Windows marks Not Responding if this blocks too long
+    wasSorting = table.isSortingEnabled()
+    table.setSortingEnabled(False)
+    table.blockSignals(True)
+    table.setUpdatesEnabled(False)
+
     table.setRowCount(numRows)
     table.setColumnCount(numCols)
     table.setHorizontalHeaderLabels(headers)
     table.show()
 
+    header = table.horizontalHeader()
+    vHeader = table.verticalHeader()
+    # NEVER ResizeToContents on large tables — Qt walks every row (multi-minute freeze)
+    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    header.setStretchLastSection(False)
+    vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+
+    timestamps = []
     if dataDictionaryTable:
-        timestamps = [row.split(',')[0].strip() for row in data]
+        timestamps = [row.split(',', 1)[0].strip() for row in data]
         table.setVerticalHeaderLabels(timestamps)
-        vHeader = table.verticalHeader()
-        vHeader.setMinimumWidth(120)
-        vHeader.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         vHeader.setVisible(True)
+        # Fixed min width from sample only (not ResizeToContents)
+        font = table.font()
+        metrics = QFontMetrics(font)
+        sampleTs = timestamps[0] if timestamps else "01/01/26 00:00:00"
+        vHeader.setMinimumWidth(max(120, metrics.horizontalAdvance(sampleTs) + 16))
     else:
         table.verticalHeader().setVisible(False)
-    font = table.font()
-    metrics = QFontMetrics(font)
-    columnWidths = []
-    sampleRows = min(500, numRows)  # enough for width; avoid scanning 10k+ rows
+        font = table.font()
+        metrics = QFontMetrics(font)
 
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"buildTable: Sampling {sampleRows} rows for column widths")
-    # Pre-split sample once (old path re-split every row per column — very slow on big sets)
+    columnWidths = []
+    sampleRows = min(100, numRows)  # small sample; width does not need full scan
     sampleSplit = []
     for row in data[:sampleRows]:
         parts = row.split(',')
@@ -507,40 +548,36 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 val = parts[c].strip()
                 if val:
                     nonEmptyValues.append(val)
-
         if nonEmptyValues:
             maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
         else:
             maxCellWidth = metrics.horizontalAdvance("0.00")
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"buildTable col {c}: No non-empty values, using fallback width {maxCellWidth}")
         headerLines = headers[c].split('\n')
         headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"buildTable col {c}: maxCellWidth={maxCellWidth}, headerWidth={headerWidth}")
         finalWidth = max(maxCellWidth, headerWidth)
-
         if headerWidth > maxCellWidth:
-            paddingIncrease = headerWidth - maxCellWidth
-            finalWidth = maxCellWidth + paddingIncrease + 10
+            finalWidth = maxCellWidth + (headerWidth - maxCellWidth) + 10
         else:
             finalWidth += 20
         columnWidths.append(finalWidth)
 
-    # Sorting during setItem is catastrophic for large tables (re-sort every insert)
-    wasSorting = table.isSortingEnabled()
-    table.setSortingEnabled(False)
-    table.setUpdatesEnabled(False)
-
     if Config.debug:
-        Logic.logMessage("DEBUG", "buildTable: Disabled updates+sorting for population")
+        Logic.logMessage("DEBUG", "buildTable: Disabled updates+sorting+signals for population")
 
     align = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
     rawData = Config.rawData
+    # Yield often enough that Windows does not show "Not Responding"
+    yieldEvery = 200 if totalCells > 200000 else 500 if numRows > 2000 else 1000
+    progressBase = 90
+    progressSpan = 8  # 90–98 during cell fill
+
     for rowIdx, rowStr in enumerate(data):
-        rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
+        # split once on first comma for ts already used; cells after first comma
+        if skipDateCol:
+            comma = rowStr.find(',')
+            rowData = rowStr[comma + 1:].split(',') if comma >= 0 else []
+        else:
+            rowData = rowStr.split(',')
 
         for colIdx in range(min(numCols, len(rowData))):
             cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
@@ -552,129 +589,112 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             item.setTextAlignment(align)
             table.setItem(rowIdx, colIdx, item)
 
-        # Occasional UI yield on huge tables so progress dialog can paint
-        if numRows > 5000 and rowIdx > 0 and rowIdx % 2000 == 0:
-            table.setUpdatesEnabled(True)
+        if rowIdx % yieldEvery == 0 or rowIdx == numRows - 1:
+            if progressDialog is not None:
+                pct = progressBase + int(progressSpan * (rowIdx + 1) / max(numRows, 1))
+                progressDialog.setLabelText(
+                    f"Building table... ({rowIdx + 1}/{numRows} rows, {numCols} cols)"
+                )
+                progressDialog.setValue(min(pct, 98))
+                progressDialog.repaint()
+            # Keep table updates OFF — re-enabling mid-fill forces expensive paints
             QCoreApplication.processEvents()
-            table.setUpdatesEnabled(False)
+            if progressDialog is not None and progressDialog.wasCanceled():
+                break
 
-    table.setUpdatesEnabled(True)
-    table.setSortingEnabled(wasSorting)
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", "buildTable: Re-enabled table updates after population")
-    # Sort is connected once on the main window; do not re-connect here (would stack handlers)
-    header = table.horizontalHeader()
-    vHeader = table.verticalHeader()
-    table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-    table.setMinimumSize(0, 0)
-    table.update()
-    header.setStretchLastSection(False)
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", "buildTable: Set stretchLastSection=False to prevent last column expansion.")
-    if dataDictionaryTable:
-        maxTimeWidth = max(metrics.horizontalAdvance(ts) for ts in timestamps)
-        vHeader.setMinimumWidth(120 if maxTimeWidth < 120 else maxTimeWidth + 10)
     for c in range(numCols):
         table.setColumnWidth(c, columnWidths[c])
 
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"buildTable: Set column {c} width to {columnWidths[c]}")
     rowHeight = metrics.height() + 10
-    sampleItem = QTableWidgetItem("189.5140")
-    sampleItem.setFont(font)
-    sampleCellHeight = sampleItem.sizeHint().height()
-
-    if sampleCellHeight <= 0:
-        sampleCellHeight = metrics.height()
-    adjustedRowHeight = max(rowHeight, sampleCellHeight + 2)
-
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"buildTable: Sample cell height: {sampleCellHeight}, Adjusted row height: {adjustedRowHeight}")
+    adjustedRowHeight = max(rowHeight, metrics.height() + 2)
     vHeader.setDefaultSectionSize(adjustedRowHeight)
 
-    if Config.debug:
-        Logic.logMessage("DEBUG", f"buildTable: Set default row height to {adjustedRowHeight}")
-    header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-    vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-    table.update()
-    table.horizontalScrollBar().setValue(0)
-    visibleWidth = table.columnWidth(1) if numCols > 1 else 0
-
-    if Config.debug and numCols > 1:
-        Logic.logMessage("DEBUG", f"buildTable: Custom resized {numCols} columns. Text width for col 1: {metrics.horizontalAdvance(headers[1])}, Visible width: {visibleWidth}, Row height: {adjustedRowHeight}")
-    dataIds = buildHeader
-
-    if Config.qaqcEnabled:
-        qaqc(table, dataDictionaryTable, dataIds)
+    table.blockSignals(False)
+    table.setUpdatesEnabled(True)
+    # Leave sorting off for very large tables (click-to-sort still works via customSort)
+    if totalCells < 100000:
+        table.setSortingEnabled(wasSorting)
     else:
-        for r in range(table.rowCount()):
-            for c in range(table.columnCount()):
-                item = table.item(r, c)
+        table.setSortingEnabled(False)
 
-                if item:
-                    item.setBackground(QColor(0, 0, 0, 0))
-        if Config.debug:
-            Logic.logMessage("DEBUG", "buildTable: QAQC skipped, cleared cell backgrounds")
+    table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+    table.setMinimumSize(0, 0)
+    table.horizontalScrollBar().setValue(0)
 
-def qaqc(table, dataDictionaryTable, lookupIds):
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"buildTable: Population done. cells={totalCells}, sortEnabled={table.isSortingEnabled()}"
+        )
+
+    # QAQC is applied by executeQuery after overlay/delta modifyTable so we do not
+    # color twice on huge tables. dictIndex available on table for reuse if needed.
+    table._dataDictIndex = dictIndex  # lightweight attach for executeQuery
+
+    if Config.debug:
+        Logic.logMessage("DEBUG", "buildTable: complete (QAQC deferred to executeQuery)")
+
+def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=None):
     if not Config.qaqcEnabled:
         if Config.debug:
             Logic.logMessage("DEBUG", "qaqc: Skipped, QAQC disabled in config")
-        for r in range(table.rowCount()):
-            for c in range(table.columnCount()):
-                item = table.item(r, c)
-
-                if item:
-                    item.setBackground(QColor(0, 0, 0, 0))
+        # Do NOT walk every cell to clear backgrounds — empty default is fine and
+        # was a multi-minute no-op on million-cell tables.
         return
-    now = datetime.now()
 
-    for col, lookupId in enumerate(lookupIds):
+    if dictIndex is None and dataDictionaryTable is not None:
+        dictIndex = buildDataDictionaryIndex(dataDictionaryTable)
+
+    # Column indices once (not 5× getColByName per series column)
+    expectedMinCol = getColByName(dataDictionaryTable, 'expectedMin') if dataDictionaryTable else -1
+    expectedMaxCol = getColByName(dataDictionaryTable, 'expectedMax') if dataDictionaryTable else -1
+    cutoffMinCol = getColByName(dataDictionaryTable, 'cuttoffMin') if dataDictionaryTable else -1
+    cutoffMaxCol = getColByName(dataDictionaryTable, 'cutoffMax') if dataDictionaryTable else -1
+    rateOfChangeCol = getColByName(dataDictionaryTable, 'rateOfChange') if dataDictionaryTable else -1
+
+    now = datetime.now()
+    numCols = min(table.columnCount(), len(lookupIds) if lookupIds is not None else table.columnCount())
+    numRows = table.rowCount()
+    blackBrush = QBrush(QColor(0, 0, 0))
+    blueMissing = QColor(100, 195, 247)
+
+    table.setUpdatesEnabled(False)
+    table.blockSignals(True)
+
+    for col in range(numCols):
+        lookupId = lookupIds[col] if lookupIds is not None and col < len(lookupIds) else None
         if Config.debug:
             Logic.logMessage("DEBUG", "qaqc: Processing column {} for lookupId {}".format(col, lookupId))
-        rowIndex = getDataDictionaryItem(dataDictionaryTable, lookupId)
+        rowIndex = getDataDictionaryItem(dataDictionaryTable, lookupId, idIndex=dictIndex) if lookupId is not None else -1
         expectedMin = None
         expectedMax = None
         cutoffMin = None
         cutoffMax = None
         rateOfChange = None
 
-        if rowIndex != -1:
-            expectedMinCol = getColByName(dataDictionaryTable, 'expectedMin')
-            expectedMinItem = dataDictionaryTable.item(rowIndex, expectedMinCol) if expectedMinCol != -1 else None
+        if rowIndex != -1 and dataDictionaryTable is not None:
+            def _floatAt(r, c):
+                if c == -1:
+                    return None
+                it = dataDictionaryTable.item(r, c)
+                if not it or not it.text().strip():
+                    return None
+                try:
+                    return float(it.text().strip())
+                except ValueError:
+                    return None
+            expectedMin = _floatAt(rowIndex, expectedMinCol)
+            expectedMax = _floatAt(rowIndex, expectedMaxCol)
+            cutoffMin = _floatAt(rowIndex, cutoffMinCol)
+            cutoffMax = _floatAt(rowIndex, cutoffMaxCol)
+            rateOfChange = _floatAt(rowIndex, rateOfChangeCol)
 
-            if expectedMinItem and expectedMinItem.text().strip():
-                expectedMin = float(expectedMinItem.text().strip())
-            expectedMaxCol = getColByName(dataDictionaryTable, 'expectedMax')
-            expectedMaxItem = dataDictionaryTable.item(rowIndex, expectedMaxCol) if expectedMaxCol != -1 else None
-
-            if expectedMaxItem and expectedMaxItem.text().strip():
-                expectedMax = float(expectedMaxItem.text().strip())
-            cutoffMinCol = getColByName(dataDictionaryTable, 'cuttoffMin')
-            cutoffMinItem = dataDictionaryTable.item(rowIndex, cutoffMinCol) if cutoffMinCol != -1 else None
-
-            if cutoffMinItem and cutoffMinItem.text().strip():
-                cutoffMin = float(cutoffMinItem.text().strip())
-            cutoffMaxCol = getColByName(dataDictionaryTable, 'cutoffMax')
-            cutoffMaxItem = dataDictionaryTable.item(rowIndex, cutoffMaxCol) if cutoffMaxCol != -1 else None
-
-            if cutoffMaxItem and cutoffMaxItem.text().strip():
-                cutoffMax = float(cutoffMaxItem.text().strip())
-            rateOfChangeCol = getColByName(dataDictionaryTable, 'rateOfChange')
-            rateOfChangeItem = dataDictionaryTable.item(rowIndex, rateOfChangeCol) if rateOfChangeCol != -1 else None
-
-            if rateOfChangeItem and rateOfChangeItem.text().strip():
-                rateOfChange = float(rateOfChangeItem.text().strip())
         prevVal = None
-
-        for r in range(table.rowCount()):
+        for r in range(numRows):
             item = table.item(r, col)
 
             if not item:
                 continue
-            item.setData(Qt.ItemDataRole.ForegroundRole, None)
             cellText = item.text().strip()
 
             if cellText == '':
@@ -682,12 +702,10 @@ def qaqc(table, dataDictionaryTable, lookupIds):
 
                 if tsItem:
                     tsStr = tsItem.text()
-
                     try:
                         tsDt = datetime.strptime(tsStr, '%m/%d/%y %H:%M:00')
-
                         if tsDt <= now:
-                            item.setBackground(QColor(100, 195, 247))
+                            item.setBackground(blueMissing)
                     except ValueError:
                         pass
                 continue
@@ -698,26 +716,33 @@ def qaqc(table, dataDictionaryTable, lookupIds):
             if rowIndex != -1:
                 if expectedMin is not None and val < expectedMin:
                     item.setBackground(QColor(249, 240, 107))
-                    item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))
+                    item.setData(Qt.ItemDataRole.ForegroundRole, blackBrush)
                 elif expectedMax is not None and val > expectedMax:
                     item.setBackground(QColor(249, 194, 17))
-                    item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))
+                    item.setData(Qt.ItemDataRole.ForegroundRole, blackBrush)
                 elif cutoffMin is not None and val < cutoffMin:
                     item.setBackground(QColor(255, 163, 72))
-                    item.setData(Qt.ItemDataRole.ForegroundRole, None)
                 elif cutoffMax is not None and val > cutoffMax:
                     item.setBackground(QColor(192, 28, 40))
-                    item.setData(Qt.ItemDataRole.ForegroundRole, None)
             if rateOfChange is not None and prevVal is not None:
                 if abs(val - prevVal) > rateOfChange:
                     item.setBackground(QColor(246, 97, 81))
-                    item.setData(Qt.ItemDataRole.ForegroundRole, None)
             if prevVal is not None and val == prevVal:
                 item.setBackground(QColor(87, 227, 137))
-                item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(QColor(0, 0, 0)))
+                item.setData(Qt.ItemDataRole.ForegroundRole, blackBrush)
             prevVal = val
+
+        if progressDialog is not None and (col % 5 == 0 or col == numCols - 1):
+            progressDialog.setLabelText(f"Applying QAQC colors... ({col + 1}/{numCols} series)")
+            progressDialog.setValue(98)
+            progressDialog.repaint()
+            QCoreApplication.processEvents()
+
         if Config.debug:
             Logic.logMessage("DEBUG", "qaqc: Processed column {} for lookupId {}".format(col, lookupId))
+
+    table.blockSignals(False)
+    table.setUpdatesEnabled(True)
 
 def customSortTable(table, col, dataDictionaryTable):
     try:
@@ -1085,8 +1110,23 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
                 mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
 
-            # Build the table (sorting off during fill — critical for large row counts)
-            buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
+            # Build the table (progress yields so Windows does not show Not Responding)
+            buildTable(
+                mainWindow.mainTable,
+                data,
+                originalDataIds,
+                dataDictionaryTable,
+                originalIntervals,
+                lookupIds,
+                labelsDict,
+                databases,
+                queryItems=queryItems,
+                progressDialog=progressDialog,
+            )
+            if progressDialog.wasCanceled():
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "executeQuery: canceled during buildTable")
+                return
 
             # Remap Aquarius rawResponses keys to API labels. USGS stays keyed by DataID
             # so context-menu lookup by lookupId still works after Site Name headers.
@@ -1110,6 +1150,11 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
             # Modify table if query tools are checked
             if deltaChecked or overlayChecked:
+                if progressDialog is not None:
+                    progressDialog.setLabelText("Applying overlay/delta...")
+                    progressDialog.setValue(97)
+                    progressDialog.repaint()
+                    QCoreApplication.processEvents()
                 QueryUtils.modifyTable(mainWindow.mainTable, deltaChecked, overlayChecked, databases, queryItems, labelsDict, lookupIds, mainWindow=mainWindow)
 
                 # QAQC on final displayed columns, then overlay color overrides (mismatch / missing only)
@@ -1123,7 +1168,19 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         finalLookupIds.append(lid if lid is not None else '')
 
                 if Config.qaqcEnabled and finalLookupIds:
-                    qaqc(mainWindow.mainTable, dataDictionaryTable, finalLookupIds)
+                    if progressDialog is not None:
+                        progressDialog.setLabelText("Applying QAQC colors...")
+                        progressDialog.setValue(98)
+                        progressDialog.repaint()
+                        QCoreApplication.processEvents()
+                    dictIndex = getattr(mainWindow.mainTable, '_dataDictIndex', None)
+                    qaqc(
+                        mainWindow.mainTable,
+                        dataDictionaryTable,
+                        finalLookupIds,
+                        dictIndex=dictIndex,
+                        progressDialog=progressDialog,
+                    )
                 if overlayChecked:
                     QueryUtils.applyOverlayColorOverrides(mainWindow.mainTable)
             else:    
@@ -1149,6 +1206,22 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", "executeQuery: Set columnMetadata for non-overlay with lists: {repr(mainWindow.columnMetadata)}")
+
+                # QAQC once on final columns (not inside buildTable)
+                if Config.qaqcEnabled:
+                    if progressDialog is not None:
+                        progressDialog.setLabelText("Applying QAQC colors...")
+                        progressDialog.setValue(98)
+                        progressDialog.repaint()
+                        QCoreApplication.processEvents()
+                    dictIndex = getattr(mainWindow.mainTable, '_dataDictIndex', None)
+                    qaqc(
+                        mainWindow.mainTable,
+                        dataDictionaryTable,
+                        lookupIds,
+                        dictIndex=dictIndex,
+                        progressDialog=progressDialog,
+                    )
 
             # After QAQC/overlay: blue box + black text for HDB r_base fills (no interval)
             QueryUtils.applyUsbrRbaseFallbackColors(mainWindow.mainTable, mainWindow)

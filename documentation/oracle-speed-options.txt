@@ -1,4 +1,4 @@
-Oracle / HDB over the network — speed options (discussion only; not implemented)
+Oracle / HDB over the network — speed options (discussion; not implemented yet)
 ================================================================================
 Context: Internal HDB uses many short SQL round-trips (per SDID × date chunk ×
 thread). Wall time is usually dominated by network RTT + Oracle parse/execute,
@@ -20,48 +20,49 @@ Why a 2-year × many SDIDs query is slow
 - Two HDB homes (LCHDB + YAOHDB) are separate query groups; still same Instant
   Client process, but each sqlRead has its own worker pool and task list.
 
-Options to speed up (pick later; tradeoffs)
-------------------------------------------
+Options (with Seifer decisions)
+-------------------------------
 
 A) Batch SDIDs in one SQL (WHERE site_datatype_id IN (...))
    - One round-trip for many series in the same chunk/DB.
    - Biggest win for “100 parameters” style lists.
-   - Need careful bind limits (Oracle IN list / array binds), result split by SDID,
-     and memory for large multi-series result sets.
+   - Need careful bind limits, result split by SDID, memory for wide results.
+   DECISION: Hold off for now; keep as a later option. Pair with D when we try it.
 
-B) Fewer / smarter date chunks
-   - Larger queryLimit or adaptive chunking → fewer tasks, fewer connects.
-   - Risk: bigger result sets, longer single statements, more chance of timeout.
+B) Fewer / smarter date chunks  — REMOVED
+   - Too risky (timeouts, huge result sets).
 
-C) Connection reuse / pool per thread (or per sqlRead)
+C) Connection reuse per worker (or per sqlRead)
    - Worker opens one connection and reuses it for many tasks instead of
      connect/close per (SDID, chunk).
    - Cuts login/handshake cost a lot over the internet.
    - Must be thread-safe (one connection per thread only).
+   DECISION: Prefer this first when we pick up Oracle speed work on bug-smashing.
 
-D) Connection pool (oracledb pool) shared carefully
-   - Acquire/release instead of full client setup each time.
-   - Helps multi-query sessions; still need A or B for true multi-series speed.
+D) Connection pool (oracledb pool)
+   - Acquire/release instead of full connect each time.
+   DECISION: Use when we try A (batch SDIDs).
 
 E) Database links / single DSN strategy
-   - Already uses primary DSN + @db_link for secondary HDBs.
-   - Ensure all HDB work rides one authenticated session tree where possible.
+   - Already uses primary DSN + @db_link where links exist (3 HDBs linked;
+     others are not). No new product work unless more links appear.
+   DECISION: Already in place where possible; leave as-is.
 
-F) Parallelism tuning
-   - maxThreads vs DB/session limits vs network congestion.
-   - More threads can help or hurt (session storms, lock/contention).
+F) Parallelism tuning (maxThreads)
+   - More threads can help or hurt.
+   DECISION: Leave current threading as-is while testing C (and later A/D).
+             Do not push thread count without measurement.
 
-G) Reduce metadata work when not needed
-   - Skip r_base merge / map lookups for public or “values only” mode if product allows.
+G) Reduce metadata work when not needed  — REMOVED
+   - r_base / maps needed for details context menu.
 
-Recommended order of attack (when you green-light efficiency work)
-------------------------------------------------------------------
-1. C — per-worker connection reuse (low risk, big cut on connect spam)
-2. A — multi-SDID IN-list queries per chunk (biggest win for wide queries)
-3. B — tune chunk size for long ranges
-4. D/F — pool + thread count after measuring
+When we green-light efficiency work (after staging push)
+--------------------------------------------------------
+1. C — per-worker connection reuse
+2. A + D — multi-SDID IN-list + pool
+3. Leave F (threads) alone unless profiling says otherwise
 
-Not recommended as first step
------------------------------
-- More threads alone without A/C (more connects, more PATH/session stress).
-- Client-side “fake” monthly/yearly for USGS (API has no such collections).
+Not first steps
+---------------
+- More threads alone without C/A
+- Client-side fake USGS monthly/yearly
