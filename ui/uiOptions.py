@@ -452,8 +452,9 @@ class uiOptions(QDialog):
 
         # Dynamically show/hide SQL tab if enableSQL changed
         if newEnableSQL != previousEnableSQL:
-            sqlTab = self.winMain.findChild(QWidget, 'tabSQL')
+            sqlTab = getattr(self.winMain, 'tabSQL', None) or self.winMain.findChild(QWidget, 'tabSQL')
             if sqlTab:
+                self.winMain.tabSQL = sqlTab
                 if newEnableSQL:
                     sqlIndex = self.winMain.tabWidget.indexOf(sqlTab)
                     if sqlIndex == -1:

@@ -1,18 +1,34 @@
-Still need testing (code changed; not yet confirmed):
+Still need testing (code re-fixed 2026-07-23; re-confirm):
 --------------------------------------------------------------------------------
 
 1) Export CSV uses active tab
    Steps:
      a. Data Query tab with data → Export → should export main results
         (with Timestamp column from row headers).
-     b. Enable SQL, run a SQL query, leave SQL tab selected → Export.
+     b. Enable SQL, run a SQL query so sqlTable has rows, leave SQL tab selected → Export.
      EXPECT: exports sqlTable (column headers only, no forced Timestamp).
-     2026-07-23: This still doesn't work. Export to .csv pops up with a window saying no data to export. This was tested on a fresh open with just the SQL Query Builder window open.
-     Ran test again with Data Query tab open. Selected SQL Query Builder tab, hit export to csv. Window came up to show exported csv and save location. Saved file, opened it. The data
-     was the data from Data Query tab, not the currently selected tab.
+     c. SQL tab selected but no SQL results yet → "No data to export" is correct
+        (only exports the active tab's table).
+     2026-07-23 (earlier): FAILED — identity check missed SQL tab, fell back to mainTable.
+     2026-07-23 (re-fix): detect by objectName / tab index; store self.tabSQL.
 
 3) HDB headers = commonName - dataType
    Steps: Query USBR/HDB series that exist in the data dictionary with a dataType.
-   EXPECT: header top line like "Some Site - Flow" (commonName - dataType),
+   EXPECT: header top line like "Some Site - average flow" (commonName - datatype),
            not commonName alone.
-      2026-07-23: This isn't working still
+     2026-07-23 (earlier): FAILED — looked up column "dataType"; DB header is "datatype".
+     2026-07-23 (re-fix): getColByName is case-insensitive.
+
+Already confirmed previously (don't re-break):
+--------------------------------------------------------------------------------
+[x] End timestamps exclusive end
+[x] BOP/EOP Options radios
+[x] Header sort / Undo smashed Overlay formatting
+[x] QAQC vs Overlay fight club
+[x] Password paste while masked
+[x] Export complete message
+
+Previously changed, not re-confirmed this pass:
+--------------------------------------------------------------------------------
+[ ] Large dataset warning removed (>10k row Yes/No dialog gone from buildTable)
+[ ] Header sort not stacked (sectionClicked no longer re-connected every query)

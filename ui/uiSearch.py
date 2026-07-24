@@ -34,8 +34,8 @@ class uiSearch(QMainWindow):
         self.searchTable.setSelectionBehavior(self.searchTable.SelectionBehavior.SelectRows)
         self.searchTable.setEditTriggers(self.searchTable.EditTrigger.NoEditTriggers)
 
-        # Populate with limited columns
-        columns = ['dataID', 'database', 'commonName', 'dataType']
+        # Populate with limited columns (must match bunker.db schema; datatype is lowercase)
+        columns = ['dataID', 'database', 'commonName', 'datatype']
         whereClause = "database != 'AQUARIUS'" if self.parent().queryType == 'public' else None
         Logic.buildDataDictionary(self.searchTable, columns=columns, whereClause=whereClause)
 
@@ -67,7 +67,7 @@ class uiSearch(QMainWindow):
 
     def applyFilter(self):
         searchText = self.qleSearch.text()
-        Logic.filterTable(self.searchTable, searchText, ['dataID', 'commonName', 'dataType'])
+        Logic.filterTable(self.searchTable, searchText, ['dataID', 'commonName', 'datatype'])
 
     def addToQuery(self, item):
         row = item.row()

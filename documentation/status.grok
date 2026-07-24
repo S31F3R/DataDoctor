@@ -2,10 +2,9 @@ DataDoctor — session handoff / where the hell we left off
 ============================================================
 File: documentation/status.grok
 For: Future Grok (hi) + Seifer
-Branch when we stopped: staging
+Branch when we stopped: bug-smashing
 Remote: origin (https://github.com/S31F3R/DataDoctor.git)
-Last known tip before all the bug smashing: 5158d7a (same as main)
-Working tree had uncommitted fix work — check git status before you do anything dumb.
+Working tree may have uncommitted re-fixes — check git status before you do anything dumb.
 
 
 What this app is (30-second brain reload)
@@ -18,12 +17,10 @@ Entry: DataDoctor.py. Guts: core/. Pretty buttons: ui/.
 
 Branch story (so you don't "wait we were on main?")
 --------------------------------------------------
-- Started conversation on main.
-- User switched to staging and pulled main into it (fast-forward).
-- staging == main at 5158d7a when fixes began.
-- All fix work was done ON staging, mostly uncommitted unless Seifer committed later.
-- Other branches exist (bug-smashing, overlay-context-menu-overhaul, etc.) — don't
-  casually merge them; they're older side quests.
+- bug-smashing is current work branch (tracks origin/bug-smashing).
+- main at 5158d7a (Changed .pyw to .py).
+- staging has separate history (audio/PipeWire etc.) — don't casually merge.
+- Earlier handoff assumed staging; Seifer is on bug-smashing now.
 
 
 Confirmed FIXED by Seifer (do not re-fix unless something regressed)
@@ -45,11 +42,22 @@ Confirmed FIXED by Seifer (do not re-fix unless something regressed)
     -> success QMessageBox after CSV write
 
 
-Code changed but NOT confirmed by Seifer yet (test.txt has the checklist)
--------------------------------------------------------------------------
+RE-FIXED this session (2026-07-23) — Seifer still needs to re-test
+------------------------------------------------------------------
 [ ] Export CSV respects active tab (Data Query mainTable vs SQL sqlTable)
-[ ] Large dataset warning removed (>10k row Yes/No dialog gone from buildTable)
+    ROOT CAUSE: used `currentWidget is sqlTab` after findChild — identity missed
+    SQL tab, so export always used mainTable (empty → "no data"; with data → wrong tab).
+    FIX: store self.tabSQL; detect via objectName == 'tabSQL' and/or tab index.
+    File: DataDoctor.py btnExportCSVPressed
+
 [ ] HDB headers: commonName - dataType (not commonName alone)
+    ROOT CAUSE: getColByName looked for exact "dataType"; bunker.db column /
+    table header is "datatype" (lowercase). Lookup returned -1 → baseLabel only.
+    FIX: getColByName is case-insensitive; uiSearch uses 'datatype'.
+    Files: core/Query.py getColByName; ui/uiSearch.py
+
+Also still in code but not re-confirmed:
+[ ] Large dataset warning removed (>10k row Yes/No dialog gone from buildTable)
 [ ] Header sort not stacked (sectionClicked no longer re-connected every query)
 
 See: documentation/test.txt
@@ -63,27 +71,37 @@ documentation/notes.txt       — venv/git crumbs only, not bugs
 documentation/status.grok     — this file (you are here)
 
 
-Intentionally NOT fixed this pass (still open / hard / needs live data)
------------------------------------------------------------------------
-- Aquarius-only context menu (overlay path works; label/key lookup is spicy)
-- Double Aquarius + Overlay individual metadata
-- USGS-NWIS cell right-click crash in overlay/details
-- Options multi-tab save weirdness / retro restart on Windows
-- Multi-source "Building rows" progress only feels happy with 1 DB
-- HDB meta when r_base has value but interval doesn't
-- SQL Query Builder freezes UI (needs background thread)
-- Oracle wrong password shouldn't spam-lock the account
-- Taskbar icon, quick look dialog width, plots, log viewer, etc.
-  (see To Do List for the full carnival)
+New / still open on To Do List (skim CURRENT BUGS — Seifer added more)
+----------------------------------------------------------------------
+- Meta: HDB tab adds 3rd column that can bleed into Overlay Details
+- Meta: >16 rows need themed scrollbar
+- USGS meta: duplicated rows (Parameter Code, Statistic ID, etc.)
+- USGS meta only when overlayed with working context menu (or 2 USGS overlayed)
+- thenetpi.jpg → ui/icons/pi.jpg
+- Large queries stuck on "Building table..." (threading)
+- USGS intervals beyond instant/daily?
+- Update tab index on all windows
+- HDB headers commonName - datatype  (re-fixed above — retest)
+- Save quick look dialog +60px wider
+- Query window wider (USGS UID)
+- Retro restart broken on Windows
+- Raw data deltas in scientific notation for tiny diffs
+- Wrong HDB password lockout protection
+- Taskbar icon
+- Windows text size / truncation
+- HDB rbase vs interval QAQC coloring
+- New USGS query: always pull meta; Site Name split for header labels
+- SQL Query Builder freezes UI; Export CSV by tab (re-fixed — retest)
+- (features, logging, git release items — see full To Do List)
 
 
 Key files if you pick up coding again
 -------------------------------------
-core/Query.py       timestamps, sort/undo, buildTable headers, executeQuery QAQC order
+core/Query.py       timestamps, sort/undo, buildTable headers, getColByName, executeQuery QAQC order
 core/QueryUtils.py  overlay merge + applyOverlayColorOverrides
 core/Utils.py       customPasswordEdit, resolvePeriodOffset, config load/reload
-ui/uiOptions.py     save hourTimestampMethod + periodOffset together
-DataDoctor.py       export complete + export active tab
+ui/uiOptions.py     save hourTimestampMethod + periodOffset together; SQL tab toggle
+DataDoctor.py       export active tab + export complete; self.tabSQL
 
 
 How to run (when the stars align)
@@ -105,7 +123,7 @@ Seifer humor / standing orders
 
 Resume checklist for next session
 ---------------------------------
-1. git status / branch (expect staging unless he says otherwise)
+1. git status / branch (expect bug-smashing unless he says otherwise)
 2. Skim documentation/test.txt — anything still unchecked?
 3. Skim documentation/To Do List.txt CURRENT BUGS
 4. Ask Seifer what he wants next (more tests, commit, next bug cluster)

@@ -303,15 +303,20 @@ def getDataDictionaryItem(table, dataId):
     return -1
 
 def getColByName(table, name):
+    """Find a DataDictionary column by header name (case-insensitive).
+
+    SQLite headers are often lowercase (e.g. datatype); callers may use camelCase (dataType).
+    """
+    nameLower = name.strip().lower()
     for c in range(table.columnCount()):
         header = table.horizontalHeaderItem(c)
 
-        if header and header.text().strip() == name:
+        if header and header.text().strip().lower() == nameLower:
             return c
     if Config.debug:
         Logic.logMessage("DEBUG", f"Available DataDictionary columns: {[table.horizontalHeaderItem(c).text().strip() for c in range(table.columnCount()) if table.horizontalHeaderItem(c)]}")
-    Logic.logMessage("WARN", "IColumn not found in DataDictionary: {name}")  
-    
+    Logic.logMessage("WARN", f"Column not found in DataDictionary: {name}")
+
     return -1
 
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None):

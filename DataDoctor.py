@@ -36,6 +36,7 @@ class uiMain(QMainWindow):
         self.btnUndo = self.findChild(QPushButton, 'btnUndo')
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
         self.tabMain = self.findChild(QWidget, 'tabMain')
+        self.tabSQL = self.findChild(QWidget, 'tabSQL')
         self.lastQueryType = None
         self.lastQueryItems = []
         self.lastStartDate = None
@@ -124,8 +125,8 @@ class uiMain(QMainWindow):
         Utils.reloadGlobals()
 
         # Hide tabs on startup
-        sqlTab = self.findChild(QWidget, 'tabSQL')
-        sqlIndex = self.tabWidget.indexOf(sqlTab)
+        sqlTab = self.tabSQL
+        sqlIndex = self.tabWidget.indexOf(sqlTab) if sqlTab else -1
 
         # Store titles after removal (in case .ui changes)
         self.dataQueryTitle = "Data Query"
@@ -469,14 +470,32 @@ class uiMain(QMainWindow):
 
     def btnExportCSVPressed(self):
         # Export the table on the active tab (Data Query vs SQL Query Builder)
-        sqlTab = self.findChild(QWidget, 'tabSQL')
-        currentWidget = self.tabWidget.currentWidget() if self.tabWidget else None
         exportTable = self.mainTable
-        useSqlTimestamps = False
+        useSqlFormat = False
 
-        if sqlTab is not None and currentWidget is sqlTab and self.sqlTable is not None:
+        currentWidget = self.tabWidget.currentWidget() if self.tabWidget else None
+        sqlTab = self.tabSQL or self.findChild(QWidget, 'tabSQL')
+        # Detect SQL tab by objectName / index — identity (is) is unreliable across findChild wrappers
+        isSqlTab = False
+        if currentWidget is not None and self.tabWidget is not None:
+            sqlIndex = self.tabWidget.indexOf(sqlTab) if sqlTab is not None else -1
+            isSqlTab = (
+                currentWidget.objectName() == 'tabSQL'
+                or (sqlIndex != -1 and self.tabWidget.currentIndex() == sqlIndex)
+                or (sqlTab is not None and currentWidget == sqlTab)
+            )
+
+        if isSqlTab and self.sqlTable is not None:
             exportTable = self.sqlTable
-            useSqlTimestamps = True
+            useSqlFormat = True
+
+        if Config.debug:
+            tabName = currentWidget.objectName() if currentWidget else None
+            Logic.logMessage(
+                "DEBUG",
+                f"btnExportCSVPressed: activeTab={tabName}, isSqlTab={isSqlTab}, "
+                f"rows={exportTable.rowCount() if exportTable else 0}"
+            )
 
         if exportTable is None or exportTable.rowCount() == 0:
             QMessageBox.warning(self, "Export CSV", "No data to export.")
@@ -508,7 +527,7 @@ class uiMain(QMainWindow):
                     headers.append(headerItem.text() if headerItem else f"Column {c}")
 
                 # Data Query uses vertical header timestamps; SQL results use table columns only
-                if useSqlTimestamps or not exportTable.verticalHeaderItem(0):
+                if useSqlFormat or not exportTable.verticalHeaderItem(0):
                     writer.writerow(headers)
                     for row in range(exportTable.rowCount()):
                         rowData = []
