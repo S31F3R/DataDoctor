@@ -770,6 +770,27 @@
    <zorder>btnDeleteQuickLook</zorder>
   </widget>
  </widget>
+ <tabstops>
+  <tabstop>cbDatabase</tabstop>
+  <tabstop>cbInterval</tabstop>
+  <tabstop>qleDataID</tabstop>
+  <tabstop>btnSearch</tabstop>
+  <tabstop>btnAddQuery</tabstop>
+  <tabstop>dteStartDate</tabstop>
+  <tabstop>dteEndDate</tabstop>
+  <tabstop>rbCustomDateTime</tabstop>
+  <tabstop>rbPrevDayToCurrent</tabstop>
+  <tabstop>rbPrevWeekToCurrent</tabstop>
+  <tabstop>chkbDelta</tabstop>
+  <tabstop>chkbOverlay</tabstop>
+  <tabstop>listQueryList</tabstop>
+  <tabstop>cbQuickLook</tabstop>
+  <tabstop>btnLoadQuickLook</tabstop>
+  <tabstop>btnClearQuery</tabstop>
+  <tabstop>btnSaveQuickLook</tabstop>
+  <tabstop>btnDeleteQuickLook</tabstop>
+  <tabstop>btnQuery</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

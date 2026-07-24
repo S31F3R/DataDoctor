@@ -6,8 +6,9 @@
 #
 # Routing:
 #   - 32-char hex method  → modern OGC API (api.waterdata.usgs.gov)
-#       continuous (HOUR/INSTANT) and daily (DAY)
-#   - numeric methodID    → legacy waterservices.usgs.gov (IV/DV)
+#       continuous (HOUR/INSTANT) and daily (DAY) only —
+#       OGC collections have no monthly/yearly time-series products
+#   - numeric methodID    → legacy waterservices.usgs.gov (IV/DV only)
 #
 # API key (optional, higher rate limits on OGC API): keyring "DataDoctor"/"usgsApiKey"
 #   sent as X-Api-Key when present.

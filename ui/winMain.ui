@@ -478,9 +478,21 @@
  </widget>
  <tabstops>
   <tabstop>btnPublicQuery</tabstop>
+  <tabstop>btnInternalQuery</tabstop>
   <tabstop>btnDataDictionary</tabstop>
   <tabstop>btnExportCSV</tabstop>
+  <tabstop>btnOptions</tabstop>
   <tabstop>btnInfo</tabstop>
+  <tabstop>btnRefresh</tabstop>
+  <tabstop>btnUndo</tabstop>
+  <tabstop>mainTable</tabstop>
+  <tabstop>btnRunQuery</tabstop>
+  <tabstop>btnSaveSnippet</tabstop>
+  <tabstop>btnDeleteSnippet</tabstop>
+  <tabstop>cbDatabase</tabstop>
+  <tabstop>pteSQL</tabstop>
+  <tabstop>sqlTable</tabstop>
+  <tabstop>listSnippets</tabstop>
  </tabstops>
  <resources/>
  <connections/>

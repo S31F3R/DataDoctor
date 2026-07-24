@@ -490,13 +490,23 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     font = table.font()
     metrics = QFontMetrics(font)
     columnWidths = []
-    sampleRows = min(1000, numRows)
+    sampleRows = min(500, numRows)  # enough for width; avoid scanning 10k+ rows
 
     if Config.debug:
         Logic.logMessage("DEBUG", f"buildTable: Sampling {sampleRows} rows for column widths")
+    # Pre-split sample once (old path re-split every row per column — very slow on big sets)
+    sampleSplit = []
+    for row in data[:sampleRows]:
+        parts = row.split(',')
+        sampleSplit.append(parts[1:] if skipDateCol and len(parts) > 1 else parts)
+
     for c in range(numCols):
-        cellValues = [row.split(',')[c+1].strip() if c+1 < len(row.split(',')) else "0.00" for row in data[:sampleRows]]
-        nonEmptyValues = [val for val in cellValues if val]
+        nonEmptyValues = []
+        for parts in sampleSplit:
+            if c < len(parts):
+                val = parts[c].strip()
+                if val:
+                    nonEmptyValues.append(val)
 
         if nonEmptyValues:
             maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
@@ -518,22 +528,38 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         else:
             finalWidth += 20
         columnWidths.append(finalWidth)
+
+    # Sorting during setItem is catastrophic for large tables (re-sort every insert)
+    wasSorting = table.isSortingEnabled()
+    table.setSortingEnabled(False)
     table.setUpdatesEnabled(False)
 
     if Config.debug:
-        Logic.logMessage("DEBUG", "buildTable: Disabled table updates for population")
+        Logic.logMessage("DEBUG", "buildTable: Disabled updates+sorting for population")
+
+    align = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+    rawData = Config.rawData
     for rowIdx, rowStr in enumerate(data):
         rowData = rowStr.split(',')[1:] if skipDateCol else rowStr.split(',')
 
         for colIdx in range(min(numCols, len(rowData))):
             cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
-            item = QTableWidgetItem(cellText)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-
-            if not Config.rawData and cellText.strip():
-                item.setText(Logic.valuePrecision(cellText))
+            if not rawData and cellText:
+                display = Logic.valuePrecision(cellText)
+            else:
+                display = cellText
+            item = QTableWidgetItem(display)
+            item.setTextAlignment(align)
             table.setItem(rowIdx, colIdx, item)
+
+        # Occasional UI yield on huge tables so progress dialog can paint
+        if numRows > 5000 and rowIdx > 0 and rowIdx % 2000 == 0:
+            table.setUpdatesEnabled(True)
+            QCoreApplication.processEvents()
+            table.setUpdatesEnabled(False)
+
     table.setUpdatesEnabled(True)
+    table.setSortingEnabled(wasSorting)
 
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: Re-enabled table updates after population")
@@ -1028,18 +1054,21 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         databases = [item[2] for item in queryItems]
         lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
         data = []
+        numTs = len(timestamps)
+        # Progress/UI yield cadence — every 10 rows + per-row debug made huge tables look hung
+        progressEvery = 500 if numTs > 2000 else 100 if numTs > 200 else 25
 
-        for r in range(len(timestamps)):
+        for r in range(numTs):
             rowValues = [valueDict.get(dataID, defaultBlanks)[r] for dataID in originalDataIds]
             data.append("{},{}".format(timestamps[r], ','.join(rowValues)))
 
-            if r % 100 == 0 or r % 10 == 0: # Update more frequently for small tables
-                progressDialog.setLabelText(f"Building rows... ({r}/{len(timestamps)} rows)")
-                progressDialog.setValue(70 + int(20 * r / len(timestamps))) # Adjusted to 70-90 for rows
+            if r % progressEvery == 0 or r == numTs - 1:
+                progressDialog.setLabelText(f"Building rows... ({r + 1}/{numTs} rows)")
+                progressDialog.setValue(70 + int(20 * (r + 1) / max(numTs, 1)))
                 progressDialog.repaint()
                 QCoreApplication.processEvents()
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"executeQuery: Building row {r}/{len(timestamps)}")
+                if Config.debug and (r % max(progressEvery * 5, 1) == 0 or r == numTs - 1):
+                    Logic.logMessage("DEBUG", f"executeQuery: Building row {r + 1}/{numTs}")
         if Config.debug:
             Logic.logMessage("DEBUG", f"executeQuery: Built {len(data)} rows for table")
         if not progressDialog.wasCanceled():
@@ -1056,7 +1085,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             if mainWindow.tabWidget.indexOf(mainWindow.tabMain) == -1:
                 mainWindow.tabWidget.addTab(mainWindow.tabMain, 'Data Query')
 
-            # Build the table
+            # Build the table (sorting off during fill — critical for large row counts)
             buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
 
             # Remap Aquarius rawResponses keys to API labels. USGS stays keyed by DataID

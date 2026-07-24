@@ -10,36 +10,29 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
-1) Options: remask secrets on close
-   Steps:
-     a. Open Options → reveal AQ password, USGS key, and/or Oracle password (eye icons).
-     b. Close via OK, Cancel, or window X.
-     c. Re-open Options.
-   EXPECT: all three secret fields are masked again; eye icons show Hidden state.
-   Notes: hideEvent + showEvent call maskSensitiveFields().
+1) Large query "Building table..." finishes in reasonable time
+   Steps: Run a wide/long query (many timestamps, e.g. INSTANT over weeks or multi-series HOUR year).
+   EXPECT: Progress advances past Building rows / Building table; table appears without
+           multi-minute freeze. Debug mode should not log every single row.
+   Notes: sorting disabled during fill; less processEvents; sample widths once;
+          progress every 100–500 rows instead of every 10.
 
-2) SQL Query Builder does not freeze UI
-   Steps: Enable SQL, run a non-trivial Oracle query (or even a slow one).
-   EXPECT: main window stays responsive while query runs (can drag window, click elsewhere);
-           Run button disabled until done; results fill sqlTable when finished.
-           Wrong password still shows single login-failed style message.
-   Notes: Oracle work runs on QThreadPool; table fill on main thread when done.
+2) Data Dictionary window larger + resize grip
+   Steps: Open Data Dictionary.
+   EXPECT: ~1280×720 default (min 900×500); status-bar size grip visible for resize.
+      2026-07-24 Not fixed. It's the vertical scroll bar, the up down one, the thing to grab a very tiny. THis is due to the 40k rows that are populated into the table from the sqllite file. I need that grab thing thicker so it can actually be grabbed.
 
-3) Wrong HDB/Oracle password (if not re-checked yet)
-   Steps: Wrong Oracle password → HDB or SQL query.
-   EXPECT: clear auth error; no multi-thread login spam; fixed by saving creds in Options.
-
-
-Known / not a pure Python fix
---------------------------------------------------------------------------------
-[!] Taskbar icon on Windows when launched via VB.NET → Python
-    Linux OK. Python process icon is controlled by the host .exe / shortcut.
-    Fix belongs on the VB launcher (or ship a PyInstaller/DataDoctor.exe with --icon).
-    Left off active work unless you want a launcher-side change.
+3) Tab order (main + query)
+   Steps: Tab through main toolbar and Query window fields with keyboard.
+   EXPECT: Public → Internal → Dictionary → Export → Options → Info … then SQL controls;
+           Query: database → interval → data ID → add → dates → options → list → quick looks → Query.
+            2026-07-24 FIXED!
 
 
 Confirmed (do not re-break)
 --------------------------------------------------------------------------------
+[x] Options remask secrets on close
+[x] SQL Query Builder background thread (UI not frozen)
 [x] Aquarius Label = Label only
 [x] About secret π icon
 [x] Header Max/Min show timestamps
@@ -48,20 +41,24 @@ Confirmed (do not re-break)
 [x] HDB headers = commonName - datatype
 [x] Details max 16 rows + themed scrollbar
 [x] Overlay/HDB no ghost 3rd column
-[x] USGS meta no duplicate rows / USGS-only meta
-[x] USGS headers use Site Name (comma split)
-[x] Save Quick Look dialog wider
-[x] Query window wider (USGS UID)
-[x] Raw data deltas without scientific notation
+[x] USGS meta / Site Name headers
+[x] Save Quick Look wider / Query window wider
+[x] Raw data deltas fixed-point
 [x] End timestamps exclusive end
 [x] BOP/EOP Options radios
 [x] Header sort / Undo preserves Overlay
 [x] QAQC vs Overlay order
 [x] Password paste while masked
 [x] Export complete message
+[x] Wrong Oracle password fail-fast (auth)
 
 
-Optional smoke
+Deferred / external
 --------------------------------------------------------------------------------
-[ ] Large dataset warning removed (>10k Yes/No gone)
-[ ] Header sort not stacked (sectionClicked once)
+[!] Windows taskbar icon when launched via VB.NET → Python (launcher-side)
+[!] USGS monthly/yearly time series — OGC API has only continuous + daily
+    (no monthly/yearly collections). Documented in code; not implementable as
+    first-class USGS series without client-side aggregation.
+[!] Retro restart Windows / Windows text truncation (need Windows machine)
+[!] Aquarius daily 2300 TZ (needs live Aquarius design choice)
+[!] Features: plots, log viewer, goat, formatting rules DB, git/readme

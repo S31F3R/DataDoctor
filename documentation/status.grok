@@ -2,26 +2,26 @@ DataDoctor — session handoff
 ============================================================
 Branch: bug-smashing
 
-Workflow: To Do List = backlog | test.txt = in-progress tests
-
-
-Pi icon lesson
---------------
-Secret.png (clean white π) worked before this conversation.
-thenetpi.jpg / pi.jpg is a full CRT still — do not use as the 16px button.
-pi.png should be the clean glyph (same as Secret.png). Movie still can stay as pi.jpg.
+Verified by Seifer (recent)
+---------------------------
+Options remask on close, SQL background thread, Aquarius label-only,
+meta/export/headers/rbase/max-min/π/raw deltas/password auth fail-fast, etc.
 
 
 In flight (test.txt)
 --------------------
-1) π icon restored to clean glyph
-2) Header Max/Min + timestamps
-3) HDB r_base fallback blue + black text
-4) Aquarius Label first in cell meta
+1) Large-table build performance
+2) Data Dictionary bigger + size grip
+3) Tab order main + query windows
 
 
-Still backlog
--------------
-Building table hang, USGS monthly+, tab indexes, retro Windows, HDB password
-lockout, taskbar icon, Windows text size, SQL UI thread, features, Aquarius
-daily TZ, formatting rules, git/readme.
+Deferred
+--------
+Windows taskbar via VB launcher, USGS monthly/yearly (API has none),
+retro Windows restart, Windows text size, Aquarius TZ daily, features.
+
+
+Code notes
+----------
+buildTable: sorting OFF during fill; less processEvents; sample widths once.
+USGS OGC collections = continuous + daily only (confirmed against API list).

@@ -35,6 +35,14 @@ class uiDataDictionary(QMainWindow):
         Utils.buttonStyle(self.btnSave, "Save", 36)
         Utils.buttonStyle(self.btnAddRow, "Plus", 36)
         Utils.buttonStyle(self.btnDeleteRow, "Delete", 36)
+
+        # Larger default + visible resize grip (handle was too small / easy to miss)
+        self.resize(max(self.width(), 1280), max(self.height(), 720))
+        self.setMinimumSize(900, 500)
+        sb = self.statusBar()
+        if sb is not None:
+            sb.setSizeGripEnabled(True)
+            sb.show()
         
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDataDictionary initialized with btnDeleteRow")
