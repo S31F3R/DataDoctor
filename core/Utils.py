@@ -76,12 +76,12 @@ CONTROL_LAYOUTS = {
 }
 
 # Extra Y offset (pixels) applied on a given platform for default (Noto) mode only.
-# btnRefresh/btnUndo need to sit 3px lower on Windows; Linux coords stay as in CONTROL_LAYOUTS.
+# btnRefresh/btnUndo: Linux y=6; Windows y=8 (+2). Final for non-retro.
 PLATFORM_LAYOUT_Y_NUDGE = {
     'win32': {
         'default': {
-            'btnRefresh': 3,
-            'btnUndo': 3,
+            'btnRefresh': 2,
+            'btnUndo': 2,
         },
     },
 }

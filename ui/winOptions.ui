@@ -205,18 +205,18 @@
       <string/>
      </property>
     </widget>
+    <zorder>lblQc</zorder>
+    <zorder>lblDebug</zorder>
+    <zorder>lblSQL</zorder>
     <zorder>lblRawData</zorder>
+    <zorder>lblRetroMode</zorder>
     <zorder>lbUTCOffset</zorder>
     <zorder>cbUTCOffset</zorder>
     <zorder>chkbRawData</zorder>
-    <zorder>chkbQAQC</zorder>
     <zorder>chkbDebug</zorder>
-    <zorder>chkbRetroMode</zorder>
-    <zorder>lblQc</zorder>
-    <zorder>lblRetroMode</zorder>
-    <zorder>lblDebug</zorder>
-    <zorder>lblSQL</zorder>
+    <zorder>chkbQAQC</zorder>
     <zorder>chkbEnableSQL</zorder>
+    <zorder>chkbRetroMode</zorder>
    </widget>
    <widget class="QWidget" name="tabAquarius">
     <attribute name="title">
