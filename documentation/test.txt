@@ -16,6 +16,22 @@ Need retest (this pass)
            multi-minute freeze. Debug mode should not log every single row.
    Notes: sorting disabled during fill; less processEvents; sample widths once;
           progress every 100–500 rows instead of every 10.
+          Bug, See Below:
+
+          Exception has occurred: ValueError
+the environment variable is longer than 32767 characters
+  File "C:\Data Doctor\core\Oracle.py", line 91, in setup
+    os.environ['PATH'] = f"{clientDir};{os.environ.get('PATH', '')}"
+    ~~~~~~~~~~^^^^^^^^
+  File "C:\Data Doctor\core\Oracle.py", line 65, in __init__
+    self.setup()
+    ~~~~~~~~~~^^
+  File "C:\Data Doctor\core\USBR.py", line 389, in queryTask
+    oracleConn = Oracle.oracleConnection(dsn)
+  File "C:\Data Doctor\core\USBR.py", line 491, in worker
+    queryTask(SDID, subStartStr, subEndStr, threadId)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: the environment variable is longer than 32767 characters
 
 2) Data Dictionary window larger + resize grip
    Steps: Open Data Dictionary.
