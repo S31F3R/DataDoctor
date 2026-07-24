@@ -40,7 +40,7 @@ winOptions
   chkbRetroMode         (130, 119)    
   chkbDebug             (130, 149)
   chkbEnableSQL         (206, 179)
-  rbBOP                 (199, 0)      -4 x
+  rbBOP                 (193, 0)      -6 x (from 199)
   rbEOP                 (350, 0)
 winQuery
   btnDataIdInfo         (406, 5)

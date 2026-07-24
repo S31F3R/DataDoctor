@@ -73,7 +73,7 @@ CONTROL_LAYOUTS = {
         'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
         'chkbDebug': (130, 149, 21, 22),
         'chkbEnableSQL': (206, 179, 21, 22),
-        'rbBOP': (199, 0, 141, 22),                 # was 203; -4 x
+        'rbBOP': (193, 0, 141, 22),                 # was 199; -6 x
         'rbEOP': (350, 0, 131, 22),
         'btnDataIdInfo': (406, 5, 31, 20),
         'btnIntervalInfo': (164, 76, 31, 20),
@@ -531,8 +531,9 @@ def retroSpacingStylesheet():
     """
     if not Config.retroMode:
         return ""
-    # Tab chrome uses same neon as scrollbar handles; stripped when retro off
+    # Tab chrome + close icons; stripped when retro off
     # (readBaseStylesheet / setRetroStyles rebuild without this block).
+    # Hover for close is a 2nd image (same pattern as default dark/light pair).
     green = RETRO_NEON_GREEN
     return f"""
     /* Retro tabs: neon green (scrollbar green) + black label text */
@@ -559,6 +560,22 @@ def retroSpacingStylesheet():
     QTabBar::tab:!selected {{
         background: #00cc00;
         color: #000000;
+    }}
+    /* Close: black disc + green X; -10px X (margin-right moves left from tab edge) */
+    QTabBar::close-button {{
+        image: url(ui/icons/Tab-close-retro.png);
+        background: transparent;
+        border-radius: 8px;
+        subcontrol-position: right;
+        width: 16px;
+        height: 16px;
+        margin-right: 10px;
+    }}
+    QTabBar::close-button:hover {{
+        image: url(ui/icons/Tab-close-retro-hover.png);
+    }}
+    QTabBar::close-button:pressed {{
+        image: url(ui/icons/Tab-close-retro-pressed.png);
     }}
     /* List item air (vertical); keep horizontal small */
     QListWidget::item, QListView::item {{

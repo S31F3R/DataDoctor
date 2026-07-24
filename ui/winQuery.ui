@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>850</width>
+    <width>870</width>
     <height>640</height>
    </rect>
   </property>
@@ -18,7 +18,7 @@
   </property>
   <property name="maximumSize">
    <size>
-    <width>850</width>
+    <width>870</width>
     <height>640</height>
    </size>
   </property>
@@ -161,7 +161,7 @@
      <rect>
       <x>328</x>
       <y>128</y>
-      <width>511</width>
+      <width>531</width>
       <height>501</height>
      </rect>
     </property>
@@ -169,7 +169,7 @@
    <widget class="QPushButton" name="btnAddQuery">
     <property name="geometry">
      <rect>
-      <x>700</x>
+      <x>720</x>
       <y>65</y>
       <width>141</width>
       <height>31</height>
@@ -385,7 +385,7 @@
      <rect>
       <x>328</x>
       <y>29</y>
-      <width>511</width>
+      <width>531</width>
       <height>32</height>
      </rect>
     </property>
@@ -666,7 +666,7 @@
    <widget class="QPushButton" name="btnSearch">
     <property name="geometry">
      <rect>
-      <x>650</x>
+      <x>690</x>
       <y>65</y>
       <width>32</width>
       <height>32</height>
