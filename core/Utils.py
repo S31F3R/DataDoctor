@@ -46,7 +46,7 @@ _DEFAULT_FONT_FILES = (
 # Only controls listed here are moved; everything else stays at .ui geometry.
 CONTROL_LAYOUTS = {
     'default': {
-        # winMain — Data Query tab overlay icons
+        # winMain — Data Query tab overlay icons (Linux y=6; Windows +3 via PLATFORM_LAYOUT_Y_NUDGE)
         'btnRefresh': (22, 6, 32, 32),
         'btnUndo': (70, 6, 32, 32),
         # winOptions — Application tab checkboxes (nudged left under Noto labels)
@@ -72,6 +72,17 @@ CONTROL_LAYOUTS = {
         'btnDataIdInfo': (382, 5, 31, 20),
         'btnIntervalInfo': (110, 76, 31, 20),
         'btnQueryOptionsInfo': (124, 401, 31, 20),
+    },
+}
+
+# Extra Y offset (pixels) applied on a given platform for default (Noto) mode only.
+# btnRefresh/btnUndo need to sit 3px lower on Windows; Linux coords stay as in CONTROL_LAYOUTS.
+PLATFORM_LAYOUT_Y_NUDGE = {
+    'win32': {
+        'default': {
+            'btnRefresh': 3,
+            'btnUndo': 3,
+        },
     },
 }
 
@@ -370,11 +381,18 @@ def applyModeControlLayouts(app=None, root=None):
     """
     Move mode-specific absolute controls (default Noto vs retro Press Start).
     Call after UI load / on mode apply. Unknown names are skipped.
+    Windows default mode can apply PLATFORM_LAYOUT_Y_NUDGE (e.g. Refresh/Undo +3 y).
     """
     mode = 'retro' if Config.retroMode else 'default'
     coords = CONTROL_LAYOUTS.get(mode) or {}
     if not coords:
         return
+
+    yNudges = (
+        PLATFORM_LAYOUT_Y_NUDGE.get(sys.platform, {}).get(mode, {})
+        if not Config.retroMode
+        else {}
+    )
 
     if root is not None:
         widgets = [root] + list(root.findChildren(QWidget))
@@ -397,7 +415,8 @@ def applyModeControlLayouts(app=None, root=None):
         if widget is None:
             continue
         try:
-            widget.setGeometry(x, y, w, h)
+            yAdj = y + int(yNudges.get(name, 0))
+            widget.setGeometry(x, yAdj, w, h)
         except Exception as e:
             if Config.debug:
                 Logic.logMessage("DEBUG", f"applyModeControlLayouts {name}: {e}")
@@ -405,7 +424,8 @@ def applyModeControlLayouts(app=None, root=None):
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
-            f"applyModeControlLayouts: mode={mode} applied={len(byName)}/{len(coords)}",
+            f"applyModeControlLayouts: mode={mode} platform={sys.platform} "
+            f"applied={len(byName)}/{len(coords)} yNudges={yNudges or '{}'}",
         )
 
 

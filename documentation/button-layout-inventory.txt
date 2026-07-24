@@ -13,8 +13,9 @@ Modes
 DEFAULT (Noto) — set whenever retro is OFF
 ------------------------------------------
 winMain
-  btnRefresh            (22, 6, 32, 32)     was (26, 10, 32, 32)
-  btnUndo               (70, 6, 32, 32)     was (76, 10, 32, 32)
+  btnRefresh            (22, 6, 32, 32)     Linux; Windows y=9 (+3 nudge)
+  btnUndo               (70, 6, 32, 32)     Linux; Windows y=9 (+3 nudge)
+  (was pre-Noto (26/76, 10); PLATFORM_LAYOUT_Y_NUDGE win32 default only)
 
 winOptions (Application tab checkboxes)
   chkbRawData           (74, 60, 21, 22)    was (84, 60, 21, 22)
