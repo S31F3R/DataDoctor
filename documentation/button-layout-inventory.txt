@@ -2,67 +2,67 @@ Button / control layout inventory
 =================================
 Updated: 2026-07-24
 Code map: core/Utils.py → CONTROL_LAYOUTS + applyModeControlLayouts()
-Applied on: applyStylesAndFonts, uiQuery.showEvent, uiOptions.showEvent
 
 Modes
 -----
-  default = Noto Sans (retro OFF) — Seifer-tuned positions
-  retro   = Press Start baseline (pre-Noto) until retro layout pass
+  default = Noto Sans (retro OFF) — full key set restores all moved controls
+  retro   = Press Start — RESPONSE pass 10 APPLIED
 
 
-DEFAULT (Noto) — set whenever retro is OFF
-------------------------------------------
+DEFAULT (Noto) — CURRENT in code
+--------------------------------
 winMain
-  btnRefresh            (22, 6, 32, 32)     Linux; Windows y=8 (+2 nudge) FINAL
-  btnUndo               (70, 6, 32, 32)     Linux; Windows y=8 (+2 nudge) FINAL
-  (was pre-Noto (26/76, 10); PLATFORM_LAYOUT_Y_NUDGE win32 default only)
-
-winOptions (Application tab checkboxes)
-  chkbRawData           (74, 60, 21, 22)    was (84, 60, 21, 22)
-  chkbQAQC              (156, 90, 21, 22)   was (178, 90, 21, 22)
-  chkbRetroMode         (88, 120, 21, 22)   was (100, 120, 21, 22)
-  chkbDebug             (96, 150, 21, 22)   was (110, 150, 21, 22)
-  chkbEnableSQL         (128, 180, 21, 22)  was (150, 180, 21, 22)
-
-winQuery (info icons)
-  btnDataIdInfo         (376, 5, 31, 20)    was (382, 5, 31, 20)
-  btnIntervalInfo       (100, 76, 31, 20)   was (110, 76, 31, 20)
-  btnQueryOptionsInfo   (110, 401, 31, 20)  was (124, 401, 31, 20)
-
-
-RETRO (Press Start) — current = pre-Noto baseline (tune later)
--------------------------------------------------------------
-winMain
-  btnRefresh            (26, 10, 32, 32)
-  btnUndo               (76, 10, 32, 32)
-
+  btnRefresh            (22, 6, 32, 32)     Linux; Windows y=8 FINAL
+  btnUndo               (70, 6, 32, 32)
 winOptions
-  chkbRawData           (84, 60, 21, 22)
-  chkbQAQC              (178, 90, 21, 22)
-  chkbRetroMode         (100, 120, 21, 22)
-  chkbDebug             (110, 150, 21, 22)
-  chkbEnableSQL         (150, 180, 21, 22)
-
+  chkbRawData           (74, 60)
+  chkbQAQC              (156, 90)
+  chkbRetroMode         (88, 120)
+  chkbDebug             (96, 150)
+  chkbEnableSQL         (128, 180)
+  rbBOP                 (210, 0)
+  rbEOP                 (350, 0)
 winQuery
-  btnDataIdInfo         (382, 5, 31, 20)
-  btnIntervalInfo       (110, 76, 31, 20)
-  btnQueryOptionsInfo   (124, 401, 31, 20)
+  btnDataIdInfo         (376, 5)
+  btnIntervalInfo       (100, 76)
+  btnQueryOptionsInfo   (110, 401)
+  chkbOverlay           (150, 424)
 
 
-Other controls (not mode-switched yet)
---------------------------------------
-  LAY main toolbar icons, Data Dictionary buttons
-  ABS remaining Query/Options buttons at .ui geometry for both modes
+RETRO (Press Start) — CURRENT in code (pass 10)
+----------------------------------------------
+winMain
+  btnRefresh            (56, 8)       y corrected -4
+  btnUndo               (106, 8)      y corrected -4
+winOptions
+  chkbRawData           (108, 60)
+  chkbQAQC              (261, 88)     
+  chkbRetroMode         (130, 119)    
+  chkbDebug             (130, 149)
+  chkbEnableSQL         (206, 179)
+  rbBOP                 (203, 0)
+  rbEOP                 (350, 0)
+winQuery
+  btnDataIdInfo         (406, 5)
+  btnIntervalInfo       (164, 76)
+  btnQueryOptionsInfo   (164, 401)
+  chkbOverlay           (162, 424)
+
+Fonts / table (mode-aware on restart)
+-------------------------------------
+  btnAddQuery + btnQuery: button role + 1pt
+  RETRO_SMALL_FONT_CONTROLS @ 6pt (retro only)
+  Headers: part1\\n\\npart2 (retro only)
+  Header minHeight set in retro, cleared (0) in default
+  Table: no QSS pad; original column width math
 
 
-List row padding (Windows non-retro only)
------------------------------------------
-  listSnippets   — SQL tab quick-look / snippet list (right pane)
-  listQueryList  — Query window dataID list
-  Utils.applyCompactListStyle → 0 vertical item padding on win32 when retro OFF
-  Retro: uses global retroSpacingStylesheet (extra pad for Press Start)
+Toggle test (Linux then Windows)
+--------------------------------
+  1. Retro ON → restart → positions/fonts/table header height as retro
+  2. Retro OFF → restart → Noto positions (all keys above), normal fonts, header minHeight 0
+  3. Open Options + Query after each restart; check Refresh/Undo, checks, info icons, BOP/EOP, Overlay
+  4. Run a query: two-line headers with blank between; column widths sensible
 
 
-Log Viewer tab
---------------
-  Always opens as the LAST tab (addTab / move to end). Not next to active tab.
+(Add new RESPONSE lines; Grok applies into CONTROL_LAYOUTS['retro'])

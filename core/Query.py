@@ -492,7 +492,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USBR not in dict, header {i}: {fullLabel}")
         processedHeaders.append(fullLabel)
-    headers = processedHeaders
+    # Retro: trailing blank line under double headers so body text is not clipped
+    headers = [Utils.formatTableHeaderLabel(h) for h in processedHeaders]
     skipDateCol = dataDictionaryTable is not None
     numCols = len(headers)
     numRows = len(data)
@@ -542,6 +543,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         font = table.font()
         metrics = QFontMetrics(font)
         sampleTs = timestamps[0] if timestamps else "01/01/26 00:00:00"
+        # Original fudge (+16). No extra horizontal "padding" on the timestamp rail.
         vHeader.setMinimumWidth(max(120, metrics.horizontalAdvance(sampleTs) + 16))
     else:
         table.verticalHeader().setVisible(False)
@@ -566,8 +568,13 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
         else:
             maxCellWidth = metrics.horizontalAdvance("0.00")
-        headerLines = headers[c].split('\n')
-        headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
+        # Non-empty header lines only (blank BETWEEN parts does not drive width)
+        headerLines = [line.strip() for line in headers[c].split('\n') if line.strip()]
+        headerWidth = max(
+            (metrics.horizontalAdvance(line) for line in headerLines),
+            default=0,
+        )
+        # Exact original buildTable width math (pre-padding experiments)
         finalWidth = max(maxCellWidth, headerWidth)
         if headerWidth > maxCellWidth:
             finalWidth = maxCellWidth + (headerWidth - maxCellWidth) + 10

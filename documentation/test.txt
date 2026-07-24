@@ -10,12 +10,14 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
-[ ] Fonts/layout: Noto default + list pad + mode ABS positions
+[ ] Fonts/layout: Noto default ↔ retro toggle (Linux then Windows)
    Steps:
-     a. Linux retro OFF: Noto 10; default positions (Refresh/Undo, Options checks, Query info icons).
-     b. Windows: listSnippets (SQL right) + listQueryList (Query) row spacing tight, not airy.
-     c. Log Viewer always opens as LAST tab (not next to current tab).
-     d. Retro later: CONTROL_LAYOUTS['retro'] for same 10 controls.
+     a. Retro ON + restart: Refresh/Undo at (56,10)/(106,10); QAQC at 259; Query info icons;
+        Add Query/Query Data 7pt; headers part1 blank part2; table no QSS width pad.
+     b. Retro OFF + restart: Noto positions (default map), 10pt UI, header minHeight cleared,
+        Overlay/BOP/EOP back to .ui coords (150 / 210 / 350).
+     c. Log Viewer always LAST tab.
+     d. Windows: same a–c; Refresh/Undo y=8 only in default (PLATFORM_LAYOUT_Y_NUDGE).
 
 [x] Log Viewer tab
    Steps:

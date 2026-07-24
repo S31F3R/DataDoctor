@@ -7,7 +7,7 @@ import configparser
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
-    QListWidget, QTreeView, QPushButton,
+    QListWidget, QTreeView, QPushButton, QCheckBox, QRadioButton, QComboBox,
 )
 from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
@@ -45,35 +45,62 @@ _DEFAULT_FONT_FILES = (
 # Default = Noto (Seifer-tuned 2026-07-24). Retro = pre-Noto baseline until tuned.
 # Only controls listed here are moved; everything else stays at .ui geometry.
 CONTROL_LAYOUTS = {
+    # Every control retro moves must also appear here so retro OFF restores Noto positions.
     'default': {
-        # winMain — Data Query tab overlay icons (Linux y=6; Windows +3 via PLATFORM_LAYOUT_Y_NUDGE)
+        # winMain — Data Query tab overlay icons (Windows y via PLATFORM_LAYOUT_Y_NUDGE)
         'btnRefresh': (22, 6, 32, 32),
         'btnUndo': (70, 6, 32, 32),
-        # winOptions — Application tab checkboxes (nudged left under Noto labels)
+        # winOptions
         'chkbRawData': (74, 60, 21, 22),
         'chkbQAQC': (156, 90, 21, 22),
         'chkbRetroMode': (88, 120, 21, 22),
         'chkbDebug': (96, 150, 21, 22),
         'chkbEnableSQL': (128, 180, 21, 22),
-        # winQuery — info icons next to labels
+        'rbBOP': (210, 0, 141, 22),                 # .ui
+        'rbEOP': (350, 0, 131, 22),                 # .ui
+        # winQuery
         'btnDataIdInfo': (376, 5, 31, 20),
         'btnIntervalInfo': (100, 76, 31, 20),
         'btnQueryOptionsInfo': (110, 401, 31, 20),
+        'chkbOverlay': (150, 424, 131, 22),         # .ui
     },
     'retro': {
-        # Pre-Noto baseline (Press Start tuning TBD — update these when retro layout starts)
-        'btnRefresh': (26, 10, 32, 32),
-        'btnUndo': (76, 10, 32, 32),
-        'chkbRawData': (84, 60, 21, 22),
-        'chkbQAQC': (178, 90, 21, 22),
-        'chkbRetroMode': (100, 120, 21, 22),
-        'chkbDebug': (110, 150, 21, 22),
-        'chkbEnableSQL': (150, 180, 21, 22),
-        'btnDataIdInfo': (382, 5, 31, 20),
-        'btnIntervalInfo': (110, 76, 31, 20),
-        'btnQueryOptionsInfo': (124, 401, 31, 20),
+        # Press Start — inventory RESPONSE pass 10 (Refresh/Undo y correction)
+        'btnRefresh': (56, 8, 32, 32),              # was y=12; RESPONSE -4 y
+        'btnUndo': (106, 8, 32, 32),                # was y=12; RESPONSE -4 y
+        'chkbRawData': (108, 60, 21, 22),
+        'chkbQAQC': (261, 88, 21, 22),              # was 259; RESPONSE +2 x
+        'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
+        'chkbDebug': (130, 149, 21, 22),
+        'chkbEnableSQL': (206, 179, 21, 22),
+        'rbBOP': (203, 0, 141, 22),
+        'rbEOP': (350, 0, 131, 22),
+        'btnDataIdInfo': (406, 5, 31, 20),
+        'btnIntervalInfo': (164, 76, 31, 20),
+        'btnQueryOptionsInfo': (164, 401, 31, 20),
+        'chkbOverlay': (162, 424, 131, 22),
     },
 }
+
+# Retro-only: smaller Press Start on these (objectName → leave rest at role sizes)
+RETRO_SMALL_FONT_CONTROLS = frozenset({
+    'cbUTCOffset',
+    'rbCustomDateTime',
+    'rbPrevDayToCurrent',
+    'rbPrevWeekToCurrent',
+    'chkbDelta',
+    'chkbOverlay',
+    'lblTimeStampMethod',
+    'rbBOP',
+    'rbEOP',
+})
+RETRO_SMALL_FONT_PT = 6  # one step under general ui 8pt
+
+# Query window text buttons: one point larger than normal button role (retro 6→7, default 10→11)
+QUERY_LARGE_BUTTON_CONTROLS = frozenset({
+    'btnAddQuery',
+    'btnQuery',
+})
 
 # Extra Y offset (pixels) applied on a given platform for default (Noto) mode only.
 # btnRefresh/btnUndo: Linux y=6; Windows y=8 (+2). Final for non-retro.
@@ -274,12 +301,12 @@ def makeUiFont(pointSize=None):
 
 def tableDefaultRowHeight(font=None, metrics=None):
     """
-    Vertical section size for data tables — font + platform + mode aware.
+    Vertical section size for data table ROWS (height, not width).
 
     Non-retro (Noto) on Linux: height+10 looks perfect (existing design).
-    Non-retro on Windows: native styles add extra cell margin, so use less pad
-    so rows match the Linux density.
-    Retro (Press Start): keep the roomier height+10 used by buildTable today.
+    Non-retro on Windows: native styles add extra cell margin, so use less pad.
+    Retro (Press Start): taller rows — QSS left/right padding only made columns
+    wider; height must come from defaultSectionSize.
     """
     if metrics is None:
         if font is None:
@@ -287,27 +314,74 @@ def tableDefaultRowHeight(font=None, metrics=None):
         metrics = QFontMetrics(font)
     h = metrics.height()
     if Config.retroMode:
-        return max(h + 10, h + 2)
+        # Press Start metrics.height() is tiny (~11 at 8pt); force real row height
+        # Seifer: -2 from prior (was h+18 / min 32)
+        return max(h + 16, 30)
     # Non-retro Noto Sans
     if sys.platform == 'win32':
-        # Windows QStyle bakes more internal item padding than Fusion/Linux
         return max(h + 4, 20)
-    # Linux / macOS — match the density Seifer signed off on
     return max(h + 10, 22)
 
 
+def tableHeaderBarHeight(font=None, metrics=None):
+    """
+    Horizontal header band height (taller in retro for multi-line labels).
+    Retro two-part headers use a blank line BETWEEN parts (part1 / blank / part2).
+    """
+    if metrics is None:
+        if font is None:
+            font = makeFontForRole('table')
+        metrics = QFontMetrics(font)
+    h = metrics.height()
+    if Config.retroMode:
+        # part1 + blank spacer + part2
+        return max(h * 3 + 6, 42)
+    return 0  # leave native
+
+
+def formatTableHeaderLabel(text):
+    """
+    Retro: two-part headers get a blank line BETWEEN the parts (extra space before
+    the 2nd line), not after the whole label. Idempotent. Default/Noto: unchanged.
+
+    e.g. "Site Name\\nHOUR" → "Site Name\\n\\nHOUR"
+    """
+    if text is None:
+        return ''
+    s = str(text)
+    if not Config.retroMode:
+        return s
+    s = s.strip('\n')
+    if '\n' not in s:
+        return s
+    # First line vs everything after first break (second part may itself have spaces)
+    first, rest = s.split('\n', 1)
+    first = first.rstrip()
+    rest = rest.lstrip('\n').strip()  # drop any prior spacer newlines; keep part-2 text
+    if not rest:
+        return first
+    return f"{first}\n\n{rest}"
+
+
 def applyTableRowMetrics(table, font=None):
-    """Apply cross-platform default row height to a QTableWidget (headers + sections)."""
+    """Apply row HEIGHT + (retro) header bar HEIGHT — never column width."""
     if table is None:
         return
     try:
         if font is None:
             font = table.font()
-        size = tableDefaultRowHeight(font)
+        metrics = QFontMetrics(font)
+        size = tableDefaultRowHeight(font, metrics)
         vHeader = table.verticalHeader()
         vHeader.setDefaultSectionSize(size)
-        # Allow slightly smaller if user drags, but not below glyph height
-        vHeader.setMinimumSectionSize(max(QFontMetrics(font).height() + 2, 16))
+        vHeader.setMinimumSectionSize(max(metrics.height() + 2, 16))
+
+        hHeader = table.horizontalHeader()
+        if Config.retroMode:
+            hHeader.setMinimumHeight(tableHeaderBarHeight(font, metrics))
+        else:
+            # Restore native header band when leaving retro (toggle / restart)
+            hHeader.setMinimumHeight(0)
     except Exception as e:
         if Config.debug:
             Logic.logMessage("DEBUG", f"applyTableRowMetrics failed: {e}")
@@ -431,13 +505,30 @@ def applyModeControlLayouts(app=None, root=None):
 
 def retroSpacingStylesheet():
     """
-    Extra vertical room for dense pixel fonts (Press Start looks like -2 line gap).
-    Only list/table/checkbox spacing — never QTabBar/QPushButton padding (Windows
-    native metrics break if those go into stylesheet mode).
+    Retro only — targeted VERTICAL room for Press Start (not width).
+
+    Global padding was removed: left/right QSS on table cells/headers made the
+    table look wider without making rows taller. Row height is set in
+    tableDefaultRowHeight / applyTableRowMetrics instead.
+
+    Keep only:
+      • QTabBar::tab — taller tab labels (vertical pad)
+      • QHeaderView::section — vertical pad only (no extra left/right)
+      • List items — vertical pad (query/SQL lists)
+      • Light checkbox/radio spacing for Press Start density
     """
     if not Config.retroMode:
         return ""
     return """
+    /* Tabs only: taller labels (vertical). Tables use NO QSS width/height pad —
+       column width is pure metrics + original +10/+20 fudge (retro start). */
+    QTabBar::tab {
+        padding-top: 6px;
+        padding-bottom: 6px;
+        padding-left: 6px;
+        padding-right: 6px;
+    }
+    /* Original retro list item air (vertical); keep horizontal small */
     QListWidget::item, QListView::item {
         padding-top: 5px;
         padding-bottom: 5px;
@@ -445,24 +536,9 @@ def retroSpacingStylesheet():
         padding-right: 3px;
         min-height: 1.2em;
     }
-    QTableWidget::item, QTableView::item {
-        padding-top: 4px;
-        padding-bottom: 4px;
-        padding-left: 3px;
-        padding-right: 3px;
-    }
     QCheckBox, QRadioButton {
         spacing: 10px;
         min-height: 1.3em;
-    }
-    QComboBox {
-        padding-top: 2px;
-        padding-bottom: 2px;
-        min-height: 1.2em;
-    }
-    QLabel {
-        padding-top: 1px;
-        padding-bottom: 1px;
     }
     """
 
@@ -508,12 +584,21 @@ def applyRoleFonts(app=None, root=None):
     """
     Set role-specific sizes: buttons stay smaller in retro; log/code larger, etc.
     Call after new windows open if they create tables/editors themselves.
+    Retro-only small fonts for named radios/checkboxes/UTC combo (RETRO_SMALL_FONT_CONTROLS).
     """
     buttonFont = makeFontForRole('button')
+    # Add Query / Query Data: one point larger than standard button role
+    queryLargeButtonFont = makeFontForRole(
+        'button',
+        pointSize=max(rolePointSize('button') + 1, 1),
+    )
     logFont = makeFontForRole('log')
     tableFont = makeFontForRole('table')
     listFont = makeFontForRole('list')
     codeFont = makeFontForRole('code')
+    retroSmallFont = None
+    if Config.retroMode:
+        retroSmallFont = makeFontForRole('ui', pointSize=RETRO_SMALL_FONT_PT)
 
     if root is not None:
         widgets = [root] + list(root.findChildren(QWidget))
@@ -527,12 +612,20 @@ def applyRoleFonts(app=None, root=None):
 
     for w in widgets:
         try:
+            name = w.objectName() or ''
+            # Retro notes: specific controls at 6pt Press Start (Noto/default untouched)
+            if Config.retroMode and retroSmallFont is not None and name in RETRO_SMALL_FONT_CONTROLS:
+                w.setFont(retroSmallFont)
+                continue
             if isinstance(w, QPushButton):
-                # Keep retro button size at the tuned width/fit (smaller than labels)
-                w.setFont(buttonFont)
+                if name in QUERY_LARGE_BUTTON_CONTROLS:
+                    w.setFont(queryLargeButtonFont)
+                else:
+                    # Keep retro button size at the tuned width/fit (smaller than labels)
+                    w.setFont(buttonFont)
             elif isinstance(w, (QPlainTextEdit, QTextEdit)):
-                name = (w.objectName() or '').lower()
-                if 'log' in name:
+                lname = name.lower()
+                if 'log' in lname:
                     w.setFont(logFont)
                 else:
                     w.setFont(codeFont)

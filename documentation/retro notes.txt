@@ -1,0 +1,9 @@
+--- APPLIED (retro only) ---
+Pass 5 (table height/width/headers):
+  Row height -2 (min 30 / fontH+16)
+  Header/cell horizontal QSS pad → 0 (width back toward original)
+  Column width: ignore blank spacer lines; same +10/+20 fudge as original buildTable
+  Header labels: trailing \\n under double headers (formatTableHeaderLabel)
+  Header bar height sized for 3 lines
+Default Noto unchanged.
+
