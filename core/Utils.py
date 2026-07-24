@@ -1,12 +1,17 @@
 # Utils.py
 
 import os
+import sys
 import json
 import configparser
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import QWidget, QLineEdit
-from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon, QPixmap
+from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
+
+# Cached result of loading ui/fonts/PressStart2P-Regular.ttf (None = not tried yet)
+_retroFontFamilyCache = None
+_retroFontLoadAttempted = False
 
 class customPasswordEdit(QLineEdit):
     """Password field using Qt's native echo modes (no dual realText/display bookkeeping).
@@ -53,28 +58,177 @@ class customPasswordEdit(QLineEdit):
     def isRevealed(self):
         return self.revealed
 
+def ensureRetroFontLoaded():
+    """
+    Register bundled Press Start 2P once. Returns family name or None on failure.
+    Logs clearly so Windows diagnosis is easy (missing file vs register failure).
+    """
+    global _retroFontFamilyCache, _retroFontLoadAttempted
+    if _retroFontLoadAttempted:
+        return _retroFontFamilyCache
+    _retroFontLoadAttempted = True
+
+    fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
+    if not os.path.isfile(fontPath):
+        Logic.logMessage("ERROR", f"Retro font file missing: {fontPath}")
+        Config.retroFontLoaded = False
+        return None
+
+    fontId = QFontDatabase.addApplicationFont(fontPath)
+    if fontId == -1:
+        Logic.logMessage("ERROR", f"Failed to register retro font (addApplicationFont=-1): {fontPath}")
+        Config.retroFontLoaded = False
+        return None
+
+    families = QFontDatabase.applicationFontFamilies(fontId)
+    if not families:
+        Logic.logMessage("ERROR", f"Retro font registered but returned no families: {fontPath}")
+        Config.retroFontLoaded = False
+        return None
+
+    _retroFontFamilyCache = families[0]
+    Config.retroFontLoaded = True
+    Logic.logMessage(
+        "INFO",
+        f"Loaded retro font family {_retroFontFamilyCache!r} from {fontPath}",
+    )
+    return _retroFontFamilyCache
+
+
+def uiPointSize(retro=None):
+    """
+    Point size that fits fixed-size layouts across platforms.
+
+    Linux was tuned at 10pt (Terminess / Press Start look correct there).
+    Windows (Segoe UI + common 125%/150% DPI, and chunkier pixel-font metrics)
+    needs a smaller base so Query buttons and list items are not truncated.
+    """
+    if retro is None:
+        retro = bool(getattr(Config, 'retroMode', False))
+
+    if sys.platform == 'win32':
+        # Press Start 2P is wide/tall at the same pt as proportional UI fonts
+        size = 8 if retro else 9
+    else:
+        size = 10
+
+    # Extra step-down only on high-DPI desktop scaling (150%+)
+    try:
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None and screen.logicalDotsPerInch() >= 140:
+            size = max(7, size - 1)
+    except Exception:
+        pass
+
+    return size
+
+
+def resolveUiFont():
+    """
+    Resolve (family, pointSize) for the current mode.
+    family '' means use the platform default family at the given size.
+    """
+    size = uiPointSize()
+    Config.fontSize = size
+    if Config.retroMode:
+        family = ensureRetroFontLoaded() or ''
+        Config.uiFontFamily = family
+        return family, size
+    Config.uiFontFamily = ''
+    Config.retroFontLoaded = Config.retroFontLoaded  # leave last load state
+    return '', size
+
+
+def makeUiFont(pointSize=None):
+    """Build the QFont used app-wide (or for a specific point size override)."""
+    family, size = resolveUiFont()
+    if pointSize is not None:
+        size = int(pointSize)
+    if family:
+        font = QFont(family, size)
+        # Pixel font: crisp edges, no greyscale blur
+        font.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
+        return font
+    font = QFont()
+    font.setPointSize(size)
+    return font
+
+
+def buildFontStylesheet():
+    """
+    Global QSS font rules. Critical on Windows: .ui files used to hardcode
+    TerminessTTF at 12pt; widget stylesheets override app.setFont(), so we
+    must set family/size in the app stylesheet (and clear designer overrides).
+    """
+    family, size = resolveUiFont()
+    # Slightly tighter control padding on Windows reduces the "extra padding"
+    # look around button/list text with the native style.
+    if sys.platform == 'win32':
+        pad = "padding-top: 1px; padding-bottom: 1px;"
+    else:
+        pad = ""
+
+    if family:
+        # Escape family for QSS (Press Start 2P has spaces)
+        fam = family.replace('"', '\\"')
+        return (
+            f'* {{ font-family: "{fam}"; font-size: {size}pt; }}\n'
+            f'QPushButton, QComboBox, QListWidget, QListView, QLineEdit, '
+            f'QLabel, QCheckBox, QRadioButton, QTabBar::tab, QGroupBox {{ '
+            f'font-family: "{fam}"; font-size: {size}pt; {pad} }}\n'
+        )
+    return (
+        f'* {{ font-size: {size}pt; }}\n'
+        f'QPushButton, QComboBox, QListWidget, QListView, QLineEdit, '
+        f'QLabel, QCheckBox, QRadioButton, QTabBar::tab, QGroupBox {{ '
+        f'font-size: {size}pt; {pad} }}\n'
+    )
+
+
+def readBaseStylesheet():
+    """Base qss file + resolved UI font rules."""
+    path = Logic.resourcePath('ui/stylesheet.qss')
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            base = f.read()
+    except Exception as e:
+        Logic.logMessage("ERROR", f"Could not read stylesheet {path}: {e}")
+        base = ""
+    return base + "\n" + buildFontStylesheet()
+
+
 def applyStylesAndFonts(app, mainTable, queryList):
-    """Apply stylesheet and retro font if enabled."""
-    with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
-        app.setStyleSheet(f.read())
+    """Apply stylesheet and platform-correct UI font (retro or system)."""
     config = loadConfig()
     Config.debug = config['debugMode']
     Config.utcOffset = config['utcOffset']
     Config.periodOffset = resolvePeriodOffset(config)
     Config.retroMode = config.get('retroMode', True)
-    if Config.retroMode:
-        fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
-        fontId = QFontDatabase.addApplicationFont(fontPath)
-        if fontId != -1:
-            fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-            retroFontObj = QFont(fontFamily, 10)
-            retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
-            app.setFont(retroFontObj)
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Applied retro font at startup")
-        setRetroStyles(app, True, mainTable, queryList)
-    else:
-        setRetroStyles(app, False, mainTable, queryList)
+
+    app.setStyleSheet(readBaseStylesheet())
+    appFont = makeUiFont()
+    app.setFont(appFont)
+
+    # Log what actually resolved — answers "is retro applying on Windows?"
+    try:
+        info = QFontInfo(appFont)
+        Logic.logMessage(
+            "INFO",
+            "UI font: platform={} retroMode={} requested={!r} actual={!r} "
+            "pointSize={} exactMatch={} retroLoaded={}".format(
+                sys.platform,
+                Config.retroMode,
+                Config.uiFontFamily or '(system)',
+                info.family(),
+                Config.fontSize,
+                appFont.exactMatch() if Config.uiFontFamily else True,
+                Config.retroFontLoaded,
+            ),
+        )
+    except Exception as e:
+        Logic.logMessage("WARN", f"UI font diagnostics failed: {e}")
+
+    setRetroStyles(app, bool(Config.retroMode), mainTable, queryList)
 
 def loadDataDictionary(table):
     """Load the data dictionary into the provided table."""
@@ -235,31 +389,21 @@ def centerWindowToParent(ui):
     if Config.debug:
         Logic.logMessage("DEBUG", f"centerWindowToParent: Centered {ui.objectName()} at {rect.topLeft().x()},{rect.topLeft().y()}")
 
-def applyRetroFont(widget, pointSize=10):
-    if Config.retroMode:
-        fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
-        fontId = QFontDatabase.addApplicationFont(fontPath)
-
-        if fontId != -1:
-            fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-            retroFontObj = QFont(fontFamily, pointSize)
-            retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
-            widget.setFont(retroFontObj)
-
-            for child in widget.findChildren(QWidget):
-                child.setFont(retroFontObj)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Applied retro font to widget: {widget.objectName()}")
-        else:
-            if Config.debug:
-                Logic.logMessage("ERROR", f"Failed to load retro font from {fontPath}")
-    else:
-        widget.setFont(QFont())
-
-        for child in widget.findChildren(QWidget):
-            child.setFont(QFont())
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Reverted widget {widget.objectName()} to system font")
+def applyRetroFont(widget, pointSize=None):
+    """
+    Apply the current UI font (retro or system) to a widget tree.
+    pointSize=None uses the platform-resolved app size.
+    """
+    font = makeUiFont(pointSize)
+    widget.setFont(font)
+    for child in widget.findChildren(QWidget):
+        child.setFont(font)
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"applyRetroFont: {widget.objectName()} family={font.family()!r} "
+            f"size={font.pointSize()} retro={Config.retroMode}",
+        )
 
 def thickScrollBarStyle(retro=None, minHandle=48, track=20):
     """
@@ -334,14 +478,14 @@ def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQuery
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Applied retro scroll bar styles to {widget.objectName()}")
-        app.setStyleSheet(app.styleSheet() + retroStyles)
+        # Keep font rules; append scroll theme only
+        app.setStyleSheet(readBaseStylesheet() + retroStyles)
 
         if Config.debug:
             Logic.logMessage("DEBUG", "Applied retro scroll bar styles globally")
     else:
-        # Reset to base stylesheet
-        with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
-            app.setStyleSheet(f.read())
+        # Reset to base stylesheet + current font rules (no neon scroll handles)
+        app.setStyleSheet(readBaseStylesheet())
         for widget in [mainTable, webQueryList, internalQueryList]:
             if widget:
                 widget.setStyleSheet("")

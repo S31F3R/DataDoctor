@@ -3,10 +3,10 @@
 import os
 from PyQt6.QtWidgets import QDialog, QLabel, QTextBrowser, QPushButton
 from PyQt6.QtCore import Qt, QUrl, QSize
-from PyQt6.QtGui import QPixmap, QFont, QFontDatabase, QIcon
+from PyQt6.QtGui import QPixmap, QFont, QIcon
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import uic
-from core import Logic, Utils
+from core import Logic, Utils, Config
 
 class uiAbout(QDialog):
     """About dialog: Retro PNG bg with transparent info overlay and looping music."""
@@ -28,10 +28,10 @@ class uiAbout(QDialog):
         scaledPixmap = pixmap.scaled(900, 479, Qt.AspectRatioMode.KeepAspectRatio)
         self.backgroundLabel.setPixmap(scaledPixmap)
         self.backgroundLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)     
-        fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
-        fontId = QFontDatabase.addApplicationFont(fontPath)
-        fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0] if fontId != -1 else "Courier"
-        retroFontObj = QFont(fontFamily, 10)
+        # Bundled pixel font + platform-resolved size (same pipeline as main UI)
+        fontFamily = Utils.ensureRetroFontLoaded() or "Courier"
+        pt = max(8, int(getattr(Config, 'fontSize', 10) or 10))
+        retroFontObj = QFont(fontFamily, pt)
         retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
         self.textInfo.setFont(retroFontObj)
         
@@ -43,7 +43,10 @@ class uiAbout(QDialog):
             ('Music', 'By Eric Matyas at www.soundimage.org')
         ]
 
-        htmlContent = '<html><body style="color: white; font-family: \'' + fontFamily + '\'; font-size: 10pt; padding-left: 50px; white-space: nowrap; line-height: 2.0;">'
+        htmlContent = (
+            f'<html><body style="color: white; font-family: \'{fontFamily}\'; '
+            f'font-size: {pt}pt; padding-left: 50px; white-space: nowrap; line-height: 2.0;">'
+        )
 
         for label, content in infoList:
             if 'GitHub' in label:

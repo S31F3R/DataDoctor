@@ -1,8 +1,8 @@
 ####### CURRENT BUGS #######
 -Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
--Text is slightly too big on Windows. Buttons in Query are truncated
-    -There looks like there is extra padding above and under the text also. Not sure if a simple lower by 1 size will fix this
-    -This might be tied to certain controls. THe SQL Query Builder area isn't impacted, either is the table output from the query, but the SQL quicklooks to the right are
+-Text size / retro font on Windows (fix applied — retest)
+    -Cause: .ui files hardcoded TerminessTTF Nerd Font @ 12pt (Linux-only). Widget stylesheet overrode app.setFont(Press Start 2P).
+    -Fix: strip Terminess from .ui; load bundled Press Start 2P; apply via app font + QSS; Windows uses smaller pt (8 retro / 9 normal).
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
 -Oracle HDB speed: C connection reuse kept (good enough); A batch tried & reverted
@@ -13,7 +13,6 @@
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
     -Add a plot that graphs delta pair and overlays delta as a seperate line
--Log viewer: search / filter / sort asc-desc buttons (base viewer shipped — open via btnViewLog)
 -Add a button to see table with rounding rules based on data type (need table created first)
 
 ####### LOGGING ENHANCEMENTS #######

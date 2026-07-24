@@ -10,7 +10,18 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
-1) Log Viewer tab
+[ ] Windows UI font size + retro font
+   Steps (on Windows):
+     a. Start with retroMode ON. Open Log Viewer; look for INFO line:
+        "Loaded retro font family 'Press Start 2P' ..."
+        and "UI font: platform=win32 retroMode=True requested='Press Start 2P' actual='Press Start 2P' ..."
+     b. If actual is NOT Press Start 2P, font file failed to load (path/bundle).
+     c. Query window: button labels not truncated; quicklook list readable.
+     d. Turn retroMode OFF, restart: text still fits (should be ~9pt system font, not 12pt Terminess fallback).
+     e. Compare Linux: still ~10pt, no regression.
+   Notes: Utils.ensureRetroFontLoaded / uiPointSize / buildFontStylesheet; .ui Terminess removed.
+
+[x] Log Viewer tab
    Steps:
      a. Click Log (notebook) button on main toolbar.
      b. Expect Log Viewer tab opens; entries from app.log + app.log.1..N loaded.
@@ -44,6 +55,7 @@ Deferred
 --------------------------------------------------------------------------------
 [!] Windows taskbar via VB launcher
 [!] USGS monthly/yearly
-[!] Retro restart Windows / Windows text
+[!] Retro restart Windows
+[!] Windows text/font (code done — needs Windows retest)
 [!] Aquarius daily 2300 TZ
 [!] Features: plots, search/filter on log tab later, goat, formatting rules, git/readme

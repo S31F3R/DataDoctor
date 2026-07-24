@@ -27,7 +27,7 @@
    <bool>false</bool>
   </property>
   <property name="styleSheet">
-   <string notr="true">font: 57 12pt &quot;TerminessTTF Nerd Font&quot;;</string>
+   <string notr="true"/>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QGridLayout" name="gridLayout">
@@ -258,14 +258,6 @@
           <width>32</width>
           <height>32</height>
          </rect>
-        </property>
-        <property name="font">
-         <font>
-          <family>TerminessTTF Nerd Font</family>
-          <pointsize>12</pointsize>
-          <italic>false</italic>
-          <fontweight></fontweight>
-         </font>
         </property>
         <property name="toolTip">
          <string>Refresh current query</string>

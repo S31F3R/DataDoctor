@@ -1035,9 +1035,17 @@ class uiMain(QMainWindow):
             'DEBUG': QColor(108, 113, 120),
         }
         defaultColor = QColor(200, 200, 200) if Config.retroMode else QColor(40, 40, 40)
-        mono = QFont("TerminessTTF Nerd Font", 10)
-        if not mono.exactMatch():
-            mono = QFont("monospace", 10)
+        # Prefer active UI font; fall back to portable monospace (Terminess is Linux-only)
+        family = getattr(Config, 'uiFontFamily', '') or ''
+        pt = int(getattr(Config, 'fontSize', 10) or 10)
+        if family:
+            mono = QFont(family, pt)
+        else:
+            mono = QFont("Consolas", pt)
+            if not mono.exactMatch():
+                mono = QFont("Courier New", pt)
+            if not mono.exactMatch():
+                mono = QFont("monospace", pt)
         fmt = QTextCharFormat()
         fmt.setForeground(levelColors.get(level, defaultColor))
         fmt.setFont(mono)
