@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
                              QVBoxLayout, QHBoxLayout, QSplitter, QLabel)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPalette
+from PyQt6.QtGui import QPalette, QIcon
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
 from ui.uiAbout import uiAbout
@@ -420,7 +420,14 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", f"runCustomQuery: Populated sqlTable with {len(results)} rows, {len(columns)} columns")
         except Exception as e:
             Logic.logException("runCustomQuery: Failed to execute", e)
-            QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
+            try:
+                from core.Oracle import OracleAuthError
+                if isinstance(e, OracleAuthError):
+                    QMessageBox.warning(self, "Oracle Login Failed", str(e))
+                else:
+                    QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
+            except Exception:
+                QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
@@ -959,6 +966,12 @@ if __name__ == '__main__':
     try:
         app = QApplication(sys.argv)
         app.setApplicationName("Data Doctor")
+        # Taskbar / window icon (Windows + Linux desktop shells that honor QApplication icon)
+        _appIcon = QIcon(Logic.resourcePath('ui/icons/DataDoctor.ico'))
+        if _appIcon.isNull():
+            _appIcon = QIcon(Logic.resourcePath('ui/icons/Data Doctor.png'))
+        if not _appIcon.isNull():
+            app.setWindowIcon(_appIcon)
 
         # Init logging early, then install hooks so uncaught errors are logged and non-fatal
         Logic.initLogging()
@@ -972,6 +985,8 @@ if __name__ == '__main__':
 
         # Create instances
         winMain = uiMain()
+        if not _appIcon.isNull():
+            winMain.setWindowIcon(_appIcon)
         winQuery = uiQuery(winMain)
         winDataDictionary = uiDataDictionary(winMain)
         winOptions = uiOptions(winMain)

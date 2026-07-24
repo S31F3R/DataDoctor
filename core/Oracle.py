@@ -10,6 +10,54 @@ from pathlib import Path
 from typing import List, Any, Optional
 from core import Logic, Config
 
+# After a bad password, refuse further connect attempts for this process so we
+# do not spam Oracle and lock the account (multi-thread HDB / multi-DSN queries).
+_authFailureMessage = None
+
+
+class OracleAuthError(RuntimeError):
+    """Wrong username/password or locked account — do not retry."""
+    pass
+
+
+def clearAuthFailure():
+    """Call after the user updates Oracle credentials in Options."""
+    global _authFailureMessage
+    _authFailureMessage = None
+
+
+def isAuthError(exc) -> bool:
+    """True if this looks like bad credentials / locked account."""
+    text = str(exc) if exc is not None else ''
+    upper = text.upper()
+    # Common Oracle auth codes
+    codes = (
+        'ORA-01017',  # invalid username/password
+        'ORA-1017',
+        'ORA-28000',  # account locked
+        'ORA-28001',  # password expired
+        'ORA-28003',
+        'ORA-28043',
+        'ORA-00988',
+    )
+    if any(c in upper for c in codes):
+        return True
+    if 'INVALID USERNAME' in upper or 'INVALID PASSWORD' in upper:
+        return True
+    if 'USERNAME/PASSWORD' in upper and 'INVALID' in upper:
+        return True
+    # python-oracledb often wraps with error object
+    try:
+        if hasattr(exc, 'args') and exc.args:
+            err = exc.args[0]
+            code = getattr(err, 'code', None)
+            if code in (1017, 28000, 28001, 28003, 28043):
+                return True
+    except Exception:
+        pass
+    return False
+
+
 class oracleConnection:
     def __init__(self, dsn: str):
         self.dsn = dsn
@@ -62,6 +110,12 @@ class oracleConnection:
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""
+        global _authFailureMessage
+
+        # Do not hammer Oracle after a failed login (account lock protection)
+        if _authFailureMessage:
+            raise OracleAuthError(_authFailureMessage)
+
         try:
             user = keyring.get_password("DataDoctor", "oracleUser") or ''
             password = keyring.get_password("DataDoctor", "oraclePassword") or ''
@@ -72,15 +126,35 @@ class oracleConnection:
             
             self.connection = oracledb.connect(user=user, password=password, dsn=self.dsn)
             if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Connection established to {self.dsn}")
+            # Successful login clears any prior auth block
+            _authFailureMessage = None
             user = None
             password = None
             return self.connection
+        except OracleAuthError:
+            raise
         except oracledb.Error as e:
+            if isAuthError(e):
+                _authFailureMessage = (
+                    "Oracle login failed: wrong username/password or account locked. "
+                    "Fix credentials in Options — further connect attempts are blocked "
+                    "this session to avoid locking the account."
+                )
+                Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
+                raise OracleAuthError(_authFailureMessage) from e
             Logic.logException(f"oracleConnection.connect: Error connecting to Oracle ({self.dsn})", e)
             user = None
             password = None
             raise
         except Exception as e:
+            if isAuthError(e):
+                _authFailureMessage = (
+                    "Oracle login failed: wrong username/password or account locked. "
+                    "Fix credentials in Options — further connect attempts are blocked "
+                    "this session to avoid locking the account."
+                )
+                Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
+                raise OracleAuthError(_authFailureMessage) from e
             Logic.logException(f"oracleConnection.connect: Unexpected error ({self.dsn})", e)
             user = None
             password = None

@@ -479,10 +479,13 @@ class uiOptions(QDialog):
             ("oraclePassword", self.qleOraclePassword.text())
         ]
 
+        oracleCredsUpdated = False
         for key, value in credentials:
             if value and isinstance(value, str) and value.strip():
                 try:
                     keyring.set_password("DataDoctor", key, value)
+                    if key in ("oracleUser", "oraclePassword"):
+                        oracleCredsUpdated = True
 
                     if Config.debug:
                         Logic.logMessage("DEBUG", "Saved {} to keyring".format(key))
@@ -492,3 +495,14 @@ class uiOptions(QDialog):
                     
             elif Config.debug:
                 Logic.logMessage("DEBUG", "Skipped saving {} to keyring: empty or invalid".format(key))
+
+        # Allow reconnect after user fixes HDB credentials (clears auth fail-fast block)
+        if oracleCredsUpdated:
+            try:
+                from core.Oracle import clearAuthFailure
+                clearAuthFailure()
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "Cleared Oracle auth failure block after credential save")
+            except Exception as e:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"clearAuthFailure skipped: {e}")

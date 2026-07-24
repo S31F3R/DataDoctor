@@ -414,18 +414,9 @@ class uiDetails(QWidget):
             Logic.logMessage("WARN", f"No matching point found for timestamp {timestampStr}")
             return
         
-        # 0. Aquarius Label first (series-level — Label + LocationIdentifier)
-        aqLabel = (response.get('Label') or '').strip()
-        aqLocation = (response.get('LocationIdentifier') or '').strip()
-        if aqLabel and aqLocation:
-            labelDisplay = f"{aqLabel} \n{aqLocation}"
-        elif aqLabel:
-            labelDisplay = aqLabel
-        elif aqLocation:
-            labelDisplay = aqLocation
-        else:
-            labelDisplay = 'N/A'
-        self.addRow("Aquarius Label", labelDisplay, table=table)
+        # 0. Aquarius Label first — Label only (location is not part of this row)
+        aqLabel = (response.get('Label') or '').strip() or 'N/A'
+        self.addRow("Aquarius Label", aqLabel, table=table)
 
         # 1. Parameter/Unit (series-level)
         self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}", table=table)

@@ -383,6 +383,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     def queryTask(SDID, subStartStr, subEndStr, threadId):
         if Config.debug:
             Logic.logMessage("DEBUG", f"Thread {threadId} processing task for SDID {SDID}, range {subStartStr} to {subEndStr}")
+        # Skip if a sibling thread already hit bad credentials
+        if getattr(Oracle, '_authFailureMessage', None):
+            raise Oracle.OracleAuthError(Oracle._authFailureMessage)
         oracleConn = Oracle.oracleConnection(dsn)
         oracleConn.connect()
 
