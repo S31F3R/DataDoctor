@@ -89,7 +89,7 @@
        <widget class="QPushButton" name="btnRefresh">
         <property name="geometry">
          <rect>
-          <x>22</x>
+          <x>4</x>
           <y>6</y>
           <width>32</width>
           <height>32</height>
@@ -115,7 +115,7 @@
        <widget class="QPushButton" name="btnUndo">
         <property name="geometry">
          <rect>
-          <x>70</x>
+          <x>40</x>
           <y>6</y>
           <width>32</width>
           <height>32</height>
@@ -130,6 +130,32 @@
         <property name="icon">
          <iconset>
           <normaloff>icons/Reset.png</normaloff>icons/Reset.png</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>32</width>
+          <height>32</height>
+         </size>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="btnUpload">
+        <property name="geometry">
+         <rect>
+          <x>76</x>
+          <y>6</y>
+          <width>32</width>
+          <height>32</height>
+         </rect>
+        </property>
+        <property name="toolTip">
+         <string>Upload changed data (dry-run to documentation/*.csv)</string>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+        <property name="icon">
+         <iconset>
+          <normaloff>icons/Upload.png</normaloff>icons/Upload.png</iconset>
         </property>
         <property name="iconSize">
          <size>
@@ -472,26 +498,6 @@
         </widget>
        </item>
       </layout>
-     </widget>
-    </item>
-    <item row="0" column="1">
-     <widget class="QPushButton" name="btnUpload">
-      <property name="toolTip">
-       <string>Upload changed data (dry-run to documentation/*.csv)</string>
-      </property>
-      <property name="text">
-       <string/>
-      </property>
-      <property name="icon">
-       <iconset>
-        <normaloff>icons/Refresh.png</normaloff>icons/Refresh.png</iconset>
-      </property>
-      <property name="iconSize">
-       <size>
-        <width>32</width>
-        <height>32</height>
-       </size>
-      </property>
      </widget>
     </item>
    </layout>
