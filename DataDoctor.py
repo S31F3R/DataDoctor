@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
                              QVBoxLayout, QHBoxLayout, QSplitter, QLabel)
 from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QPalette, QIcon
+from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QColor, QTextCursor, QFont
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
 from ui.uiAbout import uiAbout
@@ -69,12 +69,15 @@ class uiMain(QMainWindow):
         self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')
         self.btnOptions = self.findChild(QPushButton, 'btnOptions')
         self.btnInfo = self.findChild(QPushButton, 'btnInfo')
+        self.btnViewLog = self.findChild(QPushButton, 'btnViewLog')
         self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
         self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
         self.btnUndo = self.findChild(QPushButton, 'btnUndo')
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
         self.tabMain = self.findChild(QWidget, 'tabMain')
         self.tabSQL = self.findChild(QWidget, 'tabSQL')
+        self.tabLog = self.findChild(QWidget, 'tabLog')
+        self.pteLog = self.findChild(QPlainTextEdit, 'pteLog')
         self.lastQueryType = None
         self.lastQueryItems = []
         self.lastStartDate = None
@@ -96,6 +99,7 @@ class uiMain(QMainWindow):
                         (self.btnDataDictionary, "Book", 36),
                         (self.btnExportCSV, "ExportCSV", 36),
                         (self.btnOptions, "Options", 36),
+                        (self.btnViewLog, "Notebook", 36),
                         (self.btnInfo, "Info", 36),
                         (self.btnInternalQuery, "InternalQuery", 36),
                         (self.btnUndo, "Reset", 36),
@@ -125,6 +129,8 @@ class uiMain(QMainWindow):
         self.btnExportCSV.clicked.connect(self.btnExportCSVPressed)
         self.btnOptions.clicked.connect(self.btnOptionsPressed)
         self.btnInfo.clicked.connect(self.btnInfoPressed)
+        if self.btnViewLog:
+            self.btnViewLog.clicked.connect(self.btnViewLogPressed)
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
@@ -169,6 +175,28 @@ class uiMain(QMainWindow):
         # Store titles after removal (in case .ui changes)
         self.dataQueryTitle = "Data Query"
         self.sqlTitle = "SQL Query Builder"
+        self.logTitle = "Log Viewer"
+
+        # Log viewer tab: layout pteLog to fill, hide until opened via btnViewLog
+        if self.tabLog:
+            if not self.tabLog.layout():
+                logLayout = QVBoxLayout(self.tabLog)
+                logLayout.setContentsMargins(0, 0, 0, 0)
+                if self.pteLog:
+                    logLayout.addWidget(self.pteLog)
+            if self.pteLog:
+                self.pteLog.setReadOnly(True)
+                self.pteLog.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+                self.pteLog.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            self.tabLog.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        # Live log updates: append while Log tab is open (no-op when closed — no refresh button)
+        notifier = Logic.getLogNotifier()
+        if notifier is not None:
+            notifier.newLogEntry.connect(
+                self.appendLogEntry,
+                Qt.ConnectionType.QueuedConnection,
+            )
 
         # Set up splitters and layout for tabSQL to enable resizing
         if sqlTab:
@@ -259,6 +287,14 @@ class uiMain(QMainWindow):
         else:
             if Config.debug:
                 Logic.logMessage("WARN", "tabSQL not found in tabWidget on startup")
+
+        # Hide log tab on startup (open via btnViewLog)
+        logIndex = self.tabWidget.indexOf(self.tabLog) if self.tabLog else -1
+        if logIndex != -1:
+            self.tabWidget.removeTab(logIndex)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Removed tabLog at index {logIndex} on startup")
+
         dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
 
         if dataQueryIndex != -1:
@@ -960,10 +996,125 @@ class uiMain(QMainWindow):
 
 
     def onTabCloseRequested(self, index):
+        # removeTab hides the page but keeps the widget so we can re-add log/SQL/query tabs
         self.tabWidget.removeTab(index)
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"onTabCloseRequested: Closed tab at index {index}")
+
+    def btnViewLogPressed(self):
+        """Show Log Viewer tab (add if closed) and load all rotated app logs, newest first."""
+        if not self.tabLog or not self.tabWidget:
+            QMessageBox.warning(self, "Log Viewer", "Log tab is not available.")
+            return
+
+        idx = self.tabWidget.indexOf(self.tabLog)
+        if idx == -1:
+            # Insert after Data Query if present, else at end
+            insertAt = self.tabWidget.count()
+            dataIdx = self.tabWidget.indexOf(self.tabMain)
+            if dataIdx != -1:
+                insertAt = dataIdx + 1
+            self.tabWidget.insertTab(insertAt, self.tabLog, self.logTitle)
+            idx = self.tabWidget.indexOf(self.tabLog)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"btnViewLogPressed: added tabLog at {idx}")
+
+        self.tabWidget.setCurrentIndex(idx)
+        self.populateLogViewer()
+
+    def _logViewerFormat(self, level):
+        """QTextCharFormat for a log level (shared by full load and live append)."""
+        level = (level or 'INFO').upper()
+        levelColors = {
+            'CRITICAL': QColor(220, 50, 47),
+            'ERROR': QColor(220, 50, 47),
+            'WARN': QColor(203, 120, 50),
+            'WARNING': QColor(203, 120, 50),
+            'INFO': QColor(38, 139, 210),
+            'DEBUG': QColor(108, 113, 120),
+        }
+        defaultColor = QColor(200, 200, 200) if Config.retroMode else QColor(40, 40, 40)
+        mono = QFont("TerminessTTF Nerd Font", 10)
+        if not mono.exactMatch():
+            mono = QFont("monospace", 10)
+        fmt = QTextCharFormat()
+        fmt.setForeground(levelColors.get(level, defaultColor))
+        fmt.setFont(mono)
+        if level in ('ERROR', 'CRITICAL'):
+            fmt.setFontWeight(QFont.Weight.Bold)
+        return fmt
+
+    def appendLogEntry(self, level, text):
+        """
+        Live-append one formatted log line at the top of pteLog.
+        No-op unless the Log tab is currently open — avoids UI work when closed.
+        """
+        if not self.pteLog or not self.tabLog or not self.tabWidget:
+            return
+        # Tab closed (removeTab): skip. Open but not current: still update so it is fresh on switch.
+        if self.tabWidget.indexOf(self.tabLog) == -1:
+            return
+        if not text:
+            return
+
+        # Stay put if user scrolled away from newest; otherwise pin to top
+        scrollBar = self.pteLog.verticalScrollBar()
+        wasAtTop = scrollBar is None or scrollBar.value() == 0
+
+        # Drop placeholder when first real entry arrives (check first block only — cheap)
+        doc = self.pteLog.document()
+        if doc.blockCount() <= 2:
+            first = doc.firstBlock().text()
+            if first.startswith("(No log entries found"):
+                self.pteLog.clear()
+
+        cursor = self.pteLog.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        line = text if text.endswith('\n') else text + '\n'
+        cursor.insertText(line, self._logViewerFormat(level))
+
+        if wasAtTop:
+            self.pteLog.moveCursor(QTextCursor.MoveOperation.Start)
+            self.pteLog.ensureCursorVisible()
+
+    def populateLogViewer(self):
+        """Load app.log + rotations into pteLog with level-based colors, newest on top."""
+        if not self.pteLog:
+            return
+
+        entries = Logic.loadAllAppLogEntries(newestFirst=True)
+        self.pteLog.clear()
+        self.pteLog.setUndoRedoEnabled(False)
+
+        cursor = self.pteLog.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+
+        if not entries:
+            fmt = self._logViewerFormat('INFO')
+            cursor.insertText(
+                f"(No log entries found in {Utils.getLogDir()})\n",
+                fmt,
+            )
+            self.pteLog.setTextCursor(cursor)
+            if Config.debug:
+                Logic.logMessage("DEBUG", "populateLogViewer: no entries")
+            return
+
+        for entry in entries:
+            level = (entry.get('level') or 'INFO').upper()
+            text = entry.get('text') or ''
+            cursor.insertText(text + '\n', self._logViewerFormat(level))
+
+        # Keep view at top (newest)
+        self.pteLog.moveCursor(QTextCursor.MoveOperation.Start)
+        self.pteLog.ensureCursorVisible()
+
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"populateLogViewer: loaded {len(entries)} entries from {Utils.getLogDir()}",
+            )
 
     def showOverlayCellDetails(self, row, col):
         """Display details for overlay cell using uiDetails window."""

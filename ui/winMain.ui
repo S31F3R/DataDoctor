@@ -51,8 +51,42 @@
         <height>16777215</height>
        </size>
       </property>
-      <layout class="QGridLayout" name="gridLayout_2">
-       <item row="0" column="2">
+      <layout class="QHBoxLayout" name="horizontalLayout">
+       <item>
+        <widget class="QPushButton" name="btnPublicQuery">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/PublicQuery.png</normaloff>icons/PublicQuery.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnInternalQuery">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/InternalQuery.png</normaloff>icons/InternalQuery.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QPushButton" name="btnDataDictionary">
          <property name="baseSize">
           <size>
@@ -81,41 +115,7 @@
          </property>
         </widget>
        </item>
-       <item row="0" column="0">
-        <widget class="QPushButton" name="btnPublicQuery">
-         <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset>
-           <normaloff>icons/PublicQuery.png</normaloff>icons/PublicQuery.png</iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>36</width>
-           <height>36</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="1">
-        <widget class="QPushButton" name="btnInternalQuery">
-         <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset>
-           <normaloff>icons/InternalQuery.png</normaloff>icons/InternalQuery.png</iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>36</width>
-           <height>36</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="3">
+       <item>
         <widget class="QPushButton" name="btnExportCSV">
          <property name="toolTip">
           <string>Export to CSV</string>
@@ -135,7 +135,7 @@
          </property>
         </widget>
        </item>
-       <item row="0" column="4">
+       <item>
         <widget class="QPushButton" name="btnOptions">
          <property name="text">
           <string/>
@@ -152,7 +152,27 @@
          </property>
         </widget>
        </item>
-       <item row="0" column="5">
+       <item>
+        <widget class="QPushButton" name="btnViewLog">
+         <property name="toolTip">
+          <string>View application logs</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/Notebook.png</normaloff>icons/Notebook.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QPushButton" name="btnInfo">
          <property name="toolTip">
           <string>Information</string>
@@ -193,7 +213,7 @@
        </size>
       </property>
       <property name="currentIndex">
-       <number>1</number>
+       <number>2</number>
       </property>
       <property name="tabsClosable">
        <bool>true</bool>
@@ -445,6 +465,21 @@
         </property>
        </widget>
       </widget>
+      <widget class="QWidget" name="tabLog">
+       <attribute name="title">
+        <string>Log Viewer</string>
+       </attribute>
+       <widget class="QPlainTextEdit" name="pteLog">
+        <property name="geometry">
+         <rect>
+          <x>0</x>
+          <y>0</y>
+          <width>1571</width>
+          <height>581</height>
+         </rect>
+        </property>
+       </widget>
+      </widget>
      </widget>
     </item>
    </layout>
@@ -459,7 +494,7 @@
     <string>Data Dictionary</string>
    </property>
   </action>
-  <action name="actionAboutCipher">
+  <action name="actionAboutDataDoctor">
    <property name="text">
     <string>About Cipher</string>
    </property>
@@ -482,6 +517,7 @@
   <tabstop>btnDataDictionary</tabstop>
   <tabstop>btnExportCSV</tabstop>
   <tabstop>btnOptions</tabstop>
+  <tabstop>btnViewLog</tabstop>
   <tabstop>btnInfo</tabstop>
   <tabstop>btnRefresh</tabstop>
   <tabstop>btnUndo</tabstop>

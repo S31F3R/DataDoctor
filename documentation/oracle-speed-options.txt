@@ -16,6 +16,9 @@ Seifer validation
 - Day query: HDB ~60s slower than USGS/Aquarius after C — good improvement.
 - 2-year mega query: HDB only ~30s slower than Aquarius after C — good enough.
 - Option A (IN-list multi-SDID) made things slower → REVERTED to C-only.
+- Mixed results / Oracle cache confounding retests: Grok decision KEEP C.
+  A can be slower due to bigger result sets, weaker index plans for IN-lists,
+  and little gain once connect cost is already eliminated by C.
 
 Options history
 ---------------
