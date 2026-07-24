@@ -23,6 +23,7 @@
     -Look into Aquarius query to pull value percision each query to get fresh rules
         -/AQUARIUS/Publish/v2/GetParameterList?format=json
     -Need to combine aquarius parameters to HDB data types for formatting rules
+    -Create overwrite spot in data dictionary that follows AQ type format, like DEC(3) or SIG(2) commands
 -modify and test for day, month, year, and water year queries
     -Aquarius daily from UC is comingin as 2300, that's whack
     -Data review tool shows 00:00, so my query might be whack
