@@ -141,6 +141,9 @@ class uiQuery(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", "uiQuery showEvent: queryType={}".format(self.queryType))
         Utils.centerWindowToParent(self)
+        # Re-apply role fonts + mode ABS layouts (info icons) after show
+        Utils.applyRoleFonts(root=self)
+        Utils.applyModeControlLayouts(root=self)
         Logic.loadLastQuickLook(self.cbQuickLook)
         Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
 

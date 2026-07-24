@@ -380,23 +380,28 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     if Config.debug:
         Logic.logMessage("DEBUG", f"Created {numTasks} tasks for {len(SDIDs)} SDIDs across {len(subRanges)} sub-ranges, using {numThreads} threads")
 
-    def queryTask(SDID, subStartStr, subEndStr, threadId):
+    def queryTask(SDID, subStartStr, subEndStr, threadId, oracleConn):
+        """Run one (SDID, date-chunk) pair on an existing connection (no connect/close)."""
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Thread {threadId} processing task for SDID {SDID}, range {subStartStr} to {subEndStr}")
-        # Skip if a sibling thread already hit bad credentials
+            Logic.logMessage(
+                "DEBUG",
+                f"Thread {threadId} processing task for SDID {SDID}, range {subStartStr} to {subEndStr}",
+            )
         if getattr(Oracle, '_authFailureMessage', None):
             raise Oracle.OracleAuthError(Oracle._authFailureMessage)
-        oracleConn = Oracle.oracleConnection(dsn)
-        oracleConn.connect()
 
         # Data params
         dataParams = [SDID, subStartStr, subEndStr]
         if table == 'M' and mrid != '0':
             dataParams.append(mrid)
 
-        if Config.debug: 
-            Logic.logMessage("DEBUG", f"sqlRead thread {threadId}: Executing interval query with params {dataParams}")
-        dataResults = oracleConn.executeCustomQuery(dataQuery, params=dataParams)
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"sqlRead thread {threadId}: Executing interval query with params {dataParams}",
+            )
+        # Reuse session across tasks; retry once if the network dropped the connection
+        dataResults = oracleConn.executeCustomQueryWithRetry(dataQuery, params=dataParams)
 
         # Group interval data by timeKey
         dataByTime = {row[timeAlias]: row for row in dataResults}
@@ -408,9 +413,12 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         if table == 'R':
             metaParams = [SDID, subStartStr, subEndStr]
 
-            if Config.debug: 
-                Logic.logMessage("DEBUG", f"sqlRead thread {threadId}: Executing base query with params {metaParams}")
-            metaResults = oracleConn.executeCustomQuery(metaQuery, params=metaParams)
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"sqlRead thread {threadId}: Executing base query with params {metaParams}",
+                )
+            metaResults = oracleConn.executeCustomQueryWithRetry(metaQuery, params=metaParams)
             metaByTime = {row[timeAlias]: row for row in metaResults}
 
         # Process for this SDID and sub-range
@@ -427,7 +435,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             value = intRow.get('VALUE') if intRow else baseRow.get('RBASE_VALUE') if baseRow else None
 
             if value is None:
-                continue # Skip if no value
+                continue  # Skip if no value
 
             # Format timestamp from timeKey
             try:
@@ -436,19 +444,22 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                 valStr = str(value) if value is not None else ''
                 outputData.append(f'{formattedTs},{valStr}')
             except ValueError as e:
-                Logic.logMessage("WARN", f"sqlRead thread {threadId}: Invalid timeKey skipped for SDID {SDID}: {timeKey} ({e})")
+                Logic.logMessage(
+                    "WARN",
+                    f"sqlRead thread {threadId}: Invalid timeKey skipped for SDID {SDID}: {timeKey} ({e})",
+                )
                 continue
 
             # Merge metadata: base as base, override common tags with interval if present/not None
             mergedRow = baseRow.copy() if baseRow else {}
-            mergedRow.update({k: v for k, v in intRow.items() if v is not None}) # Override with interval non-None
+            mergedRow.update({k: v for k, v in intRow.items() if v is not None})
             mergedRow['SDID'] = str(SDID)
             mergedRow['INTERVAL'] = tableSuffix.lower()
 
             if intRow:
-                mergedRow['INTERVAL_VALUE'] = intRow.get('VALUE') # Add interval value explicitly
+                mergedRow['INTERVAL_VALUE'] = intRow.get('VALUE')
             if baseRow:
-                mergedRow['RBASE_VALUE'] = baseRow.get('RBASE_VALUE') # Preserve base value
+                mergedRow['RBASE_VALUE'] = baseRow.get('RBASE_VALUE')
 
             # Build display dict with friendly keys and name replacements
             displayMeta = {}
@@ -457,8 +468,16 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             displayMeta['Start Date/Time'] = mergedRow.get('START_DATE_TIME', '')
             displayMeta['End Date/Time'] = mergedRow.get('END_DATE_TIME', '')
             displayMeta['Date/Time Loaded'] = mergedRow.get('DATE_TIME_LOADED', '')
-            displayMeta['Interval Value'] = str(mergedRow.get('INTERVAL_VALUE', '')) if mergedRow.get('INTERVAL_VALUE') is not None else ''
-            displayMeta['Base Value'] = str(mergedRow.get('RBASE_VALUE', '')) if mergedRow.get('RBASE_VALUE') is not None else ''
+            displayMeta['Interval Value'] = (
+                str(mergedRow.get('INTERVAL_VALUE', ''))
+                if mergedRow.get('INTERVAL_VALUE') is not None
+                else ''
+            )
+            displayMeta['Base Value'] = (
+                str(mergedRow.get('RBASE_VALUE', ''))
+                if mergedRow.get('RBASE_VALUE') is not None
+                else ''
+            )
             displayMeta['Validation'] = mergedRow.get('VALIDATION', '') or ''
             displayMeta['Overwrite Flag'] = mergedRow.get('OVERWRITE_FLAG', '') or ''
             displayMeta['Method'] = methodMap.get(mergedRow.get('METHOD_ID'), '') or ''
@@ -469,46 +488,92 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             compName = computationMap.get(compId, '') if compId is not None else ''
             displayMeta['Computation'] = compName
             displayMeta['Computation ID'] = str(compId) if compId is not None else ''
-            displayMeta['Data Flags'] = mergedRow.get('DATA_FLAGS', '') or mergedRow.get('DERIVATION_FLAGS', '') or ''
+            displayMeta['Data Flags'] = (
+                mergedRow.get('DATA_FLAGS', '') or mergedRow.get('DERIVATION_FLAGS', '') or ''
+            )
 
             mergedMeta.append(displayMeta)
 
-        oracleConn.close()
         resultQueue.put((SDID, {'data': outputData, 'rawResponse': mergedMeta}))
 
-        if Config.debug: 
-            Logic.logMessage("DEBUG", f"sqlRead thread {threadId}: Processed {len(outputData)} data points and {len(mergedMeta)} merged meta rows for SDID {SDID}")
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"sqlRead thread {threadId}: Processed {len(outputData)} data points and "
+                f"{len(mergedMeta)} merged meta rows for SDID {SDID}",
+            )
 
-    # Start threads
+    # Start threads — one Oracle session per worker, reused across all its tasks
     taskQueue = queue.Queue()
-    for task in tasks: taskQueue.put(task)
+    for task in tasks:
+        taskQueue.put(task)
     threads = []
 
     workerErrors = []
+    workerErrorsLock = threading.Lock()
 
     def worker(threadId):
-        while True:
-            try:
-                SDID, subStartStr, subEndStr = taskQueue.get_nowait()
-            except queue.Empty:
-                break
-            try:
-                queryTask(SDID, subStartStr, subEndStr, threadId)
-            except Exception as e:
-                # Do not kill the whole process from a worker thread (e.g. old PATH bloat)
-                Logic.logException(
-                    f"sqlRead worker {threadId} failed for SDID {SDID} range {subStartStr}-{subEndStr}",
-                    e,
+        """
+        Option C: open one connection for this worker, run many (SDID, chunk) tasks,
+        close when the queue is empty. Avoids connect/close per task over the WAN.
+        """
+        oracleConn = None
+        tasksDone = 0
+        try:
+            if getattr(Oracle, '_authFailureMessage', None):
+                raise Oracle.OracleAuthError(Oracle._authFailureMessage)
+
+            oracleConn = Oracle.oracleConnection(dsn)
+            oracleConn.connect()
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"sqlRead worker {threadId}: opened reusable connection to {dsn}",
                 )
-                workerErrors.append(e)
-            finally:
+
+            while True:
                 try:
-                    taskQueue.task_done()
+                    SDID, subStartStr, subEndStr = taskQueue.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    queryTask(SDID, subStartStr, subEndStr, threadId, oracleConn)
+                    tasksDone += 1
+                except Exception as e:
+                    Logic.logException(
+                        f"sqlRead worker {threadId} failed for SDID {SDID} "
+                        f"range {subStartStr}-{subEndStr}",
+                        e,
+                    )
+                    with workerErrorsLock:
+                        workerErrors.append(e)
+                    # Auth failure: stop this worker; other workers will hit the same block
+                    if isinstance(e, Oracle.OracleAuthError) or Oracle.isAuthError(e):
+                        break
+                finally:
+                    try:
+                        taskQueue.task_done()
+                    except Exception:
+                        pass
+        except Exception as e:
+            # Connect / setup failure before any tasks
+            Logic.logException(f"sqlRead worker {threadId} failed to start session", e)
+            with workerErrorsLock:
+                workerErrors.append(e)
+        finally:
+            if oracleConn is not None:
+                try:
+                    oracleConn.close()
                 except Exception:
                     pass
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"sqlRead worker {threadId}: closed connection after {tasksDone} task(s)",
+                    )
 
     for i in range(numThreads):
-        t = threading.Thread(target=worker, args=(i,))
+        t = threading.Thread(target=worker, args=(i,), name=f"HDB-sqlRead-{i}")
         threads.append(t)
         t.start()
 

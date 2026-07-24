@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>920</width>
+    <width>900</width>
     <height>640</height>
    </rect>
   </property>
@@ -18,7 +18,7 @@
   </property>
   <property name="maximumSize">
    <size>
-    <width>920</width>
+    <width>900</width>
     <height>640</height>
    </size>
   </property>
@@ -33,7 +33,7 @@
    <bool>false</bool>
   </property>
   <property name="styleSheet">
-   <string notr="true">font: 57 12pt &quot;TerminessTTF Nerd Font&quot;;</string>
+   <string notr="true"/>
   </property>
   <widget class="QWidget" name="centralwidget">
    <widget class="QComboBox" name="cbInterval">
@@ -161,7 +161,7 @@
      <rect>
       <x>328</x>
       <y>128</y>
-      <width>581</width>
+      <width>561</width>
       <height>501</height>
      </rect>
     </property>
@@ -169,7 +169,7 @@
    <widget class="QPushButton" name="btnAddQuery">
     <property name="geometry">
      <rect>
-      <x>770</x>
+      <x>750</x>
       <y>65</y>
       <width>141</width>
       <height>31</height>
@@ -279,8 +279,8 @@
    <widget class="QPushButton" name="btnDataIdInfo">
     <property name="geometry">
      <rect>
-      <x>382</x>
-      <y>5</y>
+      <x>376</x>
+      <y>7</y>
       <width>31</width>
       <height>20</height>
      </rect>
@@ -305,8 +305,8 @@
    <widget class="QPushButton" name="btnIntervalInfo">
     <property name="geometry">
      <rect>
-      <x>110</x>
-      <y>76</y>
+      <x>100</x>
+      <y>77</y>
       <width>31</width>
       <height>20</height>
      </rect>
@@ -385,7 +385,7 @@
      <rect>
       <x>328</x>
       <y>29</y>
-      <width>581</width>
+      <width>561</width>
       <height>32</height>
      </rect>
     </property>
@@ -406,8 +406,8 @@
    <widget class="QPushButton" name="btnQueryOptionsInfo">
     <property name="geometry">
      <rect>
-      <x>124</x>
-      <y>401</y>
+      <x>110</x>
+      <y>403</y>
       <width>31</width>
       <height>20</height>
      </rect>
@@ -434,7 +434,7 @@
      <rect>
       <x>20</x>
       <y>424</y>
-      <width>131</width>
+      <width>136</width>
       <height>22</height>
      </rect>
     </property>
@@ -666,7 +666,7 @@
    <widget class="QPushButton" name="btnSearch">
     <property name="geometry">
      <rect>
-      <x>730</x>
+      <x>720</x>
       <y>65</y>
       <width>32</width>
       <height>32</height>

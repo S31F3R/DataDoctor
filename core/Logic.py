@@ -2,6 +2,7 @@
 
 import os
 import sys
+import re
 import json
 import sqlite3
 import logging
@@ -10,7 +11,7 @@ import threading
 import faulthandler
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
-from PyQt6.QtCore import QThreadPool, QDir
+from PyQt6.QtCore import QThreadPool, QDir, QObject, pyqtSignal
 from PyQt6.QtWidgets import QTableWidgetItem, QFileDialog, QSplitter, QTreeView
 from core import Config, Utils
 
@@ -18,6 +19,36 @@ from core import Config, Utils
 loggingInitialized = False
 _faultLogFile = None
 _exceptionHooksInstalled = False
+_logNotifier = None  # LogNotifier for live log viewer (created in initLogging)
+
+
+class LogNotifier(QObject):
+    """Bridges Python logging to the Qt UI thread for live log viewing."""
+    newLogEntry = pyqtSignal(str, str)  # level, formatted text
+
+
+class _QtLogHandler(logging.Handler):
+    """
+    Lightweight handler: format once and emit a signal.
+    Receivers (log viewer) no-op when the Log tab is closed, so cost is negligible.
+    emit() is safe from any thread; connect with QueuedConnection on the UI side.
+    """
+    def __init__(self, notifier):
+        super().__init__()
+        self._notifier = notifier
+        self.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self._notifier.newLogEntry.emit(record.levelname, msg)
+        except Exception:
+            self.handleError(record)
+
+
+def getLogNotifier():
+    """Return the LogNotifier singleton, or None before initLogging."""
+    return _logNotifier
 
 def resourcePath(relativePath):
     """Get absolute path to resource, works for dev and PyInstaller"""
@@ -29,7 +60,7 @@ def resourcePath(relativePath):
     return os.path.normpath(os.path.join(basePath, relativePath))
 
 def initLogging():
-    global loggingInitialized
+    global loggingInitialized, _logNotifier
 
     if loggingInitialized:
         return # Already initialized
@@ -55,6 +86,17 @@ def initLogging():
     fileFormatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
     fileHandler.setFormatter(fileFormatter)
     logger.addHandler(fileHandler)
+
+    # UI bridge for live log viewer (append-only when tab open; no-op otherwise)
+    try:
+        if _logNotifier is None:
+            _logNotifier = LogNotifier()
+        uiHandler = _QtLogHandler(_logNotifier)
+        uiHandler.setLevel(logging.DEBUG)
+        logger.addHandler(uiHandler)
+    except Exception:
+        # Live viewer is optional; never fail logging setup because of UI bridge
+        pass
     
     loggingInitialized = True
 
@@ -124,6 +166,101 @@ def logException(context, exc=None):
             print(f"ERROR: {context}: {exc}", file=sys.stderr)
         except Exception:
             pass
+
+# File log line: "2026-07-24 12:34:56,789 [ERROR] message"
+_LOG_LINE_RE = re.compile(
+    r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:,\d+)?)\s+\[([A-Za-z]+)\]\s?(.*)$'
+)
+
+
+def listAppLogFiles():
+    """
+    Return rotated app log paths newest-first: app.log, app.log.1, ... app.log.N
+    (RotatingFileHandler: app.log is current; higher numbers are older).
+    """
+    logDir = Utils.getLogDir()
+    if not os.path.isdir(logDir):
+        return []
+    files = []
+    # Current + numbered backups (backupCount=5 → .1 .. .5)
+    for name in os.listdir(logDir):
+        if name == 'app.log' or (name.startswith('app.log.') and name[8:].isdigit()):
+            files.append(os.path.join(logDir, name))
+
+    def sortKey(path):
+        base = os.path.basename(path)
+        if base == 'app.log':
+            return 0
+        try:
+            return int(base.split('.')[-1])
+        except ValueError:
+            return 999
+
+    files.sort(key=sortKey)
+    return files
+
+
+def loadAllAppLogEntries(newestFirst=True):
+    """
+    Load all rotated app.log* files, group multi-line records, return list of dicts:
+      { 'timestamp': datetime|None, 'level': str, 'text': str (full record) }
+
+    Timeline order: newestFirst=True puts the most recent log entry first.
+    """
+    entries = []
+    for path in listAppLogFiles():
+        try:
+            with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                lines = f.readlines()
+        except Exception as e:
+            logMessage("WARN", f"loadAllAppLogEntries: could not read {path}: {e}")
+            continue
+
+        current = None
+        for raw in lines:
+            line = raw.rstrip('\n')
+            m = _LOG_LINE_RE.match(line)
+            if m:
+                if current is not None:
+                    entries.append(current)
+                tsStr, level, rest = m.group(1), m.group(2).upper(), m.group(3)
+                ts = None
+                for fmt in ('%Y-%m-%d %H:%M:%S,%f', '%Y-%m-%d %H:%M:%S'):
+                    try:
+                        ts = datetime.strptime(tsStr, fmt)
+                        break
+                    except ValueError:
+                        pass
+                current = {
+                    'timestamp': ts,
+                    'level': level,
+                    'text': line,
+                    'source': os.path.basename(path),
+                }
+            else:
+                # Continuation (traceback, etc.) — attach to previous record
+                if current is not None:
+                    current['text'] = current['text'] + '\n' + line
+                elif line.strip():
+                    entries.append({
+                        'timestamp': None,
+                        'level': 'INFO',
+                        'text': line,
+                        'source': os.path.basename(path),
+                    })
+        if current is not None:
+            entries.append(current)
+
+    def entryKey(e):
+        ts = e.get('timestamp')
+        # Untimed lines sort as oldest so they don't float to the top
+        if ts is None:
+            return datetime.min
+        return ts
+
+    entries.sort(key=entryKey, reverse=bool(newestFirst))
+    return entries
+
 
 def installExceptionHooks(showDialog=True):
     """

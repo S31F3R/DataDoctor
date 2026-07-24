@@ -260,6 +260,37 @@ class oracleConnection:
             password = None
             raise
 
+    def reconnect(self) -> oracledb.Connection:
+        """Close any existing session and open a new one (same DSN/credentials)."""
+        try:
+            if self.connection is not None:
+                self.connection.close()
+        except Exception:
+            pass
+        self.connection = None
+        return self.connect()
+
+    def isConnectionError(self, exc) -> bool:
+        """True if the session looks dead (safe to reconnect and retry once)."""
+        if isAuthError(exc):
+            return False
+        text = str(exc).upper() if exc is not None else ''
+        markers = (
+            'DPI-1010',  # not connected
+            'DPI-1080',  # connection closed
+            'DPY-4011',  # connection was closed
+            'DPY-1001',
+            'ORA-03113',  # end-of-file on communication channel
+            'ORA-03114',
+            'ORA-03135',  # connection lost contact
+            'ORA-12571',
+            'ORA-25408',
+            'NOT CONNECTED',
+            'CONNECTION WAS CLOSED',
+            'BROKEN PIPE',
+        )
+        return any(m in text for m in markers)
+
     def executeCustomQuery(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> Any:
         if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
 
@@ -296,43 +327,95 @@ class oracleConnection:
         startTime = time.time()
 
         try:
-            exactQuery = query 
-            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Validating query: {exactQuery}")
-
-            if params:
-                cursor.execute(exactQuery, params)
-            else:
-                cursor.execute(exactQuery)
-
-            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Executed query: {exactQuery[:100]} with params {params}")
-            isSelect = cursor.description is not None
-            executionTime = time.time() - startTime
-            if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds")
-
-            if isSelect:
-                if fetchAll:
-                    results = cursor.fetchall()
-                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Fetched {len(results)} rows")
-                else:
-                    results = cursor.fetchone()
-                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Fetched single row: {results}")
-                if cursor.description:
-                    columns = [desc[0] for desc in cursor.description]
-                    if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Found columns: {columns}")
-                    formattedResults = [dict(zip(columns, row)) for row in (results if isinstance(results, list) else [results] if results else [])]
-                    return formattedResults
-
-                return results if isinstance(results, list) else [results] if results else []
-            else:
-                rowCount = cursor.rowcount
-                if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Affected {rowCount} rows")
-                return rowCount
+            return self._runQueryOnCursor(cursor, query, params, fetchAll, startTime)
         except oracledb.Error as e:
             if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Oracle error: {e}")
             raise
         finally:
-            cursor.close()
-            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Cursor closed")         
+            try:
+                cursor.close()
+            except Exception:
+                pass
+            if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Cursor closed")
+
+    def _runQueryOnCursor(self, cursor, query, params, fetchAll, startTime):
+        exactQuery = query
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Validating query: {exactQuery}")
+
+        if params:
+            cursor.execute(exactQuery, params)
+        else:
+            cursor.execute(exactQuery)
+
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"OracleConnection.executeCustomQuery: Executed query: {exactQuery[:100]} with params {params}",
+            )
+        isSelect = cursor.description is not None
+        executionTime = time.time() - startTime
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"OracleConnection.executeCustomQuery: Query executed in {executionTime:.3f} seconds",
+            )
+
+        if isSelect:
+            if fetchAll:
+                results = cursor.fetchall()
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"OracleConnection.executeCustomQuery: Fetched {len(results)} rows",
+                    )
+            else:
+                results = cursor.fetchone()
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"OracleConnection.executeCustomQuery: Fetched single row: {results}",
+                    )
+            if cursor.description:
+                columns = [desc[0] for desc in cursor.description]
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"OracleConnection.executeCustomQuery: Found columns: {columns}",
+                    )
+                formattedResults = [
+                    dict(zip(columns, row))
+                    for row in (results if isinstance(results, list) else [results] if results else [])
+                ]
+                return formattedResults
+
+            return results if isinstance(results, list) else [results] if results else []
+        else:
+            rowCount = cursor.rowcount
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"OracleConnection.executeCustomQuery: Affected {rowCount} rows",
+                )
+            return rowCount
+
+    def executeCustomQueryWithRetry(self, query: str, params: Optional[List[Any]] = None, fetchAll: bool = True) -> Any:
+        """
+        Run a query; on lost-connection errors, reconnect once and retry.
+        Used by long-lived worker sessions that reuse one connection across tasks.
+        """
+        try:
+            return self.executeCustomQuery(query, params=params, fetchAll=fetchAll)
+        except Exception as e:
+            if isAuthError(e) or not self.isConnectionError(e):
+                raise
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection: connection error on {self.dsn}, reconnecting once: {e}",
+                )
+            self.reconnect()
+            return self.executeCustomQuery(query, params=params, fetchAll=fetchAll)
 
     def callStoredProcedure(self, procedureName: str, params: Optional[List[Any]] = None) -> List[Any]:
         """Call an Oracle stored procedure and return output values."""

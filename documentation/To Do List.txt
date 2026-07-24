@@ -1,21 +1,12 @@
 ####### CURRENT BUGS #######
 -Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
--Text is slightly too big on Windows. Buttons in Query are truncated
-    -There looks like there is extra padding above and under the text also. Not sure if a simple lower by 1 size will fix this
-    -This might be tied to certain controls. THe SQL Query Builder area isn't impacted, either is the table output from the query, but the SQL quicklooks to the right are
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
--Oracle HDB speed over network (hold until after staging push; work on bug-smashing)
-    -See documentation/oracle-speed-options.txt (Seifer decisions recorded)
-    -Next try: C connection reuse per worker; later A batch SDIDs + D pool
-    -Do not raise maxThreads without measuring; B/G removed
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
     -Add a plot that graphs delta pair and overlays delta as a seperate line
--Add a log viewer with same type of formatting you get from reading .log files in Kate (WARN orange text, ERROR red text, etc)
-    -Include a way to open/view app.log from inside the app (no hunting config paths)
 -Add a button to see table with rounding rules based on data type (need table created first)
 
 ####### LOGGING ENHANCEMENTS #######
@@ -32,6 +23,7 @@
     -Look into Aquarius query to pull value percision each query to get fresh rules
         -/AQUARIUS/Publish/v2/GetParameterList?format=json
     -Need to combine aquarius parameters to HDB data types for formatting rules
+    -Create overwrite spot in data dictionary that follows AQ type format, like DEC(3) or SIG(2) commands
 -modify and test for day, month, year, and water year queries
     -Aquarius daily from UC is comingin as 2300, that's whack
     -Data review tool shows 00:00, so my query might be whack

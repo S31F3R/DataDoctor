@@ -5,7 +5,7 @@ from datetime import datetime
 from PyQt6.QtCore import Qt, QCoreApplication
 from PyQt6.QtGui import QColor, QFontMetrics, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem
-from core import Logic, Config
+from core import Logic, Config, Utils
 from DataDoctor import uiMain
 
 
@@ -225,7 +225,10 @@ def modifyTable(
     table.clear()
     table.setRowCount(numRows)
     table.setColumnCount(outCols)
-    table.setHorizontalHeaderLabels(finalHeaders)
+    # Retro trailing blank line under headers (same as buildTable)
+    table.setHorizontalHeaderLabels(
+        [Utils.formatTableHeaderLabel(h) for h in finalHeaders]
+    )
     if timestamps and any(timestamps):
         table.setVerticalHeaderLabels(timestamps)
 
@@ -264,14 +267,17 @@ def modifyTable(
             pass  # column loop already yields
 
     # Lightweight width: header + tiny sample (never scan all rows)
+    # Match buildTable fudge; ignore blank spacer lines in header text
     font = table.font()
     metrics = QFontMetrics(font)
     sampleN = min(50, numRows)
     for c in range(outCols):
         headerItem = table.horizontalHeaderItem(c)
         headerText = headerItem.text() if headerItem else ""
+        # Same original buildTable width math (blank spacer lines ignored)
+        headerLines = [line.strip() for line in headerText.split('\n') if line.strip()]
         headerWidth = max(
-            (metrics.horizontalAdvance(line.strip()) for line in headerText.split('\n')),
+            (metrics.horizontalAdvance(line) for line in headerLines),
             default=40,
         )
         maxCell = metrics.horizontalAdvance("0.00")
@@ -279,8 +285,15 @@ def modifyTable(
             it = table.item(r, c)
             if it and it.text():
                 maxCell = max(maxCell, metrics.horizontalAdvance(it.text()))
-        finalWidth = max(maxCell, headerWidth) + 16
+        finalWidth = max(maxCell, headerWidth)
+        if headerWidth > maxCell:
+            finalWidth = maxCell + (headerWidth - maxCell) + 10
+        else:
+            finalWidth += 20
         table.setColumnWidth(c, finalWidth)
+
+    # Re-apply row/header heights after clear/rewrite
+    Utils.applyTableRowMetrics(table, font=font)
 
     table.blockSignals(False)
     table.setUpdatesEnabled(True)

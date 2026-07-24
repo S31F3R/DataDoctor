@@ -249,6 +249,9 @@ class uiOptions(QDialog):
             Logic.logMessage("DEBUG", f"uiOptions showEvent")
         Utils.centerWindowToParent(self)
         super().showEvent(event)
+        # Mode-specific checkbox positions (default Noto vs retro)
+        Utils.applyModeControlLayouts(root=self)
+        Utils.applyRoleFonts(root=self)
         self.loadSettings()
         self.tabWidget.setCurrentIndex(0)
         # Always start with secrets masked when the dialog opens

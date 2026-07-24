@@ -1,12 +1,133 @@
 # Utils.py
 
 import os
+import sys
 import json
 import configparser
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
-from PyQt6.QtWidgets import QWidget, QLineEdit
-from PyQt6.QtGui import QFont, QFontDatabase, QGuiApplication, QIcon, QPixmap
+from PyQt6.QtWidgets import (
+    QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
+    QListWidget, QTreeView, QPushButton, QCheckBox, QRadioButton, QComboBox,
+)
+from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
+
+# Bundled fonts (cross-platform):
+#   non-retro → Noto Sans  (matches Seifer's Linux system UI font)
+#   retro     → Press Start 2P
+_defaultFontFamilyCache = None   # Noto Sans
+_defaultFontLoadAttempted = False
+_retroFontFamilyCache = None     # Press Start 2P
+_retroFontLoadAttempted = False
+
+# Point sizes by control role: (non-retro, retro)
+# Non-retro: 10pt Noto Sans — matches this machine's GNOME/Qt default.
+# Retro: buttons stay at 6 (width/fit tuned); other roles larger so labels/lists/logs aren't tiny.
+FONT_ROLE_SIZES = {
+    'ui':     (10, 8),   # labels, checkboxes, radios, combos, tabs, general
+    'button': (10, 6),   # QPushButton — retro size kept at tuned 6pt
+    'list':   (10, 8),   # list widgets / snippets / quick looks
+    'table':  (10, 8),   # data tables
+    'log':    (10, 10),  # log viewer
+    'code':   (10, 9),   # SQL / plain text editors
+    'about':  (10, 9),   # about dialog body (About always forces Press Start)
+}
+
+# Bundled default (non-retro) font faces — all register as family "Noto Sans"
+_DEFAULT_FONT_FILES = (
+    'ui/fonts/NotoSans-Regular.ttf',
+    'ui/fonts/NotoSans-Bold.ttf',
+    'ui/fonts/NotoSans-Italic.ttf',
+    'ui/fonts/NotoSans-BoldItalic.ttf',
+)
+
+# Absolute geometries that differ by font mode: (x, y, width, height)
+# Default = Noto (Seifer-tuned 2026-07-24). Retro = pre-Noto baseline until tuned.
+# Only controls listed here are moved; everything else stays at .ui geometry.
+CONTROL_LAYOUTS = {
+    # Every control retro moves must also appear here so retro OFF restores Noto positions.
+    'default': {
+        # winMain — Data Query tab overlay icons (Windows y via PLATFORM_LAYOUT_Y_NUDGE)
+        'btnRefresh': (22, 6, 32, 32),
+        'btnUndo': (70, 6, 32, 32),
+        # winOptions
+        'chkbRawData': (74, 60, 21, 22),
+        'chkbQAQC': (156, 90, 21, 22),
+        'chkbRetroMode': (88, 120, 21, 22),
+        'chkbDebug': (96, 150, 21, 22),
+        'chkbEnableSQL': (128, 180, 21, 22),
+        'rbBOP': (210, 0, 141, 22),                 # .ui
+        'rbEOP': (350, 0, 131, 22),                 # .ui
+        # winQuery
+        'btnDataIdInfo': (376, 5, 31, 20),
+        'btnIntervalInfo': (100, 76, 31, 20),
+        'btnQueryOptionsInfo': (110, 401, 31, 20),
+        'chkbOverlay': (150, 424, 131, 22),         # .ui
+    },
+    'retro': {
+        # Press Start — inventory RESPONSE pass 10 (Refresh/Undo y correction)
+        'btnRefresh': (56, 8, 32, 32),              # was y=12; RESPONSE -4 y
+        'btnUndo': (106, 8, 32, 32),                # was y=12; RESPONSE -4 y
+        'chkbRawData': (108, 60, 21, 22),
+        'chkbQAQC': (261, 88, 21, 22),              # was 259; RESPONSE +2 x
+        'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
+        'chkbDebug': (130, 149, 21, 22),
+        'chkbEnableSQL': (206, 179, 21, 22),
+        'rbBOP': (193, 0, 141, 22),                 # was 199; -6 x
+        'rbEOP': (350, 0, 131, 22),
+        'btnDataIdInfo': (406, 5, 31, 20),
+        'btnIntervalInfo': (164, 76, 31, 20),
+        'btnQueryOptionsInfo': (164, 401, 31, 20),
+        'chkbOverlay': (162, 424, 131, 22),
+    },
+}
+
+# Neon green used for retro scrollbars and tab chrome
+RETRO_NEON_GREEN = '#00FF00'
+
+# Retro-only: smaller Press Start on these (objectName → leave rest at role sizes)
+RETRO_SMALL_FONT_CONTROLS = frozenset({
+    'cbUTCOffset',
+    'rbCustomDateTime',
+    'rbPrevDayToCurrent',
+    'rbPrevWeekToCurrent',
+    'chkbDelta',
+    'chkbOverlay',
+    'lblTimeStampMethod',
+    'rbBOP',
+    'rbEOP',
+})
+RETRO_SMALL_FONT_PT = 6  # one step under general ui 8pt
+
+# Query window text buttons: one point larger than normal button role (retro 6→7, default 10→11)
+QUERY_LARGE_BUTTON_CONTROLS = frozenset({
+    'btnAddQuery',
+    'btnQuery',
+})
+
+# Windows + retro only: one point smaller (Press Start is roomier on Win metrics)
+WIN_RETRO_SMALLER_CONTROLS = frozenset({
+    'btnLoadQuickLook',
+    'btnClearQuery',
+    'btnSaveQuickLook',
+    'btnDeleteQuickLook',  # same row as Load/Save; keep quartet consistent
+    'listQueryList',
+})
+
+# Extra Y offset (pixels) applied on a given platform for default (Noto) mode only.
+# btnRefresh/btnUndo: Linux y=6; Windows y=8 (+2). Final for non-retro.
+PLATFORM_LAYOUT_Y_NUDGE = {
+    'win32': {
+        'default': {
+            'btnRefresh': 2,
+            'btnUndo': 2,
+        },
+    },
+}
+
+# Query-style lists that need tight item rows on Windows non-retro
+# (SQL snippet list + Query dataID list only — not every QListWidget)
+COMPACT_LIST_OBJECT_NAMES = frozenset({'listSnippets', 'listQueryList'})
 
 class customPasswordEdit(QLineEdit):
     """Password field using Qt's native echo modes (no dual realText/display bookkeeping).
@@ -53,28 +174,608 @@ class customPasswordEdit(QLineEdit):
     def isRevealed(self):
         return self.revealed
 
+def _registerBundledFont(relativePath, label):
+    """
+    Register one TTF/OTF from the app bundle. Returns family name or None.
+    Safe to call repeatedly for the same path (Qt may return a new id; we cache outside).
+    """
+    fontPath = Logic.resourcePath(relativePath)
+    if not os.path.isfile(fontPath):
+        Logic.logMessage("ERROR", f"{label} font file missing: {fontPath}")
+        return None
+
+    fontId = QFontDatabase.addApplicationFont(fontPath)
+    if fontId == -1:
+        Logic.logMessage("ERROR", f"Failed to register {label} font (addApplicationFont=-1): {fontPath}")
+        return None
+
+    families = QFontDatabase.applicationFontFamilies(fontId)
+    if not families:
+        Logic.logMessage("ERROR", f"{label} font registered but returned no families: {fontPath}")
+        return None
+
+    family = families[0]
+    Logic.logMessage("INFO", f"Loaded {label} font family {family!r} from {fontPath}")
+    return family
+
+
+def ensureDefaultFontLoaded():
+    """
+    Bundled Noto Sans — non-retro default so Linux/Windows/macOS look the same.
+    Registers Regular/Bold/Italic/BoldItalic; returns the family name or None.
+    Falls back to the OS UI font only if every file fails to load.
+    """
+    global _defaultFontFamilyCache, _defaultFontLoadAttempted
+    if _defaultFontLoadAttempted:
+        return _defaultFontFamilyCache
+    _defaultFontLoadAttempted = True
+
+    family = None
+    for rel in _DEFAULT_FONT_FILES:
+        loaded = _registerBundledFont(rel, 'default (Noto Sans)')
+        if loaded and not family:
+            family = loaded
+
+    _defaultFontFamilyCache = family
+    Config.defaultFontLoaded = bool(family)
+    if not family:
+        Logic.logMessage(
+            "WARN",
+            "Bundled Noto Sans failed to load; non-retro will use the OS UI font",
+        )
+    return family
+
+
+def ensureRetroFontLoaded():
+    """Bundled Press Start 2P — retro mode only."""
+    global _retroFontFamilyCache, _retroFontLoadAttempted
+    if _retroFontLoadAttempted:
+        return _retroFontFamilyCache
+    _retroFontLoadAttempted = True
+
+    family = _registerBundledFont(
+        'ui/fonts/PressStart2P-Regular.ttf',
+        'retro (Press Start 2P)',
+    )
+    _retroFontFamilyCache = family
+    Config.retroFontLoaded = bool(family)
+    return family
+
+
+def activeFontFamily():
+    """
+    Family for the current mode.
+    Retro → bundled Press Start 2P.
+    Default → bundled Noto Sans (cross-platform); '' only if load failed.
+    """
+    if Config.retroMode:
+        return ensureRetroFontLoaded() or ''
+    return ensureDefaultFontLoaded() or ''
+
+
+def rolePointSize(role='ui', retro=None):
+    """Point size for a control role (see FONT_ROLE_SIZES)."""
+    if retro is None:
+        retro = bool(getattr(Config, 'retroMode', False))
+    defaultPt, retroPt = FONT_ROLE_SIZES.get(role, FONT_ROLE_SIZES['ui'])
+    size = retroPt if retro else defaultPt
+
+    # HiDPI: step down slightly so dense pixel fonts / tables stay readable
+    if size > 0:
+        try:
+            screen = QGuiApplication.primaryScreen()
+            if screen is not None and screen.logicalDotsPerInch() >= 140:
+                size = max(5, size - 1)
+        except Exception:
+            pass
+    return size
+
+
+def uiPointSize(retro=None):
+    """Base UI point size (role 'ui'). Kept for About / older call sites."""
+    return rolePointSize('ui', retro=retro)
+
+
+def makeFontForRole(role='ui', pointSize=None):
+    """
+    Build a QFont for a control role.
+    Roles: ui, button, list, table, log, code, about — see FONT_ROLE_SIZES.
+    Non-retro: bundled Noto Sans at role size (fallback OS font if missing).
+    Retro: bundled Press Start 2P, no antialias.
+    """
+    family = activeFontFamily()
+    if pointSize is not None:
+        size = int(pointSize)
+    else:
+        size = rolePointSize(role)
+
+    if family:
+        pt = size if size > 0 else (6 if Config.retroMode else 10)
+        font = QFont(family, pt)
+        if Config.retroMode:
+            font.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
+        return font
+
+    # Fallback: OS UI font (only if bundled default failed to load)
+    font = QFont()
+    if size > 0:
+        font.setPointSize(size)
+    return font
+
+
+def makeUiFont(pointSize=None):
+    """App-wide default font (UI role)."""
+    font = makeFontForRole('ui', pointSize=pointSize)
+    Config.uiFontFamily = activeFontFamily() or ''
+    Config.fontSize = font.pointSize() if font.pointSize() > 0 else rolePointSize('ui')
+    return font
+
+
+def tableDefaultRowHeight(font=None, metrics=None):
+    """
+    Vertical section size for data table ROWS (height, not width).
+
+    Non-retro (Noto) on Linux: height+10 looks perfect (existing design).
+    Non-retro on Windows: native styles add extra cell margin, so use less pad.
+    Retro (Press Start): taller rows — QSS left/right padding only made columns
+    wider; height must come from defaultSectionSize.
+    """
+    if metrics is None:
+        if font is None:
+            font = makeFontForRole('table')
+        metrics = QFontMetrics(font)
+    h = metrics.height()
+    if Config.retroMode:
+        # Press Start metrics.height() is tiny (~11 at 8pt); force real row height
+        # Seifer: -2 from prior (was h+18 / min 32)
+        return max(h + 16, 30)
+    # Non-retro Noto Sans
+    if sys.platform == 'win32':
+        return max(h + 4, 20)
+    return max(h + 10, 22)
+
+
+def tableHeaderBarHeight(font=None, metrics=None):
+    """
+    Horizontal header band height (taller in retro for multi-line labels).
+    Retro two-part headers use a blank line BETWEEN parts (part1 / blank / part2).
+    """
+    if metrics is None:
+        if font is None:
+            font = makeFontForRole('table')
+        metrics = QFontMetrics(font)
+    h = metrics.height()
+    if Config.retroMode:
+        # part1 + blank spacer + part2
+        return max(h * 3 + 6, 42)
+    return 0  # leave native
+
+
+def formatTableHeaderLabel(text):
+    """
+    Retro: two-part headers get a blank line BETWEEN the parts (extra space before
+    the 2nd line), not after the whole label. Idempotent. Default/Noto: unchanged.
+
+    e.g. "Site Name\\nHOUR" → "Site Name\\n\\nHOUR"
+    """
+    if text is None:
+        return ''
+    s = str(text)
+    if not Config.retroMode:
+        return s
+    s = s.strip('\n')
+    if '\n' not in s:
+        return s
+    # First line vs everything after first break (second part may itself have spaces)
+    first, rest = s.split('\n', 1)
+    first = first.rstrip()
+    rest = rest.lstrip('\n').strip()  # drop any prior spacer newlines; keep part-2 text
+    if not rest:
+        return first
+    return f"{first}\n\n{rest}"
+
+
+def applyTableRowMetrics(table, font=None):
+    """Apply row HEIGHT + (retro) header bar HEIGHT — never column width."""
+    if table is None:
+        return
+    try:
+        if font is None:
+            font = table.font()
+        metrics = QFontMetrics(font)
+        size = tableDefaultRowHeight(font, metrics)
+        vHeader = table.verticalHeader()
+        vHeader.setDefaultSectionSize(size)
+        vHeader.setMinimumSectionSize(max(metrics.height() + 2, 16))
+
+        hHeader = table.horizontalHeader()
+        if Config.retroMode:
+            hHeader.setMinimumHeight(tableHeaderBarHeight(font, metrics))
+        else:
+            # Restore native header band when leaving retro (toggle / restart)
+            hHeader.setMinimumHeight(0)
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"applyTableRowMetrics failed: {e}")
+
+
+def nonRetroPlatformStylesheet():
+    """
+    Non-retro (Noto) spacing tweaks that differ by platform.
+    Table item padding only here — listSnippets/listQueryList use applyCompactListStyle.
+    Never QTabBar/QPushButton chrome.
+    """
+    if Config.retroMode:
+        return ""
+    if sys.platform == 'win32':
+        # Optional table tightening (harmless; row height is the main table control)
+        return """
+    QTableWidget::item, QTableView::item {
+        padding-top: 0px;
+        padding-bottom: 0px;
+        padding-left: 3px;
+        padding-right: 3px;
+    }
+    """
+    return ""
+
+
+def applyCompactListStyle(listWidget):
+    """
+    Tighten vertical item padding on SQL snippet list + Query dataID list.
+    Windows non-retro only (Linux Noto list density was already fine).
+    Retro keeps global retroSpacingStylesheet on these lists.
+    """
+    if listWidget is None:
+        return
+    name = listWidget.objectName() or ''
+    if name not in COMPACT_LIST_OBJECT_NAMES:
+        return
+    try:
+        if Config.retroMode:
+            # Clear widget-local override so app-level retro list padding applies
+            # (don't wipe thick scrollbar styles if any were set only here)
+            existing = listWidget.styleSheet() or ''
+            if '/*compact-list*/' in existing:
+                listWidget.setStyleSheet('')
+            listWidget.setSpacing(0)
+            return
+        if sys.platform == 'win32':
+            listWidget.setSpacing(0)
+            listWidget.setStyleSheet("""
+                /*compact-list*/
+                QListWidget::item {
+                    padding-top: 0px;
+                    padding-bottom: 0px;
+                    padding-left: 2px;
+                    padding-right: 2px;
+                    min-height: 0px;
+                }
+            """)
+        else:
+            # Linux/macOS non-retro: leave native metrics (looked correct)
+            listWidget.setSpacing(0)
+            existing = listWidget.styleSheet() or ''
+            if '/*compact-list*/' in existing:
+                listWidget.setStyleSheet('')
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"applyCompactListStyle({name}) failed: {e}")
+
+
+def applyModeControlLayouts(app=None, root=None):
+    """
+    Move mode-specific absolute controls (default Noto vs retro Press Start).
+    Call after UI load / on mode apply. Unknown names are skipped.
+    Windows default mode can apply PLATFORM_LAYOUT_Y_NUDGE (e.g. Refresh/Undo +3 y).
+    """
+    mode = 'retro' if Config.retroMode else 'default'
+    coords = CONTROL_LAYOUTS.get(mode) or {}
+    if not coords:
+        return
+
+    yNudges = (
+        PLATFORM_LAYOUT_Y_NUDGE.get(sys.platform, {}).get(mode, {})
+        if not Config.retroMode
+        else {}
+    )
+
+    if root is not None:
+        widgets = [root] + list(root.findChildren(QWidget))
+    elif app is not None:
+        try:
+            widgets = list(app.allWidgets())
+        except Exception:
+            widgets = list(app.topLevelWidgets())
+    else:
+        return
+
+    byName = {}
+    for w in widgets:
+        n = w.objectName()
+        if n and n in coords:
+            byName[n] = w
+
+    for name, (x, y, w, h) in coords.items():
+        widget = byName.get(name)
+        if widget is None:
+            continue
+        try:
+            yAdj = y + int(yNudges.get(name, 0))
+            widget.setGeometry(x, yAdj, w, h)
+        except Exception as e:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"applyModeControlLayouts {name}: {e}")
+
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"applyModeControlLayouts: mode={mode} platform={sys.platform} "
+            f"applied={len(byName)}/{len(coords)} yNudges={yNudges or '{}'}",
+        )
+
+
+def retroSpacingStylesheet():
+    """
+    Retro only — targeted VERTICAL room for Press Start (not width).
+
+    Global padding was removed: left/right QSS on table cells/headers made the
+    table look wider without making rows taller. Row height is set in
+    tableDefaultRowHeight / applyTableRowMetrics instead.
+
+    Keep only:
+      • QTabBar::tab — taller tab labels (vertical pad)
+      • QHeaderView::section — vertical pad only (no extra left/right)
+      • List items — vertical pad (query/SQL lists)
+      • Light checkbox/radio spacing for Press Start density
+    """
+    if not Config.retroMode:
+        return ""
+    # Tab chrome + close icons; stripped when retro off
+    # (readBaseStylesheet / setRetroStyles rebuild without this block).
+    # Hover for close is a 2nd image (same pattern as default dark/light pair).
+    green = RETRO_NEON_GREEN
+    return f"""
+    /* Retro tabs: neon green + black text. NO tab:hover fill — that lit the whole
+       tab and stole hover from the close button. Only close-button:hover changes. */
+    QTabBar::tab {{
+        background: {green};
+        color: #000000;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        padding-left: 8px;
+        padding-right: 8px;
+        border: 1px solid #00aa00;
+        margin-right: 2px;
+    }}
+    QTabBar::tab:selected {{
+        background: {green};
+        color: #000000;
+        font-weight: bold;
+        border: 1px solid #003300;
+    }}
+    QTabBar::tab:!selected {{
+        background: #00cc00;
+        color: #000000;
+    }}
+    /* Keep tab fill stable under mouse (no whole-tab brighten) */
+    QTabBar::tab:hover,
+    QTabBar::tab:selected:hover {{
+        background: {green};
+        color: #000000;
+    }}
+    QTabBar::tab:!selected:hover {{
+        background: #00cc00;
+        color: #000000;
+    }}
+    /* Close only: black disc + green X; hover = 2nd image (brighter X) */
+    QTabBar::close-button {{
+        image: url(ui/icons/Tab-close-retro.png);
+        background: transparent;
+        border: none;
+        border-radius: 8px;
+        subcontrol-position: right;
+        subcontrol-origin: padding;
+        width: 16px;
+        height: 16px;
+        margin-right: 10px;
+    }}
+    QTabBar::close-button:hover {{
+        image: url(ui/icons/Tab-close-retro-hover.png);
+        background: transparent;
+    }}
+    QTabBar::close-button:pressed {{
+        image: url(ui/icons/Tab-close-retro-pressed.png);
+        background: transparent;
+    }}
+    /* List item air (vertical); keep horizontal small */
+    QListWidget::item, QListView::item {{
+        padding-top: 5px;
+        padding-bottom: 5px;
+        padding-left: 3px;
+        padding-right: 3px;
+        min-height: 1.2em;
+    }}
+    QCheckBox, QRadioButton {{
+        spacing: 10px;
+        min-height: 1.3em;
+    }}
+    """
+
+
+def readBaseStylesheet():
+    """
+    Base qss (hover, tab close) + mode/platform item spacing.
+    Fonts are applied via QFont (not QSS font-size on tabs/buttons) so Windows
+    keeps native tab/button chrome.
+    """
+    path = Logic.resourcePath('ui/stylesheet.qss')
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            base = f.read()
+    except Exception as e:
+        Logic.logMessage("ERROR", f"Could not read stylesheet {path}: {e}")
+        base = ""
+    return base + "\n" + retroSpacingStylesheet() + "\n" + nonRetroPlatformStylesheet()
+
+
+def propagateUiFont(app, font=None):
+    """
+    Apply base UI font to the app default and every existing widget, then
+    upgrade specific control types to role sizes (log larger, etc.).
+    """
+    if font is None:
+        font = makeUiFont()
+    app.setFont(font)
+    try:
+        widgets = list(app.allWidgets())
+    except Exception:
+        widgets = list(app.topLevelWidgets())
+    for w in widgets:
+        try:
+            w.setFont(font)
+        except Exception:
+            pass
+    applyRoleFonts(app)
+    return font
+
+
+def applyRoleFonts(app=None, root=None):
+    """
+    Set role-specific sizes: buttons stay smaller in retro; log/code larger, etc.
+    Call after new windows open if they create tables/editors themselves.
+    Retro-only small fonts for named radios/checkboxes/UTC combo (RETRO_SMALL_FONT_CONTROLS).
+    """
+    buttonFont = makeFontForRole('button')
+    # Add Query / Query Data: one point larger than standard button role
+    queryLargeButtonFont = makeFontForRole(
+        'button',
+        pointSize=max(rolePointSize('button') + 1, 1),
+    )
+    logFont = makeFontForRole('log')
+    tableFont = makeFontForRole('table')
+    listFont = makeFontForRole('list')
+    codeFont = makeFontForRole('code')
+    retroSmallFont = None
+    if Config.retroMode:
+        retroSmallFont = makeFontForRole('ui', pointSize=RETRO_SMALL_FONT_PT)
+    # Windows retro: named Query controls one point smaller
+    winRetroSmaller = (
+        Config.retroMode and sys.platform == 'win32'
+    )
+    winSmallerButtonFont = None
+    winSmallerListFont = None
+    if winRetroSmaller:
+        winSmallerButtonFont = makeFontForRole(
+            'button', pointSize=max(rolePointSize('button') - 1, 5)
+        )
+        winSmallerListFont = makeFontForRole(
+            'list', pointSize=max(rolePointSize('list') - 1, 5)
+        )
+
+    if root is not None:
+        widgets = [root] + list(root.findChildren(QWidget))
+    elif app is not None:
+        try:
+            widgets = list(app.allWidgets())
+        except Exception:
+            widgets = list(app.topLevelWidgets())
+    else:
+        return
+
+    for w in widgets:
+        try:
+            name = w.objectName() or ''
+            # Retro notes: specific controls at 6pt Press Start (Noto/default untouched)
+            if Config.retroMode and retroSmallFont is not None and name in RETRO_SMALL_FONT_CONTROLS:
+                w.setFont(retroSmallFont)
+                continue
+            # Windows + retro: Load/Clear/Save/Delete Quick Look + dataID list −1pt
+            if winRetroSmaller and name in WIN_RETRO_SMALLER_CONTROLS:
+                if isinstance(w, QListWidget) and winSmallerListFont is not None:
+                    w.setFont(winSmallerListFont)
+                    applyCompactListStyle(w)
+                    continue
+                if isinstance(w, QPushButton) and winSmallerButtonFont is not None:
+                    w.setFont(winSmallerButtonFont)
+                    continue
+            if isinstance(w, QPushButton):
+                if name in QUERY_LARGE_BUTTON_CONTROLS:
+                    w.setFont(queryLargeButtonFont)
+                else:
+                    # Keep retro button size at the tuned width/fit (smaller than labels)
+                    w.setFont(buttonFont)
+            elif isinstance(w, (QPlainTextEdit, QTextEdit)):
+                lname = name.lower()
+                if 'log' in lname:
+                    w.setFont(logFont)
+                else:
+                    w.setFont(codeFont)
+            elif isinstance(w, QTableWidget):
+                w.setFont(tableFont)
+                try:
+                    w.horizontalHeader().setFont(tableFont)
+                    w.verticalHeader().setFont(tableFont)
+                except Exception:
+                    pass
+                applyTableRowMetrics(w, tableFont)
+            elif isinstance(w, QListWidget):
+                w.setFont(listFont)
+                applyCompactListStyle(w)
+            elif isinstance(w, QTreeView):
+                w.setFont(listFont)
+        except Exception:
+            pass
+
+
 def applyStylesAndFonts(app, mainTable, queryList):
-    """Apply stylesheet and retro font if enabled."""
-    with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
-        app.setStyleSheet(f.read())
+    """Load config, stylesheet, and bundled UI fonts (Noto Sans or Press Start)."""
     config = loadConfig()
     Config.debug = config['debugMode']
     Config.utcOffset = config['utcOffset']
     Config.periodOffset = resolvePeriodOffset(config)
     Config.retroMode = config.get('retroMode', True)
+
+    # Pre-register the font for the active mode (and About always wants Press Start)
     if Config.retroMode:
-        fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
-        fontId = QFontDatabase.addApplicationFont(fontPath)
-        if fontId != -1:
-            fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-            retroFontObj = QFont(fontFamily, 10)
-            retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
-            app.setFont(retroFontObj)
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Applied retro font at startup")
-        setRetroStyles(app, True, mainTable, queryList)
+        ensureRetroFontLoaded()
     else:
-        setRetroStyles(app, False, mainTable, queryList)
+        ensureDefaultFontLoaded()
+        ensureRetroFontLoaded()  # About dialog always uses pixel font
+
+    app.setStyleSheet(readBaseStylesheet())
+    appFont = propagateUiFont(app)
+    # Mode-specific ABS button/checkbox positions (default Noto vs retro)
+    applyModeControlLayouts(app=app)
+
+    try:
+        info = QFontInfo(appFont)
+        Logic.logMessage(
+            "INFO",
+            "UI font: platform={} retroMode={} requested={!r} actual={!r} "
+            "uiPt={} buttonPt={} logPt={} defaultLoaded={} retroLoaded={}".format(
+                sys.platform,
+                Config.retroMode,
+                Config.uiFontFamily or '(system fallback)',
+                info.family(),
+                rolePointSize('ui'),
+                rolePointSize('button'),
+                rolePointSize('log'),
+                Config.defaultFontLoaded,
+                Config.retroFontLoaded,
+            ),
+        )
+    except Exception as e:
+        Logic.logMessage("WARN", f"UI font diagnostics failed: {e}")
+
+    setRetroStyles(app, bool(Config.retroMode), mainTable, queryList)
+    # setRetroStyles may clear listQueryList stylesheet — re-apply compact list padding
+    try:
+        for w in app.allWidgets():
+            if isinstance(w, QListWidget):
+                applyCompactListStyle(w)
+    except Exception:
+        pass
 
 def loadDataDictionary(table):
     """Load the data dictionary into the provided table."""
@@ -235,31 +936,22 @@ def centerWindowToParent(ui):
     if Config.debug:
         Logic.logMessage("DEBUG", f"centerWindowToParent: Centered {ui.objectName()} at {rect.topLeft().x()},{rect.topLeft().y()}")
 
-def applyRetroFont(widget, pointSize=10):
-    if Config.retroMode:
-        fontPath = Logic.resourcePath('ui/fonts/PressStart2P-Regular.ttf')
-        fontId = QFontDatabase.addApplicationFont(fontPath)
-
-        if fontId != -1:
-            fontFamily = QFontDatabase.applicationFontFamilies(fontId)[0]
-            retroFontObj = QFont(fontFamily, pointSize)
-            retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
-            widget.setFont(retroFontObj)
-
-            for child in widget.findChildren(QWidget):
-                child.setFont(retroFontObj)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Applied retro font to widget: {widget.objectName()}")
-        else:
-            if Config.debug:
-                Logic.logMessage("ERROR", f"Failed to load retro font from {fontPath}")
-    else:
-        widget.setFont(QFont())
-
-        for child in widget.findChildren(QWidget):
-            child.setFont(QFont())
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Reverted widget {widget.objectName()} to system font")
+def applyRetroFont(widget, pointSize=None):
+    """
+    Apply the current UI font (bundled Noto Sans or Press Start) to a widget tree.
+    pointSize=None uses the UI role size for the active mode.
+    """
+    font = makeUiFont(pointSize)
+    widget.setFont(font)
+    for child in widget.findChildren(QWidget):
+        child.setFont(font)
+    applyRoleFonts(root=widget)
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"applyRetroFont: {widget.objectName()} family={font.family()!r} "
+            f"size={font.pointSize()} retro={Config.retroMode}",
+        )
 
 def thickScrollBarStyle(retro=None, minHandle=48, track=20):
     """
@@ -334,14 +1026,14 @@ def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQuery
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Applied retro scroll bar styles to {widget.objectName()}")
-        app.setStyleSheet(app.styleSheet() + retroStyles)
+        # Keep font rules; append scroll theme only
+        app.setStyleSheet(readBaseStylesheet() + retroStyles)
 
         if Config.debug:
             Logic.logMessage("DEBUG", "Applied retro scroll bar styles globally")
     else:
-        # Reset to base stylesheet
-        with open(Logic.resourcePath('ui/stylesheet.qss'), 'r') as f:
-            app.setStyleSheet(f.read())
+        # Reset to base stylesheet + current font rules (no neon scroll handles)
+        app.setStyleSheet(readBaseStylesheet())
         for widget in [mainTable, webQueryList, internalQueryList]:
             if widget:
                 widget.setStyleSheet("")

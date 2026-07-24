@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QCoreApplication, QTimer
 from PyQt6.QtGui import QColor, QBrush, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
-from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils
+from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils
 
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)
@@ -492,7 +492,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"buildTable: USBR not in dict, header {i}: {fullLabel}")
         processedHeaders.append(fullLabel)
-    headers = processedHeaders
+    # Retro: trailing blank line under double headers so body text is not clipped
+    headers = [Utils.formatTableHeaderLabel(h) for h in processedHeaders]
     skipDateCol = dataDictionaryTable is not None
     numCols = len(headers)
     numRows = len(data)
@@ -507,17 +508,31 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     table.blockSignals(True)
     table.setUpdatesEnabled(False)
 
-    table.setRowCount(numRows)
-    table.setColumnCount(numCols)
-    table.setHorizontalHeaderLabels(headers)
-    table.show()
-
     header = table.horizontalHeader()
     vHeader = table.verticalHeader()
     # NEVER ResizeToContents on large tables — Qt walks every row (multi-minute freeze)
     header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     header.setStretchLastSection(False)
     vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+
+    # Row height before setRowCount so new sections pick up the platform-tuned size
+    # (non-retro Windows is tighter; Linux Noto +10; retro keeps roomier pad)
+    _rowFont = table.font()
+    _rowMetrics = QFontMetrics(_rowFont)
+    _rowH = Utils.tableDefaultRowHeight(font=_rowFont, metrics=_rowMetrics)
+    vHeader.setDefaultSectionSize(_rowH)
+    vHeader.setMinimumSectionSize(max(_rowMetrics.height() + 2, 16))
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"buildTable: rowHeight={_rowH} fontH={_rowMetrics.height()} "
+            f"retro={Config.retroMode} platform={__import__('sys').platform}",
+        )
+
+    table.setRowCount(numRows)
+    table.setColumnCount(numCols)
+    table.setHorizontalHeaderLabels(headers)
+    table.show()
 
     timestamps = []
     if dataDictionaryTable:
@@ -528,6 +543,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         font = table.font()
         metrics = QFontMetrics(font)
         sampleTs = timestamps[0] if timestamps else "01/01/26 00:00:00"
+        # Original fudge (+16). No extra horizontal "padding" on the timestamp rail.
         vHeader.setMinimumWidth(max(120, metrics.horizontalAdvance(sampleTs) + 16))
     else:
         table.verticalHeader().setVisible(False)
@@ -552,8 +568,13 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
         else:
             maxCellWidth = metrics.horizontalAdvance("0.00")
-        headerLines = headers[c].split('\n')
-        headerWidth = max(metrics.horizontalAdvance(line.strip()) for line in headerLines) if headerLines else 0
+        # Non-empty header lines only (blank BETWEEN parts does not drive width)
+        headerLines = [line.strip() for line in headers[c].split('\n') if line.strip()]
+        headerWidth = max(
+            (metrics.horizontalAdvance(line) for line in headerLines),
+            default=0,
+        )
+        # Exact original buildTable width math (pre-padding experiments)
         finalWidth = max(maxCellWidth, headerWidth)
         if headerWidth > maxCellWidth:
             finalWidth = maxCellWidth + (headerWidth - maxCellWidth) + 10
@@ -605,9 +626,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     for c in range(numCols):
         table.setColumnWidth(c, columnWidths[c])
 
-    rowHeight = metrics.height() + 10
-    adjustedRowHeight = max(rowHeight, metrics.height() + 2)
-    vHeader.setDefaultSectionSize(adjustedRowHeight)
+    # Re-assert row height after fill (platform/font aware; same helper as startup)
+    Utils.applyTableRowMetrics(table, font=table.font())
 
     table.blockSignals(False)
     table.setUpdatesEnabled(True)

@@ -7,42 +7,53 @@ Workflow:
   - FAIL → note here; Grok re-fixes
 
 
-GATE before staging push
+Need retest (this pass)
 --------------------------------------------------------------------------------
 
-V1) Large multi-source query finishes through overlay/delta + table display
-   Steps: 2-year mega query (USGS + multi-HDB + Aquarius, many series), with Overlay
-          and/or Delta if that is how you normally run it.
-   EXPECT:
-     - Building table... shows row progress (does not freeze forever).
-     - At 97%: "Overlay/delta: reading... / computing pairs... / writing..." updates
-       (NOT a silent hang on "Applying overlay/delta").
-     - Then QAQC / overlay colors if enabled; table appears.
-   Notes:
-     2026-07-24 PATH crash FIXED.
-     2026-07-24 buildTable hang improved; then hung on Applying overlay/delta @ 97%.
-     Cause: processOverlay called removeColumn for every pair on 10k+ row tables —
-             each remove shifts every remaining cell (O(pairs × rows × cols)).
-     FIX: offline extract → compute merges/deltas → single table rewrite; progress
-          yields; no removeColumn loop. Retest mega query with overlay/delta on.
+[ ] Fonts/layout: Noto default ↔ retro toggle (Linux then Windows)
+   Steps:
+     a. Retro ON + restart: Refresh/Undo at (56,10)/(106,10); QAQC at 259; Query info icons;
+        Add Query/Query Data 7pt; headers part1 blank part2; table no QSS width pad.
+     b. Retro OFF + restart: Noto positions (default map), 10pt UI, header minHeight cleared,
+        Overlay/BOP/EOP back to .ui coords (150 / 210 / 350).
+     c. Log Viewer always LAST tab.
+     d. Windows: same a–c; Refresh/Undo y=8 only in default (PLATFORM_LAYOUT_Y_NUDGE).
+
+[x] Log Viewer tab
+   Steps:
+     a. Click Log (notebook) button on main toolbar.
+     b. Expect Log Viewer tab opens; entries from app.log + app.log.1..N loaded.
+     c. Newest entry at top; multi-line errors keep traceback with the ERROR line.
+     d. Colors: ERROR/CRITICAL red, WARN orange, INFO blue, DEBUG gray.
+     e. Close tab with X; button opens it again and reloads logs.
+   Notes: Logic.loadAllAppLogEntries; pteLog colored insert.
 
 
-Confirmed recently
+Oracle speed decision (keep C)
 --------------------------------------------------------------------------------
-[x] Data Dictionary scrollbar thick + retro theme
-[x] Large multi-source query: no Oracle PATH 32767 crash
-[x] Tab order main + query
-[x] Options remask secrets on close
-[x] SQL Query Builder background thread
-[x] Aquarius Label = Label only
-[x] (prior bug-smash cluster)
+[x] Keep connection reuse (C); do NOT re-add batch SDIDs (A).
+    Why A can be slower even if fewer round-trips:
+      - Larger result sets / more bytes over WAN per query
+      - IN-list plans can be worse than equality on (SDID, time) indexes
+      - Extra Python split/group work
+      - After C, connect cost is already gone — day queries gain little from A
+      - Oracle result/plan cache can favor repeated single-SDID shapes
+    2-year: C left HDB ~30s behind Aquarius — good enough.
 
 
-Deferred / external
+Confirmed
 --------------------------------------------------------------------------------
-[!] Oracle HDB speed after staging (C connection reuse first)
-[!] Windows taskbar icon via VB.NET launcher
-[!] USGS monthly/yearly — OGC continuous + daily only
-[!] Retro restart Windows / Windows text truncation
+[x] Option C connection reuse
+[x] V1 large table build + overlay
+[x] PATH Instant Client env limit
+[x] Prior bug-smash cluster
+
+
+Deferred
+--------------------------------------------------------------------------------
+[!] Windows taskbar via VB launcher
+[!] USGS monthly/yearly
+[!] Retro restart Windows
+[!] Windows text/font (code done — needs Windows retest)
 [!] Aquarius daily 2300 TZ
-[!] Features: plots, log viewer, goat, formatting rules, git/readme
+[!] Features: plots, search/filter on log tab later, goat, formatting rules, git/readme
