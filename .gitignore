@@ -53,7 +53,7 @@ Thumbs.db
 *.log
 temp/
 tmp/
-*.grok
+documentation/*.grok
 
 # Oracle client
 oracle/client
