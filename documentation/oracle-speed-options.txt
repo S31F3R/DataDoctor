@@ -23,11 +23,13 @@ Why a 2-year × many SDIDs query is slow
 Options (with Seifer decisions)
 -------------------------------
 
-A) Batch SDIDs in one SQL (WHERE site_datatype_id IN (...))
+A) Batch SDIDs in one SQL (WHERE site_datatype_id IN (...))  — IMPLEMENTED (retest)
    - One round-trip for many series in the same chunk/DB.
    - Biggest win for “100 parameters” style lists.
    - Need careful bind limits, result split by SDID, memory for wide results.
-   DECISION: Hold off for now; keep as a later option. Pair with D when we try it.
+   DECISION: Do after C validated.
+   CODE: sdidBatchSize=25; tasks = (batch, dateRange); _buildMultiSdidQueries IN-list;
+         results split by SDID into same result shape as before.
 
 B) Fewer / smarter date chunks  — REMOVED
    - Too risky (timeouts, huge result sets).
@@ -43,7 +45,8 @@ C) Connection reuse per worker (or per sqlRead)  — IMPLEMENTED (retest)
 
 D) Connection pool (oracledb pool)
    - Acquire/release instead of full connect each time.
-   DECISION: Use when we try A (batch SDIDs).
+   DECISION: Deferred — C already reuses one session per worker for a full sqlRead.
+             Revisit pool if we need share-across successive queries / mapConn merge.
 
 E) Database links / single DSN strategy
    - Already uses primary DSN + @db_link where links exist (3 HDBs linked;
@@ -58,11 +61,12 @@ F) Parallelism tuning (maxThreads)
 G) Reduce metadata work when not needed  — REMOVED
    - r_base / maps needed for details context menu.
 
-When we green-light efficiency work (after staging push)
---------------------------------------------------------
-1. C — per-worker connection reuse
-2. A + D — multi-SDID IN-list + pool
-3. Leave F (threads) alone unless profiling says otherwise
+Progress
+--------
+1. C — per-worker connection reuse  ✓ done / confirmed
+2. A — multi-SDID IN-list            ✓ implemented — retest
+3. D — pool                         deferred (C covers primary case)
+4. F — threads                      leave alone unless profiling says otherwise
 
 Not first steps
 ---------------

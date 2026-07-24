@@ -7,26 +7,28 @@ Workflow:
   - FAIL → note here; Grok re-fixes
 
 
-Need retest (this pass) — Oracle connection reuse (option C)
+Need retest (this pass) — Oracle option A: batch SDIDs
 --------------------------------------------------------------------------------
 
-1) HDB multi-task reuse: fewer logins, still correct data
+1) Multi-series HDB IN-list batching (with connection reuse from C)
    Steps:
-     a. Internal query with several HDB series over a multi-day range (enough to
-        create multiple SDID × chunk tasks — e.g. week+ of HOUR, or 2-year mega).
-     b. Optionally watch debug log: each worker should log "opened reusable
-        connection" once and "closed connection after N task(s)" with N > 1.
+     a. Internal query with many HDB series on one DB (e.g. 20–50+ LCHDB series),
+        yesterday→now or multi-day HOUR (same as daily use is fine).
+     b. Optional debug log: "batch of N SDIDs", "interval IN-list query n=N",
+        fewer batch tasks than (#series × #chunks).
    EXPECT:
-     - Results match previous behavior (values, meta/details still work).
-     - Wall time lower than connect-per-task (esp. over WAN); no auth spam.
-     - Wrong password still fails fast (one clear login error).
-   Notes: sqlRead workers open 1 Oracle session each, run many tasks, then close.
-          executeCustomQueryWithRetry reconnects once on dropped connections.
+     - Values match prior runs (spot-check a few SDIDs).
+     - Context-menu meta / r_base still works on HDB cells.
+     - Faster than single-SDID SQL when many series (fewer round-trips).
+     - Connection reuse still: one open/close per worker, N batch tasks.
+   Notes: sdidBatchSize=25; WHERE site_datatype_id IN (:1..:n) + date range.
 
 
-GATE / already confirmed (staging)
+Confirmed
 --------------------------------------------------------------------------------
-[x] V1 large multi-source build table + overlay/delta finishes (not hang)
+[x] Oracle option C — connection reuse per worker
+      2026-07-24 works great (HDB ~60s slower than USGS/Aquarius on normal day query)
+[x] V1 large table build + overlay
 [x] PATH Instant Client env limit
 [x] Data Dictionary scrollbar retro
 [x] Prior bug-smash cluster
@@ -34,9 +36,9 @@ GATE / already confirmed (staging)
 
 Deferred
 --------------------------------------------------------------------------------
-[!] Oracle A batch SDIDs + D pool (after C validated)
+[!] Oracle D pool (optional; C covers per-sqlRead reuse — pool if multi-query later)
 [!] Windows taskbar via VB launcher
-[!] USGS monthly/yearly — OGC continuous + daily only
+[!] USGS monthly/yearly
 [!] Retro restart Windows / Windows text
 [!] Aquarius daily 2300 TZ
 [!] Features: plots, log viewer, etc.

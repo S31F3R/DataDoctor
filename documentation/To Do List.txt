@@ -5,7 +5,7 @@
     -This might be tied to certain controls. THe SQL Query Builder area isn't impacted, either is the table output from the query, but the SQL quicklooks to the right are
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
--Oracle HDB speed: C connection reuse implemented (see test.txt) — then A batch SDIDs + D pool
+-Oracle HDB speed: C reuse done; A batch SDIDs in test (D pool deferred)
     -See documentation/oracle-speed-options.txt
     -Do not raise maxThreads without measuring; B/G removed
 
