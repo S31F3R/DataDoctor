@@ -8,7 +8,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QTableWidgetItem,
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
                              QVBoxLayout, QHBoxLayout, QSplitter, QLabel)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QPalette, QIcon
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config
@@ -18,6 +18,44 @@ from ui.uiOptions import uiOptions
 from ui.uiQuery import uiQuery
 from ui.uiDetails import uiDetails
 from core.Oracle import oracleConnection
+
+
+class _sqlQuerySignals(QObject):
+    finished = pyqtSignal(object)   # list of row dicts
+    failed = pyqtSignal(str, bool)  # message, isAuthError
+
+
+class _sqlQueryWorker(QRunnable):
+    """Run Oracle custom SQL off the UI thread so the main window stays responsive."""
+    def __init__(self, dsn, sqlText, signals):
+        super().__init__()
+        self.dsn = dsn
+        self.sqlText = sqlText
+        self.signals = signals
+
+    def run(self):
+        conn = None
+        try:
+            from core.Oracle import OracleAuthError
+            conn = oracleConnection(self.dsn)
+            conn.connect()
+            results = conn.executeCustomQuery(self.sqlText)
+            self.signals.finished.emit(results if results is not None else [])
+        except Exception as e:
+            isAuth = False
+            try:
+                from core.Oracle import OracleAuthError, isAuthError
+                isAuth = isinstance(e, OracleAuthError) or isAuthError(e)
+            except Exception:
+                pass
+            Logic.logException("sqlQueryWorker: Failed to execute", e)
+            self.signals.failed.emit(str(e), isAuth)
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
 class uiMain(QMainWindow):
     def __init__(self):
@@ -372,11 +410,15 @@ class uiMain(QMainWindow):
                     Logic.logMessage("WARN", f"deleteSnippet: File not found: {filePath}")
 
     def runCustomQuery(self):
-        """Run custom SQL from pteSQL and display in sqlTable."""
+        """Run custom SQL from pteSQL on a background thread; fill sqlTable on completion."""
         if not self.pteSQL or not self.sqlTable:
             if Config.debug:
                 Logic.logMessage("WARN", "pteSQL or sqlTable not found, skipping runCustomQuery")
             return
+        if getattr(self, '_sqlQueryRunning', False):
+            QMessageBox.information(self, "Run Query", "A SQL query is already running.")
+            return
+
         sqlText = self.pteSQL.toPlainText().strip()
 
         if not sqlText:
@@ -389,21 +431,32 @@ class uiMain(QMainWindow):
         dsn = db.split('-')[1].lower() if '-' in db else db.lower() # e.g., 'USBR-LCHDB' -> 'lchdb'
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query")
+            Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query (background)")
+
+        self._sqlQueryRunning = True
+        if self.btnRunQuery:
+            self.btnRunQuery.setEnabled(False)
+
+        signals = _sqlQuerySignals()
+        # Keep reference so signals aren't GC'd before emit
+        self._sqlQuerySignals = signals
+        signals.finished.connect(self._onSqlQueryFinished)
+        signals.failed.connect(self._onSqlQueryFailed)
+        worker = _sqlQueryWorker(dsn, sqlText, signals)
+        QThreadPool.globalInstance().start(worker)
+
+    def _onSqlQueryFinished(self, results):
+        self._sqlQueryRunning = False
+        if self.btnRunQuery:
+            self.btnRunQuery.setEnabled(True)
+
+        if not results:
+            QMessageBox.information(self, "Query Result", "No results returned.")
+            if Config.debug:
+                Logic.logMessage("DEBUG", "runCustomQuery: No results from query")
+            return
 
         try:
-            conn = oracleConnection(dsn)
-            conn.connect()
-            results = conn.executeCustomQuery(sqlText)
-            conn.close()
-
-            if not results:
-                QMessageBox.information(self, "Query Result", "No results returned.")
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "runCustomQuery: No results from query")
-                return
-
-            # Build sqlTable from results (list of dicts)
             columns = list(results[0].keys()) if results else []
             self.sqlTable.setColumnCount(len(columns))
             self.sqlTable.setHorizontalHeaderLabels(columns)
@@ -417,17 +470,22 @@ class uiMain(QMainWindow):
             self.sqlTable.resizeColumnsToContents()
 
             if Config.debug:
-                Logic.logMessage("DEBUG", f"runCustomQuery: Populated sqlTable with {len(results)} rows, {len(columns)} columns")
+                Logic.logMessage(
+                    "DEBUG",
+                    f"runCustomQuery: Populated sqlTable with {len(results)} rows, {len(columns)} columns"
+                )
         except Exception as e:
-            Logic.logException("runCustomQuery: Failed to execute", e)
-            try:
-                from core.Oracle import OracleAuthError
-                if isinstance(e, OracleAuthError):
-                    QMessageBox.warning(self, "Oracle Login Failed", str(e))
-                else:
-                    QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
-            except Exception:
-                QMessageBox.warning(self, "Query Error", f"Failed to execute query: {e}")
+            Logic.logException("runCustomQuery: Failed to populate table", e)
+            QMessageBox.warning(self, "Query Error", f"Failed to display results: {e}")
+
+    def _onSqlQueryFailed(self, message, isAuthError):
+        self._sqlQueryRunning = False
+        if self.btnRunQuery:
+            self.btnRunQuery.setEnabled(True)
+        if isAuthError:
+            QMessageBox.warning(self, "Oracle Login Failed", message)
+        else:
+            QMessageBox.warning(self, "Query Error", f"Failed to execute query: {message}")
 
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""

@@ -10,30 +10,38 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
-1) Aquarius Label = Label only (no location /n line)
-   Steps: Internal Aquarius → cell Show details.
-   EXPECT: first row "Aquarius Label" shows only the series Label text (single line).
-           LocationIdentifier is NOT under it.
-   Notes: 2026-07-23 kinda fixed with Label+location; removed location line.
+1) Options: remask secrets on close
+   Steps:
+     a. Open Options → reveal AQ password, USGS key, and/or Oracle password (eye icons).
+     b. Close via OK, Cancel, or window X.
+     c. Re-open Options.
+   EXPECT: all three secret fields are masked again; eye icons show Hidden state.
+   Notes: hideEvent + showEvent call maskSensitiveFields().
 
-2) Taskbar / app icon
-   Steps: Launch Data Doctor (Linux panel / Windows taskbar).
-   EXPECT: app uses DataDoctor.ico (or Data Doctor.png fallback), not a generic Python icon.
-   Notes: app.setWindowIcon + winMain.setWindowIcon at startup.
+2) SQL Query Builder does not freeze UI
+   Steps: Enable SQL, run a non-trivial Oracle query (or even a slow one).
+   EXPECT: main window stays responsive while query runs (can drag window, click elsewhere);
+           Run button disabled until done; results fill sqlTable when finished.
+           Wrong password still shows single login-failed style message.
+   Notes: Oracle work runs on QThreadPool; table fill on main thread when done.
 
-3) Wrong HDB/Oracle password does not spam-lock account
-   Steps: Set deliberately wrong Oracle password in Options → Save → run internal HDB query
-          (or SQL Builder against HDB). Optionally multi-series / multi-DB.
-   EXPECT:
-     - One clear "Oracle Login Failed" style message (wrong user/password or locked).
-     - Further connects blocked until you save correct credentials in Options again.
-     - Not a storm of failed login attempts from worker threads.
-   Notes: OracleAuthError + process-wide auth fail-fast; cleared on credential save.
+3) Wrong HDB/Oracle password (if not re-checked yet)
+   Steps: Wrong Oracle password → HDB or SQL query.
+   EXPECT: clear auth error; no multi-thread login spam; fixed by saving creds in Options.
+
+
+Known / not a pure Python fix
+--------------------------------------------------------------------------------
+[!] Taskbar icon on Windows when launched via VB.NET → Python
+    Linux OK. Python process icon is controlled by the host .exe / shortcut.
+    Fix belongs on the VB launcher (or ship a PyInstaller/DataDoctor.exe with --icon).
+    Left off active work unless you want a launcher-side change.
 
 
 Confirmed (do not re-break)
 --------------------------------------------------------------------------------
-[x] About secret π icon (clean glyph)
+[x] Aquarius Label = Label only
+[x] About secret π icon
 [x] Header Max/Min show timestamps
 [x] HDB r_base fallback coloring
 [x] Export CSV uses active tab

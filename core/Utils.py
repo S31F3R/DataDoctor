@@ -45,6 +45,11 @@ class customPasswordEdit(QLineEdit):
                 f"Reveal toggled: revealed={self.revealed}, len={len(self.text())}"
             )
 
+    def setMasked(self, masked=True):
+        """Force masked (True) or revealed (False) state."""
+        self.revealed = not masked
+        self.applyEchoMode()
+
     def isRevealed(self):
         return self.revealed
 

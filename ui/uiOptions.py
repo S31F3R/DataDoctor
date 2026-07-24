@@ -251,9 +251,35 @@ class uiOptions(QDialog):
         super().showEvent(event)
         self.loadSettings()
         self.tabWidget.setCurrentIndex(0)
+        # Always start with secrets masked when the dialog opens
+        self.maskSensitiveFields()
 
         if Config.debug:
-            Logic.logMessage("DEBUG", "uiOptions showEvent")    
+            Logic.logMessage("DEBUG", "uiOptions showEvent")
+
+    def hideEvent(self, event):
+        # Re-mask on any close (OK, Cancel, X) so secrets don't stay visible next open
+        self.maskSensitiveFields()
+        super().hideEvent(event)
+
+    def maskSensitiveFields(self):
+        """Mask AQ password, USGS API key, Oracle password; reset eye icons to hidden."""
+        fields = (
+            (getattr(self, 'qleAQPassword', None), getattr(self, 'btnShowPassword', None)),
+            (getattr(self, 'qleUSGSAPIKey', None), getattr(self, 'btnShowUSGSKey', None)),
+            (getattr(self, 'qleOraclePassword', None), getattr(self, 'btnShowOraclePassword', None)),
+        )
+        hiddenIcon = QIcon(Logic.resourcePath('ui/icons/Hidden.png'))
+        for field, btn in fields:
+            if field is not None and hasattr(field, 'setMasked'):
+                field.setMasked(True)
+            elif field is not None:
+                from PyQt6.QtWidgets import QLineEdit
+                field.setEchoMode(QLineEdit.EchoMode.Password)
+            if btn is not None:
+                btn.setIcon(hiddenIcon)
+        if Config.debug:
+            Logic.logMessage("DEBUG", "maskSensitiveFields: AQ/USGS/Oracle secrets masked")
 
     def togglePasswordVisibility(self):
         self.qleAQPassword.toggleReveal()
