@@ -7,8 +7,12 @@ Workflow: To Do List.txt = backlog | test.txt = retest checklist | this file = h
 
 WHERE WE LEFT OFF
 -----------------
-Active focus: **fonts** — package default + retro so they look the same on every OS.
-Non-retro first (make solid on Linux, then Windows); retro polish after.
+Active focus: **fonts / layout** — non-retro Noto first; platform row padding + button ABS coords.
+Workflow Seifer confirmed:
+  1) Fix Windows row padding (done in code — needs Windows retest)
+  2) Seifer moves buttons for default (Noto) on Linux until perfect
+  3) We note which buttons moved → store as default-font locations
+  4) Retro later: same buttons get Press Start offsets
 
 Font model (round 5):
   • **Non-retro (default):** bundled **Noto Sans 10pt**
@@ -50,23 +54,35 @@ core/Utils.py
   - ensureDefaultFontLoaded() registers all four Noto Sans faces
   - activeFontFamily() → Noto Sans (non-retro) or Press Start (retro)
   - FONT_ROLE_SIZES non-retro side set to 10
-  - applyStylesAndFonts logs defaultLoaded + retroLoaded
+  - tableDefaultRowHeight / applyTableRowMetrics (platform-aware)
+  - nonRetroPlatformStylesheet: Windows table/list item padding → 0
+  - applyRoleFonts applies table row metrics to every QTableWidget
+core/Query.py buildTable
+  - sets default section size BEFORE setRowCount (so rows pick up height)
+  - uses Utils.tableDefaultRowHeight (win non-retro tighter)
 core/Config.py
   - defaultFontLoaded flag
 ui/fonts/
-  - added NotoSans-*.ttf + LICENSE-NotoSans.txt
-  - removed TerminessNerdFont + its license
+  - NotoSans-*.ttf + LICENSE-NotoSans.txt; Terminess removed
+documentation/button-layout-inventory.txt
+  - ABS/LAY inventory of all buttons (baseline before Seifer moves)
+
+
+ROW PADDING (non-retro Noto)
+----------------------------
+  Linux:  fontHeight + 10  (unchanged — Seifer: perfect)
+  Windows: fontHeight + 4 + QSS item padding 0 (native styles over-pad)
+  Retro:  fontHeight + 10 + retroSpacingStylesheet (unchanged)
 
 
 IMMEDIATE NEXT
 --------------
-1) Seifer retests Linux non-retro (test.txt):
-     a. Main, Query, Options, tables, SQL, log — Noto Sans 10, Designer-like layout
-     b. Log INFO: requested='Noto Sans' actual='Noto Sans' defaultLoaded=True
-     c. Sign off "looks perfect on my machine" before Windows pass
-2) Windows retest same non-retro (bundled faces travel with the app)
-3) Then retro re-tune if needed (don't change button 6 without ask)
-4) Still open bugs:
+1) Seifer retests Linux non-retro still looks perfect (padding unchanged on Linux)
+2) Seifer retests Windows table row density (should be tighter now)
+3) Seifer moves buttons for default Noto until Query/Options look right
+4) Tell Grok which buttons moved → fill DEFAULT section in button-layout-inventory.txt
+5) Retro later: same control list, second coordinate set
+6) Still open bugs:
      - Retro mode toggle restart fails on Windows (works Linux)
      - Windows taskbar icon via VB.NET launcher (launcher-side)
      - Aquarius daily 2300 TZ

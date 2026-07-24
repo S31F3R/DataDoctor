@@ -10,14 +10,14 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
-[ ] Fonts: bundled Noto Sans (non-retro) + Press Start (retro) — Linux first
+[ ] Fonts: bundled Noto Sans (non-retro) + Press Start (retro)
    Steps:
-     a. retro OFF: UI is bundled Noto Sans 10pt (same look as this Linux machine).
-        Check main window, Query, Options, Data Dictionary, tables, SQL editor.
-        Log INFO line should show requested='Noto Sans' actual='Noto Sans' defaultLoaded=True.
-     b. retro ON: buttons stay ~6pt Press Start; labels/lists/checkboxes ~8; log ~10 + line height.
-        Open Log Viewer — must not crash (setLineHeight int fix).
-     c. After Linux looks solid → Windows retest (same Noto Sans faces are in ui/fonts/).
+     a. Linux retro OFF: Noto Sans 10; table row density still perfect (height+10).
+        Log: requested='Noto Sans' actual='Noto Sans' defaultLoaded=True.
+     b. Windows retro OFF: same Noto font; table rows should NOT look overly padded
+        (height+4 + zero item padding). Compare main table + data dictionary + lists.
+     c. After padding OK: Seifer moves ABS buttons for default Noto; report which moved.
+     d. retro ON later: same buttons as (c); sizes button 6 / ui 8 / log 10.
 
 [x] Log Viewer tab
    Steps:

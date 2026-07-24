@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
     QListWidget, QTreeView, QPushButton,
 )
-from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QGuiApplication, QIcon, QPixmap
+from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
 
 # Bundled fonts (cross-platform):
@@ -223,6 +223,73 @@ def makeUiFont(pointSize=None):
     return font
 
 
+def tableDefaultRowHeight(font=None, metrics=None):
+    """
+    Vertical section size for data tables — font + platform + mode aware.
+
+    Non-retro (Noto) on Linux: height+10 looks perfect (existing design).
+    Non-retro on Windows: native styles add extra cell margin, so use less pad
+    so rows match the Linux density.
+    Retro (Press Start): keep the roomier height+10 used by buildTable today.
+    """
+    if metrics is None:
+        if font is None:
+            font = makeFontForRole('table')
+        metrics = QFontMetrics(font)
+    h = metrics.height()
+    if Config.retroMode:
+        return max(h + 10, h + 2)
+    # Non-retro Noto Sans
+    if sys.platform == 'win32':
+        # Windows QStyle bakes more internal item padding than Fusion/Linux
+        return max(h + 4, 20)
+    # Linux / macOS — match the density Seifer signed off on
+    return max(h + 10, 22)
+
+
+def applyTableRowMetrics(table, font=None):
+    """Apply cross-platform default row height to a QTableWidget (headers + sections)."""
+    if table is None:
+        return
+    try:
+        if font is None:
+            font = table.font()
+        size = tableDefaultRowHeight(font)
+        vHeader = table.verticalHeader()
+        vHeader.setDefaultSectionSize(size)
+        # Allow slightly smaller if user drags, but not below glyph height
+        vHeader.setMinimumSectionSize(max(QFontMetrics(font).height() + 2, 16))
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"applyTableRowMetrics failed: {e}")
+
+
+def nonRetroPlatformStylesheet():
+    """
+    Non-retro (Noto) spacing tweaks that differ by platform.
+    Only list/table item padding — never QTabBar/QPushButton chrome.
+    """
+    if Config.retroMode:
+        return ""
+    if sys.platform == 'win32':
+        # Kill the extra native item margins that make rows look airy on Windows
+        return """
+    QTableWidget::item, QTableView::item {
+        padding-top: 0px;
+        padding-bottom: 0px;
+        padding-left: 3px;
+        padding-right: 3px;
+    }
+    QListWidget::item, QListView::item {
+        padding-top: 1px;
+        padding-bottom: 1px;
+        padding-left: 3px;
+        padding-right: 3px;
+    }
+    """
+    return ""
+
+
 def retroSpacingStylesheet():
     """
     Extra vertical room for dense pixel fonts (Press Start looks like -2 line gap).
@@ -263,7 +330,7 @@ def retroSpacingStylesheet():
 
 def readBaseStylesheet():
     """
-    Base qss (hover, tab close) + optional retro item spacing.
+    Base qss (hover, tab close) + mode/platform item spacing.
     Fonts are applied via QFont (not QSS font-size on tabs/buttons) so Windows
     keeps native tab/button chrome.
     """
@@ -274,7 +341,7 @@ def readBaseStylesheet():
     except Exception as e:
         Logic.logMessage("ERROR", f"Could not read stylesheet {path}: {e}")
         base = ""
-    return base + "\n" + retroSpacingStylesheet()
+    return base + "\n" + retroSpacingStylesheet() + "\n" + nonRetroPlatformStylesheet()
 
 
 def propagateUiFont(app, font=None):
@@ -337,6 +404,7 @@ def applyRoleFonts(app=None, root=None):
                     w.verticalHeader().setFont(tableFont)
                 except Exception:
                     pass
+                applyTableRowMetrics(w, tableFont)
             elif isinstance(w, QListWidget):
                 w.setFont(listFont)
             elif isinstance(w, QTreeView):
