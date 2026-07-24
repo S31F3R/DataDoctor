@@ -1,90 +1,54 @@
-TEST FILE — bugs currently being worked / needing retest
+TEST FILE — currently being worked / needing retest
 ============================================================
 Workflow:
-  - To Do List.txt = backlog only (not being worked yet)
-  - This file = in-progress / ready for Seifer to test
-  - When a test PASSES: mark [x] here (Grok leaves it off To Do)
-  - When a test FAILS: note it here; Grok re-fixes; keep here until pass
+  - To Do List.txt = backlog only
+  - This file = in-progress / Seifer tests here
+  - PASS → mark [x] here (stay off To Do)
+  - FAIL → note here; Grok re-fixes
 
 
-A) Export / HDB headers (code committed earlier — retest if not done)
+Need retest (this pass)
 --------------------------------------------------------------------------------
 
-1) Export CSV uses active tab
+1) About secret π icon loads
+   Steps: Open About. Look bottom-right corner for the Net π glyph.
+   EXPECT: small visible π icon (not blank). Uses ui/icons/pi.png crop, not the full still.
+   Notes: 2026-07-23 FAILED — full pi.jpg scaled to 16px looked empty.
+          Re-fix: cropped glyph → pi.png + QPixmap scale to 20px.
+
+2) USGS headers use Site Name (comma split)
    Steps:
-     a. Data Query tab with data → Export → main results + Timestamp column.
-     b. Enable SQL, run SQL so sqlTable has rows, leave SQL tab selected → Export
-        EXPECT: sqlTable only (no forced Timestamp column).
-     c. SQL tab, no results yet → "No data to export".
-   Notes: objectName / tab index + self.tabSQL.
+     a. Public or internal OGC USGS query (Site-time_series_id-Parameter).
+     b. Check column header after data loads.
+   EXPECT:
+     - Site Name from API, e.g. "COLORADO RIVER NEAR CISCO" on line 1,
+       "UT" (or second comma segment) on line 2 — not site-param only.
+     - Meta still available on internal (right-click Show details).
+     - Public: headers still use Site Name; no cell context menu (unchanged).
+   Notes: labelsDict gets Site Name for USGS; buildTable prefers it; seriesResponses
+          stay keyed by DataID so details still resolve.
 
-2) HDB headers = commonName - datatype
-   Steps: Query USBR/HDB series in the data dictionary.
-   EXPECT: top line like "Some Site - average flow", not commonName alone.
-   Notes: getColByName case-insensitive (DB column is "datatype").
 
-
-B) Metadata cluster
+Confirmed this session (do not re-break)
 --------------------------------------------------------------------------------
-
-3) Details window: max 16 rows + themed scrollbar
-   Steps: Open cell details with >16 metadata rows (USGS OGC series meta is easy).
-   EXPECT: ~16 rows visible; vertical scrollbar for the rest; themed like the app.
-
-4) Overlay / HDB tab: no ghost 3rd column
-   Steps: Overlay including HDB → Show details → switch Overlay ↔ HDB tabs.
-   EXPECT: both tabs stay Type | Value (2 columns), no empty extra column.
-
-5) USGS meta: no duplicate rows
-   Steps: Internal USGS OGC → Show details.
-   EXPECT: Parameter Code, Statistic ID, Time Series ID, Monitoring Location ID once each.
-
-6) USGS meta on USGS-only (and non-overlay) columns
-   Steps:
-     a. Internal, only USGS, no overlay → Show details → real series meta (not blank/legacy unless legacy methodID).
-     b. USGS + HDB, no overlay → each column's details works for its source.
-     c. Overlay two USGS → both DB tabs show correct series meta.
-
-
-C) UI polish + raw deltas (NEW this pass)
---------------------------------------------------------------------------------
-
-7) thenetpi / pi.jpg
-   Steps: Open About. Bottom-right secret (π) button should show the Net pi art.
-   EXPECT: icon loads from ui/icons/pi.jpg (file exists; old documentation/thenetpi.jpg gone).
-
-8) Save Quick Look dialog wider (~+60px)
-   Steps: Query window → Save Quick Look.
-   EXPECT: name dialog is noticeably wider than a stock Qt input dialog (~60px more).
-
-9) Query window wider (USGS UID)
-   Steps: Open Query. Paste a long USGS Site-time_series_id-Parameter id.
-   EXPECT: Data ID field + query list fit the long UID without the window feeling clipped
-           (window ~920px wide; field/list expanded).
-
-10) Raw data: deltas without scientific notation
-    Steps: Options → enable Raw Data. Query two close series with Delta checked
-           (or overlay) so a tiny difference appears (e.g. floating noise).
-    EXPECT: delta shows fixed-point like 0.000000000123, NOT 1.23e-10.
-
-
-D) Earlier code changes (optional smoke)
---------------------------------------------------------------------------------
-[ ] Large dataset warning removed (>10k Yes/No gone from buildTable)
-[ ] Header sort not stacked (sectionClicked connected once)
-
-
-E) Already confirmed (don't re-break)
---------------------------------------------------------------------------------
+[x] Export CSV uses active tab
+[x] HDB headers = commonName - datatype
+[x] Details max 16 rows + themed scrollbar
+[x] Overlay/HDB no ghost 3rd column
+[x] USGS meta no duplicate rows
+[x] USGS meta on USGS-only / non-overlay
+[x] Save Quick Look dialog wider (~+60px)
+[x] Query window wider (USGS UID)
+[x] Raw data deltas without scientific notation
 [x] End timestamps exclusive end
 [x] BOP/EOP Options radios
-[x] Header sort / Undo smashed Overlay formatting
-[x] QAQC vs Overlay fight club
+[x] Header sort / Undo preserves Overlay formatting
+[x] QAQC vs Overlay order
 [x] Password paste while masked
 [x] Export complete message
 
 
-Blocked / wait for retest before coding
+Optional smoke (earlier code, not re-checked)
 --------------------------------------------------------------------------------
-- New USGS: always pull meta + Site Name header split  (depends on B 5/6)
-- Further export tab / HDB header churn until A is green
+[ ] Large dataset warning removed (>10k Yes/No gone)
+[ ] Header sort not stacked (sectionClicked once)

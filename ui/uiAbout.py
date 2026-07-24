@@ -114,14 +114,29 @@ class uiAbout(QDialog):
             "QPushButton:hover { background: rgba(255, 255, 255, 25); border-radius: 2px; }"
             "QPushButton:pressed { background: rgba(255, 255, 255, 40); }"
         )
-        # The Net π backdoor art (moved from documentation/thenetpi.jpg)
-        iconPath = Logic.resourcePath('ui/icons/pi.jpg')
+        # The Net π glyph — use cropped pi.png (full pi.jpg is a 1200px still;
+        # scaling that to 16px made the icon look blank).
+        iconPath = Logic.resourcePath('ui/icons/pi.png')
+        if not os.path.exists(iconPath):
+            iconPath = Logic.resourcePath('ui/icons/pi.jpg')
         if not os.path.exists(iconPath):
             iconPath = Logic.resourcePath('ui/icons/Secret.png')
-        icon = QIcon(iconPath)
-        self.buttonSecret.setIcon(icon)
+
+        pix = QPixmap(iconPath)
+        if not pix.isNull():
+            # If somehow still the full still, crop the known π region (50x50 @ 742,322)
+            if pix.width() > 200 and pix.height() > 200:
+                pix = pix.copy(742, 322, 50, 50)
+            pix = pix.scaled(
+                20, 20,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self.buttonSecret.setIcon(QIcon(pix))
+        else:
+            self.buttonSecret.setIcon(QIcon(iconPath))
         # Movie pi is small and quiet in the corner
-        self.buttonSecret.setIconSize(QSize(16, 16))
+        self.buttonSecret.setIconSize(QSize(20, 20))
         # No-op for now — wire secret behavior when you're ready
         self.buttonSecret.clicked.connect(self.buttonSecretPressed)
 

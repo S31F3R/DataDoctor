@@ -1,54 +1,37 @@
 DataDoctor — session handoff
 ============================================================
 Branch: bug-smashing
-Remote: origin (https://github.com/S31F3R/DataDoctor.git)
 
 Workflow
 --------
-- documentation/To Do List.txt = BACKLOG only (not currently worked)
-- documentation/test.txt = IN-PROGRESS tests Seifer runs
-- When work starts: pull item off To Do → put steps in test.txt
-- When Seifer confirms: [x] in test.txt; stay off To Do
+- To Do List.txt = BACKLOG
+- test.txt = IN-PROGRESS tests for Seifer
 
 
-What's in flight (test.txt) — Seifer should commit + push + retest
------------------------------------------------------------------
-A) Export active tab + HDB commonName-datatype headers (earlier commit)
-B) Metadata cluster (uiDetails / seriesResponses)
-C) UI polish: pi.jpg, Save Quick Look +60px, Query window 920px
-   + raw-data deltas without scientific notation
+Just confirmed by Seifer (2026-07-23)
+-------------------------------------
+Export tab, HDB headers, meta cluster (16-row scroll, ghost column, USGS
+dupes/USGS-only), Save Quick Look width, Query window width, raw deltas.
+All [x] in test.txt.
 
 
-Still backlog (To Do List) — not started
-----------------------------------------
-Large "Building table..." hang / threading, USGS monthly+, tab indexes,
-retro restart Windows, HDB password lockout, taskbar icon, Windows text size,
-HDB rbase QAQC colors, USGS Site Name headers (blocked on meta retest),
-SQL UI freeze thread, features/plots/log viewer, Aquarius daily TZ, etc.
+In flight (test.txt retest)
+---------------------------
+1) About π icon — pi.png crop + QPixmap scale (full pi.jpg was unreadable at 16px)
+2) USGS column headers from Site Name (comma split) for public + internal OGC
+
+
+Still backlog
+-------------
+Building table hang, USGS monthly+, tab indexes, retro Windows restart,
+HDB password lockout, taskbar icon, Windows text size, HDB rbase QAQC,
+SQL UI thread, features/plots/log viewer, Aquarius daily TZ, max/min
+timestamp, Aquarius label first, formatting rules, git/readme.
 
 
 Key files this pass
 -------------------
-DataDoctor.py       export tab + series response resolve
-core/Query.py       empty-group still keeps rawResponses; getColByName casefold
-core/QueryUtils.py  raw deltas via valuePrecision
-core/Logic.py       formatRawNumber / valuePrecision
-ui/uiDetails.py     16-row scroll, column clamp, USGS tag dedupe
-ui/uiQuery.py       wider Save Quick Look dialog
-ui/winQuery.ui      920px query window, wider DataID/list
-ui/uiAbout.py       secret button uses ui/icons/pi.jpg
-ui/icons/pi.jpg     moved from documentation/thenetpi.jpg
-
-
-How to run
-----------
-  pip install -r requirements.txt
-  python DataDoctor.py
-
-
-Resume
-------
-1. git status — expect uncommitted meta + UI polish unless Seifer committed
-2. Seifer tests documentation/test.txt A→C
-3. Next free cluster after retest: large table hang, SQL thread, Windows text,
-   or password lockout — avoid USGS Site Name headers until B is green
+ui/icons/pi.png     cropped Net π glyph (64x64)
+ui/uiAbout.py       loads pi.png via QPixmap
+core/Query.py       USGS Site Name → labelsDict → buildTable headers;
+                    don't remap USGS seriesResponses keys to Site Name

@@ -82,7 +82,8 @@ class queryWorker(QRunnable):
     def run(self):
         db, _, _ = self.groupKey
         groupResult = {}
-        groupLabels = {} if db == 'AQUARIUS' else None
+        # Aquarius + USGS OGC: labels used for column headers (Site Name / AQ label)
+        groupLabels = {} if db in ('AQUARIUS', 'USGS-NWIS') else None
         groupRawResponses = {}  # Always dict to support USBR metadata
         usbrGroups = defaultdict(list)
 
@@ -143,19 +144,29 @@ class queryWorker(QRunnable):
                         else:
                             outputData = res
                             groupRawResponses[dataID] = res # Use full dataID as key for USBR
-                        if db == 'AQUARIUS':
+                        if db == 'AQUARIUS' and groupLabels is not None:
                             groupLabels[dataID] = result.get(SDID, {}).get('label', dataID)
 
                             if Config.debug:
                                 Logic.logMessage("DEBUG", f"queryWorker: Aquarius label for {dataID}: {groupLabels[dataID]}")
+                        elif db == 'USGS-NWIS' and groupLabels is not None:
+                            # Site Name from OGC series/location meta (public + internal)
+                            raw = res.get('rawResponse') if isinstance(res, dict) else None
+                            siteName = ''
+                            if isinstance(raw, dict):
+                                siteName = (raw.get('seriesMeta') or {}).get('Site Name') or ''
+                            groupLabels[dataID] = siteName.strip() if siteName else ''
+
+                            if Config.debug:
+                                Logic.logMessage("DEBUG", f"queryWorker: USGS Site Name for {dataID}: {groupLabels[dataID]!r}")
                         alignedData = gapCheck(self.timestamps, outputData, dataID)
                         values = [line.split(',')[1] if line else '' for line in alignedData]
                         groupResult[dataID] = values
                     else:
                         groupResult[dataID] = self.defaultBlanks
 
-                        if db == 'AQUARIUS':
-                            groupLabels[dataID] = dataID
+                        if groupLabels is not None:
+                            groupLabels[dataID] = dataID if db == 'AQUARIUS' else ''
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: No data for SDID {SDID} in {db}")
             if Config.debug:
@@ -165,8 +176,8 @@ class queryWorker(QRunnable):
             for _, dataID, _, _, _, _ in self.groupItems:
                 groupResult[dataID] = self.defaultBlanks
 
-                if db == 'AQUARIUS' and groupLabels is not None:
-                    groupLabels[dataID] = dataID
+                if groupLabels is not None:
+                    groupLabels[dataID] = dataID if db == 'AQUARIUS' else ''
         try:
             self.signals.resultSignal.emit((self.groupKey, groupResult, groupLabels, groupRawResponses))
         except Exception as e:
@@ -319,6 +330,22 @@ def getColByName(table, name):
 
     return -1
 
+def usgsHeaderFromSiteName(siteName, intervalStr, fallback=None):
+    """
+    USGS column header from monitoring-location Site Name.
+    Split on comma: part 0 = top line, part 1 = bottom line.
+    Falls back to None when Site Name is empty so caller can use old logic.
+    """
+    if not siteName or not str(siteName).strip():
+        return None
+    parts = [p.strip() for p in str(siteName).split(',') if p.strip()]
+    if not parts:
+        return None
+    if len(parts) >= 2:
+        return f"{parts[0]} \n{parts[1]}"
+    # Single segment: name on top, interval underneath
+    return f"{parts[0]} \n{intervalStr}"
+
 def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupIds=None, labelsDict=None, databases=None, queryItems=None):
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: Starting with {} rows, {} headers".format(len(data), len(buildHeader)))
@@ -352,18 +379,28 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             baseLabel = commonItem.text().strip() if commonItem else dataId
 
             if database == 'USGS-NWIS':
-                parts = dataId.split('-')
-
-                if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
-                    fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
-
+                # Prefer live Site Name from API meta (public + internal OGC)
+                siteName = labelsDict.get(dataId) if labelsDict else None
+                # Also try original header key (buildHeader entry) if dataId was rewritten
+                if not siteName and labelsDict and h.strip() in labelsDict:
+                    siteName = labelsDict.get(h.strip())
+                fullLabel = usgsHeaderFromSiteName(siteName, intervalStr)
+                if fullLabel:
                     if Config.debug:
-                        Logic.logMessage("DEBUG", f"buildTable: USGS in dict, header {i}: {fullLabel}")
+                        Logic.logMessage("DEBUG", f"buildTable: USGS in dict via Site Name, header {i}: {fullLabel}")
                 else:
-                    fullLabel = f"{baseLabel} \n{intervalStr}"
-                    
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", f"buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
+                    parts = dataId.split('-')
+
+                    if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
+                        fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"buildTable: USGS in dict, header {i}: {fullLabel}")
+                    else:
+                        fullLabel = f"{baseLabel} \n{intervalStr}"
+                        
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
             elif database == 'AQUARIUS':
                 fullLabel = f"{baseLabel} \n{dataId}"
 
@@ -388,18 +425,26 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                         Logic.logMessage("DEBUG", f"buildTable: USBR in dict, header {i}: {fullLabel}")
         else:
             if database == 'USGS-NWIS':
-                parts = dataId.split('-')
-
-                if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
-                    fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
-
+                siteName = labelsDict.get(dataId) if labelsDict else None
+                if not siteName and labelsDict and h.strip() in labelsDict:
+                    siteName = labelsDict.get(h.strip())
+                fullLabel = usgsHeaderFromSiteName(siteName, intervalStr)
+                if fullLabel:
                     if Config.debug:
-                        Logic.logMessage("DEBUG", f"buildTable: Parsed USGS header {i}: {fullLabel}")
+                        Logic.logMessage("DEBUG", f"buildTable: USGS Site Name header {i}: {fullLabel}")
                 else:
-                    fullLabel = f"{dataId} \n{intervalStr}"
+                    parts = dataId.split('-')
 
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", f"buildTable: USGS not in dict, header {i}: {fullLabel}")
+                    if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
+                        fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"buildTable: Parsed USGS header {i}: {fullLabel}")
+                    else:
+                        fullLabel = f"{dataId} \n{intervalStr}"
+
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"buildTable: USGS not in dict, header {i}: {fullLabel}")
             elif database == 'AQUARIUS' and labelsDict and dataId in labelsDict:
                 apiFull = labelsDict[dataId]
                 parts = apiFull.split('\n')
@@ -844,10 +889,14 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 return
             processedGroups.add(groupKey)
 
-            # Always keep rawResponses (series metadata) even when values are blank —
-            # otherwise USGS/USBR context-menu details have nothing to show.
+            # Always keep rawResponses + labels (Site Name headers) even when values blank
             if groupRawResponses:
                 rawResponses.update(groupRawResponses)
+            if groupLabels and labelsDict is not None:
+                labelsDict.update(groupLabels)
+
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
 
             if all(all(v == '' for v in values) for values in groupResult.values()):
                 if Config.debug:
@@ -861,12 +910,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     QCoreApplication.processEvents()
                 return
             valueDict.update(groupResult)
-
-            if groupLabels and labelsDict is not None:
-                labelsDict.update(groupLabels)
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
             collected += 1
 
             if Config.debug:
@@ -1016,14 +1059,21 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             # Build the table
             buildTable(mainWindow.mainTable, data, originalDataIds, dataDictionaryTable, originalIntervals, lookupIds, labelsDict, databases, queryItems=queryItems)
 
-            # Remap rawResponses keys to fullLabel (guard for labelsDict None/empty)
+            # Remap Aquarius rawResponses keys to API labels. USGS stays keyed by DataID
+            # so context-menu lookup by lookupId still works after Site Name headers.
             if Config.debug:
-                Logic.logMessage("DEBUG", f"executeQuery: Remapping rawResponses keys, labelsDict type={type(labelsDict)}, keys={list(labelsDict.keys())}")
+                Logic.logMessage("DEBUG", f"executeQuery: Remapping rawResponses keys, labelsDict type={type(labelsDict)}, keys={list(labelsDict.keys()) if labelsDict else []}")
             if labelsDict:
-                rawResponses = {labelsDict.get(k, k): v for k, v in rawResponses.items()}
-            # Else keep as-is for non-Aquarius (e.g., public USBR keys are SDIDs)
+                remapped = {}
+                for k, v in rawResponses.items():
+                    isUsgsMeta = isinstance(v, dict) and (v.get('kind') in ('ogc', 'legacy') or 'seriesMeta' in v)
+                    if isUsgsMeta:
+                        remapped[k] = v
+                    else:
+                        remapped[labelsDict.get(k, k)] = v
+                rawResponses = remapped
 
-            # Store rawResponses for Aquarius
+            # Store rawResponses for details / context menu
             mainWindow.storeQueryData(rawResponses, 'internal' if isInternal else 'public')
 
             if Config.debug:

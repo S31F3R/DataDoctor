@@ -11,9 +11,6 @@
     -This might be tied to certain controls. THe SQL Query Builder area isn't impacted, either is the table output from the query, but the SQL quicklooks to the right are
 -HDB data needs to bypass QAQC coloring when there is a value in rbase and not in interval. Use the blue box when data is missing, but place black text with the rbase value
     -Code currently works, just doesn't do the coloring properly
--When using new USGS query, ALWAYS pull meta data for public and internal. Use the Site Name for the column header, splitting by the comma. Part 0 is first label, under that put part 1
-    -Public won't have context menu, just pulling meta data for label. Internal will still have meta data and label
-    -WAIT: related to USGS meta work currently in test.txt — leave until that retest passes
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
