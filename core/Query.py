@@ -844,9 +844,14 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 return
             processedGroups.add(groupKey)
 
+            # Always keep rawResponses (series metadata) even when values are blank —
+            # otherwise USGS/USBR context-menu details have nothing to show.
+            if groupRawResponses:
+                rawResponses.update(groupRawResponses)
+
             if all(all(v == '' for v in values) for values in groupResult.values()):
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"executeQuery: Skipping empty group {groupKey}, no data")
+                    Logic.logMessage("DEBUG", f"executeQuery: Skipping empty group {groupKey}, no data (meta keys kept: {list(groupRawResponses.keys()) if groupRawResponses else []})")
                 collected += 1
 
                 if not progressDialog.wasCanceled():
@@ -862,8 +867,6 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"executeQuery: Updated labelsDict with {list(groupLabels.keys())}")
-            if groupRawResponses:
-                rawResponses.update(groupRawResponses)
             collected += 1
 
             if Config.debug:

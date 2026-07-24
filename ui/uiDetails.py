@@ -7,6 +7,10 @@ from PyQt6 import uic
 from datetime import datetime
 from core import Logic, Config
 
+# Cap visible metadata rows; beyond this, show a themed vertical scrollbar
+MAX_VISIBLE_META_ROWS = 16
+
+
 class uiDetails(QWidget):
     """Details window: Displays metadata or overlay info for a specific timeseries cell."""    
     def __init__(self, parent=None):
@@ -23,10 +27,7 @@ class uiDetails(QWidget):
         self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/Info.png')))
         
         # Initialize table with no rows yet (column count set dynamically in populate)
-        self.detailsTable.setSortingEnabled(True)
-        self.detailsTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers) # Read-only
-        self.detailsTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows) # Select whole rows
-        self.detailsTable.verticalHeader().setVisible(False) # Hide row numbers to reduce extra space
+        self._configureMetaTable(self.detailsTable, twoColumn=True)
         
         # Zero main layout margins for single-panel view
         layout = self.layout()
@@ -41,8 +42,89 @@ class uiDetails(QWidget):
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDetails initialized")
 
+    def _configureMetaTable(self, table, twoColumn=True):
+        """Apply shared details-table settings and a fixed column layout."""
+        table.setSortingEnabled(True)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.verticalHeader().setVisible(False)
+        table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Vertical policy set in _sizeWindowToTable based on row count
+        self._clampTableColumns(table, twoColumn=twoColumn)
+        table.horizontalHeader().setStretchLastSection(True)
+
+    def _clampTableColumns(self, table, twoColumn=True):
+        """Force 2- or 4-column layout so ghost columns cannot bleed across tabs."""
+        if twoColumn:
+            if table.columnCount() != 2:
+                table.setColumnCount(2)
+            table.setHorizontalHeaderLabels(["Type", "Value"])
+        else:
+            if table.columnCount() != 4:
+                table.setColumnCount(4)
+            table.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
+
+    def _sizeWindowToTable(self, table, extraHeight=0, minWidthExtra=0):
+        """
+        Size the window to content, capped at MAX_VISIBLE_META_ROWS.
+        Extra rows get a vertical scrollbar (app stylesheet themes it).
+        """
+        if table is None:
+            return
+
+        table.resizeColumnsToContents()
+        table.resizeRowsToContents()
+
+        rowCount = table.rowCount()
+        visibleRows = min(rowCount, MAX_VISIBLE_META_ROWS) if rowCount else 0
+        needsScroll = rowCount > MAX_VISIBLE_META_ROWS
+
+        if needsScroll:
+            table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        else:
+            table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        # Lock column count so Qt setItem never leaves a ghost extra column
+        expectedCols = table.columnCount()
+        if expectedCols not in (2, 4):
+            expectedCols = 2
+            table.setColumnCount(2)
+
+        contentWidth = (
+            sum(table.columnWidth(i) for i in range(table.columnCount()))
+            + table.verticalHeader().width()
+            + table.frameWidth() * 2
+            + 30
+            + minWidthExtra
+        )
+        if needsScroll:
+            contentWidth += table.verticalScrollBar().sizeHint().width() + 8
+
+        if hasattr(self, 'tabWidget') and self.tabWidget and self.tabWidget.isVisible():
+            tabBarWidth = self.tabWidget.tabBar().sizeHint().width() + 50
+            contentWidth = max(contentWidth, tabBarWidth)
+
+        rowsHeight = sum(table.rowHeight(i) for i in range(visibleRows)) if visibleRows else 0
+        height = (
+            rowsHeight
+            + table.horizontalHeader().height()
+            + self.lblTitle.height()
+            + table.frameWidth() * 2
+            + 30
+            + extraHeight
+        )
+        self.resize(max(contentWidth, 280), max(height, 120))
+
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"_sizeWindowToTable: rows={rowCount}, visible={visibleRows}, "
+                f"scroll={needsScroll}, size={self.width()}x{self.height()}"
+            )
+
     def resizeToCurrentTab(self, index):
-        """Resize window to fit current tab's content without scrollbars."""
+        """Resize window to fit current tab's content (max 16 rows + scrollbar)."""
         if not hasattr(self, 'tabWidget') or not self.tabWidget:
             return
         
@@ -53,28 +135,21 @@ class uiDetails(QWidget):
         tabTable = currentTab.findChild(QTableWidget)
         if not tabTable:
             return
-        
-        # Calculate size based on tab table
-        tabTable.resizeColumnsToContents()
-        tabTable.resizeRowsToContents()
-        tabTable.verticalScrollBar().setVisible(False) # Suppress scrollbar
-        tabTable.horizontalScrollBar().setVisible(False) # Suppress horizontal too
-        tabTable.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # Always off to avoid space reservation        
-        
-        # Content width for current tab
-        contentWidth = sum(tabTable.columnWidth(i) for i in range(tabTable.columnCount())) + tabTable.verticalHeader().width() + tabTable.frameWidth() * 2 + 50 # +50 buffer for right gap
-        
-        # Tab bar width to prevent header cutoff
-        tabBarWidth = self.tabWidget.tabBar().sizeHint().width() + 50  # +50 buffer for margins, matching content
-        
-        # Use max of content or tab bar width
-        width = max(contentWidth, tabBarWidth)
-        
-        height = sum(tabTable.rowHeight(i) for i in range(tabTable.rowCount())) + tabTable.horizontalHeader().height() + self.lblTitle.height() + self.tabWidget.tabBar().height() + tabTable.frameWidth() * 2 + 20 # Reduced buffer to avoid extra row
-        self.resize(width, height)
+
+        # Re-assert column layout for this tab (prevents bleed across tab switches)
+        colCount = tabTable.columnCount()
+        if colCount > 2 and tabTable.horizontalHeaderItem(0) and tabTable.horizontalHeaderItem(0).text() == "Type":
+            # 2-col table that grew a ghost column — shrink back
+            tabTable.setColumnCount(2)
+            tabTable.setHorizontalHeaderLabels(["Type", "Value"])
+        elif colCount == 2:
+            tabTable.setHorizontalHeaderLabels(["Type", "Value"])
+
+        extra = self.tabWidget.tabBar().height() + 20
+        self._sizeWindowToTable(tabTable, extraHeight=extra)
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Resized to current tab {index}: {width}x{height}")
+            Logic.logMessage("DEBUG", f"Resized to current tab {index}: {self.width()}x{self.height()}")
 
     def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None, multiTypes=None, responsesList=None, intervalsList=None):
         """
@@ -101,15 +176,8 @@ class uiDetails(QWidget):
 
             # Clear existing rows and set columns dynamically
             self.detailsTable.setRowCount(0)
-
-            if queryType in ["overlay", "headerNormal", "headerDelta", "headerOverlay", "USBR", "USGS"]:
-                self.detailsTable.setColumnCount(2)
-                self.detailsTable.setHorizontalHeaderLabels(["Type", "Value"])
-            else:
-                self.detailsTable.setColumnCount(4)
-                self.detailsTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
-
-            self.detailsTable.horizontalHeader().setStretchLastSection(True)
+            twoColTypes = {"overlay", "headerNormal", "headerDelta", "headerOverlay", "USBR", "USGS"}
+            self._configureMetaTable(self.detailsTable, twoColumn=(queryType in twoColTypes))
 
             # Handler dictionary for database-specific metadata (easy to add USGS)
             metadataHandlers = {
@@ -127,39 +195,31 @@ class uiDetails(QWidget):
 
                     if layout:
                         layout.addWidget(self.tabWidget)
-                    self.detailsTable.hide() # Hide original table, use per-tab tables
                     self.tabWidget.currentChanged.connect(self.resizeToCurrentTab) # Connect here if created
 
-                # Clear existing tabs
+                self.detailsTable.hide() # Hide original table, use per-tab tables
+                self.tabWidget.show()
+
+                # Clear existing tabs (delete old page widgets so tables don't leak)
                 while self.tabWidget.count() > 0:
+                    old = self.tabWidget.widget(0)
                     self.tabWidget.removeTab(0)
+                    if old is not None:
+                        old.deleteLater()
 
                 # Add tabs in order (Overlay first, then DBs)
                 for i, t in enumerate(multiTypes):
-                    # Normalize t for handlers (e.g., 'USBR-LCHDB' -> 'USBR')
-                    normT = t.split('-')[0] if '-' in t else t                
+                    # Normalize t for handlers (e.g., 'USBR-LCHDB' -> 'USBR', 'USGS-NWIS' -> 'USGS')
+                    normT = t.split('-')[0] if '-' in t else t
                     tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
-                    tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'                
+                    tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'
                     tabWidget = QWidget()
                     tabLayout = QVBoxLayout(tabWidget)
                     tabLayout.setContentsMargins(0, 0, 0, 0) # Zero margins to remove gaps
                     tabTable = QTableWidget(tabWidget) # New table per tab
-                    tabTable.setSortingEnabled(True)
-                    tabTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-                    tabTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-                    tabTable.verticalHeader().setVisible(False)
-                    tabTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding) # Expand to fill layout
-                    tabTable.horizontalScrollBar().setVisible(False) # Hide horizontal scrollbar
-                    tabTable.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # Always off to avoid space reservation
-
-                    # Set columns/headers based on type
-                    if normT in ["overlay", "USBR", "USGS"]:
-                        tabTable.setColumnCount(2)
-                        tabTable.setHorizontalHeaderLabels(["Type", "Value"])
-                    else:
-                        tabTable.setColumnCount(4)
-                        tabTable.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
-                    tabTable.horizontalHeader().setStretchLastSection(True)
+                    # USBR/USGS/overlay = 2 cols; Aquarius (and unknown) = 4 cols
+                    twoCol = normT in ("overlay", "USBR", "USGS")
+                    self._configureMetaTable(tabTable, twoColumn=twoCol)
 
                     # Populate per type
                     if normT == 'overlay':
@@ -168,7 +228,10 @@ class uiDetails(QWidget):
                         metadataHandlers[normT](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
                     else:
                         Logic.logMessage("WARN", f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab")
-                        continue                
+                        continue
+
+                    # Clamp ghost columns after populate (Qt setItem can grow columnCount)
+                    self._clampTableColumns(tabTable, twoColumn=twoCol)
                     tabLayout.addWidget(tabTable)
 
                     # Tab name: Uppercase abbreviations/suffixes, capitalize "Details"
@@ -178,12 +241,8 @@ class uiDetails(QWidget):
                         tabName = t.capitalize() + " Details"
                     if i > 0: # For DB tabs
                         if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                            tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"                
+                            tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"
                     self.tabWidget.addTab(tabWidget, tabName)
-
-                    # Initial resize table (final resize on tab change)
-                    tabTable.resizeColumnsToContents()
-                    tabTable.resizeRowsToContents()
 
                 if self.tabWidget.count() == 0:
                     if Config.debug:
@@ -214,16 +273,10 @@ class uiDetails(QWidget):
                     Logic.logMessage("WARN", f"Unknown queryType: {queryType} - No details populated")
                     return
 
-                # Resize table to contents
-                self.detailsTable.resizeColumnsToContents()
-                self.detailsTable.resizeRowsToContents()
-
-                # Manually calculate and set window size to fit content exactly (no scroll bars)
-                self.detailsTable.setMinimumHeight(0) # Prevent over-allocation for empty space
-                self.detailsTable.verticalScrollBar().setVisible(False) # Suppress any latent scrollbar
-                width = sum(self.detailsTable.columnWidth(i) for i in range(self.detailsTable.columnCount())) + self.detailsTable.verticalHeader().width() + self.detailsTable.frameWidth() * 2 + 30 # Tighter padding for borders/margins
-                height = sum(self.detailsTable.rowHeight(i) for i in range(self.detailsTable.rowCount())) + self.detailsTable.horizontalHeader().height() + self.lblTitle.height() + self.detailsTable.frameWidth() * 2 + 30 # Reduced buffer to avoid extra row
-                self.resize(width, height)
+                # Clamp ghost columns then size (max 16 rows + scrollbar)
+                self._clampTableColumns(self.detailsTable, twoColumn=(queryType in twoColTypes))
+                self.detailsTable.setMinimumHeight(0)
+                self._sizeWindowToTable(self.detailsTable)
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Populated {self.detailsTable.rowCount()} rows (or tabs)")
@@ -245,14 +298,16 @@ class uiDetails(QWidget):
         secondaryVal = data.get('secondaryVal', 'N/A') if data.get('secondaryVal') is not None else 'N/A'
         delta = data.get('delta', 'N/A') if data.get('delta') is not None else 'N/A'
         
-        # Respect Config.rawData for value formatting if needed (e.g., if vals are numeric)
-        if not Config.rawData:
-            try:
-                primaryVal = Logic.valuePrecision(float(primaryVal)) if primaryVal != 'N/A' else 'N/A'
-                secondaryVal = Logic.valuePrecision(float(secondaryVal)) if secondaryVal != 'N/A' else 'N/A'
-                delta = Logic.valuePrecision(float(delta)) if delta != 'N/A' else 'N/A'
-            except ValueError:
-                pass # Keep as string if not numeric
+        # valuePrecision handles rawData (fixed-point, no scientific notation)
+        try:
+            if primaryVal != 'N/A':
+                primaryVal = Logic.valuePrecision(float(primaryVal))
+            if secondaryVal != 'N/A':
+                secondaryVal = Logic.valuePrecision(float(secondaryVal))
+            if delta != 'N/A':
+                delta = Logic.valuePrecision(float(delta))
+        except (ValueError, TypeError):
+            pass # Keep as string if not numeric
         
         # Add rows for overlay specifics (broken out per user request)
         self.addRow("Primary Database", data.get('db1', 'N/A'), table=table)
@@ -478,7 +533,7 @@ class uiDetails(QWidget):
             "Thresholds",
             "Series Last Modified",
         ]
-        # Point-level tags for the clicked timestamp
+        # Point-level tags only (do not repeat series-level IDs — those are already in seriesTags)
         pointTags = [
             "Value",
             "Time (UTC)",
@@ -486,10 +541,6 @@ class uiDetails(QWidget):
             "Approval Status",
             "Qualifier",
             "Last Modified",
-            "Parameter Code",
-            "Statistic ID",
-            "Time Series ID",
-            "Monitoring Location ID",
         ]
 
         try:
@@ -555,17 +606,27 @@ class uiDetails(QWidget):
                 pass
 
     def addRow(self, metaType, details, startTime="", endTime="", table=None):
-        """Add a single row to the table (defaults for 2-column modes)."""
+        """Add a single row to the table (defaults for 2-column modes).
+
+        Never writes past the current column count — Qt would otherwise grow the
+        table and leave ghost columns when switching overlay/HDB/USGS tabs.
+        """
         if table is None:
             table = self.detailsTable
+        # Ensure at least Type/Value columns exist
+        if table.columnCount() < 2:
+            table.setColumnCount(2)
+            table.setHorizontalHeaderLabels(["Type", "Value"])
         row = table.rowCount()
         table.insertRow(row)
-        table.setItem(row, 0, QTableWidgetItem(metaType))
-        table.setItem(row, 1, QTableWidgetItem(details))
+        table.setItem(row, 0, QTableWidgetItem(str(metaType) if metaType is not None else ''))
+        table.setItem(row, 1, QTableWidgetItem(str(details) if details is not None else ''))
 
-        if table.columnCount() > 2:
-            table.setItem(row, 2, QTableWidgetItem(startTime))
-            table.setItem(row, 3, QTableWidgetItem(endTime))
+        # Only write Start/End when table is intentionally 4-column (Aquarius)
+        if table.columnCount() >= 4:
+            table.setItem(row, 2, QTableWidgetItem(str(startTime) if startTime is not None else ''))
+            table.setItem(row, 3, QTableWidgetItem(str(endTime) if endTime is not None else ''))
+
 
     def addArrayRows(self, metaType, items, timestamp, detailFormatter, table=None):
         """Add rows for array items matching the timestamp range."""

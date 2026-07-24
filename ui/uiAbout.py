@@ -1,5 +1,6 @@
 # uiAbout.py
 
+import os
 from PyQt6.QtWidgets import QDialog, QLabel, QTextBrowser, QPushButton
 from PyQt6.QtCore import Qt, QUrl, QSize
 from PyQt6.QtGui import QPixmap, QFont, QFontDatabase, QIcon
@@ -113,7 +114,10 @@ class uiAbout(QDialog):
             "QPushButton:hover { background: rgba(255, 255, 255, 25); border-radius: 2px; }"
             "QPushButton:pressed { background: rgba(255, 255, 255, 40); }"
         )
-        iconPath = Logic.resourcePath('ui/icons/Secret.png')
+        # The Net π backdoor art (moved from documentation/thenetpi.jpg)
+        iconPath = Logic.resourcePath('ui/icons/pi.jpg')
+        if not os.path.exists(iconPath):
+            iconPath = Logic.resourcePath('ui/icons/Secret.png')
         icon = QIcon(iconPath)
         self.buttonSecret.setIcon(icon)
         # Movie pi is small and quiet in the corner

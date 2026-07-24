@@ -1,133 +1,54 @@
-DataDoctor — session handoff / where the hell we left off
+DataDoctor — session handoff
 ============================================================
-File: documentation/status.grok
-For: Future Grok (hi) + Seifer
-Branch when we stopped: bug-smashing
+Branch: bug-smashing
 Remote: origin (https://github.com/S31F3R/DataDoctor.git)
-Working tree may have uncommitted re-fixes — check git status before you do anything dumb.
+
+Workflow
+--------
+- documentation/To Do List.txt = BACKLOG only (not currently worked)
+- documentation/test.txt = IN-PROGRESS tests Seifer runs
+- When work starts: pull item off To Do → put steps in test.txt
+- When Seifer confirms: [x] in test.txt; stay off To Do
 
 
-What this app is (30-second brain reload)
------------------------------------------
-PyQt6 desktop hydrology tool. Pulls time series from USBR/HDB (API + Oracle),
-AQUARIUS, and USGS NWIS. Local catalog in core/bunker.db. Overlay/delta compare,
-QAQC colors, quick looks, optional SQL tab, CSV export, keyring creds.
-Entry: DataDoctor.py. Guts: core/. Pretty buttons: ui/.
+What's in flight (test.txt) — Seifer should commit + push + retest
+-----------------------------------------------------------------
+A) Export active tab + HDB commonName-datatype headers (earlier commit)
+B) Metadata cluster (uiDetails / seriesResponses)
+C) UI polish: pi.jpg, Save Quick Look +60px, Query window 920px
+   + raw-data deltas without scientific notation
 
 
-Branch story (so you don't "wait we were on main?")
---------------------------------------------------
-- bug-smashing is current work branch (tracks origin/bug-smashing).
-- main at 5158d7a (Changed .pyw to .py).
-- staging has separate history (audio/PipeWire etc.) — don't casually merge.
-- Earlier handoff assumed staging; Seifer is on bug-smashing now.
+Still backlog (To Do List) — not started
+----------------------------------------
+Large "Building table..." hang / threading, USGS monthly+, tab indexes,
+retro restart Windows, HDB password lockout, taskbar icon, Windows text size,
+HDB rbase QAQC colors, USGS Site Name headers (blocked on meta retest),
+SQL UI freeze thread, features/plots/log viewer, Aquarius daily TZ, etc.
 
 
-Confirmed FIXED by Seifer (do not re-fix unless something regressed)
---------------------------------------------------------------------
-[x] End timestamps exclusive end (HOUR end on the hour dropped last point)
-    -> core/Query.py buildTimestamps: while current <= end
-[x] BOP/EOP Options radios not wired to Config.periodOffset
-    -> Utils.resolvePeriodOffset + Options save writes both hourTimestampMethod
-       and periodOffset (EOP=True, BOP=False)
-[x] Header sort / Undo smashed Overlay formatting
-    -> sort captures UserRole + colors; restore after sort (no rebuild wipe)
-[x] QAQC vs Overlay fight club
-    -> overlay merges first, then QAQC on final display, then overlay color
-       overrides only for mismatch/missing (delta==0 keeps QAQC)
-[x] Password paste while masked = chaos
-    -> customPasswordEdit now uses Qt native EchoMode.Password / Normal
-       (no more dual realText + fake bullets). Brief "show last typed char" is GONE.
-[x] Export complete message
-    -> success QMessageBox after CSV write
+Key files this pass
+-------------------
+DataDoctor.py       export tab + series response resolve
+core/Query.py       empty-group still keeps rawResponses; getColByName casefold
+core/QueryUtils.py  raw deltas via valuePrecision
+core/Logic.py       formatRawNumber / valuePrecision
+ui/uiDetails.py     16-row scroll, column clamp, USGS tag dedupe
+ui/uiQuery.py       wider Save Quick Look dialog
+ui/winQuery.ui      920px query window, wider DataID/list
+ui/uiAbout.py       secret button uses ui/icons/pi.jpg
+ui/icons/pi.jpg     moved from documentation/thenetpi.jpg
 
 
-RE-FIXED this session (2026-07-23) — Seifer still needs to re-test
-------------------------------------------------------------------
-[ ] Export CSV respects active tab (Data Query mainTable vs SQL sqlTable)
-    ROOT CAUSE: used `currentWidget is sqlTab` after findChild — identity missed
-    SQL tab, so export always used mainTable (empty → "no data"; with data → wrong tab).
-    FIX: store self.tabSQL; detect via objectName == 'tabSQL' and/or tab index.
-    File: DataDoctor.py btnExportCSVPressed
-
-[ ] HDB headers: commonName - dataType (not commonName alone)
-    ROOT CAUSE: getColByName looked for exact "dataType"; bunker.db column /
-    table header is "datatype" (lowercase). Lookup returned -1 → baseLabel only.
-    FIX: getColByName is case-insensitive; uiSearch uses 'datatype'.
-    Files: core/Query.py getColByName; ui/uiSearch.py
-
-Also still in code but not re-confirmed:
-[ ] Large dataset warning removed (>10k row Yes/No dialog gone from buildTable)
-[ ] Header sort not stacked (sectionClicked no longer re-connected every query)
-
-See: documentation/test.txt
-
-
-Docs we touched / care about
-----------------------------
-documentation/To Do List.txt  — master bug/feature backlog (keep honest)
-documentation/test.txt        — Seifer's remaining test checklist for THIS pass
-documentation/notes.txt       — venv/git crumbs only, not bugs
-documentation/status.grok     — this file (you are here)
-
-
-New / still open on To Do List (skim CURRENT BUGS — Seifer added more)
-----------------------------------------------------------------------
-- Meta: HDB tab adds 3rd column that can bleed into Overlay Details
-- Meta: >16 rows need themed scrollbar
-- USGS meta: duplicated rows (Parameter Code, Statistic ID, etc.)
-- USGS meta only when overlayed with working context menu (or 2 USGS overlayed)
-- thenetpi.jpg → ui/icons/pi.jpg
-- Large queries stuck on "Building table..." (threading)
-- USGS intervals beyond instant/daily?
-- Update tab index on all windows
-- HDB headers commonName - datatype  (re-fixed above — retest)
-- Save quick look dialog +60px wider
-- Query window wider (USGS UID)
-- Retro restart broken on Windows
-- Raw data deltas in scientific notation for tiny diffs
-- Wrong HDB password lockout protection
-- Taskbar icon
-- Windows text size / truncation
-- HDB rbase vs interval QAQC coloring
-- New USGS query: always pull meta; Site Name split for header labels
-- SQL Query Builder freezes UI; Export CSV by tab (re-fixed — retest)
-- (features, logging, git release items — see full To Do List)
-
-
-Key files if you pick up coding again
--------------------------------------
-core/Query.py       timestamps, sort/undo, buildTable headers, getColByName, executeQuery QAQC order
-core/QueryUtils.py  overlay merge + applyOverlayColorOverrides
-core/Utils.py       customPasswordEdit, resolvePeriodOffset, config load/reload
-ui/uiOptions.py     save hourTimestampMethod + periodOffset together; SQL tab toggle
-DataDoctor.py       export active tab + export complete; self.tabSQL
-
-
-How to run (when the stars align)
----------------------------------
-Python 3.13-ish. Prefer project .venv if packages are there; system python
-had PyQt6 last time .venv didn't.
+How to run
+----------
   pip install -r requirements.txt
   python DataDoctor.py
 
 
-Seifer humor / standing orders
-------------------------------
-- Don't "fix" what he hasn't confirmed. Leave it on To Do + test.txt.
-- When he confirms: delete from To Do, move to [x] on test.txt, update this file.
-- Prefer high-certainty fixes over multi-source folklore until he can hit APIs.
-- notes.txt is not the bug list. To Do List is. test.txt is the homework.
-- If you open this and git status is a crime scene, stop and ask.
-
-
-Resume checklist for next session
----------------------------------
-1. git status / branch (expect bug-smashing unless he says otherwise)
-2. Skim documentation/test.txt — anything still unchecked?
-3. Skim documentation/To Do List.txt CURRENT BUGS
-4. Ask Seifer what he wants next (more tests, commit, next bug cluster)
-5. Don't force-push. Don't invent commits he didn't ask for.
-
-
-End of handoff. Go fix water data, not the timeline.
+Resume
+------
+1. git status — expect uncommitted meta + UI polish unless Seifer committed
+2. Seifer tests documentation/test.txt A→C
+3. Next free cluster after retest: large table hang, SQL thread, Windows text,
+   or password lockout — avoid USGS Site Name headers until B is green

@@ -1,25 +1,80 @@
-Still need testing (code re-fixed 2026-07-23; re-confirm):
+TEST FILE — bugs currently being worked / needing retest
+============================================================
+Workflow:
+  - To Do List.txt = backlog only (not being worked yet)
+  - This file = in-progress / ready for Seifer to test
+  - When a test PASSES: mark [x] here (Grok leaves it off To Do)
+  - When a test FAILS: note it here; Grok re-fixes; keep here until pass
+
+
+A) Export / HDB headers (code committed earlier — retest if not done)
 --------------------------------------------------------------------------------
 
 1) Export CSV uses active tab
    Steps:
-     a. Data Query tab with data → Export → should export main results
-        (with Timestamp column from row headers).
-     b. Enable SQL, run a SQL query so sqlTable has rows, leave SQL tab selected → Export.
-     EXPECT: exports sqlTable (column headers only, no forced Timestamp).
-     c. SQL tab selected but no SQL results yet → "No data to export" is correct
-        (only exports the active tab's table).
-     2026-07-23 (earlier): FAILED — identity check missed SQL tab, fell back to mainTable.
-     2026-07-23 (re-fix): detect by objectName / tab index; store self.tabSQL.
+     a. Data Query tab with data → Export → main results + Timestamp column.
+     b. Enable SQL, run SQL so sqlTable has rows, leave SQL tab selected → Export
+        EXPECT: sqlTable only (no forced Timestamp column).
+     c. SQL tab, no results yet → "No data to export".
+   Notes: objectName / tab index + self.tabSQL.
 
-3) HDB headers = commonName - dataType
-   Steps: Query USBR/HDB series that exist in the data dictionary with a dataType.
-   EXPECT: header top line like "Some Site - average flow" (commonName - datatype),
-           not commonName alone.
-     2026-07-23 (earlier): FAILED — looked up column "dataType"; DB header is "datatype".
-     2026-07-23 (re-fix): getColByName is case-insensitive.
+2) HDB headers = commonName - datatype
+   Steps: Query USBR/HDB series in the data dictionary.
+   EXPECT: top line like "Some Site - average flow", not commonName alone.
+   Notes: getColByName case-insensitive (DB column is "datatype").
 
-Already confirmed previously (don't re-break):
+
+B) Metadata cluster
+--------------------------------------------------------------------------------
+
+3) Details window: max 16 rows + themed scrollbar
+   Steps: Open cell details with >16 metadata rows (USGS OGC series meta is easy).
+   EXPECT: ~16 rows visible; vertical scrollbar for the rest; themed like the app.
+
+4) Overlay / HDB tab: no ghost 3rd column
+   Steps: Overlay including HDB → Show details → switch Overlay ↔ HDB tabs.
+   EXPECT: both tabs stay Type | Value (2 columns), no empty extra column.
+
+5) USGS meta: no duplicate rows
+   Steps: Internal USGS OGC → Show details.
+   EXPECT: Parameter Code, Statistic ID, Time Series ID, Monitoring Location ID once each.
+
+6) USGS meta on USGS-only (and non-overlay) columns
+   Steps:
+     a. Internal, only USGS, no overlay → Show details → real series meta (not blank/legacy unless legacy methodID).
+     b. USGS + HDB, no overlay → each column's details works for its source.
+     c. Overlay two USGS → both DB tabs show correct series meta.
+
+
+C) UI polish + raw deltas (NEW this pass)
+--------------------------------------------------------------------------------
+
+7) thenetpi / pi.jpg
+   Steps: Open About. Bottom-right secret (π) button should show the Net pi art.
+   EXPECT: icon loads from ui/icons/pi.jpg (file exists; old documentation/thenetpi.jpg gone).
+
+8) Save Quick Look dialog wider (~+60px)
+   Steps: Query window → Save Quick Look.
+   EXPECT: name dialog is noticeably wider than a stock Qt input dialog (~60px more).
+
+9) Query window wider (USGS UID)
+   Steps: Open Query. Paste a long USGS Site-time_series_id-Parameter id.
+   EXPECT: Data ID field + query list fit the long UID without the window feeling clipped
+           (window ~920px wide; field/list expanded).
+
+10) Raw data: deltas without scientific notation
+    Steps: Options → enable Raw Data. Query two close series with Delta checked
+           (or overlay) so a tiny difference appears (e.g. floating noise).
+    EXPECT: delta shows fixed-point like 0.000000000123, NOT 1.23e-10.
+
+
+D) Earlier code changes (optional smoke)
+--------------------------------------------------------------------------------
+[ ] Large dataset warning removed (>10k Yes/No gone from buildTable)
+[ ] Header sort not stacked (sectionClicked connected once)
+
+
+E) Already confirmed (don't re-break)
 --------------------------------------------------------------------------------
 [x] End timestamps exclusive end
 [x] BOP/EOP Options radios
@@ -28,7 +83,8 @@ Already confirmed previously (don't re-break):
 [x] Password paste while masked
 [x] Export complete message
 
-Previously changed, not re-confirmed this pass:
+
+Blocked / wait for retest before coding
 --------------------------------------------------------------------------------
-[ ] Large dataset warning removed (>10k row Yes/No dialog gone from buildTable)
-[ ] Header sort not stacked (sectionClicked no longer re-connected every query)
+- New USGS: always pull meta + Site Name header split  (depends on B 5/6)
+- Further export tab / HDB header churn until A is green

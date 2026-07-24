@@ -677,21 +677,9 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
             
-            # Normalize lookup key for seriesResponses.
-            # USGS headers are "site-param \\n interval" — use full DataID from columnMetadata.
-            if db == 'AQUARIUS':
-                normalizedLabel = seriesLabel.replace('\n', ' ').strip()
-            elif db == 'USGS-NWIS':
-                if isinstance(lookupId, str) and lookupId:
-                    normalizedLabel = lookupId.strip()
-                else:
-                    # Fallback: DataID is first segment of queryInfos
-                    qInfo = (self.columnMetadata[col].get('queryInfos') or ['|'])[0] if col < len(self.columnMetadata) else '|'
-                    normalizedLabel = qInfo.split('|')[0].strip() if qInfo else seriesLabel.split('\n')[-1].strip()
-            else:
-                normalizedLabel = seriesLabel.split('\n')[-1].strip()
-            response = self.seriesResponses.get(normalizedLabel) if normalizedLabel else None
-            
+            # Resolve seriesResponses with multiple candidate keys (header label != storage key for USGS).
+            response, normalizedLabel = self._resolveSeriesResponse(col, seriesLabel, db, lookupId)
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")              
             menu = QMenu(self)
@@ -751,6 +739,68 @@ class uiMain(QMainWindow):
         except Exception as e:
             Logic.logException("showCellContextMenu failed", e)
 
+    def _resolveSeriesResponse(self, col, seriesLabel, db, lookupId):
+        """
+        Find the stored series response for a column.
+
+        seriesResponses is keyed by query DataID (and Aquarius label variants).
+        Header text alone is not reliable for USGS (headers are site-param + interval).
+        """
+        candidates = []
+
+        def _add(val):
+            if val is None:
+                return
+            if isinstance(val, (list, tuple)):
+                for v in val:
+                    _add(v)
+                return
+            key = str(val).replace('\n', ' ').replace('\u00a0', ' ').strip()
+            key = ' '.join(key.split())
+            if key and key not in candidates:
+                candidates.append(key)
+
+        _add(lookupId)
+
+        meta = self.columnMetadata[col] if col < len(self.columnMetadata) else {}
+        _add(meta.get('dataIds'))
+        for qi in (meta.get('queryInfos') or []):
+            if isinstance(qi, list):
+                qi = qi[0] if qi else ''
+            qiStr = str(qi) if qi is not None else ''
+            if '|' in qiStr:
+                _add(qiStr.split('|')[0])
+            else:
+                _add(qiStr)
+
+        if db == 'AQUARIUS':
+            _add(seriesLabel.replace('\n', ' ').strip() if seriesLabel else None)
+        elif db == 'USGS-NWIS':
+            # Prefer DataID candidates already added; header last line is often just interval
+            if seriesLabel:
+                parts = [p.strip() for p in seriesLabel.split('\n') if p.strip()]
+                for p in parts:
+                    _add(p)
+        else:
+            # USBR: second header line is usually SDID or SDID-MRID
+            if seriesLabel and '\n' in seriesLabel:
+                _add(seriesLabel.split('\n')[-1].strip())
+            elif seriesLabel:
+                _add(seriesLabel.strip())
+
+        for key in candidates:
+            if key in self.seriesResponses:
+                return self.seriesResponses[key], key
+
+        # Case-insensitive fallback (hex time_series_id case mismatches)
+        lowerMap = {str(k).lower(): (k, v) for k, v in self.seriesResponses.items()}
+        for key in candidates:
+            hit = lowerMap.get(key.lower())
+            if hit:
+                return hit[1], hit[0]
+
+        return None, (candidates[0] if candidates else None)
+
     def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType, interval=None, multiTypes=None):
         """Open uiDetails for metadata (Aquarius or USBR)."""
         try:
@@ -761,6 +811,18 @@ class uiMain(QMainWindow):
             if multiTypes:
                 meta = self.columnMetadata[col]
                 lookupIds = meta.get('lookupId', [])
+                if not isinstance(lookupIds, list):
+                    lookupIds = [lookupIds] if lookupIds is not None else []
+                dataIds = meta.get('dataIds', [])
+                if not isinstance(dataIds, list):
+                    dataIds = [dataIds] if dataIds is not None else []
+                dbs = meta.get('dbs', [])
+                if not isinstance(dbs, list):
+                    dbs = [dbs] if dbs is not None else []
+                queryInfos = meta.get('queryInfos', [])
+                if not isinstance(queryInfos, list):
+                    queryInfos = [queryInfos] if queryInfos is not None else []
+
                 responsesList = []
                 intervalsList = []
                 
@@ -772,30 +834,51 @@ class uiMain(QMainWindow):
                         responsesList.append(cellData)
                         intervalsList.append(None) # No interval for overlay
                     else:
-                        # Use seriesResponses for DB tabs
-                        if i-1 < len(lookupIds): # i-1 since overlay is first
-                            lid = lookupIds[i-1]
-                            if isinstance(lid, list):
-                                lid = lid[0] if lid else ''
-                            normLabel = str(lid).replace('\n', ' ').strip()
-                            dbResponse = self.seriesResponses.get(normLabel, {})
-                            # USGS-NWIS: ensure details never receive a non-dict (overlay crash guard)
-                            if isinstance(t, str) and t.upper().startswith('USGS') and not isinstance(dbResponse, dict):
-                                dbResponse = {"kind": "legacy", "seriesMeta": {}, "points": []}
-                            responsesList.append(dbResponse)
-                            
-                            # Extract interval from queryInfos
-                            qInfo = meta['queryInfos'][i-1] if i-1 < len(meta['queryInfos']) else '|'
-                            if isinstance(qInfo, list):
-                                qInfo = qInfo[0] if qInfo else '|'
-                            dbInterval = str(qInfo).split('|')[1] if '|' in str(qInfo) else 'HOUR'
-                            intervalsList.append(dbInterval)
-                        else:
-                            blank = {"kind": "legacy", "seriesMeta": {}, "points": []} if isinstance(t, str) and t.upper().startswith('USGS') else {}
-                            responsesList.append(blank)
-                            intervalsList.append('HOUR')
-                            if Config.debug:
-                                Logic.logMessage("DEBUG", f"showMetadataDetails: No lookupId/queryInfo for type {t} at index {i-1}")
+                        # DB tab index in parallel lists (overlay is multiTypes[0])
+                        dbIdx = i - 1
+                        lid = lookupIds[dbIdx] if dbIdx < len(lookupIds) else None
+                        dataId = dataIds[dbIdx] if dbIdx < len(dataIds) else None
+                        dbName = dbs[dbIdx] if dbIdx < len(dbs) else t
+                        if isinstance(dbName, list):
+                            dbName = dbName[0] if dbName else t
+
+                        # Prefer this tab's own DataID/lookupId so primary/secondary don't swap
+                        dbResponse = None
+                        matchedKey = None
+                        for prefer in (lid, dataId):
+                            if prefer is None:
+                                continue
+                            preferKey = str(prefer).replace('\n', ' ').strip()
+                            if preferKey in self.seriesResponses:
+                                dbResponse = self.seriesResponses[preferKey]
+                                matchedKey = preferKey
+                                break
+                        if dbResponse is None:
+                            dbResponse, matchedKey = self._resolveSeriesResponse(
+                                col, seriesLabel, dbName, lid if lid is not None else dataId
+                            )
+
+                        if dbResponse is None:
+                            dbResponse = {}
+
+                        # USGS-NWIS: ensure details never receive a non-dict (overlay crash guard)
+                        if isinstance(t, str) and t.upper().startswith('USGS') and not isinstance(dbResponse, dict):
+                            dbResponse = {"kind": "legacy", "seriesMeta": {}, "points": []}
+                        responsesList.append(dbResponse)
+
+                        # Extract interval from queryInfos
+                        qInfo = queryInfos[dbIdx] if dbIdx < len(queryInfos) else '|'
+                        if isinstance(qInfo, list):
+                            qInfo = qInfo[0] if qInfo else '|'
+                        dbInterval = str(qInfo).split('|')[1] if '|' in str(qInfo) else 'HOUR'
+                        intervalsList.append(dbInterval)
+
+                        if Config.debug and not dbResponse:
+                            Logic.logMessage(
+                                "DEBUG",
+                                f"showMetadataDetails: No seriesResponse for type {t} idx={dbIdx} "
+                                f"lid={lid!r} dataId={dataId!r} matchedKey={matchedKey!r}"
+                            )
                 
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"showMetadataDetails: Gathered {len(responsesList)} responses and intervals for multiTypes {multiTypes}")
@@ -809,6 +892,7 @@ class uiMain(QMainWindow):
         except Exception as e:
             Logic.logException("showMetadataDetails failed", e)
             QMessageBox.warning(self, "Details Error", f"Failed to show details:\n{e}")
+
 
     def onTabCloseRequested(self, index):
         self.tabWidget.removeTab(index)

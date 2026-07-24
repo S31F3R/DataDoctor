@@ -1,24 +1,9 @@
 ####### CURRENT BUGS #######
--Meta data has a bug: when clicking on a HDB tab it adds a 3rd column to the table. once this is done, if Overlay Details tab is clicked, it has that extra column also
-    -If clicking on an HDB meta data tab then to a USGS-NWIS details tab, the extra column goes away. This was only tested on old USGS-NWIS query where meta data is blank
-    -This bug doesn't always happen. Haven't figured out why it happens sometimes and other times it doesn't
-    -This bug might only be tied to USGS data being in the context menu as overlayed. Got this idea from working on the USGS meta data bug documented below
--Meta data from context menu should only show 16 rows under the header. Anymore than that a scroll bar needs to be added, using the same color theme as the rest of the program
-    -Manually sizing this does allow scroll but no scroll bar currently shows up
--Meta data bug with USGS data. Some rows are duplicated. Parameter Code, Statistic ID, Time Series ID, Monitoring Location ID are all in there twice. There might be more
--USGS meta data doesn't work if only USGS data is queried. Added HDB data, still didn't work but HDB data did have meta data
-    -Validated USGS meta data only shows up when it's overlayed with data that context menu works on
-    -Works if 2 USGS data are queried and overlayed
--thenetpi.jpg needs to be mvoed to ui>icons folder and renamed to pi.jpg
 -Very large data queries seem to be getting stuck on "Building table...". Let it run for ~10 minutes but it never completed
     -Even if this isn't broke and would have completed after 30 minutes, need to look at a multi thread solution. Possibly organize the data first then place into table
 -Does USGS only give instant and daily? If not, need to add in the rest of the queries for monthly, yearly, etc. This needs to match what the program can currently query
 -Update tab index on all windows
--HDB headers are using commonName only, needs to be commonName - datatype
--Save quick look dialog needs to be wider by about 60px
--Query window needs to be wider. Currently can't fit new USGS query with UID
 -Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
--When using raw data option, values that are .000000000X different are showing a delta that's using scientific notation. This needs to be fixed
 -Need to catch "wrong user/password" for HDB login so multiple attempts don't lock the account
 -Figure out how to change taskbar icon
 -Text is slightly too big on Windows. Buttons in Query are truncated
@@ -28,10 +13,10 @@
     -Code currently works, just doesn't do the coloring properly
 -When using new USGS query, ALWAYS pull meta data for public and internal. Use the Site Name for the column header, splitting by the comma. Part 0 is first label, under that put part 1
     -Public won't have context menu, just pulling meta data for label. Internal will still have meta data and label
+    -WAIT: related to USGS meta work currently in test.txt — leave until that retest passes
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
--Export CSV needs to work based on what tab is selected
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
@@ -68,3 +53,9 @@
 -Update readme
 -Need documentation on different installers and pre req, maybe add in wiki or readme
 -Provide links to stuff like requesting USGS API key, Reclamation website, USGS data browser, and documention on how to find USGS information to create dataID
+
+####### WORKFLOW (for Grok / Seifer) #######
+-To Do List = backlog only (not currently being worked)
+-When work starts on a bug: remove it from here, add it to documentation/test.txt with steps
+-When Seifer confirms a test item: mark [x] in test.txt (and leave off this list)
+-If a test fails: keep in test.txt with notes; do not put back on To Do until abandoned

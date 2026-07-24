@@ -266,7 +266,16 @@ class uiQuery(QMainWindow):
                 Logic.logMessage("DEBUG", "btnSaveQuickLookPressed: Empty query list, showing warning")
             QMessageBox.warning(self, "Empty Query List", "Cannot save Quick Look: No items in the query list.")
             return        
-        name, ok = QInputDialog.getText(self, "Save Quick Look", "Quick Look name:")
+        # Wider than default QInputDialog (~+60px) so longer Quick Look names fit
+        dlg = QInputDialog(self)
+        dlg.setWindowTitle("Save Quick Look")
+        dlg.setLabelText("Quick Look name:")
+        dlg.setInputMode(QInputDialog.InputMode.TextInput)
+        dlg.setOkButtonText("Save")
+        hint = dlg.sizeHint()
+        dlg.resize(max(hint.width(), 280) + 60, hint.height())
+        ok = dlg.exec() == dlg.DialogCode.Accepted
+        name = dlg.textValue().strip() if ok else ""
 
         if ok and name:
             Logic.saveQuickLook(name, self.listQueryList)

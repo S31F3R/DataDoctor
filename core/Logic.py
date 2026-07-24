@@ -550,20 +550,48 @@ def exportTableToCSV(table, fileLocation, fileName):
         if Config.debug:
             logMessage("DEBUG", "exportTableToCSV: Failed to update user.config: {}".format(e))
 
-def valuePrecision(value):
-    """Format value to 2 decimals if <10, 1 if 10-99, 0 if >=100."""
-    if Config.rawData:
-        return str(value)
+def formatRawNumber(value):
+    """
+    Format a float for raw-data display without scientific notation.
+    Tiny differences (e.g. 1e-12) show as 0.000000000001, not 1e-12.
+    """
     try:
         v = float(value)
-        if v < 1000:
-            return '%.2f' % v
-        elif 1000 <= v < 10000:
-            return '%.1f' % v
-        else:
-            return '%.0f' % v
-    except ValueError:
+    except (ValueError, TypeError):
+        return str(value) if value is not None else ''
+    if v != v:  # NaN
+        return ''
+    if v == float('inf') or v == float('-inf'):
+        return str(v)
+    # Shortest round-trip first (avoids 123.450000000000003 noise)
+    s = format(v, '.15g')
+    if 'e' in s.lower():
+        # Force fixed-point for tiny/huge magnitudes Python would show as 1e-12
+        s = format(v, '.15f')
+        if '.' in s:
+            s = s.rstrip('0').rstrip('.')
+    if s in ('', '-0'):
+        s = '0'
+    return s
+
+def valuePrecision(value):
+    """Format value to 2 decimals if |v|<1000, 1 if 1000-9999, 0 if >=10000.
+
+    Raw mode: full precision in fixed-point (never scientific notation).
+    """
+    try:
+        v = float(value)
+    except (ValueError, TypeError):
         return value
+
+    if Config.rawData:
+        return formatRawNumber(v)
+    if abs(v) < 1000:
+        return '%.2f' % v
+    elif abs(v) < 10000:
+        return '%.1f' % v
+    else:
+        return '%.0f' % v
 
 def cleanShutdown():
     pool = QThreadPool.globalInstance()

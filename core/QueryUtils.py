@@ -200,9 +200,10 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
             d = deltas[r]
 
             # Set data for details (do not paint yet — QAQC runs first on final display values)
-            pStr = Logic.valuePrecision(str(primaryVal)) if hasP and not Config.rawData else str(primaryVal) if hasP else ''
-            sStr = Logic.valuePrecision(str(secondaryVal)) if hasS and not Config.rawData else str(secondaryVal) if hasS else ''
-            dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
+            # valuePrecision handles rawData (fixed-point, no scientific notation)
+            pStr = Logic.valuePrecision(primaryVal) if hasP else ''
+            sStr = Logic.valuePrecision(secondaryVal) if hasS else ''
+            dStr = Logic.valuePrecision(d) if np.isfinite(d) else ''
             item.setData(Qt.ItemDataRole.UserRole, {
                 'primaryVal': pStr,
                 'secondaryVal': sStr,
@@ -272,7 +273,8 @@ def addDeltaColumn(table, insertIdx, deltas):
 
     for r in range(numRows):
         d = deltas[r]
-        dStr = Logic.valuePrecision(str(d)) if np.isfinite(d) and not Config.rawData else str(d) if np.isfinite(d) else ''
+        # valuePrecision handles rawData (fixed-point, no scientific notation)
+        dStr = Logic.valuePrecision(d) if np.isfinite(d) else ''
         item = QTableWidgetItem(dStr)
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
         item.setForeground(Config.systemTextColor) # System default
