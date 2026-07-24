@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QMainWindow, QLineEdit, QComboBox, QDateTimeEdit, Q
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6 import uic
-from core import Logic, Query, Utils, Config
+from core import Logic, Query, Utils, Config, Upload
 from ui.uiSearch import uiSearch
 
 class uiQuery(QMainWindow):
@@ -242,6 +242,11 @@ class uiQuery(QMainWindow):
             overlayChecked = self.chkbOverlay.isChecked()
 
             if self.winMain:
+                if not Upload.confirmDiscardPendingEdits(self, "run a new query"):
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "btnQueryPressed: Canceled due to pending edits")
+                    return
+
                 self.winMain.lastQueryType = self.queryType
                 self.winMain.lastQueryItems = queryItems
                 self.winMain.lastStartDate = startDate

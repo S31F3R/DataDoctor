@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QCoreApplication, QTimer
 from PyQt6.QtGui import QColor, QBrush, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
-from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils
+from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils, Upload
 
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)
@@ -795,6 +795,8 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
     """Restore rows after sort, preserving cell UserRole and colors (overlay / QAQC)."""
     try:
         table.setSortingEnabled(False)
+        table.blockSignals(True)
+        table.setUpdatesEnabled(False)
 
         for rowIdx, row in enumerate(sortedRows):
             table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row['ts']))
@@ -827,9 +829,22 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
                 table.setItem(rowIdx, c, item)
         if Config.debug:
             Logic.logMessage("DEBUG", "Updated table after sort; preserved cell formatting and UserRole data.")
+
+        # Re-apply public / delta column edit locks (new items default to editable)
+        try:
+            mainWindow = table.window() if table is not None else None
+            if mainWindow is not None and hasattr(mainWindow, 'columnMetadata'):
+                Upload.applyEditability(table, mainWindow)
+        except Exception as e:
+            Logic.logException("updateTableAfterSort: applyEditability failed", e)
     except Exception as e:
         Logic.logException("updateTableAfterSort failed", e)
     finally:
+        try:
+            table.blockSignals(False)
+            table.setUpdatesEnabled(True)
+        except Exception:
+            pass
         try:
             table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         except Exception:
@@ -1291,6 +1306,13 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"executeQuery: Stored lastDeltaChecked={deltaChecked}, lastOverlayChecked={overlayChecked}")
+
+        # Baseline for edit/upload tracking + public/delta lock (after QAQC colors)
+        try:
+            Upload.snapshotBaseline(mainWindow.mainTable, mainWindow)
+        except Exception as e:
+            Logic.logException("executeQuery: upload baseline snapshot failed", e)
+
         progressDialog.cancel()
 
         # Show Data Query tab at index 0, moving if necessary

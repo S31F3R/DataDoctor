@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
 from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
 from PyQt6 import uic
-from core import Logic, Query, Utils, Config
+from core import Logic, Query, Utils, Config, Upload
 from ui.uiAbout import uiAbout
 from ui.uiDataDictionary import uiDataDictionary
 from ui.uiOptions import uiOptions
@@ -73,6 +73,7 @@ class uiMain(QMainWindow):
         self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
         self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
         self.btnUndo = self.findChild(QPushButton, 'btnUndo')
+        self.btnUpload = self.findChild(QPushButton, 'btnUpload')
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
         self.tabMain = self.findChild(QWidget, 'tabMain')
         self.tabSQL = self.findChild(QWidget, 'tabSQL')
@@ -85,6 +86,8 @@ class uiMain(QMainWindow):
         self.columnMetadata = []
         self.seriesResponses = {} # Dict to store {seriesLabel: responseDict} post-query
         self.currentQueryType = "" # str: "AQUARIUS", etc., set post-query
+        self._uploadBaselineReady = False
+        self._uploadTrackingBlocked = False
         self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
         self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
         self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
@@ -94,6 +97,7 @@ class uiMain(QMainWindow):
         self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')        
 
         # Map button style
+        # btnUpload uses the same Refresh icon assets as btnRefresh (user-placed button)
         buttonIcons = [
                         (self.btnPublicQuery, "PublicQuery", 36),
                         (self.btnDataDictionary, "Book", 36),
@@ -104,6 +108,7 @@ class uiMain(QMainWindow):
                         (self.btnInternalQuery, "InternalQuery", 36),
                         (self.btnUndo, "Reset", 36),
                         (self.btnRefresh, "Refresh", 36),
+                        (self.btnUpload, "Refresh", 32),
                         (self.btnRunQuery, "Play", 36),
                         (self.btnSaveSnippet, "StarPlus", 36),
                         (self.btnDeleteSnippet, "StarMinus", 36)
@@ -134,11 +139,15 @@ class uiMain(QMainWindow):
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
+        if self.btnUpload:
+            self.btnUpload.clicked.connect(self.btnUploadPressed)
         self.mainTable.horizontalHeader().sectionClicked.connect(lambda col: Query.customSortTable(self.mainTable, col, self.winDataDictionary.mainTable))
         self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)
         self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
+        self.mainTable.itemChanged.connect(self.onMainTableItemChanged)
+        # Edit triggers / locks applied after each query via Upload.snapshotBaseline
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
         self.btnRunQuery.clicked.connect(self.runCustomQuery)
         self.btnSaveSnippet.clicked.connect(self.saveSnippet)
@@ -673,6 +682,10 @@ class uiMain(QMainWindow):
     def btnRefreshPressed(self):
         try:
             if self.lastQueryType and self.lastQueryItems:
+                if not Upload.confirmDiscardPendingEdits(self, "refresh the query"):
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "btnRefreshPressed: Canceled due to pending edits")
+                    return
                 # Retrieve last delta and overlay states from globals, default to False if not set
                 deltaChecked = getattr(Config, 'lastDeltaChecked', False)
                 overlayChecked = getattr(Config, 'lastOverlayChecked', False)
@@ -704,6 +717,14 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", "btnUndoPressed: Called timestampSortTable")
         except Exception as e:
             Logic.logException("btnUndoPressed failed", e)
+
+    def onMainTableItemChanged(self, item):
+        """Flag user edits for upload (magenta); restore baseline when text matches original."""
+        Upload.onItemChanged(self, item)
+
+    def btnUploadPressed(self):
+        """Dry-run write of pending user edits to documentation/*.csv."""
+        Upload.runUpload(self)
 
     def showHeaderContextMenu(self, pos):
         """Show context menu for header right-click to display full query info using uiDetails."""
