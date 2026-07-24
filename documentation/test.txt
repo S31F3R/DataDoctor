@@ -7,28 +7,18 @@ Workflow:
   - FAIL → note here; Grok re-fixes
 
 
-Need retest (this pass) — Oracle option A: batch SDIDs
+Oracle speed (settled)
 --------------------------------------------------------------------------------
-
-1) Multi-series HDB IN-list batching (with connection reuse from C)
-   Steps:
-     a. Internal query with many HDB series on one DB (e.g. 20–50+ LCHDB series),
-        yesterday→now or multi-day HOUR (same as daily use is fine).
-     b. Optional debug log: "batch of N SDIDs", "interval IN-list query n=N",
-        fewer batch tasks than (#series × #chunks).
-   EXPECT:
-     - Values match prior runs (spot-check a few SDIDs).
-     - Context-menu meta / r_base still works on HDB cells.
-     - Faster than single-SDID SQL when many series (fewer round-trips).
-     - Connection reuse still: one open/close per worker, N batch tasks.
-   Notes: sdidBatchSize=25; WHERE site_datatype_id IN (:1..:n) + date range.
+[x] Option C — connection reuse per worker
+      2026-07-24: good speedup; day query HDB ~60s slower than USGS/Aquarius.
+      2026-07-24: 2-year mega query HDB only ~30s slower than Aquarius — good enough.
+[x] Option A — batch SDIDs  — REVERTED
+      2026-07-24: made things slower than C alone; code restored to C (pre-batch).
 
 
-Confirmed
+Confirmed (staging / this branch)
 --------------------------------------------------------------------------------
-[x] Oracle option C — connection reuse per worker
-      2026-07-24 works great (HDB ~60s slower than USGS/Aquarius on normal day query)
-[x] V1 large table build + overlay
+[x] V1 large multi-source build table + overlay/delta finishes
 [x] PATH Instant Client env limit
 [x] Data Dictionary scrollbar retro
 [x] Prior bug-smash cluster
@@ -36,7 +26,7 @@ Confirmed
 
 Deferred
 --------------------------------------------------------------------------------
-[!] Oracle D pool (optional; C covers per-sqlRead reuse — pool if multi-query later)
+[!] Oracle A batch / D pool — not pursuing unless new evidence
 [!] Windows taskbar via VB launcher
 [!] USGS monthly/yearly
 [!] Retro restart Windows / Windows text

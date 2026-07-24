@@ -1,74 +1,41 @@
-Oracle / HDB over the network — speed options (discussion; not implemented yet)
+Oracle / HDB over the network — speed options
 ================================================================================
 Context: Internal HDB uses many short SQL round-trips (per SDID × date chunk ×
-thread). Wall time is usually dominated by network RTT + Oracle parse/execute,
-not by local Python after the PATH bug fix.
+thread). Wall time is dominated by network RTT + Oracle parse/execute.
 
-Current shape (USBR.sqlRead)
-----------------------------
-- Estimate points for the full date range → split into date sub-ranges (chunks)
-  when over queryLimit rows.
-- For each (SDID, chunk): open connection, run interval SQL, optionally r_base
-  SQL, close connection.
-- Up to maxThreads (15) workers pull those tasks.
-- Map/lookup tables (agency, method, …) use one connection first.
+Current production path (bug-smashing)
+--------------------------------------
+- Option C: each worker opens ONE Oracle session, runs many (SDID, date-chunk)
+  tasks, then closes. executeCustomQueryWithRetry reconnects once if the session
+  drops.
+- Date chunking still uses queryLimit for large ranges.
+- maxThreads still 15 (not increased).
 
-Why a 2-year × many SDIDs query is slow
----------------------------------------
-- Tasks ≈ (# HDB series) × (# date chunks). Chunks grow with range/interval.
-- Each task pays connect + 1–2 SQL round-trips over the internet (or WAN).
-- Two HDB homes (LCHDB + YAOHDB) are separate query groups; still same Instant
-  Client process, but each sqlRead has its own worker pool and task list.
+Seifer validation
+-----------------
+- Day query: HDB ~60s slower than USGS/Aquarius after C — good improvement.
+- 2-year mega query: HDB only ~30s slower than Aquarius after C — good enough.
+- Option A (IN-list multi-SDID) made things slower → REVERTED to C-only.
 
-Options (with Seifer decisions)
--------------------------------
-
-A) Batch SDIDs in one SQL (WHERE site_datatype_id IN (...))  — IMPLEMENTED (retest)
-   - One round-trip for many series in the same chunk/DB.
-   - Biggest win for “100 parameters” style lists.
-   - Need careful bind limits, result split by SDID, memory for wide results.
-   DECISION: Do after C validated.
-   CODE: sdidBatchSize=25; tasks = (batch, dateRange); _buildMultiSdidQueries IN-list;
-         results split by SDID into same result shape as before.
-
-B) Fewer / smarter date chunks  — REMOVED
-   - Too risky (timeouts, huge result sets).
-
-C) Connection reuse per worker (or per sqlRead)  — IMPLEMENTED (retest)
-   - Worker opens one connection and reuses it for many tasks instead of
-     connect/close per (SDID, chunk).
-   - Cuts login/handshake cost a lot over the internet.
-   - Must be thread-safe (one connection per thread only).
-   DECISION: Prefer this first when we pick up Oracle speed work on bug-smashing.
-   CODE: USBR.sqlRead worker() opens oracleConnection once; queryTask uses
-         executeCustomQueryWithRetry; close in finally after queue empty.
-
-D) Connection pool (oracledb pool)
-   - Acquire/release instead of full connect each time.
-   DECISION: Deferred — C already reuses one session per worker for a full sqlRead.
-             Revisit pool if we need share-across successive queries / mapConn merge.
-
-E) Database links / single DSN strategy
-   - Already uses primary DSN + @db_link where links exist (3 HDBs linked;
-     others are not). No new product work unless more links appear.
-   DECISION: Already in place where possible; leave as-is.
-
-F) Parallelism tuning (maxThreads)
-   - More threads can help or hurt.
-   DECISION: Leave current threading as-is while testing C (and later A/D).
-             Do not push thread count without measurement.
-
-G) Reduce metadata work when not needed  — REMOVED
-   - r_base / maps needed for details context menu.
-
-Progress
---------
-1. C — per-worker connection reuse  ✓ done / confirmed
-2. A — multi-SDID IN-list            ✓ implemented — retest
-3. D — pool                         deferred (C covers primary case)
-4. F — threads                      leave alone unless profiling says otherwise
-
-Not first steps
+Options history
 ---------------
-- More threads alone without C/A
-- Client-side fake USGS monthly/yearly
+
+A) Batch SDIDs IN-list  — TRIED, REVERTED (slower than C alone)
+
+B) Fewer date chunks  — REMOVED (too risky)
+
+C) Connection reuse per worker  — SHIPPED / keep
+   CODE: USBR.sqlRead worker() owns one oracleConnection for its task queue.
+
+D) Connection pool  — DEFERRED (C covers the win we care about)
+
+E) DB links  — already in place where available
+
+F) More threads  — leave alone unless profiling says otherwise
+
+G) Skip metadata  — REMOVED (needed for details)
+
+Bottom line
+-----------
+Stop here for Oracle speed unless a new bottleneck appears. Prefer not to re-try
+A without a measured plan (bind batch size, fetch cost, DB plan).

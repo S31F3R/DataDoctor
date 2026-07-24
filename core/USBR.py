@@ -11,76 +11,6 @@ from collections import defaultdict
 primaryDsn = None
 queryLimit = 500
 maxThreads = 15
-# Option A: how many site_datatype_ids per SQL (IN-list). Keeps bind lists modest
-# while cutting round-trips for multi-series internal queries.
-sdidBatchSize = 25
-
-
-def _chunkList(items, size):
-    """Yield successive chunks of items (size may be 1..n)."""
-    if size < 1:
-        size = 1
-    for i in range(0, len(items), size):
-        yield items[i : i + size]
-
-
-def _buildMultiSdidQueries(dataTable, baseTable, timeCol, tableSuffix, sdidCount, table, mrid):
-    """
-    Build interval (+ optional r_base) SQL with IN (:1..:N) for N SDIDs.
-    Bind order: SDID1..SDIDn, start, end [, model_run_id].
-    """
-    inBinds = ','.join(f':{i}' for i in range(1, sdidCount + 1))
-    startBind = sdidCount + 1
-    endBind = sdidCount + 2
-    dataQuery = f"""
-        SELECT 
-          site_datatype_id AS SDID, 
-          TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
-          TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
-          TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
-          value,
-          validation,
-          overwrite_flag,
-          method_id,
-          derivation_flags
-        FROM {dataTable}
-        WHERE site_datatype_id IN ({inBinds})
-          AND {timeCol} BETWEEN TO_DATE(:{startBind}, 'YYYY-MM-DD HH24:MI:SS') 
-          AND TO_DATE(:{endBind}, 'YYYY-MM-DD HH24:MI:SS')
-        ORDER BY site_datatype_id, {timeCol} ASC
-    """
-    if table == 'M' and mrid != '0':
-        mridBind = endBind + 1
-        dataQuery = dataQuery.replace(
-            'ORDER BY',
-            f"AND model_run_id = :{mridBind}\nORDER BY",
-        )
-
-    metaQuery = None
-    if table == 'R' and baseTable:
-        metaQuery = f"""
-            SELECT 
-              site_datatype_id AS SDID, 
-              TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
-              TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
-              TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
-              value AS RBASE_VALUE,
-              validation,
-              overwrite_flag,
-              method_id,
-              agen_id,
-              collection_system_id,
-              loading_application_id,
-              computation_id,
-              data_flags
-            FROM {baseTable}
-            WHERE site_datatype_id IN ({inBinds})
-              AND {timeCol} BETWEEN TO_DATE(:{startBind}, 'YYYY-MM-DD HH24:MI:SS') 
-              AND TO_DATE(:{endBind}, 'YYYY-MM-DD HH24:MI:SS') 
-              AND interval = '{tableSuffix.lower()}'
-            ORDER BY site_datatype_id, {timeCol} ASC
-        """
-    return dataQuery, metaQuery
 
 def fetchAgenMap(oracleConn, schema):
     # Fetch agen map from primary dsn's hdb tables (local, no link)
@@ -292,11 +222,6 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     if Config.debug:
         Logic.logMessage("DEBUG", f"USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
 
-    if not SDIDs:
-        if Config.debug:
-            Logic.logMessage("DEBUG", "sqlRead: empty SDIDs list, returning {}")
-        return {}
-
     # Parse svr to short lower if full format
     if '-' in svr:
         svr = svr.split('-')[1].lower()
@@ -397,39 +322,122 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         timeCol = 'start_date_time'
         timeAlias = 'START_DATE_TIME'
 
-    # Option A: tasks are (batch of SDIDs, date range) — one SQL IN-list per task
-    sdidList = list(SDIDs)
-    sdidBatches = list(_chunkList(sdidList, sdidBatchSize))
+    # Interval query template (for single SDID)
+    dataQuery = f"""
+        SELECT 
+          site_datatype_id AS SDID, 
+          TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
+          TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
+          TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
+          value,
+          validation,
+          overwrite_flag,
+          method_id,
+          derivation_flags
+        FROM {dataTable}
+        WHERE site_datatype_id = :1
+          AND {timeCol} BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
+          AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS')
+        ORDER BY {timeCol} ASC
+    """
+
+    if table == 'M' and mrid != '0':
+        dataQuery = dataQuery.replace('ORDER BY', f"AND model_run_id = :4\nORDER BY")
+
+    # Base query template (metadata, only for 'R', single SDID)
+    metaQuery = None
+
+    if table == 'R':
+        metaQuery = f"""
+            SELECT 
+              site_datatype_id AS SDID, 
+              TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
+              TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
+              TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
+              value AS RBASE_VALUE,
+              validation,
+              overwrite_flag,
+              method_id,
+              agen_id,
+              collection_system_id,
+              loading_application_id,
+              computation_id,
+              data_flags
+            FROM {baseTable}
+            WHERE site_datatype_id = :1
+              AND {timeCol} BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
+              AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS') 
+              AND interval = '{tableSuffix.lower()}'
+            ORDER BY {timeCol} ASC
+        """
+
+    # Threading setup
     resultQueue = queue.Queue()
-    tasks = [
-        (batch, subStartStr, subEndStr)
-        for batch in sdidBatches
-        for subStartStr, subEndStr in subRanges
-    ]
+    tasks = [(SDID, subStartStr, subEndStr) for SDID in SDIDs for subStartStr, subEndStr in subRanges]
     numTasks = len(tasks)
-    numThreads = min(maxThreads, numTasks) if numTasks else 0
+    numThreads = min(maxThreads, numTasks)
 
     if Config.debug:
-        Logic.logMessage(
-            "DEBUG",
-            f"Created {numTasks} tasks: {len(sdidList)} SDIDs in {len(sdidBatches)} batches "
-            f"(size≤{sdidBatchSize}) × {len(subRanges)} date ranges, {numThreads} threads",
-        )
+        Logic.logMessage("DEBUG", f"Created {numTasks} tasks for {len(SDIDs)} SDIDs across {len(subRanges)} sub-ranges, using {numThreads} threads")
 
-    def _mergeRowsForSdid(SDID, dataByTime, metaByTime):
-        """Build output lines + display meta for one SDID from time-keyed maps."""
+    def queryTask(SDID, subStartStr, subEndStr, threadId, oracleConn):
+        """Run one (SDID, date-chunk) pair on an existing connection (no connect/close)."""
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"Thread {threadId} processing task for SDID {SDID}, range {subStartStr} to {subEndStr}",
+            )
+        if getattr(Oracle, '_authFailureMessage', None):
+            raise Oracle.OracleAuthError(Oracle._authFailureMessage)
+
+        # Data params
+        dataParams = [SDID, subStartStr, subEndStr]
+        if table == 'M' and mrid != '0':
+            dataParams.append(mrid)
+
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"sqlRead thread {threadId}: Executing interval query with params {dataParams}",
+            )
+        # Reuse session across tasks; retry once if the network dropped the connection
+        dataResults = oracleConn.executeCustomQueryWithRetry(dataQuery, params=dataParams)
+
+        # Group interval data by timeKey
+        dataByTime = {row[timeAlias]: row for row in dataResults}
+
+        # Fetch base metadata if applicable
+        metaResults = []
+        metaByTime = {}
+
+        if table == 'R':
+            metaParams = [SDID, subStartStr, subEndStr]
+
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"sqlRead thread {threadId}: Executing base query with params {metaParams}",
+                )
+            metaResults = oracleConn.executeCustomQueryWithRetry(metaQuery, params=metaParams)
+            metaByTime = {row[timeAlias]: row for row in metaResults}
+
+        # Process for this SDID and sub-range
         outputData = []
         mergedMeta = []
+
         allTimes = sorted(set(list(dataByTime.keys()) + list(metaByTime.keys())))
 
         for timeKey in allTimes:
             intRow = dataByTime.get(timeKey, {})
             baseRow = metaByTime.get(timeKey, {})
 
+            # Value for table: interval if present, else base (but prefer interval per request)
             value = intRow.get('VALUE') if intRow else baseRow.get('RBASE_VALUE') if baseRow else None
-            if value is None:
-                continue
 
+            if value is None:
+                continue  # Skip if no value
+
+            # Format timestamp from timeKey
             try:
                 dateTime = datetime.strptime(timeKey, '%Y-%m-%d %H:%M:%S')
                 formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
@@ -438,10 +446,11 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             except ValueError as e:
                 Logic.logMessage(
                     "WARN",
-                    f"sqlRead: Invalid timeKey skipped for SDID {SDID}: {timeKey} ({e})",
+                    f"sqlRead thread {threadId}: Invalid timeKey skipped for SDID {SDID}: {timeKey} ({e})",
                 )
                 continue
 
+            # Merge metadata: base as base, override common tags with interval if present/not None
             mergedRow = baseRow.copy() if baseRow else {}
             mergedRow.update({k: v for k, v in intRow.items() if v is not None})
             mergedRow['SDID'] = str(SDID)
@@ -452,6 +461,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             if baseRow:
                 mergedRow['RBASE_VALUE'] = baseRow.get('RBASE_VALUE')
 
+            # Build display dict with friendly keys and name replacements
             displayMeta = {}
             displayMeta['SDID'] = mergedRow.get('SDID', '')
             displayMeta['Interval'] = mergedRow.get('INTERVAL', '')
@@ -481,80 +491,19 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             displayMeta['Data Flags'] = (
                 mergedRow.get('DATA_FLAGS', '') or mergedRow.get('DERIVATION_FLAGS', '') or ''
             )
+
             mergedMeta.append(displayMeta)
 
-        return outputData, mergedMeta
-
-    def queryTask(sdidBatch, subStartStr, subEndStr, threadId, oracleConn):
-        """
-        Option A: one SQL for a batch of SDIDs over a date chunk.
-        Option C: uses worker's long-lived connection.
-        """
-        if Config.debug:
-            Logic.logMessage(
-                "DEBUG",
-                f"Thread {threadId} batch of {len(sdidBatch)} SDIDs, range {subStartStr} to {subEndStr}",
-            )
-        if getattr(Oracle, '_authFailureMessage', None):
-            raise Oracle.OracleAuthError(Oracle._authFailureMessage)
-
-        n = len(sdidBatch)
-        dataQuery, metaQuery = _buildMultiSdidQueries(
-            dataTable, baseTable, timeCol, tableSuffix, n, table, mrid
-        )
-        # Binds: SDID1..n, start, end [, mrid]
-        dataParams = list(sdidBatch) + [subStartStr, subEndStr]
-        if table == 'M' and mrid != '0':
-            dataParams.append(mrid)
+        resultQueue.put((SDID, {'data': outputData, 'rawResponse': mergedMeta}))
 
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
-                f"sqlRead thread {threadId}: interval IN-list query n={n} params[0:3]={dataParams[:3]}...",
-            )
-        dataResults = oracleConn.executeCustomQueryWithRetry(dataQuery, params=dataParams)
-
-        # Group interval rows by SDID then timeKey
-        dataBySdid = defaultdict(dict)
-        for row in dataResults or []:
-            sid = str(row.get('SDID', ''))
-            tk = row.get(timeAlias)
-            if sid and tk is not None:
-                dataBySdid[sid][tk] = row
-
-        metaBySdid = defaultdict(dict)
-        if metaQuery:
-            metaParams = list(sdidBatch) + [subStartStr, subEndStr]
-            if Config.debug:
-                Logic.logMessage(
-                    "DEBUG",
-                    f"sqlRead thread {threadId}: r_base IN-list query n={n}",
-                )
-            metaResults = oracleConn.executeCustomQueryWithRetry(metaQuery, params=metaParams)
-            for row in metaResults or []:
-                sid = str(row.get('SDID', ''))
-                tk = row.get(timeAlias)
-                if sid and tk is not None:
-                    metaBySdid[sid][tk] = row
-
-        # Emit one result blob per SDID (same shape as single-SDID path)
-        for SDID in sdidBatch:
-            sid = str(SDID)
-            outputData, mergedMeta = _mergeRowsForSdid(
-                SDID, dataBySdid.get(sid, {}), metaBySdid.get(sid, {})
-            )
-            resultQueue.put((SDID, {'data': outputData, 'rawResponse': mergedMeta}))
-
-        if Config.debug:
-            Logic.logMessage(
-                "DEBUG",
-                f"sqlRead thread {threadId}: batch done — "
-                f"{len(dataResults or [])} interval rows, "
-                f"{sum(len(v) for v in metaBySdid.values())} r_base rows, "
-                f"{len(sdidBatch)} SDIDs",
+                f"sqlRead thread {threadId}: Processed {len(outputData)} data points and "
+                f"{len(mergedMeta)} merged meta rows for SDID {SDID}",
             )
 
-    # Start threads — one Oracle session per worker (C), tasks are multi-SDID batches (A)
+    # Start threads — one Oracle session per worker, reused across all its tasks
     taskQueue = queue.Queue()
     for task in tasks:
         taskQueue.put(task)
@@ -565,8 +514,8 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     def worker(threadId):
         """
-        Option C: one connection per worker.
-        Option A: each task is a multi-SDID IN-list query for one date range.
+        Option C: open one connection for this worker, run many (SDID, chunk) tasks,
+        close when the queue is empty. Avoids connect/close per task over the WAN.
         """
         oracleConn = None
         tasksDone = 0
@@ -584,21 +533,21 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
             while True:
                 try:
-                    sdidBatch, subStartStr, subEndStr = taskQueue.get_nowait()
+                    SDID, subStartStr, subEndStr = taskQueue.get_nowait()
                 except queue.Empty:
                     break
                 try:
-                    queryTask(sdidBatch, subStartStr, subEndStr, threadId, oracleConn)
+                    queryTask(SDID, subStartStr, subEndStr, threadId, oracleConn)
                     tasksDone += 1
                 except Exception as e:
                     Logic.logException(
-                        f"sqlRead worker {threadId} failed for batch size "
-                        f"{len(sdidBatch) if sdidBatch else 0} "
+                        f"sqlRead worker {threadId} failed for SDID {SDID} "
                         f"range {subStartStr}-{subEndStr}",
                         e,
                     )
                     with workerErrorsLock:
                         workerErrors.append(e)
+                    # Auth failure: stop this worker; other workers will hit the same block
                     if isinstance(e, Oracle.OracleAuthError) or Oracle.isAuthError(e):
                         break
                 finally:
@@ -607,6 +556,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                     except Exception:
                         pass
         except Exception as e:
+            # Connect / setup failure before any tasks
             Logic.logException(f"sqlRead worker {threadId} failed to start session", e)
             with workerErrorsLock:
                 workerErrors.append(e)
@@ -619,7 +569,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                 if Config.debug:
                     Logic.logMessage(
                         "DEBUG",
-                        f"sqlRead worker {threadId}: closed connection after {tasksDone} batch task(s)",
+                        f"sqlRead worker {threadId}: closed connection after {tasksDone} task(s)",
                     )
 
     for i in range(numThreads):
