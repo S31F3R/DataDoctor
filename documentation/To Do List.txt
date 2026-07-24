@@ -9,8 +9,6 @@
 -Text is slightly too big on Windows. Buttons in Query are truncated
     -There looks like there is extra padding above and under the text also. Not sure if a simple lower by 1 size will fix this
     -This might be tied to certain controls. THe SQL Query Builder area isn't impacted, either is the table output from the query, but the SQL quicklooks to the right are
--HDB data needs to bypass QAQC coloring when there is a value in rbase and not in interval. Use the blue box when data is missing, but place black text with the rbase value
-    -Code currently works, just doesn't do the coloring properly
 
 ####### SQL QUERY BUILDER MODIFICATIONS #######
 -Locks up ui when running query. Make it use seperate thread
@@ -43,8 +41,6 @@
     -Data review tool shows 00:00, so my query might be whack
     -Issue is tied to how Aquarius handles different timezones. Daily data is getting offset based on the location timezone and the UTC offset sent in query
      meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
--Max/min context menu on headers need to show timestamp for max/min value
--Aquarius meta data needs to show Aquarius label as first item. Lable currently isn't setup
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme

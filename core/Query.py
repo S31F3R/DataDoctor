@@ -1120,6 +1120,10 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", "executeQuery: Set columnMetadata for non-overlay with lists: {repr(mainWindow.columnMetadata)}")
+
+            # After QAQC/overlay: blue box + black text for HDB r_base fills (no interval)
+            QueryUtils.applyUsbrRbaseFallbackColors(mainWindow.mainTable, mainWindow)
+
             progressDialog.setValue(100)
             progressDialog.repaint()
             QCoreApplication.processEvents()

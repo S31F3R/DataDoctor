@@ -326,7 +326,7 @@ class uiDetails(QWidget):
         queryStr = queryInfos[0] if isinstance(queryInfos, list) else str(queryInfos)
         self.addRow("Query Info", queryStr)
         
-        # Add stats (computed as in original)
+        # Add stats (with timestamps for max/min)
         maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
         self.addRow("Max", maxStr)
         self.addRow("Min", minStr)
@@ -338,7 +338,7 @@ class uiDetails(QWidget):
         # Add details
         self.addRow("Calculation", f"{meta.get('dataIds', ['N/A', 'N/A'])[0]} - {meta.get('dataIds', ['N/A', 'N/A'])[1]}")
         
-        # Add stats
+        # Add stats (with timestamps for max/min)
         maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
         self.addRow("Max", maxStr)
         self.addRow("Min", minStr)
@@ -351,34 +351,41 @@ class uiDetails(QWidget):
         self.addRow("Primary", meta.get('queryInfos', ['N/A', 'N/A'])[0])
         self.addRow("Secondary", meta.get('queryInfos', ['N/A', 'N/A'])[1])
         
-        # Add stats
+        # Add stats (with timestamps for max/min)
         maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
         self.addRow("Max", maxStr)
         self.addRow("Min", minStr)
         self.addRow("Mean", meanStr)
     
     def computeColumnStats(self, col):
-        """Compute stats for a column (mirrors original logic)."""
-        values = []
+        """Compute stats for a column; max/min include the row timestamp."""
+        values = []  # list of (float, timestampStr)
 
         for row in range(self.parent().mainTable.rowCount()):
             item = self.parent().mainTable.item(row, col)
 
             if item and item.text().strip():
                 try:
-                    values.append(float(item.text()))
+                    val = float(item.text())
+                    tsItem = self.parent().mainTable.verticalHeaderItem(row)
+                    ts = tsItem.text() if tsItem else ''
+                    values.append((val, ts))
                 except ValueError:
                     pass
         if not values:
             return "N/A", "N/A", "N/A"
-        maxVal = max(values)
-        minVal = min(values)
-        meanVal = sum(values) / len(values)
+        maxPair = max(values, key=lambda x: x[0])
+        minPair = min(values, key=lambda x: x[0])
+        meanVal = sum(v for v, _ in values) / len(values)
         
         # Use valuePrecision for formatting, handles rawData internally
-        maxStr = Logic.valuePrecision(maxVal)
-        minStr = Logic.valuePrecision(minVal)
+        maxStr = Logic.valuePrecision(maxPair[0])
+        minStr = Logic.valuePrecision(minPair[0])
         meanStr = Logic.valuePrecision(meanVal)
+        if maxPair[1]:
+            maxStr = f"{maxStr} @ {maxPair[1]}"
+        if minPair[1]:
+            minStr = f"{minStr} @ {minPair[1]}"
         
         if Config.debug:
             Logic.logMessage("DEBUG", f"Computed stats for column {col}: Max {maxStr}, Min {minStr}, Mean {meanStr}")
@@ -407,9 +414,20 @@ class uiDetails(QWidget):
             Logic.logMessage("WARN", f"No matching point found for timestamp {timestampStr}")
             return
         
-        # Add rows for selected metadata (per list 1-10)
-        
-        # 1. Parameter/Label/Unit (series-level)
+        # 0. Aquarius Label first (series-level — Label + LocationIdentifier)
+        aqLabel = (response.get('Label') or '').strip()
+        aqLocation = (response.get('LocationIdentifier') or '').strip()
+        if aqLabel and aqLocation:
+            labelDisplay = f"{aqLabel} \n{aqLocation}"
+        elif aqLabel:
+            labelDisplay = aqLabel
+        elif aqLocation:
+            labelDisplay = aqLocation
+        else:
+            labelDisplay = 'N/A'
+        self.addRow("Aquarius Label", labelDisplay, table=table)
+
+        # 1. Parameter/Unit (series-level)
         self.addRow("Parameter", f"{response.get('Parameter', 'N/A')}, {response.get('Unit', 'N/A')}", table=table)
         
         # 2. Timestamp/Value (point-level, respect Config.rawData for formatting)

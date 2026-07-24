@@ -1,8 +1,9 @@
 # QueryUtils.py
 
 import numpy as np
+from datetime import datetime
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QFontMetrics
+from PyQt6.QtGui import QColor, QFontMetrics, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem
 from core import Logic, Config
 from DataDoctor import uiMain
@@ -259,6 +260,103 @@ def applyOverlayColorOverrides(table):
             elif hasP and not hasS:
                 item.setBackground(QColor(255, 182, 193))  # Light pink — primary only
                 item.setForeground(QColor(0, 0, 0))
+
+def applyUsbrRbaseFallbackColors(table, mainWindow):
+    """
+    HDB/USBR: when interval is empty but r_base has a value, the cell shows the
+    r_base number. Paint it like a missing interval (blue box) with black text
+    so it is not treated as a normal QAQC'd reading.
+    """
+    if table is None or mainWindow is None:
+        return
+    seriesResponses = getattr(mainWindow, 'seriesResponses', None) or {}
+    columnMetadata = getattr(mainWindow, 'columnMetadata', None) or []
+    if not seriesResponses or not columnMetadata:
+        return
+
+    blue = QColor(100, 195, 247)
+    black = QColor(0, 0, 0)
+
+    for col, meta in enumerate(columnMetadata):
+        if col >= table.columnCount():
+            break
+        dbs = meta.get('dbs') or []
+        if isinstance(dbs, list):
+            db = dbs[0] if dbs else ''
+        else:
+            db = dbs
+        if not db or not str(db).startswith('USBR'):
+            continue
+
+        # Resolve seriesResponses key (DataID / lookupId)
+        lid = meta.get('lookupId')
+        if isinstance(lid, list):
+            lid = lid[0] if lid else None
+        dataIds = meta.get('dataIds') or []
+        if isinstance(dataIds, list):
+            dataId = dataIds[0] if dataIds else None
+        else:
+            dataId = dataIds
+
+        response = None
+        for key in (lid, dataId):
+            if key is not None and str(key) in seriesResponses:
+                response = seriesResponses[str(key)]
+                break
+            if key is not None and key in seriesResponses:
+                response = seriesResponses[key]
+                break
+        if not isinstance(response, list) or not response:
+            continue
+
+        # Map End/Start DateTime (query format) -> meta row
+        byEnd = {}
+        byStart = {}
+        for rowMeta in response:
+            if not isinstance(rowMeta, dict):
+                continue
+            endK = rowMeta.get('End Date/Time') or ''
+            startK = rowMeta.get('Start Date/Time') or ''
+            if endK:
+                byEnd[str(endK)] = rowMeta
+            if startK:
+                byStart[str(startK)] = rowMeta
+
+        for r in range(table.rowCount()):
+            item = table.item(r, col)
+            if not item or not item.text().strip():
+                continue
+            tsItem = table.verticalHeaderItem(r)
+            if not tsItem:
+                continue
+            tsStr = tsItem.text()
+            try:
+                tsDate = datetime.strptime(tsStr, '%m/%d/%y %H:%M:00')
+                matchKey = tsDate.strftime('%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                continue
+
+            rowMeta = byEnd.get(matchKey) or byStart.get(matchKey)
+            if not rowMeta:
+                continue
+            intervalVal = (rowMeta.get('Interval Value') or '').strip()
+            baseVal = (rowMeta.get('Base Value') or '').strip()
+            if intervalVal or not baseVal:
+                continue
+
+            # r_base fill for missing interval: blue missing box + black text
+            item.setBackground(blue)
+            item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(black))
+            # Keep a light marker for other code paths if needed
+            user = item.data(Qt.ItemDataRole.UserRole)
+            if isinstance(user, dict):
+                user = dict(user)
+                user['rbaseFallback'] = True
+                item.setData(Qt.ItemDataRole.UserRole, user)
+
+    if Config.debug:
+        Logic.logMessage("DEBUG", "applyUsbrRbaseFallbackColors: finished pass")
+
 
 def computeDeltas(primaryVals, secondaryVals):
     deltas = np.subtract(primaryVals, secondaryVals)

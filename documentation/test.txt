@@ -10,26 +10,30 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
-1) About secret π icon loads
-   Steps: Open About. Look bottom-right corner for the Net π glyph.
-   EXPECT: small visible π icon (not blank). Uses ui/icons/pi.png crop, not the full still.
-   Notes: 2026-07-23 FAILED — full pi.jpg scaled to 16px looked empty.
-          Re-fix: cropped glyph → pi.png + QPixmap scale to 20px.
+1) About secret π icon (restored clean glyph)
+   Steps: Open About → bottom-right corner.
+   EXPECT: clean white π icon (same as original Secret.png look), NOT CRT/TV static.
+   Notes: pi.png is now the clean 48×48 glyph (copy of what worked as Secret.png).
+          Full movie still stays at ui/icons/pi.jpg for reference only — not used as button icon.
 
-2) USGS headers use Site Name (comma split)
-   Steps:
-     a. Public or internal OGC USGS query (Site-time_series_id-Parameter).
-     b. Check column header after data loads.
-   EXPECT:
-     - Site Name from API, e.g. "COLORADO RIVER NEAR CISCO" on line 1,
-       "UT" (or second comma segment) on line 2 — not site-param only.
-     - Meta still available on internal (right-click Show details).
-     - Public: headers still use Site Name; no cell context menu (unchanged).
-   Notes: labelsDict gets Site Name for USGS; buildTable prefers it; seriesResponses
-          stay keyed by DataID so details still resolve.
+2) Header Max/Min show timestamps
+   Steps: After a data query, right-click a column header → Show details (or Max/Min path).
+   EXPECT: Max and Min rows include the timestamp, e.g. "12.34 @ 07/01/26 14:00:00".
+           Mean can stay value-only.
+
+3) HDB r_base fallback coloring
+   Steps: Internal USBR query where some timesteps have r_base value but no interval value
+          (cell shows a number filled from base).
+   EXPECT: those cells = light blue background (same family as missing) + black text.
+           Pure missing (no base either) still blue empty. Normal interval values keep QAQC colors.
+
+4) Aquarius Label first in meta details
+   Steps: Internal Aquarius query → cell Show details.
+   EXPECT: first row is "Aquarius Label" with Label / LocationIdentifier.
+           Parameter and the rest follow.
 
 
-Confirmed this session (do not re-break)
+Confirmed (do not re-break)
 --------------------------------------------------------------------------------
 [x] Export CSV uses active tab
 [x] HDB headers = commonName - datatype
@@ -37,6 +41,7 @@ Confirmed this session (do not re-break)
 [x] Overlay/HDB no ghost 3rd column
 [x] USGS meta no duplicate rows
 [x] USGS meta on USGS-only / non-overlay
+[x] USGS headers use Site Name (comma split)
 [x] Save Quick Look dialog wider (~+60px)
 [x] Query window wider (USGS UID)
 [x] Raw data deltas without scientific notation
@@ -48,7 +53,7 @@ Confirmed this session (do not re-break)
 [x] Export complete message
 
 
-Optional smoke (earlier code, not re-checked)
+Optional smoke
 --------------------------------------------------------------------------------
 [ ] Large dataset warning removed (>10k Yes/No gone)
 [ ] Header sort not stacked (sectionClicked once)

@@ -2,36 +2,26 @@ DataDoctor — session handoff
 ============================================================
 Branch: bug-smashing
 
-Workflow
---------
-- To Do List.txt = BACKLOG
-- test.txt = IN-PROGRESS tests for Seifer
+Workflow: To Do List = backlog | test.txt = in-progress tests
 
 
-Just confirmed by Seifer (2026-07-23)
--------------------------------------
-Export tab, HDB headers, meta cluster (16-row scroll, ghost column, USGS
-dupes/USGS-only), Save Quick Look width, Query window width, raw deltas.
-All [x] in test.txt.
+Pi icon lesson
+--------------
+Secret.png (clean white π) worked before this conversation.
+thenetpi.jpg / pi.jpg is a full CRT still — do not use as the 16px button.
+pi.png should be the clean glyph (same as Secret.png). Movie still can stay as pi.jpg.
 
 
-In flight (test.txt retest)
----------------------------
-1) About π icon — pi.png crop + QPixmap scale (full pi.jpg was unreadable at 16px)
-2) USGS column headers from Site Name (comma split) for public + internal OGC
+In flight (test.txt)
+--------------------
+1) π icon restored to clean glyph
+2) Header Max/Min + timestamps
+3) HDB r_base fallback blue + black text
+4) Aquarius Label first in cell meta
 
 
 Still backlog
 -------------
-Building table hang, USGS monthly+, tab indexes, retro Windows restart,
-HDB password lockout, taskbar icon, Windows text size, HDB rbase QAQC,
-SQL UI thread, features/plots/log viewer, Aquarius daily TZ, max/min
-timestamp, Aquarius label first, formatting rules, git/readme.
-
-
-Key files this pass
--------------------
-ui/icons/pi.png     cropped Net π glyph (64x64)
-ui/uiAbout.py       loads pi.png via QPixmap
-core/Query.py       USGS Site Name → labelsDict → buildTable headers;
-                    don't remap USGS seriesResponses keys to Site Name
+Building table hang, USGS monthly+, tab indexes, retro Windows, HDB password
+lockout, taskbar icon, Windows text size, SQL UI thread, features, Aquarius
+daily TZ, formatting rules, git/readme.
