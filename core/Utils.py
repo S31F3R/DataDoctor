@@ -73,7 +73,7 @@ CONTROL_LAYOUTS = {
         'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
         'chkbDebug': (130, 149, 21, 22),
         'chkbEnableSQL': (206, 179, 21, 22),
-        'rbBOP': (203, 0, 141, 22),
+        'rbBOP': (199, 0, 141, 22),                 # was 203; -4 x
         'rbEOP': (350, 0, 131, 22),
         'btnDataIdInfo': (406, 5, 31, 20),
         'btnIntervalInfo': (164, 76, 31, 20),
@@ -81,6 +81,9 @@ CONTROL_LAYOUTS = {
         'chkbOverlay': (162, 424, 131, 22),
     },
 }
+
+# Neon green used for retro scrollbars and tab chrome
+RETRO_NEON_GREEN = '#00FF00'
 
 # Retro-only: smaller Press Start on these (objectName → leave rest at role sizes)
 RETRO_SMALL_FONT_CONTROLS = frozenset({
@@ -100,6 +103,15 @@ RETRO_SMALL_FONT_PT = 6  # one step under general ui 8pt
 QUERY_LARGE_BUTTON_CONTROLS = frozenset({
     'btnAddQuery',
     'btnQuery',
+})
+
+# Windows + retro only: one point smaller (Press Start is roomier on Win metrics)
+WIN_RETRO_SMALLER_CONTROLS = frozenset({
+    'btnLoadQuickLook',
+    'btnClearQuery',
+    'btnSaveQuickLook',
+    'btnDeleteQuickLook',  # same row as Load/Save; keep quartet consistent
+    'listQueryList',
 })
 
 # Extra Y offset (pixels) applied on a given platform for default (Noto) mode only.
@@ -519,27 +531,47 @@ def retroSpacingStylesheet():
     """
     if not Config.retroMode:
         return ""
-    return """
-    /* Tabs only: taller labels (vertical). Tables use NO QSS width/height pad —
-       column width is pure metrics + original +10/+20 fudge (retro start). */
-    QTabBar::tab {
+    # Tab chrome uses same neon as scrollbar handles; stripped when retro off
+    # (readBaseStylesheet / setRetroStyles rebuild without this block).
+    green = RETRO_NEON_GREEN
+    return f"""
+    /* Retro tabs: neon green (scrollbar green) + black label text */
+    QTabBar::tab {{
+        background: {green};
+        color: #000000;
         padding-top: 6px;
         padding-bottom: 6px;
-        padding-left: 6px;
-        padding-right: 6px;
-    }
-    /* Original retro list item air (vertical); keep horizontal small */
-    QListWidget::item, QListView::item {
+        padding-left: 8px;
+        padding-right: 8px;
+        border: 1px solid #00aa00;
+        margin-right: 2px;
+    }}
+    QTabBar::tab:selected {{
+        background: {green};
+        color: #000000;
+        font-weight: bold;
+        border: 1px solid #003300;
+    }}
+    QTabBar::tab:hover {{
+        background: #66FF66;
+        color: #000000;
+    }}
+    QTabBar::tab:!selected {{
+        background: #00cc00;
+        color: #000000;
+    }}
+    /* List item air (vertical); keep horizontal small */
+    QListWidget::item, QListView::item {{
         padding-top: 5px;
         padding-bottom: 5px;
         padding-left: 3px;
         padding-right: 3px;
         min-height: 1.2em;
-    }
-    QCheckBox, QRadioButton {
+    }}
+    QCheckBox, QRadioButton {{
         spacing: 10px;
         min-height: 1.3em;
-    }
+    }}
     """
 
 
@@ -599,6 +631,19 @@ def applyRoleFonts(app=None, root=None):
     retroSmallFont = None
     if Config.retroMode:
         retroSmallFont = makeFontForRole('ui', pointSize=RETRO_SMALL_FONT_PT)
+    # Windows retro: named Query controls one point smaller
+    winRetroSmaller = (
+        Config.retroMode and sys.platform == 'win32'
+    )
+    winSmallerButtonFont = None
+    winSmallerListFont = None
+    if winRetroSmaller:
+        winSmallerButtonFont = makeFontForRole(
+            'button', pointSize=max(rolePointSize('button') - 1, 5)
+        )
+        winSmallerListFont = makeFontForRole(
+            'list', pointSize=max(rolePointSize('list') - 1, 5)
+        )
 
     if root is not None:
         widgets = [root] + list(root.findChildren(QWidget))
@@ -617,6 +662,15 @@ def applyRoleFonts(app=None, root=None):
             if Config.retroMode and retroSmallFont is not None and name in RETRO_SMALL_FONT_CONTROLS:
                 w.setFont(retroSmallFont)
                 continue
+            # Windows + retro: Load/Clear/Save/Delete Quick Look + dataID list −1pt
+            if winRetroSmaller and name in WIN_RETRO_SMALLER_CONTROLS:
+                if isinstance(w, QListWidget) and winSmallerListFont is not None:
+                    w.setFont(winSmallerListFont)
+                    applyCompactListStyle(w)
+                    continue
+                if isinstance(w, QPushButton) and winSmallerButtonFont is not None:
+                    w.setFont(winSmallerButtonFont)
+                    continue
             if isinstance(w, QPushButton):
                 if name in QUERY_LARGE_BUTTON_CONTROLS:
                     w.setFont(queryLargeButtonFont)

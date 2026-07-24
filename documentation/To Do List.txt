@@ -1,15 +1,7 @@
 ####### CURRENT BUGS #######
 -Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
--Text / fonts (round 5 — bundled Noto Sans for non-retro)
-    -Default = bundled Noto Sans 10pt (ui/fonts/NotoSans-*.ttf) — same on Linux/Windows/Mac
-    -Retro = Press Start; buttons stay 6pt; other roles larger (ui/list 8, log 10, code 9)
-    -Log crash: setLineHeight needs int enum value (fixed)
-    -Terminess removed (was unused mistaken hardcode)
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
--Oracle HDB speed: C connection reuse kept (good enough); A batch tried & reverted
-    -See documentation/oracle-speed-options.txt
-
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
