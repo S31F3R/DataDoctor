@@ -1,0 +1,48 @@
+TEST FILE — currently being worked / needing retest
+============================================================
+Workflow:
+  - To Do List.txt = backlog only
+  - This file = in-progress / Seifer tests here
+  - PASS → mark [x] here (stay off To Do)
+  - FAIL → note here; Grok re-fixes
+
+
+GATE before staging push
+--------------------------------------------------------------------------------
+
+V1) Large multi-source query finishes through overlay/delta + table display
+   Steps: 2-year mega query (USGS + multi-HDB + Aquarius, many series), with Overlay
+          and/or Delta if that is how you normally run it.
+   EXPECT:
+     - Building table... shows row progress (does not freeze forever).
+     - At 97%: "Overlay/delta: reading... / computing pairs... / writing..." updates
+       (NOT a silent hang on "Applying overlay/delta").
+     - Then QAQC / overlay colors if enabled; table appears.
+   Notes:
+     2026-07-24 PATH crash FIXED.
+     2026-07-24 buildTable hang improved; then hung on Applying overlay/delta @ 97%.
+     Cause: processOverlay called removeColumn for every pair on 10k+ row tables —
+             each remove shifts every remaining cell (O(pairs × rows × cols)).
+     FIX: offline extract → compute merges/deltas → single table rewrite; progress
+          yields; no removeColumn loop. Retest mega query with overlay/delta on.
+
+
+Confirmed recently
+--------------------------------------------------------------------------------
+[x] Data Dictionary scrollbar thick + retro theme
+[x] Large multi-source query: no Oracle PATH 32767 crash
+[x] Tab order main + query
+[x] Options remask secrets on close
+[x] SQL Query Builder background thread
+[x] Aquarius Label = Label only
+[x] (prior bug-smash cluster)
+
+
+Deferred / external
+--------------------------------------------------------------------------------
+[!] Oracle HDB speed after staging (C connection reuse first)
+[!] Windows taskbar icon via VB.NET launcher
+[!] USGS monthly/yearly — OGC continuous + daily only
+[!] Retro restart Windows / Windows text truncation
+[!] Aquarius daily 2300 TZ
+[!] Features: plots, log viewer, goat, formatting rules, git/readme
