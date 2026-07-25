@@ -3,7 +3,7 @@
 import numpy as np
 from datetime import datetime
 from PyQt6.QtCore import Qt, QCoreApplication
-from PyQt6.QtGui import QColor, QFontMetrics, QBrush
+from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem
 from core import Logic, Config, Utils
 from DataDoctor import uiMain
@@ -266,34 +266,11 @@ def modifyTable(
         if numRows > 5000 and c == 0:
             pass  # column loop already yields
 
-    # Lightweight width: header + tiny sample (never scan all rows)
-    # Match buildTable fudge; ignore blank spacer lines in header text
-    font = table.font()
-    metrics = QFontMetrics(font)
-    sampleN = min(50, numRows)
-    for c in range(outCols):
-        headerItem = table.horizontalHeaderItem(c)
-        headerText = headerItem.text() if headerItem else ""
-        # Same original buildTable width math (blank spacer lines ignored)
-        headerLines = [line.strip() for line in headerText.split('\n') if line.strip()]
-        headerWidth = max(
-            (metrics.horizontalAdvance(line) for line in headerLines),
-            default=40,
-        )
-        maxCell = metrics.horizontalAdvance("0.00")
-        for r in range(sampleN):
-            it = table.item(r, c)
-            if it and it.text():
-                maxCell = max(maxCell, metrics.horizontalAdvance(it.text()))
-        finalWidth = max(maxCell, headerWidth)
-        if headerWidth > maxCell:
-            finalWidth = maxCell + (headerWidth - maxCell) + 10
-        else:
-            finalWidth += 20
-        table.setColumnWidth(c, finalWidth)
+    # Column width deferred to executeQuery (Utils.autoSizeTableColumns) after
+    # final headers + valuePrecision + any further color passes.
 
     # Re-apply row/header heights after clear/rewrite
-    Utils.applyTableRowMetrics(table, font=font)
+    Utils.applyTableRowMetrics(table, font=table.font())
 
     table.blockSignals(False)
     table.setUpdatesEnabled(True)

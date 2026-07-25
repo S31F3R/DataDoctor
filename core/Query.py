@@ -547,40 +547,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         vHeader.setMinimumWidth(max(120, metrics.horizontalAdvance(sampleTs) + 16))
     else:
         table.verticalHeader().setVisible(False)
-        font = table.font()
-        metrics = QFontMetrics(font)
 
-    columnWidths = []
-    sampleRows = min(100, numRows)  # small sample; width does not need full scan
-    sampleSplit = []
-    for row in data[:sampleRows]:
-        parts = row.split(',')
-        sampleSplit.append(parts[1:] if skipDateCol and len(parts) > 1 else parts)
-
-    for c in range(numCols):
-        nonEmptyValues = []
-        for parts in sampleSplit:
-            if c < len(parts):
-                val = parts[c].strip()
-                if val:
-                    nonEmptyValues.append(val)
-        if nonEmptyValues:
-            maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
-        else:
-            maxCellWidth = metrics.horizontalAdvance("0.00")
-        # Non-empty header lines only (blank BETWEEN parts does not drive width)
-        headerLines = [line.strip() for line in headers[c].split('\n') if line.strip()]
-        headerWidth = max(
-            (metrics.horizontalAdvance(line) for line in headerLines),
-            default=0,
-        )
-        # Exact original buildTable width math (pre-padding experiments)
-        finalWidth = max(maxCellWidth, headerWidth)
-        if headerWidth > maxCellWidth:
-            finalWidth = maxCellWidth + (headerWidth - maxCellWidth) + 10
-        else:
-            finalWidth += 20
-        columnWidths.append(finalWidth)
+    # Column widths deferred to executeQuery (after valuePrecision + final headers).
+    # Measuring raw CSV here was wrong: display text is reformatted on fill.
 
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: Disabled updates+sorting+signals for population")
@@ -623,10 +592,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             if progressDialog is not None and progressDialog.wasCanceled():
                 break
 
-    for c in range(numCols):
-        table.setColumnWidth(c, columnWidths[c])
-
     # Re-assert row height after fill (platform/font aware; same helper as startup)
+    # Column width: Utils.autoSizeTableColumns at end of executeQuery only
     Utils.applyTableRowMetrics(table, font=table.font())
 
     table.blockSignals(False)
@@ -1284,6 +1251,15 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             QueryUtils.applyUsbrRbaseFallbackColors(
                 mainWindow.mainTable, mainWindow, progressDialog=progressDialog
             )
+
+            # Column widths last: final headers + formatted cell text only
+            # (never raw CSV from buildTable; never mid-modifyTable rewrite)
+            if progressDialog is not None:
+                progressDialog.setLabelText("Sizing columns...")
+                progressDialog.setValue(99)
+                progressDialog.repaint()
+                QCoreApplication.processEvents()
+            Utils.autoSizeTableColumns(mainWindow.mainTable)
 
             progressDialog.setValue(100)
             progressDialog.repaint()

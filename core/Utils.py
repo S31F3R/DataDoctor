@@ -47,9 +47,11 @@ defaultFontFiles = (
 controlLayouts = {
     # Every control retro moves must also appear here so retro OFF restores Noto positions.
     'default': {
-        # winMain — Data Query tab overlay icons (Windows y via platformLayoutYNudge)
-        'btnRefresh': (22, 6, 32, 32),
-        'btnUndo': (70, 6, 32, 32),
+        # winMain — Data Query tab overlay icons (match winMain.ui; Windows y via platformLayoutYNudge)
+        # .ui bases: Refresh (4,6), Undo (40,6), Upload (76,6) — 32×32, 4px gaps
+        'btnRefresh': (4, 6, 32, 32),
+        'btnUndo': (40, 6, 32, 32),
+        'btnUpload': (76, 6, 32, 32),
         # winOptions
         'chkbRawData': (74, 60, 21, 22),
         'chkbQAQC': (156, 90, 21, 22),
@@ -65,9 +67,10 @@ controlLayouts = {
         'chkbOverlay': (150, 424, 131, 22),         # .ui
     },
     'retro': {
-        # Press Start — inventory RESPONSE pass 10 (Refresh/Undo y correction)
-        'btnRefresh': (56, 8, 32, 32),              # was y=12; RESPONSE -4 y
-        'btnUndo': (106, 8, 32, 32),                # was y=12; RESPONSE -4 y
+        # Press Start — same row as default, +34 x / +2 y (historical Refresh offset)
+        'btnRefresh': (38, 8, 32, 32),
+        'btnUndo': (74, 8, 32, 32),
+        'btnUpload': (110, 8, 32, 32),
         'chkbRawData': (108, 60, 21, 22),
         'chkbQAQC': (261, 88, 21, 22),              # was 259; RESPONSE +2 x
         'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
@@ -115,12 +118,13 @@ winRetroSmallerControls = frozenset({
 })
 
 # Extra Y offset (pixels) applied on a given platform for default (Noto) mode only.
-# btnRefresh/btnUndo: Linux y=6; Windows y=8 (+2). Final for non-retro.
+# Overlay icons: Linux y=6; Windows y=8 (+2). Final for non-retro.
 platformLayoutYNudge = {
     'win32': {
         'default': {
             'btnRefresh': 2,
             'btnUndo': 2,
+            'btnUpload': 2,
         },
     },
 }
@@ -397,6 +401,53 @@ def applyTableRowMetrics(table, font=None):
     except Exception as e:
         if Config.debug:
             Logic.logMessage("DEBUG", f"applyTableRowMetrics failed: {e}")
+
+
+def autoSizeTableColumns(table, sampleRows=100):
+    """
+    Size columns from final header labels + a sample of displayed cell text.
+
+    Call only after headers are final and cell text has been formatted
+    (valuePrecision, overlay/delta rewrite). Never scan every row.
+    """
+    if table is None:
+        return
+    numCols = table.columnCount()
+    numRows = table.rowCount()
+    if numCols == 0:
+        return
+
+    font = table.font()
+    metrics = QFontMetrics(font)
+    sampleN = min(sampleRows, numRows)
+
+    for c in range(numCols):
+        headerItem = table.horizontalHeaderItem(c)
+        headerText = headerItem.text() if headerItem else ''
+        # Blank spacer lines (retro multi-line headers) do not drive width
+        headerLines = [line.strip() for line in headerText.split('\n') if line.strip()]
+        headerWidth = max(
+            (metrics.horizontalAdvance(line) for line in headerLines),
+            default=40,
+        )
+        maxCell = metrics.horizontalAdvance('0.00')
+        for r in range(sampleN):
+            it = table.item(r, c)
+            if it and it.text():
+                maxCell = max(maxCell, metrics.horizontalAdvance(it.text()))
+        # Same fudge as original buildTable / modifyTable math
+        finalWidth = max(maxCell, headerWidth)
+        if headerWidth > maxCell:
+            finalWidth = maxCell + (headerWidth - maxCell) + 10
+        else:
+            finalWidth += 20
+        table.setColumnWidth(c, finalWidth)
+
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"autoSizeTableColumns: {numCols} cols, sampleRows={sampleN}/{numRows}",
+        )
 
 
 def nonRetroPlatformStylesheet():

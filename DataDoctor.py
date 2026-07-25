@@ -96,8 +96,7 @@ class uiMain(QMainWindow):
         self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
         self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')        
 
-        # Map button style
-        # btnUpload uses the same Refresh icon assets as btnRefresh (user-placed button)
+        # Map button style (iconName → ui/icons/{name}.png; hover/pressed fall back to normal)
         buttonIcons = [
                         (self.btnPublicQuery, "PublicQuery", 36),
                         (self.btnDataDictionary, "Book", 36),
@@ -108,7 +107,7 @@ class uiMain(QMainWindow):
                         (self.btnInternalQuery, "InternalQuery", 36),
                         (self.btnUndo, "Reset", 36),
                         (self.btnRefresh, "Refresh", 36),
-                        (self.btnUpload, "Refresh", 32),
+                        (self.btnUpload, "Upload", 36),
                         (self.btnRunQuery, "Play", 36),
                         (self.btnSaveSnippet, "StarPlus", 36),
                         (self.btnDeleteSnippet, "StarMinus", 36)
