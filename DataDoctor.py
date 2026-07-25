@@ -19,11 +19,9 @@ from ui.uiQuery import uiQuery
 from ui.uiDetails import uiDetails
 from core.Oracle import oracleConnection
 
-
 class sqlQuerySignals(QObject):
     finished = pyqtSignal(object)   # list of row dicts
     failed = pyqtSignal(str, bool)  # message, isAuthError
-
 
 class sqlQueryWorker(QRunnable):
     """Run Oracle custom SQL off the UI thread so the main window stays responsive."""
