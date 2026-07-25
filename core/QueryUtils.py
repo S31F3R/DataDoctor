@@ -3,7 +3,7 @@
 import numpy as np
 from datetime import datetime
 from PyQt6.QtCore import Qt, QCoreApplication
-from PyQt6.QtGui import QColor, QFontMetrics, QBrush
+from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem
 from core import Logic, Config, Utils
 from DataDoctor import uiMain
@@ -42,7 +42,7 @@ def modifyTable(
     queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
 
     # --- Extract all cell text once (one grid walk) ---
-    def _yield(msg, pct=None):
+    def yieldProgress(msg, pct=None):
         if progressDialog is None:
             return
         progressDialog.setLabelText(msg)
@@ -51,7 +51,7 @@ def modifyTable(
         progressDialog.repaint()
         QCoreApplication.processEvents()
 
-    _yield("Overlay/delta: reading table...", 97)
+    yieldProgress("Overlay/delta: reading table...", 97)
 
     grid = []
     headers = []
@@ -63,7 +63,7 @@ def modifyTable(
             item = table.item(r, c)
             colVals.append(item.text().strip() if item and item.text() else '')
             if r > 0 and r % 2000 == 0:
-                _yield(f"Overlay/delta: reading... col {c + 1}/{numCols}", 97)
+                yieldProgress(f"Overlay/delta: reading... col {c + 1}/{numCols}", 97)
         grid.append(colVals)
 
     # Pair columns (0,1), (2,3), ... leftover odd column kept as-is
@@ -194,7 +194,7 @@ def modifyTable(
             })
 
         if pairIndex % 2 == 0 or pairIndex == pairCount - 1:
-            _yield(f"Overlay/delta: computing pairs... ({pairIndex + 1}/{pairCount})", 97)
+            yieldProgress(f"Overlay/delta: computing pairs... ({pairIndex + 1}/{pairCount})", 97)
 
     if hasOdd:
         last = numCols - 1
@@ -214,7 +214,7 @@ def modifyTable(
 
     # --- Single rewrite of the table (no removeColumn loop) ---
     outCols = len(finalCols)
-    _yield(f"Overlay/delta: writing {outCols} columns × {numRows} rows...", 97)
+    yieldProgress(f"Overlay/delta: writing {outCols} columns × {numRows} rows...", 97)
 
     # Preserve vertical header timestamps
     timestamps = []
@@ -260,40 +260,17 @@ def modifyTable(
             table.setItem(r, c, item)
 
         if c % max(1, outCols // 10) == 0 or c == outCols - 1:
-            _yield(f"Overlay/delta: writing column {c + 1}/{outCols}...", 97)
+            yieldProgress(f"Overlay/delta: writing column {c + 1}/{outCols}...", 97)
 
         # Also yield by row volume on very tall tables
         if numRows > 5000 and c == 0:
             pass  # column loop already yields
 
-    # Lightweight width: header + tiny sample (never scan all rows)
-    # Match buildTable fudge; ignore blank spacer lines in header text
-    font = table.font()
-    metrics = QFontMetrics(font)
-    sampleN = min(50, numRows)
-    for c in range(outCols):
-        headerItem = table.horizontalHeaderItem(c)
-        headerText = headerItem.text() if headerItem else ""
-        # Same original buildTable width math (blank spacer lines ignored)
-        headerLines = [line.strip() for line in headerText.split('\n') if line.strip()]
-        headerWidth = max(
-            (metrics.horizontalAdvance(line) for line in headerLines),
-            default=40,
-        )
-        maxCell = metrics.horizontalAdvance("0.00")
-        for r in range(sampleN):
-            it = table.item(r, c)
-            if it and it.text():
-                maxCell = max(maxCell, metrics.horizontalAdvance(it.text()))
-        finalWidth = max(maxCell, headerWidth)
-        if headerWidth > maxCell:
-            finalWidth = maxCell + (headerWidth - maxCell) + 10
-        else:
-            finalWidth += 20
-        table.setColumnWidth(c, finalWidth)
+    # Column width deferred to executeQuery (Utils.autoSizeTableColumns) after
+    # final headers + valuePrecision + any further color passes.
 
     # Re-apply row/header heights after clear/rewrite
-    Utils.applyTableRowMetrics(table, font=font)
+    Utils.applyTableRowMetrics(table, font=table.font())
 
     table.blockSignals(False)
     table.setUpdatesEnabled(True)

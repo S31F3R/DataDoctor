@@ -7,8 +7,29 @@ from PyQt6.QtWidgets import (QMainWindow, QLineEdit, QComboBox, QDateTimeEdit, Q
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6 import uic
-from core import Logic, Query, Utils, Config
+from core import Logic, Query, Utils, Config, Upload
 from ui.uiSearch import uiSearch
+
+# Full interval list for non-USGS databases (matches prior cbInterval population)
+ALL_INTERVALS = (
+    'HOUR',
+    'INSTANT:1',
+    'INSTANT:15',
+    'INSTANT:60',
+    'DAY',
+    'MONTH',
+    'YEAR',
+    'WATER YEAR',
+)
+# USGS OGC/legacy only expose continuous + daily (no monthly/yearly series)
+USGS_INTERVALS = (
+    'HOUR',
+    'INSTANT:1',
+    'INSTANT:15',
+    'INSTANT:60',
+    'DAY',
+)
+
 
 class uiQuery(QMainWindow):
     """Query window: Builds and executes public/internal API calls."""
@@ -69,15 +90,8 @@ class uiQuery(QMainWindow):
         self.radioGroup.addButton(self.rbPrevDayToCurrent)
         self.radioGroup.addButton(self.rbPrevWeekToCurrent)
 
-        # Populate interval combobox
-        self.cbInterval.addItem('HOUR')
-        self.cbInterval.addItem('INSTANT:1')
-        self.cbInterval.addItem('INSTANT:15')
-        self.cbInterval.addItem('INSTANT:60')
-        self.cbInterval.addItem('DAY')
-        self.cbInterval.addItem('MONTH')
-        self.cbInterval.addItem('YEAR')
-        self.cbInterval.addItem('WATER YEAR')
+        # Interval combobox: full list by default; USGS-NWIS trims to daily max
+        self.populateIntervalCombo(ALL_INTERVALS)
 
         # Add blank combobox item
         self.cbDatabase.addItem('')
@@ -124,6 +138,7 @@ class uiQuery(QMainWindow):
         self.btnDown5.clicked.connect(self.btnDown5Pressed)
         self.btnDown1.clicked.connect(self.btnDown1Pressed)
         self.btnQueryOptionsInfo.clicked.connect(self.btnQueryOptionsInfoPressed)
+        self.cbDatabase.currentTextChanged.connect(self.onDatabaseChanged)
 
         # Install event filters
         self.qleDataID.installEventFilter(self)
@@ -137,6 +152,46 @@ class uiQuery(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", "uiQuery initialized")
 
+    def populateIntervalCombo(self, intervals):
+        """Replace cbInterval items; keep selection if still valid, else fall back."""
+        # Do not use `if not self.cbInterval` — empty QComboBox is falsy (len==0)
+        if self.cbInterval is None:
+            return
+        prev = self.cbInterval.currentText()
+        self.cbInterval.blockSignals(True)
+        try:
+            self.cbInterval.clear()
+            for name in intervals:
+                self.cbInterval.addItem(name)
+            idx = self.cbInterval.findText(prev)
+            if idx >= 0:
+                self.cbInterval.setCurrentIndex(idx)
+            elif prev in ('MONTH', 'YEAR', 'WATER YEAR'):
+                # Coarser-than-daily was selected but blocked (e.g. switched to USGS)
+                dayIdx = self.cbInterval.findText('DAY')
+                self.cbInterval.setCurrentIndex(dayIdx if dayIdx >= 0 else 0)
+            elif self.cbInterval.count() > 0:
+                self.cbInterval.setCurrentIndex(0)
+        finally:
+            self.cbInterval.blockSignals(False)
+
+    def updateIntervalForDatabase(self, database=None):
+        """USGS-NWIS: hide intervals past DAY. Any other DB: full list."""
+        if self.cbDatabase is None:
+            return
+        db = self.cbDatabase.currentText() if database is None else database
+        if db == 'USGS-NWIS':
+            self.populateIntervalCombo(USGS_INTERVALS)
+            if Config.debug:
+                Logic.logMessage("DEBUG", "cbInterval limited to daily-and-finer for USGS-NWIS")
+        else:
+            self.populateIntervalCombo(ALL_INTERVALS)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"cbInterval full list restored for database={db!r}")
+
+    def onDatabaseChanged(self, text):
+        self.updateIntervalForDatabase(text)
+
     def showEvent(self, event):
         if Config.debug:
             Logic.logMessage("DEBUG", "uiQuery showEvent: queryType={}".format(self.queryType))
@@ -149,6 +204,8 @@ class uiQuery(QMainWindow):
 
         # Populate database combobox
         Utils.loadDatabase(self.cbDatabase, self.queryType)
+        # loadDatabase rebuilds cbDatabase — re-apply interval filter for selection
+        self.updateIntervalForDatabase()
 
         # Set window icon and title based on queryType
         if self.queryType == 'public':
@@ -242,6 +299,11 @@ class uiQuery(QMainWindow):
             overlayChecked = self.chkbOverlay.isChecked()
 
             if self.winMain:
+                if not Upload.confirmDiscardPendingEdits(self, "run a new query"):
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "btnQueryPressed: Canceled due to pending edits")
+                    return
+
                 self.winMain.lastQueryType = self.queryType
                 self.winMain.lastQueryItems = queryItems
                 self.winMain.lastStartDate = startDate

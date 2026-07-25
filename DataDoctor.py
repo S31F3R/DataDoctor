@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
 from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
 from PyQt6 import uic
-from core import Logic, Query, Utils, Config
+from core import Logic, Query, Utils, Config, Upload
 from ui.uiAbout import uiAbout
 from ui.uiDataDictionary import uiDataDictionary
 from ui.uiOptions import uiOptions
@@ -19,13 +19,11 @@ from ui.uiQuery import uiQuery
 from ui.uiDetails import uiDetails
 from core.Oracle import oracleConnection
 
-
-class _sqlQuerySignals(QObject):
+class sqlQuerySignals(QObject):
     finished = pyqtSignal(object)   # list of row dicts
     failed = pyqtSignal(str, bool)  # message, isAuthError
 
-
-class _sqlQueryWorker(QRunnable):
+class sqlQueryWorker(QRunnable):
     """Run Oracle custom SQL off the UI thread so the main window stays responsive."""
     def __init__(self, dsn, sqlText, signals):
         super().__init__()
@@ -73,6 +71,7 @@ class uiMain(QMainWindow):
         self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
         self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
         self.btnUndo = self.findChild(QPushButton, 'btnUndo')
+        self.btnUpload = self.findChild(QPushButton, 'btnUpload')
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
         self.tabMain = self.findChild(QWidget, 'tabMain')
         self.tabSQL = self.findChild(QWidget, 'tabSQL')
@@ -85,6 +84,8 @@ class uiMain(QMainWindow):
         self.columnMetadata = []
         self.seriesResponses = {} # Dict to store {seriesLabel: responseDict} post-query
         self.currentQueryType = "" # str: "AQUARIUS", etc., set post-query
+        self.uploadBaselineReady = False
+        self.uploadTrackingBlocked = False
         self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
         self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
         self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
@@ -93,7 +94,7 @@ class uiMain(QMainWindow):
         self.sqlTable = self.findChild(QTableWidget, 'sqlTable')
         self.btnDeleteSnippet = self.findChild(QPushButton, 'btnDeleteSnippet')        
 
-        # Map button style
+        # Map button style (iconName → ui/icons/{name}.png; hover/pressed fall back to normal)
         buttonIcons = [
                         (self.btnPublicQuery, "PublicQuery", 36),
                         (self.btnDataDictionary, "Book", 36),
@@ -104,6 +105,7 @@ class uiMain(QMainWindow):
                         (self.btnInternalQuery, "InternalQuery", 36),
                         (self.btnUndo, "Reset", 36),
                         (self.btnRefresh, "Refresh", 36),
+                        (self.btnUpload, "Upload", 36),
                         (self.btnRunQuery, "Play", 36),
                         (self.btnSaveSnippet, "StarPlus", 36),
                         (self.btnDeleteSnippet, "StarMinus", 36)
@@ -134,11 +136,15 @@ class uiMain(QMainWindow):
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
+        if self.btnUpload:
+            self.btnUpload.clicked.connect(self.btnUploadPressed)
         self.mainTable.horizontalHeader().sectionClicked.connect(lambda col: Query.customSortTable(self.mainTable, col, self.winDataDictionary.mainTable))
         self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)
         self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
+        self.mainTable.itemChanged.connect(self.onMainTableItemChanged)
+        # Edit triggers / locks applied after each query via Upload.snapshotBaseline
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
         self.btnRunQuery.clicked.connect(self.runCustomQuery)
         self.btnSaveSnippet.clicked.connect(self.saveSnippet)
@@ -451,7 +457,7 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("WARN", "pteSQL or sqlTable not found, skipping runCustomQuery")
             return
-        if getattr(self, '_sqlQueryRunning', False):
+        if getattr(self, 'sqlQueryRunning', False):
             QMessageBox.information(self, "Run Query", "A SQL query is already running.")
             return
 
@@ -469,20 +475,20 @@ class uiMain(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query (background)")
 
-        self._sqlQueryRunning = True
+        self.sqlQueryRunning = True
         if self.btnRunQuery:
             self.btnRunQuery.setEnabled(False)
 
-        signals = _sqlQuerySignals()
+        signals = sqlQuerySignals()
         # Keep reference so signals aren't GC'd before emit
-        self._sqlQuerySignals = signals
-        signals.finished.connect(self._onSqlQueryFinished)
-        signals.failed.connect(self._onSqlQueryFailed)
-        worker = _sqlQueryWorker(dsn, sqlText, signals)
+        self.sqlQuerySignals = signals
+        signals.finished.connect(self.onSqlQueryFinished)
+        signals.failed.connect(self.onSqlQueryFailed)
+        worker = sqlQueryWorker(dsn, sqlText, signals)
         QThreadPool.globalInstance().start(worker)
 
-    def _onSqlQueryFinished(self, results):
-        self._sqlQueryRunning = False
+    def onSqlQueryFinished(self, results):
+        self.sqlQueryRunning = False
         if self.btnRunQuery:
             self.btnRunQuery.setEnabled(True)
 
@@ -514,8 +520,8 @@ class uiMain(QMainWindow):
             Logic.logException("runCustomQuery: Failed to populate table", e)
             QMessageBox.warning(self, "Query Error", f"Failed to display results: {e}")
 
-    def _onSqlQueryFailed(self, message, isAuthError):
-        self._sqlQueryRunning = False
+    def onSqlQueryFailed(self, message, isAuthError):
+        self.sqlQueryRunning = False
         if self.btnRunQuery:
             self.btnRunQuery.setEnabled(True)
         if isAuthError:
@@ -673,6 +679,10 @@ class uiMain(QMainWindow):
     def btnRefreshPressed(self):
         try:
             if self.lastQueryType and self.lastQueryItems:
+                if not Upload.confirmDiscardPendingEdits(self, "refresh the query"):
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "btnRefreshPressed: Canceled due to pending edits")
+                    return
                 # Retrieve last delta and overlay states from globals, default to False if not set
                 deltaChecked = getattr(Config, 'lastDeltaChecked', False)
                 overlayChecked = getattr(Config, 'lastOverlayChecked', False)
@@ -704,6 +714,14 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", "btnUndoPressed: Called timestampSortTable")
         except Exception as e:
             Logic.logException("btnUndoPressed failed", e)
+
+    def onMainTableItemChanged(self, item):
+        """Flag user edits for upload (magenta); restore baseline when text matches original."""
+        Upload.onItemChanged(self, item)
+
+    def btnUploadPressed(self):
+        """Dry-run write of pending user edits to documentation/*.csv."""
+        Upload.runUpload(self)
 
     def showHeaderContextMenu(self, pos):
         """Show context menu for header right-click to display full query info using uiDetails."""
@@ -779,7 +797,7 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
             
             # Resolve seriesResponses with multiple candidate keys (header label != storage key for USGS).
-            response, normalizedLabel = self._resolveSeriesResponse(col, seriesLabel, db, lookupId)
+            response, normalizedLabel = self.resolveSeriesResponse(col, seriesLabel, db, lookupId)
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")              
@@ -840,7 +858,7 @@ class uiMain(QMainWindow):
         except Exception as e:
             Logic.logException("showCellContextMenu failed", e)
 
-    def _resolveSeriesResponse(self, col, seriesLabel, db, lookupId):
+    def resolveSeriesResponse(self, col, seriesLabel, db, lookupId):
         """
         Find the stored series response for a column.
 
@@ -849,45 +867,45 @@ class uiMain(QMainWindow):
         """
         candidates = []
 
-        def _add(val):
+        def addCandidate(val):
             if val is None:
                 return
             if isinstance(val, (list, tuple)):
                 for v in val:
-                    _add(v)
+                    addCandidate(v)
                 return
             key = str(val).replace('\n', ' ').replace('\u00a0', ' ').strip()
             key = ' '.join(key.split())
             if key and key not in candidates:
                 candidates.append(key)
 
-        _add(lookupId)
+        addCandidate(lookupId)
 
         meta = self.columnMetadata[col] if col < len(self.columnMetadata) else {}
-        _add(meta.get('dataIds'))
+        addCandidate(meta.get('dataIds'))
         for qi in (meta.get('queryInfos') or []):
             if isinstance(qi, list):
                 qi = qi[0] if qi else ''
             qiStr = str(qi) if qi is not None else ''
             if '|' in qiStr:
-                _add(qiStr.split('|')[0])
+                addCandidate(qiStr.split('|')[0])
             else:
-                _add(qiStr)
+                addCandidate(qiStr)
 
         if db == 'AQUARIUS':
-            _add(seriesLabel.replace('\n', ' ').strip() if seriesLabel else None)
+            addCandidate(seriesLabel.replace('\n', ' ').strip() if seriesLabel else None)
         elif db == 'USGS-NWIS':
             # Prefer DataID candidates already added; header last line is often just interval
             if seriesLabel:
                 parts = [p.strip() for p in seriesLabel.split('\n') if p.strip()]
                 for p in parts:
-                    _add(p)
+                    addCandidate(p)
         else:
             # USBR: second header line is usually SDID or SDID-MRID
             if seriesLabel and '\n' in seriesLabel:
-                _add(seriesLabel.split('\n')[-1].strip())
+                addCandidate(seriesLabel.split('\n')[-1].strip())
             elif seriesLabel:
-                _add(seriesLabel.strip())
+                addCandidate(seriesLabel.strip())
 
         for key in candidates:
             if key in self.seriesResponses:
@@ -955,7 +973,7 @@ class uiMain(QMainWindow):
                                 matchedKey = preferKey
                                 break
                         if dbResponse is None:
-                            dbResponse, matchedKey = self._resolveSeriesResponse(
+                            dbResponse, matchedKey = self.resolveSeriesResponse(
                                 col, seriesLabel, dbName, lid if lid is not None else dataId
                             )
 
@@ -1026,14 +1044,14 @@ class uiMain(QMainWindow):
         self.tabWidget.setCurrentIndex(idx)
         self.populateLogViewer()
 
-    def _logViewerLineHeight(self):
+    def logViewerLineHeight(self):
         """
         Block line height % — Press Start has near-zero internal leading so lines
         blur together; open that up. System font still gets a little air.
         """
         return 155.0 if Config.retroMode else 125.0
 
-    def _logViewerFormat(self, level):
+    def logViewerFormat(self, level):
         """QTextCharFormat for a log level (shared by full load and live append)."""
         level = (level or 'INFO').upper()
         levelColors = {
@@ -1054,17 +1072,17 @@ class uiMain(QMainWindow):
             fmt.setFontWeight(QFont.Weight.Bold)
         return fmt
 
-    def _insertLogLine(self, cursor, text, level):
+    def insertLogLine(self, cursor, text, level):
         """Insert one log record with role font + extra line spacing."""
         blockFmt = QTextBlockFormat()
         # PyQt6 expects heightType as int, not the LineHeightTypes enum object
         blockFmt.setLineHeight(
-            self._logViewerLineHeight(),
+            self.logViewerLineHeight(),
             int(QTextBlockFormat.LineHeightTypes.ProportionalHeight.value),
         )
         cursor.setBlockFormat(blockFmt)
         line = text if text.endswith('\n') else text + '\n'
-        cursor.insertText(line, self._logViewerFormat(level))
+        cursor.insertText(line, self.logViewerFormat(level))
 
     def appendLogEntry(self, level, text):
         """
@@ -1092,7 +1110,7 @@ class uiMain(QMainWindow):
 
         cursor = self.pteLog.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
-        self._insertLogLine(cursor, text, level)
+        self.insertLogLine(cursor, text, level)
 
         if wasAtTop:
             self.pteLog.moveCursor(QTextCursor.MoveOperation.Start)
@@ -1115,7 +1133,7 @@ class uiMain(QMainWindow):
         cursor.movePosition(QTextCursor.MoveOperation.Start)
 
         if not entries:
-            self._insertLogLine(
+            self.insertLogLine(
                 cursor,
                 f"(No log entries found in {Utils.getLogDir()})",
                 'INFO',
@@ -1128,7 +1146,7 @@ class uiMain(QMainWindow):
         for entry in entries:
             level = (entry.get('level') or 'INFO').upper()
             text = entry.get('text') or ''
-            self._insertLogLine(cursor, text, level)
+            self.insertLogLine(cursor, text, level)
 
         # Keep view at top (newest)
         self.pteLog.moveCursor(QTextCursor.MoveOperation.Start)
@@ -1200,11 +1218,11 @@ if __name__ == '__main__':
         app = QApplication(sys.argv)
         app.setApplicationName("Data Doctor")
         # Taskbar / window icon (Windows + Linux desktop shells that honor QApplication icon)
-        _appIcon = QIcon(Logic.resourcePath('ui/icons/DataDoctor.ico'))
-        if _appIcon.isNull():
-            _appIcon = QIcon(Logic.resourcePath('ui/icons/Data Doctor.png'))
-        if not _appIcon.isNull():
-            app.setWindowIcon(_appIcon)
+        appIcon = QIcon(Logic.resourcePath('ui/icons/DataDoctor.ico'))
+        if appIcon.isNull():
+            appIcon = QIcon(Logic.resourcePath('ui/icons/Data Doctor.png'))
+        if not appIcon.isNull():
+            app.setWindowIcon(appIcon)
 
         # Init logging early, then install hooks so uncaught errors are logged and non-fatal
         Logic.initLogging()
@@ -1218,8 +1236,8 @@ if __name__ == '__main__':
 
         # Create instances
         winMain = uiMain()
-        if not _appIcon.isNull():
-            winMain.setWindowIcon(_appIcon)
+        if not appIcon.isNull():
+            winMain.setWindowIcon(appIcon)
         winQuery = uiQuery(winMain)
         winDataDictionary = uiDataDictionary(winMain)
         winOptions = uiOptions(winMain)

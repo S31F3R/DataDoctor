@@ -15,15 +15,15 @@ from core import Logic, Config, Utils
 # Bundled fonts (cross-platform):
 #   non-retro → Noto Sans  (matches Seifer's Linux system UI font)
 #   retro     → Press Start 2P
-_defaultFontFamilyCache = None   # Noto Sans
-_defaultFontLoadAttempted = False
-_retroFontFamilyCache = None     # Press Start 2P
-_retroFontLoadAttempted = False
+defaultFontFamilyCache = None   # Noto Sans
+defaultFontLoadAttempted = False
+retroFontFamilyCache = None     # Press Start 2P
+retroFontLoadAttempted = False
 
 # Point sizes by control role: (non-retro, retro)
 # Non-retro: 10pt Noto Sans — matches this machine's GNOME/Qt default.
 # Retro: buttons stay at 6 (width/fit tuned); other roles larger so labels/lists/logs aren't tiny.
-FONT_ROLE_SIZES = {
+fontRoleSizes = {
     'ui':     (10, 8),   # labels, checkboxes, radios, combos, tabs, general
     'button': (10, 6),   # QPushButton — retro size kept at tuned 6pt
     'list':   (10, 8),   # list widgets / snippets / quick looks
@@ -34,7 +34,7 @@ FONT_ROLE_SIZES = {
 }
 
 # Bundled default (non-retro) font faces — all register as family "Noto Sans"
-_DEFAULT_FONT_FILES = (
+defaultFontFiles = (
     'ui/fonts/NotoSans-Regular.ttf',
     'ui/fonts/NotoSans-Bold.ttf',
     'ui/fonts/NotoSans-Italic.ttf',
@@ -44,12 +44,14 @@ _DEFAULT_FONT_FILES = (
 # Absolute geometries that differ by font mode: (x, y, width, height)
 # Default = Noto (Seifer-tuned 2026-07-24). Retro = pre-Noto baseline until tuned.
 # Only controls listed here are moved; everything else stays at .ui geometry.
-CONTROL_LAYOUTS = {
+controlLayouts = {
     # Every control retro moves must also appear here so retro OFF restores Noto positions.
     'default': {
-        # winMain — Data Query tab overlay icons (Windows y via PLATFORM_LAYOUT_Y_NUDGE)
-        'btnRefresh': (22, 6, 32, 32),
-        'btnUndo': (70, 6, 32, 32),
+        # winMain — Data Query tab overlay icons (match winMain.ui; Windows y via platformLayoutYNudge)
+        # .ui bases: Refresh (4,6), Undo (40,6), Upload (76,6) — 32×32, 4px gaps
+        'btnRefresh': (4, 6, 32, 32),
+        'btnUndo': (40, 6, 32, 32),
+        'btnUpload': (76, 6, 32, 32),
         # winOptions
         'chkbRawData': (74, 60, 21, 22),
         'chkbQAQC': (156, 90, 21, 22),
@@ -65,9 +67,10 @@ CONTROL_LAYOUTS = {
         'chkbOverlay': (150, 424, 131, 22),         # .ui
     },
     'retro': {
-        # Press Start — inventory RESPONSE pass 10 (Refresh/Undo y correction)
-        'btnRefresh': (56, 8, 32, 32),              # was y=12; RESPONSE -4 y
-        'btnUndo': (106, 8, 32, 32),                # was y=12; RESPONSE -4 y
+        # Press Start — same row as default, +34 x / +2 y (historical Refresh offset)
+        'btnRefresh': (38, 8, 32, 32),
+        'btnUndo': (74, 8, 32, 32),
+        'btnUpload': (110, 8, 32, 32),
         'chkbRawData': (108, 60, 21, 22),
         'chkbQAQC': (261, 88, 21, 22),              # was 259; RESPONSE +2 x
         'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
@@ -83,10 +86,10 @@ CONTROL_LAYOUTS = {
 }
 
 # Neon green used for retro scrollbars and tab chrome
-RETRO_NEON_GREEN = '#00FF00'
+retroNeonGreen = '#00FF00'
 
 # Retro-only: smaller Press Start on these (objectName → leave rest at role sizes)
-RETRO_SMALL_FONT_CONTROLS = frozenset({
+retroSmallFontControls = frozenset({
     'cbUTCOffset',
     'rbCustomDateTime',
     'rbPrevDayToCurrent',
@@ -97,16 +100,16 @@ RETRO_SMALL_FONT_CONTROLS = frozenset({
     'rbBOP',
     'rbEOP',
 })
-RETRO_SMALL_FONT_PT = 6  # one step under general ui 8pt
+retroSmallFontPt = 6  # one step under general ui 8pt
 
 # Query window text buttons: one point larger than normal button role (retro 6→7, default 10→11)
-QUERY_LARGE_BUTTON_CONTROLS = frozenset({
+queryLargeButtonControls = frozenset({
     'btnAddQuery',
     'btnQuery',
 })
 
 # Windows + retro only: one point smaller (Press Start is roomier on Win metrics)
-WIN_RETRO_SMALLER_CONTROLS = frozenset({
+winRetroSmallerControls = frozenset({
     'btnLoadQuickLook',
     'btnClearQuery',
     'btnSaveQuickLook',
@@ -115,19 +118,20 @@ WIN_RETRO_SMALLER_CONTROLS = frozenset({
 })
 
 # Extra Y offset (pixels) applied on a given platform for default (Noto) mode only.
-# btnRefresh/btnUndo: Linux y=6; Windows y=8 (+2). Final for non-retro.
-PLATFORM_LAYOUT_Y_NUDGE = {
+# Overlay icons: Linux y=6; Windows y=8 (+2). Final for non-retro.
+platformLayoutYNudge = {
     'win32': {
         'default': {
             'btnRefresh': 2,
             'btnUndo': 2,
+            'btnUpload': 2,
         },
     },
 }
 
 # Query-style lists that need tight item rows on Windows non-retro
 # (SQL snippet list + Query dataID list only — not every QListWidget)
-COMPACT_LIST_OBJECT_NAMES = frozenset({'listSnippets', 'listQueryList'})
+compactListObjectNames = frozenset({'listSnippets', 'listQueryList'})
 
 class customPasswordEdit(QLineEdit):
     """Password field using Qt's native echo modes (no dual realText/display bookkeeping).
@@ -174,7 +178,7 @@ class customPasswordEdit(QLineEdit):
     def isRevealed(self):
         return self.revealed
 
-def _registerBundledFont(relativePath, label):
+def registerBundledFont(relativePath, label):
     """
     Register one TTF/OTF from the app bundle. Returns family name or None.
     Safe to call repeatedly for the same path (Qt may return a new id; we cache outside).
@@ -205,18 +209,18 @@ def ensureDefaultFontLoaded():
     Registers Regular/Bold/Italic/BoldItalic; returns the family name or None.
     Falls back to the OS UI font only if every file fails to load.
     """
-    global _defaultFontFamilyCache, _defaultFontLoadAttempted
-    if _defaultFontLoadAttempted:
-        return _defaultFontFamilyCache
-    _defaultFontLoadAttempted = True
+    global defaultFontFamilyCache, defaultFontLoadAttempted
+    if defaultFontLoadAttempted:
+        return defaultFontFamilyCache
+    defaultFontLoadAttempted = True
 
     family = None
-    for rel in _DEFAULT_FONT_FILES:
-        loaded = _registerBundledFont(rel, 'default (Noto Sans)')
+    for rel in defaultFontFiles:
+        loaded = registerBundledFont(rel, 'default (Noto Sans)')
         if loaded and not family:
             family = loaded
 
-    _defaultFontFamilyCache = family
+    defaultFontFamilyCache = family
     Config.defaultFontLoaded = bool(family)
     if not family:
         Logic.logMessage(
@@ -228,16 +232,16 @@ def ensureDefaultFontLoaded():
 
 def ensureRetroFontLoaded():
     """Bundled Press Start 2P — retro mode only."""
-    global _retroFontFamilyCache, _retroFontLoadAttempted
-    if _retroFontLoadAttempted:
-        return _retroFontFamilyCache
-    _retroFontLoadAttempted = True
+    global retroFontFamilyCache, retroFontLoadAttempted
+    if retroFontLoadAttempted:
+        return retroFontFamilyCache
+    retroFontLoadAttempted = True
 
-    family = _registerBundledFont(
+    family = registerBundledFont(
         'ui/fonts/PressStart2P-Regular.ttf',
         'retro (Press Start 2P)',
     )
-    _retroFontFamilyCache = family
+    retroFontFamilyCache = family
     Config.retroFontLoaded = bool(family)
     return family
 
@@ -254,10 +258,10 @@ def activeFontFamily():
 
 
 def rolePointSize(role='ui', retro=None):
-    """Point size for a control role (see FONT_ROLE_SIZES)."""
+    """Point size for a control role (see fontRoleSizes)."""
     if retro is None:
         retro = bool(getattr(Config, 'retroMode', False))
-    defaultPt, retroPt = FONT_ROLE_SIZES.get(role, FONT_ROLE_SIZES['ui'])
+    defaultPt, retroPt = fontRoleSizes.get(role, fontRoleSizes['ui'])
     size = retroPt if retro else defaultPt
 
     # HiDPI: step down slightly so dense pixel fonts / tables stay readable
@@ -279,7 +283,7 @@ def uiPointSize(retro=None):
 def makeFontForRole(role='ui', pointSize=None):
     """
     Build a QFont for a control role.
-    Roles: ui, button, list, table, log, code, about — see FONT_ROLE_SIZES.
+    Roles: ui, button, list, table, log, code, about — see fontRoleSizes.
     Non-retro: bundled Noto Sans at role size (fallback OS font if missing).
     Retro: bundled Press Start 2P, no antialias.
     """
@@ -399,6 +403,53 @@ def applyTableRowMetrics(table, font=None):
             Logic.logMessage("DEBUG", f"applyTableRowMetrics failed: {e}")
 
 
+def autoSizeTableColumns(table, sampleRows=100):
+    """
+    Size columns from final header labels + a sample of displayed cell text.
+
+    Call only after headers are final and cell text has been formatted
+    (valuePrecision, overlay/delta rewrite). Never scan every row.
+    """
+    if table is None:
+        return
+    numCols = table.columnCount()
+    numRows = table.rowCount()
+    if numCols == 0:
+        return
+
+    font = table.font()
+    metrics = QFontMetrics(font)
+    sampleN = min(sampleRows, numRows)
+
+    for c in range(numCols):
+        headerItem = table.horizontalHeaderItem(c)
+        headerText = headerItem.text() if headerItem else ''
+        # Blank spacer lines (retro multi-line headers) do not drive width
+        headerLines = [line.strip() for line in headerText.split('\n') if line.strip()]
+        headerWidth = max(
+            (metrics.horizontalAdvance(line) for line in headerLines),
+            default=40,
+        )
+        maxCell = metrics.horizontalAdvance('0.00')
+        for r in range(sampleN):
+            it = table.item(r, c)
+            if it and it.text():
+                maxCell = max(maxCell, metrics.horizontalAdvance(it.text()))
+        # Same fudge as original buildTable / modifyTable math
+        finalWidth = max(maxCell, headerWidth)
+        if headerWidth > maxCell:
+            finalWidth = maxCell + (headerWidth - maxCell) + 10
+        else:
+            finalWidth += 20
+        table.setColumnWidth(c, finalWidth)
+
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"autoSizeTableColumns: {numCols} cols, sampleRows={sampleN}/{numRows}",
+        )
+
+
 def nonRetroPlatformStylesheet():
     """
     Non-retro (Noto) spacing tweaks that differ by platform.
@@ -429,7 +480,7 @@ def applyCompactListStyle(listWidget):
     if listWidget is None:
         return
     name = listWidget.objectName() or ''
-    if name not in COMPACT_LIST_OBJECT_NAMES:
+    if name not in compactListObjectNames:
         return
     try:
         if Config.retroMode:
@@ -467,15 +518,15 @@ def applyModeControlLayouts(app=None, root=None):
     """
     Move mode-specific absolute controls (default Noto vs retro Press Start).
     Call after UI load / on mode apply. Unknown names are skipped.
-    Windows default mode can apply PLATFORM_LAYOUT_Y_NUDGE (e.g. Refresh/Undo +3 y).
+    Windows default mode can apply platformLayoutYNudge (e.g. Refresh/Undo +3 y).
     """
     mode = 'retro' if Config.retroMode else 'default'
-    coords = CONTROL_LAYOUTS.get(mode) or {}
+    coords = controlLayouts.get(mode) or {}
     if not coords:
         return
 
     yNudges = (
-        PLATFORM_LAYOUT_Y_NUDGE.get(sys.platform, {}).get(mode, {})
+        platformLayoutYNudge.get(sys.platform, {}).get(mode, {})
         if not Config.retroMode
         else {}
     )
@@ -534,7 +585,7 @@ def retroSpacingStylesheet():
     # Tab chrome + close icons; stripped when retro off
     # (readBaseStylesheet / setRetroStyles rebuild without this block).
     # Hover for close is a 2nd image (same pattern as default dark/light pair).
-    green = RETRO_NEON_GREEN
+    green = retroNeonGreen
     return f"""
     /* Retro tabs: neon green + black text. NO tab:hover fill — that lit the whole
        tab and stole hover from the close button. Only close-button:hover changes. */
@@ -644,7 +695,7 @@ def applyRoleFonts(app=None, root=None):
     """
     Set role-specific sizes: buttons stay smaller in retro; log/code larger, etc.
     Call after new windows open if they create tables/editors themselves.
-    Retro-only small fonts for named radios/checkboxes/UTC combo (RETRO_SMALL_FONT_CONTROLS).
+    Retro-only small fonts for named radios/checkboxes/UTC combo (retroSmallFontControls).
     """
     buttonFont = makeFontForRole('button')
     # Add Query / Query Data: one point larger than standard button role
@@ -658,7 +709,7 @@ def applyRoleFonts(app=None, root=None):
     codeFont = makeFontForRole('code')
     retroSmallFont = None
     if Config.retroMode:
-        retroSmallFont = makeFontForRole('ui', pointSize=RETRO_SMALL_FONT_PT)
+        retroSmallFont = makeFontForRole('ui', pointSize=retroSmallFontPt)
     # Windows retro: named Query controls one point smaller
     winRetroSmaller = (
         Config.retroMode and sys.platform == 'win32'
@@ -687,11 +738,11 @@ def applyRoleFonts(app=None, root=None):
         try:
             name = w.objectName() or ''
             # Retro notes: specific controls at 6pt Press Start (Noto/default untouched)
-            if Config.retroMode and retroSmallFont is not None and name in RETRO_SMALL_FONT_CONTROLS:
+            if Config.retroMode and retroSmallFont is not None and name in retroSmallFontControls:
                 w.setFont(retroSmallFont)
                 continue
             # Windows + retro: Load/Clear/Save/Delete Quick Look + dataID list −1pt
-            if winRetroSmaller and name in WIN_RETRO_SMALLER_CONTROLS:
+            if winRetroSmaller and name in winRetroSmallerControls:
                 if isinstance(w, QListWidget) and winSmallerListFont is not None:
                     w.setFont(winSmallerListFont)
                     applyCompactListStyle(w)
@@ -700,7 +751,7 @@ def applyRoleFonts(app=None, root=None):
                     w.setFont(winSmallerButtonFont)
                     continue
             if isinstance(w, QPushButton):
-                if name in QUERY_LARGE_BUTTON_CONTROLS:
+                if name in queryLargeButtonControls:
                     w.setFont(queryLargeButtonFont)
                 else:
                     # Keep retro button size at the tuned width/fit (smaller than labels)

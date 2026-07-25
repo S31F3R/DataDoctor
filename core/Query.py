@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QCoreApplication, QTimer
 from PyQt6.QtGui import QColor, QBrush, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
-from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils
+from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils, Upload
 
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)
@@ -517,15 +517,15 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     # Row height before setRowCount so new sections pick up the platform-tuned size
     # (non-retro Windows is tighter; Linux Noto +10; retro keeps roomier pad)
-    _rowFont = table.font()
-    _rowMetrics = QFontMetrics(_rowFont)
-    _rowH = Utils.tableDefaultRowHeight(font=_rowFont, metrics=_rowMetrics)
-    vHeader.setDefaultSectionSize(_rowH)
-    vHeader.setMinimumSectionSize(max(_rowMetrics.height() + 2, 16))
+    rowFont = table.font()
+    rowMetrics = QFontMetrics(rowFont)
+    rowH = Utils.tableDefaultRowHeight(font=rowFont, metrics=rowMetrics)
+    vHeader.setDefaultSectionSize(rowH)
+    vHeader.setMinimumSectionSize(max(rowMetrics.height() + 2, 16))
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
-            f"buildTable: rowHeight={_rowH} fontH={_rowMetrics.height()} "
+            f"buildTable: rowHeight={rowH} fontH={rowMetrics.height()} "
             f"retro={Config.retroMode} platform={__import__('sys').platform}",
         )
 
@@ -547,40 +547,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         vHeader.setMinimumWidth(max(120, metrics.horizontalAdvance(sampleTs) + 16))
     else:
         table.verticalHeader().setVisible(False)
-        font = table.font()
-        metrics = QFontMetrics(font)
 
-    columnWidths = []
-    sampleRows = min(100, numRows)  # small sample; width does not need full scan
-    sampleSplit = []
-    for row in data[:sampleRows]:
-        parts = row.split(',')
-        sampleSplit.append(parts[1:] if skipDateCol and len(parts) > 1 else parts)
-
-    for c in range(numCols):
-        nonEmptyValues = []
-        for parts in sampleSplit:
-            if c < len(parts):
-                val = parts[c].strip()
-                if val:
-                    nonEmptyValues.append(val)
-        if nonEmptyValues:
-            maxCellWidth = max(metrics.horizontalAdvance(val) for val in nonEmptyValues)
-        else:
-            maxCellWidth = metrics.horizontalAdvance("0.00")
-        # Non-empty header lines only (blank BETWEEN parts does not drive width)
-        headerLines = [line.strip() for line in headers[c].split('\n') if line.strip()]
-        headerWidth = max(
-            (metrics.horizontalAdvance(line) for line in headerLines),
-            default=0,
-        )
-        # Exact original buildTable width math (pre-padding experiments)
-        finalWidth = max(maxCellWidth, headerWidth)
-        if headerWidth > maxCellWidth:
-            finalWidth = maxCellWidth + (headerWidth - maxCellWidth) + 10
-        else:
-            finalWidth += 20
-        columnWidths.append(finalWidth)
+    # Column widths deferred to executeQuery (after valuePrecision + final headers).
+    # Measuring raw CSV here was wrong: display text is reformatted on fill.
 
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: Disabled updates+sorting+signals for population")
@@ -623,10 +592,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             if progressDialog is not None and progressDialog.wasCanceled():
                 break
 
-    for c in range(numCols):
-        table.setColumnWidth(c, columnWidths[c])
-
     # Re-assert row height after fill (platform/font aware; same helper as startup)
+    # Column width: Utils.autoSizeTableColumns at end of executeQuery only
     Utils.applyTableRowMetrics(table, font=table.font())
 
     table.blockSignals(False)
@@ -649,7 +616,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     # QAQC is applied by executeQuery after overlay/delta modifyTable so we do not
     # color twice on huge tables. dictIndex available on table for reuse if needed.
-    table._dataDictIndex = dictIndex  # lightweight attach for executeQuery
+    table.dataDictIndex = dictIndex  # lightweight attach for executeQuery
 
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: complete (QAQC deferred to executeQuery)")
@@ -693,7 +660,7 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
         rateOfChange = None
 
         if rowIndex != -1 and dataDictionaryTable is not None:
-            def _floatAt(r, c):
+            def floatAt(r, c):
                 if c == -1:
                     return None
                 it = dataDictionaryTable.item(r, c)
@@ -703,11 +670,11 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
                     return float(it.text().strip())
                 except ValueError:
                     return None
-            expectedMin = _floatAt(rowIndex, expectedMinCol)
-            expectedMax = _floatAt(rowIndex, expectedMaxCol)
-            cutoffMin = _floatAt(rowIndex, cutoffMinCol)
-            cutoffMax = _floatAt(rowIndex, cutoffMaxCol)
-            rateOfChange = _floatAt(rowIndex, rateOfChangeCol)
+            expectedMin = floatAt(rowIndex, expectedMinCol)
+            expectedMax = floatAt(rowIndex, expectedMaxCol)
+            cutoffMin = floatAt(rowIndex, cutoffMinCol)
+            cutoffMax = floatAt(rowIndex, cutoffMaxCol)
+            rateOfChange = floatAt(rowIndex, rateOfChangeCol)
 
         prevVal = None
         for r in range(numRows):
@@ -795,6 +762,8 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
     """Restore rows after sort, preserving cell UserRole and colors (overlay / QAQC)."""
     try:
         table.setSortingEnabled(False)
+        table.blockSignals(True)
+        table.setUpdatesEnabled(False)
 
         for rowIdx, row in enumerate(sortedRows):
             table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row['ts']))
@@ -827,9 +796,22 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
                 table.setItem(rowIdx, c, item)
         if Config.debug:
             Logic.logMessage("DEBUG", "Updated table after sort; preserved cell formatting and UserRole data.")
+
+        # Re-apply public / delta column edit locks (new items default to editable)
+        try:
+            mainWindow = table.window() if table is not None else None
+            if mainWindow is not None and hasattr(mainWindow, 'columnMetadata'):
+                Upload.applyEditability(table, mainWindow)
+        except Exception as e:
+            Logic.logException("updateTableAfterSort: applyEditability failed", e)
     except Exception as e:
         Logic.logException("updateTableAfterSort failed", e)
     finally:
+        try:
+            table.blockSignals(False)
+            table.setUpdatesEnabled(True)
+        except Exception:
+            pass
         try:
             table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         except Exception:
@@ -1203,7 +1185,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         progressDialog.setValue(98)
                         progressDialog.repaint()
                         QCoreApplication.processEvents()
-                    dictIndex = getattr(mainWindow.mainTable, '_dataDictIndex', None)
+                    dictIndex = getattr(mainWindow.mainTable, 'dataDictIndex', None)
                     qaqc(
                         mainWindow.mainTable,
                         dataDictionaryTable,
@@ -1251,7 +1233,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         progressDialog.setValue(98)
                         progressDialog.repaint()
                         QCoreApplication.processEvents()
-                    dictIndex = getattr(mainWindow.mainTable, '_dataDictIndex', None)
+                    dictIndex = getattr(mainWindow.mainTable, 'dataDictIndex', None)
                     qaqc(
                         mainWindow.mainTable,
                         dataDictionaryTable,
@@ -1269,6 +1251,15 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             QueryUtils.applyUsbrRbaseFallbackColors(
                 mainWindow.mainTable, mainWindow, progressDialog=progressDialog
             )
+
+            # Column widths last: final headers + formatted cell text only
+            # (never raw CSV from buildTable; never mid-modifyTable rewrite)
+            if progressDialog is not None:
+                progressDialog.setLabelText("Sizing columns...")
+                progressDialog.setValue(99)
+                progressDialog.repaint()
+                QCoreApplication.processEvents()
+            Utils.autoSizeTableColumns(mainWindow.mainTable)
 
             progressDialog.setValue(100)
             progressDialog.repaint()
@@ -1291,6 +1282,13 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"executeQuery: Stored lastDeltaChecked={deltaChecked}, lastOverlayChecked={overlayChecked}")
+
+        # Baseline for edit/upload tracking + public/delta lock (after QAQC colors)
+        try:
+            Upload.snapshotBaseline(mainWindow.mainTable, mainWindow)
+        except Exception as e:
+            Logic.logException("executeQuery: upload baseline snapshot failed", e)
+
         progressDialog.cancel()
 
         # Show Data Query tab at index 0, moving if necessary

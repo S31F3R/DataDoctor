@@ -387,8 +387,8 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                 "DEBUG",
                 f"Thread {threadId} processing task for SDID {SDID}, range {subStartStr} to {subEndStr}",
             )
-        if getattr(Oracle, '_authFailureMessage', None):
-            raise Oracle.OracleAuthError(Oracle._authFailureMessage)
+        if getattr(Oracle, 'authFailureMessage', None):
+            raise Oracle.OracleAuthError(Oracle.authFailureMessage)
 
         # Data params
         dataParams = [SDID, subStartStr, subEndStr]
@@ -520,8 +520,8 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         oracleConn = None
         tasksDone = 0
         try:
-            if getattr(Oracle, '_authFailureMessage', None):
-                raise Oracle.OracleAuthError(Oracle._authFailureMessage)
+            if getattr(Oracle, 'authFailureMessage', None):
+                raise Oracle.OracleAuthError(Oracle.authFailureMessage)
 
             oracleConn = Oracle.oracleConnection(dsn)
             oracleConn.connect()

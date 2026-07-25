@@ -8,7 +8,7 @@ from datetime import datetime
 from core import Logic, Config
 
 # Cap visible metadata rows; beyond this, show a themed vertical scrollbar
-MAX_VISIBLE_META_ROWS = 16
+maxVisibleMetaRows = 16
 
 
 class uiDetails(QWidget):
@@ -27,7 +27,7 @@ class uiDetails(QWidget):
         self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/Info.png')))
         
         # Initialize table with no rows yet (column count set dynamically in populate)
-        self._configureMetaTable(self.detailsTable, twoColumn=True)
+        self.configureMetaTable(self.detailsTable, twoColumn=True)
         
         # Zero main layout margins for single-panel view
         layout = self.layout()
@@ -42,7 +42,7 @@ class uiDetails(QWidget):
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDetails initialized")
 
-    def _configureMetaTable(self, table, twoColumn=True):
+    def configureMetaTable(self, table, twoColumn=True):
         """Apply shared details-table settings and a fixed column layout."""
         table.setSortingEnabled(True)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -50,11 +50,11 @@ class uiDetails(QWidget):
         table.verticalHeader().setVisible(False)
         table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        # Vertical policy set in _sizeWindowToTable based on row count
-        self._clampTableColumns(table, twoColumn=twoColumn)
+        # Vertical policy set in sizeWindowToTable based on row count
+        self.clampTableColumns(table, twoColumn=twoColumn)
         table.horizontalHeader().setStretchLastSection(True)
 
-    def _clampTableColumns(self, table, twoColumn=True):
+    def clampTableColumns(self, table, twoColumn=True):
         """Force 2- or 4-column layout so ghost columns cannot bleed across tabs."""
         if twoColumn:
             if table.columnCount() != 2:
@@ -65,9 +65,9 @@ class uiDetails(QWidget):
                 table.setColumnCount(4)
             table.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
 
-    def _sizeWindowToTable(self, table, extraHeight=0, minWidthExtra=0):
+    def sizeWindowToTable(self, table, extraHeight=0, minWidthExtra=0):
         """
-        Size the window to content, capped at MAX_VISIBLE_META_ROWS.
+        Size the window to content, capped at maxVisibleMetaRows.
         Extra rows get a vertical scrollbar (app stylesheet themes it).
         """
         if table is None:
@@ -77,8 +77,8 @@ class uiDetails(QWidget):
         table.resizeRowsToContents()
 
         rowCount = table.rowCount()
-        visibleRows = min(rowCount, MAX_VISIBLE_META_ROWS) if rowCount else 0
-        needsScroll = rowCount > MAX_VISIBLE_META_ROWS
+        visibleRows = min(rowCount, maxVisibleMetaRows) if rowCount else 0
+        needsScroll = rowCount > maxVisibleMetaRows
 
         if needsScroll:
             table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -119,7 +119,7 @@ class uiDetails(QWidget):
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
-                f"_sizeWindowToTable: rows={rowCount}, visible={visibleRows}, "
+                f"sizeWindowToTable: rows={rowCount}, visible={visibleRows}, "
                 f"scroll={needsScroll}, size={self.width()}x{self.height()}"
             )
 
@@ -146,7 +146,7 @@ class uiDetails(QWidget):
             tabTable.setHorizontalHeaderLabels(["Type", "Value"])
 
         extra = self.tabWidget.tabBar().height() + 20
-        self._sizeWindowToTable(tabTable, extraHeight=extra)
+        self.sizeWindowToTable(tabTable, extraHeight=extra)
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"Resized to current tab {index}: {self.width()}x{self.height()}")
@@ -177,7 +177,7 @@ class uiDetails(QWidget):
             # Clear existing rows and set columns dynamically
             self.detailsTable.setRowCount(0)
             twoColTypes = {"overlay", "headerNormal", "headerDelta", "headerOverlay", "USBR", "USGS"}
-            self._configureMetaTable(self.detailsTable, twoColumn=(queryType in twoColTypes))
+            self.configureMetaTable(self.detailsTable, twoColumn=(queryType in twoColTypes))
 
             # Handler dictionary for database-specific metadata (easy to add USGS)
             metadataHandlers = {
@@ -219,7 +219,7 @@ class uiDetails(QWidget):
                     tabTable = QTableWidget(tabWidget) # New table per tab
                     # USBR/USGS/overlay = 2 cols; Aquarius (and unknown) = 4 cols
                     twoCol = normT in ("overlay", "USBR", "USGS")
-                    self._configureMetaTable(tabTable, twoColumn=twoCol)
+                    self.configureMetaTable(tabTable, twoColumn=twoCol)
 
                     # Populate per type
                     if normT == 'overlay':
@@ -231,7 +231,7 @@ class uiDetails(QWidget):
                         continue
 
                     # Clamp ghost columns after populate (Qt setItem can grow columnCount)
-                    self._clampTableColumns(tabTable, twoColumn=twoCol)
+                    self.clampTableColumns(tabTable, twoColumn=twoCol)
                     tabLayout.addWidget(tabTable)
 
                     # Tab name: Uppercase abbreviations/suffixes, capitalize "Details"
@@ -274,9 +274,9 @@ class uiDetails(QWidget):
                     return
 
                 # Clamp ghost columns then size (max 16 rows + scrollbar)
-                self._clampTableColumns(self.detailsTable, twoColumn=(queryType in twoColTypes))
+                self.clampTableColumns(self.detailsTable, twoColumn=(queryType in twoColTypes))
                 self.detailsTable.setMinimumHeight(0)
-                self._sizeWindowToTable(self.detailsTable)
+                self.sizeWindowToTable(self.detailsTable)
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Populated {self.detailsTable.rowCount()} rows (or tabs)")
