@@ -10,7 +10,33 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
-[ ] Fonts/layout: Noto default ↔ retro toggle (Linux then Windows)
+[ ] Logging: full Python tracebacks + Qt (QT_LOGGING_RULES) in app.log / Log Viewer
+   Steps:
+     a. Trigger a handled error path (or force one) → ERROR line in Log Viewer
+        includes full Traceback body attached to that record.
+     b. With debug ON, open Log Viewer — existing CRITICAL uncaught / ERROR
+        logException records keep multi-line traces.
+     c. QT_LOGGING_RULES: launch with e.g.
+          QT_LOGGING_RULES="*.warning=true" python DataDoctor.py
+        (or any category you care about). Qt warnings should appear as
+        "Qt [category]: message @ file:line" in app.log and Log Viewer.
+     d. Optional: Python warnings (UserWarning etc.) show as
+        "Python warning: ..." in the same log.
+   Notes: Logic.installQtMessageHandler, enableWarningCapture, unraisablehook;
+          logException already wrote traces — now also unraisable + warnings.
+
+[x] USGS interval combo: no intervals past DAY when USGS-NWIS selected
+   Steps:
+     a. Open Public or Internal Query.
+     b. Select USGS-NWIS → cbInterval shows HOUR, INSTANT:1/15/60, DAY only
+        (no MONTH, YEAR, WATER YEAR).
+     c. With MONTH selected on a non-USGS DB, switch to USGS-NWIS → selection
+        falls back to DAY.
+     d. Switch to any other database (or blank) → full interval list returns;
+        previous valid selection kept when still in the list.
+   Notes: ui/uiQuery.py populateIntervalCombo / updateIntervalForDatabase
+
+[x] Fonts/layout: Noto default ↔ retro toggle (Linux then Windows)
    Steps:
      a. Retro ON + restart: Refresh/Undo at (56,10)/(106,10); QAQC at 259; Query info icons;
         Add Query/Query Data 7pt; headers part1 blank part2; table no QSS width pad.

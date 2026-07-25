@@ -19,6 +19,8 @@ from core import Config, Utils
 loggingInitialized = False
 faultLogFile = None
 exceptionHooksInstalled = False
+qtMessageHandlerInstalled = False
+qtMessageHandlerRef = None  # Must keep ref — PyQt GC's the handler otherwise
 logNotifier = None  # LogNotifier for live log viewer (created in initLogging)
 
 
@@ -103,8 +105,20 @@ def initLogging():
     # Capture hard crashes (segfaults, etc.) into the same log when possible
     enableFaultHandler(filePath)
 
+    # Python warnings → same file/console/UI handlers as app logs
+    enableWarningCapture()
+
+    # Qt category messages (filtered by QT_LOGGING_RULES) → app.log
+    installQtMessageHandler()
+
     if Config.debug:
-        logger.debug("initLogging: Logging initialized with console level {} and file at {}".format(logging.getLevelName(consoleLevel), filePath))
+        rules = os.environ.get('QT_LOGGING_RULES', '')
+        logger.debug(
+            "initLogging: Logging initialized with console level {} and file at {} "
+            "(QT_LOGGING_RULES={!r})".format(
+                logging.getLevelName(consoleLevel), filePath, rules
+            )
+        )
 
 def enableFaultHandler(filePath):
     """Dump fatal interpreter/native faults into app.log (best-effort)."""
@@ -119,6 +133,109 @@ def enableFaultHandler(filePath):
             faulthandler.enable(all_threads=True)
         except Exception:
             pass
+
+
+def enableWarningCapture():
+    """Route Python warnings module output into the Data Doctor logger (with stack)."""
+    try:
+        logging.captureWarnings(True)
+        wlog = logging.getLogger('py.warnings')
+        wlog.setLevel(logging.DEBUG)
+        wlog.propagate = False
+        # Avoid stacking duplicate handlers on re-init edge cases
+        if not any(isinstance(h, _WarningsBridgeHandler) for h in wlog.handlers):
+            wlog.addHandler(_WarningsBridgeHandler())
+    except Exception:
+        pass
+
+
+class _WarningsBridgeHandler(logging.Handler):
+    """Forward py.warnings records into logMessage (WARN + message text)."""
+
+    def emit(self, record):
+        try:
+            # warnings logger already includes file:line in the message when captureWarnings is on
+            msg = self.format(record) if self.formatter else record.getMessage()
+            logMessage('WARN', f"Python warning: {msg}")
+        except Exception:
+            pass
+
+
+def installQtMessageHandler():
+    """
+    Route Qt runtime messages into app.log / log viewer.
+
+    QT_LOGGING_RULES (env var, set before process start) still filters which
+    categories emit. Messages that pass the filter are written here instead of
+    only appearing on stderr.
+
+    Examples:
+      QT_LOGGING_RULES="*.debug=true" python DataDoctor.py
+      QT_LOGGING_RULES="qt.qpa.*=true;*.debug=false" ...
+    """
+    global qtMessageHandlerInstalled, qtMessageHandlerRef
+    if qtMessageHandlerInstalled:
+        return
+    try:
+        from PyQt6.QtCore import qInstallMessageHandler, QtMsgType
+    except Exception as e:
+        try:
+            logMessage('WARN', f"installQtMessageHandler: Qt API unavailable: {e}")
+        except Exception:
+            pass
+        return
+
+    levelMap = {
+        QtMsgType.QtDebugMsg: 'DEBUG',
+        QtMsgType.QtInfoMsg: 'INFO',
+        QtMsgType.QtWarningMsg: 'WARN',
+        QtMsgType.QtCriticalMsg: 'ERROR',
+        QtMsgType.QtFatalMsg: 'CRITICAL',
+    }
+
+    def handler(mode, context, message):
+        # Keep this path ultra-safe — never raise out of a Qt message handler
+        try:
+            level = levelMap.get(mode, 'WARN')
+            text = message if isinstance(message, str) else str(message)
+
+            category = ''
+            fileName = ''
+            line = 0
+            function = ''
+            try:
+                if context is not None:
+                    category = getattr(context, 'category', None) or ''
+                    fileName = getattr(context, 'file', None) or ''
+                    line = int(getattr(context, 'line', 0) or 0)
+                    function = getattr(context, 'function', None) or ''
+            except Exception:
+                pass
+
+            parts = ['Qt']
+            if category:
+                parts.append(f'[{category}]')
+            head = ' '.join(parts)
+            loc = ''
+            if fileName:
+                loc = f' @ {fileName}:{line}'
+                if function:
+                    loc += f' in {function}'
+            logMessage(level, f'{head}: {text}{loc}')
+        except Exception:
+            pass
+
+    # Critical: store reference so SIP does not garbage-collect the callback
+    qtMessageHandlerRef = handler
+    qInstallMessageHandler(handler)
+    qtMessageHandlerInstalled = True
+    if Config.debug:
+        logMessage(
+            'DEBUG',
+            f"installQtMessageHandler: installed "
+            f"(QT_LOGGING_RULES={os.environ.get('QT_LOGGING_RULES', '')!r})",
+        )
+
 
 def logMessage(level, message):
     """Log a message. Safe to call even if initLogging has not run yet."""
@@ -153,14 +270,24 @@ def logException(context, exc=None):
     """
     Always log an exception with full traceback at ERROR level.
     Use this for catch-and-recover paths so crashes are recorded even when debug is off.
+
+    Multi-line traceback body is one log record (continuations stick together in the
+    log viewer via loadAllAppLogEntries).
     """
     try:
         if exc is not None:
             tbText = ''.join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-            logMessage("ERROR", f"{context}: {exc}\n{tbText}")
+            logMessage("ERROR", f"{context}: {exc}\n{tbText.rstrip()}")
         else:
-            tbText = traceback.format_exc()
-            logMessage("ERROR", f"{context}\n{tbText}")
+            # Prefer active exception; format_exc() is empty outside an except block
+            excInfo = sys.exc_info()
+            if excInfo[0] is not None:
+                tbText = ''.join(traceback.format_exception(*excInfo))
+                logMessage("ERROR", f"{context}\n{tbText.rstrip()}")
+            else:
+                # No active exception — still record a stack of the call site
+                stack = ''.join(traceback.format_stack()[:-1])
+                logMessage("ERROR", f"{context}\n(no active exception; call stack:)\n{stack.rstrip()}")
     except Exception:
         try:
             print(f"ERROR: {context}: {exc}", file=sys.stderr)
@@ -264,7 +391,13 @@ def loadAllAppLogEntries(newestFirst=True):
 
 def installExceptionHooks(showDialog=True):
     """
-    Install global handlers so uncaught exceptions are logged and do not tear down the process.
+    Install global handlers so uncaught exceptions (and their full tracebacks)
+    are written to app.log and do not tear down the process.
+
+    Covers:
+      • sys.excepthook          — main-thread uncaught
+      • threading.excepthook    — non-Qt thread uncaught
+      • sys.unraisablehook      — __del__ / destructor failures
     KeyboardInterrupt / SystemExit still propagate normally.
     """
     global exceptionHooksInstalled
@@ -276,7 +409,7 @@ def installExceptionHooks(showDialog=True):
             sys.__excepthook__(excType, excValue, excTb)
             return
         try:
-            tbText = ''.join(traceback.format_exception(excType, excValue, excTb))
+            tbText = ''.join(traceback.format_exception(excType, excValue, excTb)).rstrip()
             logMessage("CRITICAL", f"Uncaught exception:\n{tbText}")
         except Exception:
             try:
@@ -317,11 +450,36 @@ def installExceptionHooks(showDialog=True):
             if issubclass(args.exc_type, (SystemExit, KeyboardInterrupt)):
                 return
             try:
-                tbText = ''.join(traceback.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
-                logMessage("CRITICAL", f"Uncaught thread exception in {getattr(args.thread, 'name', '?')}:\n{tbText}")
+                tbText = ''.join(traceback.format_exception(
+                    args.exc_type, args.exc_value, args.exc_traceback
+                )).rstrip()
+                threadName = getattr(args.thread, 'name', '?')
+                logMessage(
+                    "CRITICAL",
+                    f"Uncaught thread exception in {threadName}:\n{tbText}",
+                )
             except Exception:
                 pass
         threading.excepthook = threadExceptionHook
+
+    # Failures during __del__ / GC (would otherwise only hit stderr)
+    if hasattr(sys, 'unraisablehook'):
+        def unraisableHook(unraisable):
+            try:
+                tbText = ''.join(traceback.format_exception(
+                    unraisable.exc_type,
+                    unraisable.exc_value,
+                    unraisable.exc_traceback,
+                )).rstrip()
+                obj = getattr(unraisable, 'object', None)
+                errMsg = getattr(unraisable, 'err_msg', None) or 'Unraisable exception'
+                logMessage(
+                    "ERROR",
+                    f"{errMsg} (object={obj!r}):\n{tbText}",
+                )
+            except Exception:
+                pass
+        sys.unraisablehook = unraisableHook
 
     exceptionHooksInstalled = True
     if Config.debug:
