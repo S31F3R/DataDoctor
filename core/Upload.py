@@ -10,46 +10,46 @@ from PyQt6.QtWidgets import QAbstractItemView, QMessageBox
 from core import Logic, Config
 
 # User-edited / pending upload (magenta + white) — not used by QAQC
-EDIT_BG = QColor(0xC2, 0x18, 0x5B)  # #C2185B
-EDIT_FG = QColor(255, 255, 255)
+editBg = QColor(0xC2, 0x18, 0x5B)  # #C2185B
+editFg = QColor(255, 255, 255)
 
 # Uploaded successfully this session (deep teal + white) — unused elsewhere
-UPLOAD_OK_BG = QColor(0x00, 0x69, 0x5C)  # #00695C
-UPLOAD_OK_FG = QColor(255, 255, 255)
+uploadOkBg = QColor(0x00, 0x69, 0x5C)  # #00695C
+uploadOkFg = QColor(255, 255, 255)
 
-_EDIT_KEY = '_uploadEdit'
+editKey = 'uploadEdit'
 
 
-def _isUsgsDb(db):
+def isUsgsDb(db):
     if not db:
         return False
     s = str(db).strip().upper()
     return s == 'USGS' or s.startswith('USGS')
 
 
-def _isPublicQuery(mainWindow):
+def isPublicQuery(mainWindow):
     qt = getattr(mainWindow, 'lastQueryType', None) or getattr(mainWindow, 'currentQueryType', None) or ''
     return str(qt).strip().lower() == 'public'
 
 
-def _getUserDict(item):
+def getUserDict(item):
     if item is None:
         return {}
     data = item.data(Qt.ItemDataRole.UserRole)
     return dict(data) if isinstance(data, dict) else {}
 
 
-def _setUserDict(item, user):
+def setUserDict(item, user):
     item.setData(Qt.ItemDataRole.UserRole, user)
 
 
-def _getEditState(item):
-    user = _getUserDict(item)
-    edit = user.get(_EDIT_KEY)
+def getEditState(item):
+    user = getUserDict(item)
+    edit = user.get(editKey)
     return user, (dict(edit) if isinstance(edit, dict) else {})
 
 
-def _brushToColor(brushOrColor):
+def brushToColor(brushOrColor):
     """Normalize QBrush / QColor / None for storage and re-apply."""
     if brushOrColor is None:
         return None
@@ -64,17 +64,17 @@ def _brushToColor(brushOrColor):
     return None
 
 
-def _captureItemColors(item):
-    bg = _brushToColor(item.background())
+def captureItemColors(item):
+    bg = brushToColor(item.background())
     fgRole = item.data(Qt.ItemDataRole.ForegroundRole)
     if isinstance(fgRole, QBrush):
-        fg = _brushToColor(fgRole)
+        fg = brushToColor(fgRole)
     else:
-        fg = _brushToColor(item.foreground())
+        fg = brushToColor(item.foreground())
     return bg, fg
 
 
-def _applyColors(item, bg, fg):
+def applyColors(item, bg, fg):
     if bg is not None:
         item.setBackground(bg)
     else:
@@ -87,19 +87,19 @@ def _applyColors(item, bg, fg):
         item.setForeground(QBrush())
 
 
-def _applyEditStyle(item):
-    item.setBackground(EDIT_BG)
-    item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(EDIT_FG))
-    item.setForeground(EDIT_FG)
+def applyEditStyle(item):
+    item.setBackground(editBg)
+    item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(editFg))
+    item.setForeground(editFg)
 
 
-def _applyUploadOkStyle(item):
-    item.setBackground(UPLOAD_OK_BG)
-    item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(UPLOAD_OK_FG))
-    item.setForeground(UPLOAD_OK_FG)
+def applyUploadOkStyle(item):
+    item.setBackground(uploadOkBg)
+    item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(uploadOkFg))
+    item.setForeground(uploadOkFg)
 
 
-def _parseQueryInfo(queryInfo):
+def parseQueryInfo(queryInfo):
     """Return (dataId, interval, database) from 'dataId|interval|database'."""
     if not queryInfo:
         return '', '', ''
@@ -111,7 +111,7 @@ def _parseQueryInfo(queryInfo):
     return parts[0].strip(), '', ''
 
 
-def _primaryMeta(meta):
+def primaryMeta(meta):
     """Resolve primary series fields from columnMetadata entry."""
     if not meta:
         return None
@@ -133,7 +133,7 @@ def _primaryMeta(meta):
     dataId = dataIds[0] if dataIds else ''
     db = dbs[0] if dbs else ''
     qInfo = queryInfos[0] if queryInfos else ''
-    qDataId, interval, qDb = _parseQueryInfo(qInfo)
+    qDataId, interval, qDb = parseQueryInfo(qInfo)
 
     # Prefer full dataId from queryInfo when present; fall back to metadata id
     if qDataId:
@@ -143,7 +143,7 @@ def _primaryMeta(meta):
 
     if not dataId or not db:
         return None
-    if _isUsgsDb(db):
+    if isUsgsDb(db):
         return None
 
     return {
@@ -169,9 +169,9 @@ def outputCsvPath(dbName):
     return os.path.join(documentationDir(), f'output{safe}.csv')
 
 
-def _columnIsLocked(mainWindow, col, meta=None):
+def columnIsLocked(mainWindow, col, meta=None):
     """Public queries lock all cells; delta columns always locked from edit."""
-    if mainWindow is not None and _isPublicQuery(mainWindow):
+    if mainWindow is not None and isPublicQuery(mainWindow):
         return True
     if meta is None and mainWindow is not None:
         metas = getattr(mainWindow, 'columnMetadata', None) or []
@@ -188,7 +188,7 @@ def applyEditability(table, mainWindow=None):
     if table is None:
         return
 
-    isPublic = _isPublicQuery(mainWindow) if mainWindow is not None else False
+    isPublic = isPublicQuery(mainWindow) if mainWindow is not None else False
     if isPublic:
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     else:
@@ -203,7 +203,7 @@ def applyEditability(table, mainWindow=None):
     try:
         for c in range(table.columnCount()):
             meta = metas[c] if c < len(metas) else {}
-            lockCol = _columnIsLocked(mainWindow, c, meta)
+            lockCol = columnIsLocked(mainWindow, c, meta)
             for r in range(table.rowCount()):
                 item = table.item(r, c)
                 if item is None:
@@ -247,19 +247,19 @@ def snapshotBaseline(table, mainWindow=None):
                         Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
                     )
                     table.setItem(r, c, item)
-                user = _getUserDict(item)
-                bg, fg = _captureItemColors(item)
+                user = getUserDict(item)
+                bg, fg = captureItemColors(item)
                 text = item.text() if item.text() is not None else ''
-                user[_EDIT_KEY] = {
+                user[editKey] = {
                     'originalText': text,
                     'baselineBg': bg,
                     'baselineFg': fg,
                     'dirty': False,
                     'uploaded': False,
                 }
-                _setUserDict(item, user)
+                setUserDict(item, user)
         if mainWindow is not None:
-            mainWindow._uploadBaselineReady = True
+            mainWindow.uploadBaselineReady = True
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
@@ -284,7 +284,7 @@ def countPendingEdits(mainWindow):
             item = table.item(r, c)
             if item is None:
                 continue
-            _, edit = _getEditState(item)
+            _, edit = getEditState(item)
             if edit.get('dirty'):
                 n += 1
     return n
@@ -319,18 +319,18 @@ def onItemChanged(mainWindow, item):
     """Mark cell dirty (edit colors) or restore baseline when text matches original."""
     if item is None or mainWindow is None:
         return
-    if getattr(mainWindow, '_uploadTrackingBlocked', False):
+    if getattr(mainWindow, 'uploadTrackingBlocked', False):
         return
-    if not getattr(mainWindow, '_uploadBaselineReady', False):
+    if not getattr(mainWindow, 'uploadBaselineReady', False):
         return
     table = mainWindow.mainTable
     if table is None or item.tableWidget() is not table:
         return
 
-    user, edit = _getEditState(item)
+    user, edit = getEditState(item)
     if not edit:
         # Late-created item: seed baseline from current (no prior snapshot)
-        bg, fg = _captureItemColors(item)
+        bg, fg = captureItemColors(item)
         edit = {
             'originalText': item.text(),
             'baselineBg': bg,
@@ -346,19 +346,19 @@ def onItemChanged(mainWindow, item):
         if current != original:
             edit['dirty'] = True
             edit['uploaded'] = False
-            user[_EDIT_KEY] = edit
-            _setUserDict(item, user)
-            _applyEditStyle(item)
+            user[editKey] = edit
+            setUserDict(item, user)
+            applyEditStyle(item)
         else:
             # Restored to original — clear dirty; keep uploaded style if already uploaded
             wasUploaded = bool(edit.get('uploaded'))
             edit['dirty'] = False
-            user[_EDIT_KEY] = edit
-            _setUserDict(item, user)
+            user[editKey] = edit
+            setUserDict(item, user)
             if wasUploaded:
-                _applyUploadOkStyle(item)
+                applyUploadOkStyle(item)
             else:
-                _applyColors(item, edit.get('baselineBg'), edit.get('baselineFg'))
+                applyColors(item, edit.get('baselineBg'), edit.get('baselineFg'))
     finally:
         table.blockSignals(False)
 
@@ -374,7 +374,7 @@ def collectUploadRows(mainWindow):
         return rows
 
     # Public: cells are locked; nothing should be dirty
-    if _isPublicQuery(mainWindow):
+    if isPublicQuery(mainWindow):
         return rows
 
     columnMetadata = getattr(mainWindow, 'columnMetadata', None) or []
@@ -383,7 +383,7 @@ def collectUploadRows(mainWindow):
 
     for c in range(numCols):
         meta = columnMetadata[c] if c < len(columnMetadata) else {}
-        primary = _primaryMeta(meta)
+        primary = primaryMeta(meta)
         if primary is None:
             continue
 
@@ -391,7 +391,7 @@ def collectUploadRows(mainWindow):
             item = table.item(r, c)
             if item is None:
                 continue
-            _, edit = _getEditState(item)
+            _, edit = getEditState(item)
             if not edit.get('dirty'):
                 continue
 
@@ -409,7 +409,7 @@ def collectUploadRows(mainWindow):
                 'timestamp': timestamp,
                 'value': value,
                 'originalValue': originalText,
-                'reason': 'user_edit',
+                'reason': 'userEdit',
                 'row': r,
                 'col': c,
             })
@@ -460,22 +460,22 @@ def markUploaded(mainWindow, uploadRows):
     if table is None:
         return
     table.blockSignals(True)
-    mainWindow._uploadTrackingBlocked = True
+    mainWindow.uploadTrackingBlocked = True
     try:
         for r in uploadRows:
             item = table.item(r['row'], r['col'])
             if item is None:
                 continue
-            user, edit = _getEditState(item)
+            user, edit = getEditState(item)
             newText = r['value']
             if item.text() != newText:
                 item.setText(newText)
             edit['originalText'] = newText
             edit['dirty'] = False
             edit['uploaded'] = True
-            edit['baselineBg'] = QColor(UPLOAD_OK_BG)
-            edit['baselineFg'] = QColor(UPLOAD_OK_FG)
-            user[_EDIT_KEY] = edit
+            edit['baselineBg'] = QColor(uploadOkBg)
+            edit['baselineFg'] = QColor(uploadOkFg)
+            user[editKey] = edit
             # Keep overlay UserRole in sync with the value the user uploaded to primary
             if user.get('overlay'):
                 user['primaryVal'] = newText
@@ -489,10 +489,10 @@ def markUploaded(mainWindow, uploadRows):
                         user['delta'] = ''
                 except ValueError:
                     user['delta'] = '' if newText == sStr else '1'
-            _setUserDict(item, user)
-            _applyUploadOkStyle(item)
+            setUserDict(item, user)
+            applyUploadOkStyle(item)
     finally:
-        mainWindow._uploadTrackingBlocked = False
+        mainWindow.uploadTrackingBlocked = False
         table.blockSignals(False)
 
 
@@ -507,7 +507,7 @@ def runUpload(mainWindow):
             QMessageBox.information(mainWindow, "Upload", "No data in the table to upload.")
             return
 
-        if not getattr(mainWindow, '_uploadBaselineReady', False):
+        if not getattr(mainWindow, 'uploadBaselineReady', False):
             # Defensive: snapshot if query path missed it
             snapshotBaseline(table, mainWindow)
 

@@ -61,15 +61,15 @@ class uiAbout(QDialog):
         self.textInfo.setOpenExternalLinks(True)
         self.textInfo.setStyleSheet("background-color: transparent; border: none;")
         self.textInfo.setGeometry(70, 140, 800, 200)
-        self._setupSecretButton()
+        self.setupSecretButton()
         # QMediaPlayer (music role) instead of QSoundEffect (event role): better for a
         # long looping track, and avoids PipeWire/Pulse muting "event" streams on Linux.
         # Same Qt6 APIs on Windows/macOS/Linux — keep audioOutput alive on self.
         self.mediaPlayer = None
         self.audioOutput = None
-        self._setupMusic()
+        self.setupMusic()
 
-    def _setupMusic(self):
+    def setupMusic(self):
         """Load looping About music. Safe no-op if multimedia backend is unavailable."""
         try:
             wavPath = Logic.resourcePath('ui/sounds/8-Bit-Perplexion.wav')
@@ -80,27 +80,27 @@ class uiAbout(QDialog):
             self.mediaPlayer.setSource(QUrl.fromLocalFile(wavPath))
             # -1 == QMediaPlayer.Loops.Infinite (literal avoids enum quirks across PyQt builds)
             self.mediaPlayer.setLoops(-1)
-            self.mediaPlayer.errorOccurred.connect(self._onMusicError)
+            self.mediaPlayer.errorOccurred.connect(self.onMusicError)
         except Exception as e:
             self.mediaPlayer = None
             self.audioOutput = None
             Logic.logMessage("WARN", f"Failed to load about music: {e}")
 
-    def _onMusicError(self, error, errorString):
+    def onMusicError(self, error, errorString):
         Logic.logMessage("WARN", f"About music error: {error} {errorString}")
 
-    def _startMusic(self):
+    def startMusic(self):
         if not self.mediaPlayer:
             return
         # Restart cleanly when the dialog is reopened
         self.mediaPlayer.setPosition(0)
         self.mediaPlayer.play()
 
-    def _stopMusic(self):
+    def stopMusic(self):
         if self.mediaPlayer:
             self.mediaPlayer.stop()
 
-    def _setupSecretButton(self):
+    def setupSecretButton(self):
         """
         Tiny easter-egg control — The Net (1995) π backdoor icon, bottom-right
         (same corner as the movie). Hook action up later.
@@ -139,9 +139,9 @@ class uiAbout(QDialog):
     def showEvent(self, event):        
         Logic.logMessage("WARN", f"uiAbout showEvent")
         Utils.centerWindowToParent(self)
-        self._startMusic()
+        self.startMusic()
         super().showEvent(event)
     
     def closeEvent(self, event):
-        self._stopMusic()
+        self.stopMusic()
         super().closeEvent(event)

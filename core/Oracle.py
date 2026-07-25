@@ -13,14 +13,14 @@ from core import Logic, Config
 
 # After a bad password, refuse further connect attempts for this process so we
 # do not spam Oracle and lock the account (multi-thread HDB / multi-DSN queries).
-_authFailureMessage = None
+authFailureMessage = None
 
 # Instant Client + env must be configured once. sqlRead creates many connections
 # (per SDID × date chunk × thread). Old code prepended clientDir to PATH on every
 # construct → after enough HDB tasks Windows hit: ValueError environment variable
 # longer than 32767 characters.
-_clientInitLock = threading.Lock()
-_clientInitialized = False
+clientInitLock = threading.Lock()
+clientInitialized = False
 
 
 class OracleAuthError(RuntimeError):
@@ -30,8 +30,8 @@ class OracleAuthError(RuntimeError):
 
 def clearAuthFailure():
     """Call after the user updates Oracle credentials in Options."""
-    global _authFailureMessage
-    _authFailureMessage = None
+    global authFailureMessage
+    authFailureMessage = None
 
 
 def isAuthError(exc) -> bool:
@@ -66,7 +66,7 @@ def isAuthError(exc) -> bool:
     return False
 
 
-def _pathHasDir(envValue, directory, sep):
+def pathHasDir(envValue, directory, sep):
     """True if directory already appears as a PATH-style entry."""
     if not envValue:
         return False
@@ -79,7 +79,7 @@ def _pathHasDir(envValue, directory, sep):
     return False
 
 
-def _ensureClientOnPath(clientDir):
+def ensureClientOnPath(clientDir):
     """Prepend Instant Client to the process library path at most once."""
     system = platform.system().lower()
     clientStr = str(clientDir)
@@ -97,7 +97,7 @@ def _ensureClientOnPath(clientDir):
         raise RuntimeError(f"Unsupported platform: {system}")
 
     current = os.environ.get(key, '')
-    if _pathHasDir(current, clientStr, sep):
+    if pathHasDir(current, clientStr, sep):
         if Config.debug:
             Logic.logMessage("DEBUG", f"oracleConnection: {key} already includes Instant Client")
         return
@@ -124,12 +124,12 @@ def ensureOracleClientReady():
     One-time Instant Client init + TNS_ADMIN. Safe to call from any thread;
     concurrent callers block until the first setup finishes.
     """
-    global _clientInitialized
-    if _clientInitialized:
+    global clientInitialized
+    if clientInitialized:
         return
 
-    with _clientInitLock:
-        if _clientInitialized:
+    with clientInitLock:
+        if clientInitialized:
             return
 
         system = platform.system().lower()
@@ -166,7 +166,7 @@ def ensureOracleClientReady():
         if Config.debug:
             Logic.logMessage("DEBUG", f"oracleConnection.setup: Validated Instant Client files for {system}")
 
-        _ensureClientOnPath(clientDir)
+        ensureClientOnPath(clientDir)
 
         try:
             oracledb.init_oracle_client(lib_dir=str(clientDir))
@@ -199,7 +199,7 @@ def ensureOracleClientReady():
                     f"oracleConnection.setup: Set TNS_ADMIN to program's path: {resourceAdmin} (no copy)",
                 )
 
-        _clientInitialized = True
+        clientInitialized = True
 
 
 class oracleConnection:
@@ -210,11 +210,11 @@ class oracleConnection:
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""
-        global _authFailureMessage
+        global authFailureMessage
 
         # Do not hammer Oracle after a failed login (account lock protection)
-        if _authFailureMessage:
-            raise OracleAuthError(_authFailureMessage)
+        if authFailureMessage:
+            raise OracleAuthError(authFailureMessage)
 
         try:
             user = keyring.get_password("DataDoctor", "oracleUser") or ''
@@ -227,7 +227,7 @@ class oracleConnection:
             self.connection = oracledb.connect(user=user, password=password, dsn=self.dsn)
             if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Connection established to {self.dsn}")
             # Successful login clears any prior auth block
-            _authFailureMessage = None
+            authFailureMessage = None
             user = None
             password = None
             return self.connection
@@ -235,26 +235,26 @@ class oracleConnection:
             raise
         except oracledb.Error as e:
             if isAuthError(e):
-                _authFailureMessage = (
+                authFailureMessage = (
                     "Oracle login failed: wrong username/password or account locked. "
                     "Fix credentials in Options — further connect attempts are blocked "
                     "this session to avoid locking the account."
                 )
                 Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
-                raise OracleAuthError(_authFailureMessage) from e
+                raise OracleAuthError(authFailureMessage) from e
             Logic.logException(f"oracleConnection.connect: Error connecting to Oracle ({self.dsn})", e)
             user = None
             password = None
             raise
         except Exception as e:
             if isAuthError(e):
-                _authFailureMessage = (
+                authFailureMessage = (
                     "Oracle login failed: wrong username/password or account locked. "
                     "Fix credentials in Options — further connect attempts are blocked "
                     "this session to avoid locking the account."
                 )
                 Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
-                raise OracleAuthError(_authFailureMessage) from e
+                raise OracleAuthError(authFailureMessage) from e
             Logic.logException(f"oracleConnection.connect: Unexpected error ({self.dsn})", e)
             user = None
             password = None
@@ -327,7 +327,7 @@ class oracleConnection:
         startTime = time.time()
 
         try:
-            return self._runQueryOnCursor(cursor, query, params, fetchAll, startTime)
+            return self.runQueryOnCursor(cursor, query, params, fetchAll, startTime)
         except oracledb.Error as e:
             if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Oracle error: {e}")
             raise
@@ -338,7 +338,7 @@ class oracleConnection:
                 pass
             if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Cursor closed")
 
-    def _runQueryOnCursor(self, cursor, query, params, fetchAll, startTime):
+    def runQueryOnCursor(self, cursor, query, params, fetchAll, startTime):
         exactQuery = query
         if Config.debug:
             Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Validating query: {exactQuery}")

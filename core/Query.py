@@ -517,15 +517,15 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     # Row height before setRowCount so new sections pick up the platform-tuned size
     # (non-retro Windows is tighter; Linux Noto +10; retro keeps roomier pad)
-    _rowFont = table.font()
-    _rowMetrics = QFontMetrics(_rowFont)
-    _rowH = Utils.tableDefaultRowHeight(font=_rowFont, metrics=_rowMetrics)
-    vHeader.setDefaultSectionSize(_rowH)
-    vHeader.setMinimumSectionSize(max(_rowMetrics.height() + 2, 16))
+    rowFont = table.font()
+    rowMetrics = QFontMetrics(rowFont)
+    rowH = Utils.tableDefaultRowHeight(font=rowFont, metrics=rowMetrics)
+    vHeader.setDefaultSectionSize(rowH)
+    vHeader.setMinimumSectionSize(max(rowMetrics.height() + 2, 16))
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
-            f"buildTable: rowHeight={_rowH} fontH={_rowMetrics.height()} "
+            f"buildTable: rowHeight={rowH} fontH={rowMetrics.height()} "
             f"retro={Config.retroMode} platform={__import__('sys').platform}",
         )
 
@@ -649,7 +649,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     # QAQC is applied by executeQuery after overlay/delta modifyTable so we do not
     # color twice on huge tables. dictIndex available on table for reuse if needed.
-    table._dataDictIndex = dictIndex  # lightweight attach for executeQuery
+    table.dataDictIndex = dictIndex  # lightweight attach for executeQuery
 
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: complete (QAQC deferred to executeQuery)")
@@ -693,7 +693,7 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
         rateOfChange = None
 
         if rowIndex != -1 and dataDictionaryTable is not None:
-            def _floatAt(r, c):
+            def floatAt(r, c):
                 if c == -1:
                     return None
                 it = dataDictionaryTable.item(r, c)
@@ -703,11 +703,11 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
                     return float(it.text().strip())
                 except ValueError:
                     return None
-            expectedMin = _floatAt(rowIndex, expectedMinCol)
-            expectedMax = _floatAt(rowIndex, expectedMaxCol)
-            cutoffMin = _floatAt(rowIndex, cutoffMinCol)
-            cutoffMax = _floatAt(rowIndex, cutoffMaxCol)
-            rateOfChange = _floatAt(rowIndex, rateOfChangeCol)
+            expectedMin = floatAt(rowIndex, expectedMinCol)
+            expectedMax = floatAt(rowIndex, expectedMaxCol)
+            cutoffMin = floatAt(rowIndex, cutoffMinCol)
+            cutoffMax = floatAt(rowIndex, cutoffMaxCol)
+            rateOfChange = floatAt(rowIndex, rateOfChangeCol)
 
         prevVal = None
         for r in range(numRows):
@@ -1218,7 +1218,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         progressDialog.setValue(98)
                         progressDialog.repaint()
                         QCoreApplication.processEvents()
-                    dictIndex = getattr(mainWindow.mainTable, '_dataDictIndex', None)
+                    dictIndex = getattr(mainWindow.mainTable, 'dataDictIndex', None)
                     qaqc(
                         mainWindow.mainTable,
                         dataDictionaryTable,
@@ -1266,7 +1266,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         progressDialog.setValue(98)
                         progressDialog.repaint()
                         QCoreApplication.processEvents()
-                    dictIndex = getattr(mainWindow.mainTable, '_dataDictIndex', None)
+                    dictIndex = getattr(mainWindow.mainTable, 'dataDictIndex', None)
                     qaqc(
                         mainWindow.mainTable,
                         dataDictionaryTable,

@@ -42,7 +42,7 @@ def modifyTable(
     queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
 
     # --- Extract all cell text once (one grid walk) ---
-    def _yield(msg, pct=None):
+    def yieldProgress(msg, pct=None):
         if progressDialog is None:
             return
         progressDialog.setLabelText(msg)
@@ -51,7 +51,7 @@ def modifyTable(
         progressDialog.repaint()
         QCoreApplication.processEvents()
 
-    _yield("Overlay/delta: reading table...", 97)
+    yieldProgress("Overlay/delta: reading table...", 97)
 
     grid = []
     headers = []
@@ -63,7 +63,7 @@ def modifyTable(
             item = table.item(r, c)
             colVals.append(item.text().strip() if item and item.text() else '')
             if r > 0 and r % 2000 == 0:
-                _yield(f"Overlay/delta: reading... col {c + 1}/{numCols}", 97)
+                yieldProgress(f"Overlay/delta: reading... col {c + 1}/{numCols}", 97)
         grid.append(colVals)
 
     # Pair columns (0,1), (2,3), ... leftover odd column kept as-is
@@ -194,7 +194,7 @@ def modifyTable(
             })
 
         if pairIndex % 2 == 0 or pairIndex == pairCount - 1:
-            _yield(f"Overlay/delta: computing pairs... ({pairIndex + 1}/{pairCount})", 97)
+            yieldProgress(f"Overlay/delta: computing pairs... ({pairIndex + 1}/{pairCount})", 97)
 
     if hasOdd:
         last = numCols - 1
@@ -214,7 +214,7 @@ def modifyTable(
 
     # --- Single rewrite of the table (no removeColumn loop) ---
     outCols = len(finalCols)
-    _yield(f"Overlay/delta: writing {outCols} columns × {numRows} rows...", 97)
+    yieldProgress(f"Overlay/delta: writing {outCols} columns × {numRows} rows...", 97)
 
     # Preserve vertical header timestamps
     timestamps = []
@@ -260,7 +260,7 @@ def modifyTable(
             table.setItem(r, c, item)
 
         if c % max(1, outCols // 10) == 0 or c == outCols - 1:
-            _yield(f"Overlay/delta: writing column {c + 1}/{outCols}...", 97)
+            yieldProgress(f"Overlay/delta: writing column {c + 1}/{outCols}...", 97)
 
         # Also yield by row volume on very tall tables
         if numRows > 5000 and c == 0:

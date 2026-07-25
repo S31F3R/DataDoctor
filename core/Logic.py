@@ -17,9 +17,9 @@ from core import Config, Utils
 
 # Flag to prevent multiple initializations (module-level for encapsulation)
 loggingInitialized = False
-_faultLogFile = None
-_exceptionHooksInstalled = False
-_logNotifier = None  # LogNotifier for live log viewer (created in initLogging)
+faultLogFile = None
+exceptionHooksInstalled = False
+logNotifier = None  # LogNotifier for live log viewer (created in initLogging)
 
 
 class LogNotifier(QObject):
@@ -27,7 +27,7 @@ class LogNotifier(QObject):
     newLogEntry = pyqtSignal(str, str)  # level, formatted text
 
 
-class _QtLogHandler(logging.Handler):
+class qtLogHandler(logging.Handler):
     """
     Lightweight handler: format once and emit a signal.
     Receivers (log viewer) no-op when the Log tab is closed, so cost is negligible.
@@ -35,20 +35,20 @@ class _QtLogHandler(logging.Handler):
     """
     def __init__(self, notifier):
         super().__init__()
-        self._notifier = notifier
+        self.notifier = notifier
         self.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
 
     def emit(self, record):
         try:
             msg = self.format(record)
-            self._notifier.newLogEntry.emit(record.levelname, msg)
+            self.notifier.newLogEntry.emit(record.levelname, msg)
         except Exception:
             self.handleError(record)
 
 
 def getLogNotifier():
     """Return the LogNotifier singleton, or None before initLogging."""
-    return _logNotifier
+    return logNotifier
 
 def resourcePath(relativePath):
     """Get absolute path to resource, works for dev and PyInstaller"""
@@ -60,7 +60,7 @@ def resourcePath(relativePath):
     return os.path.normpath(os.path.join(basePath, relativePath))
 
 def initLogging():
-    global loggingInitialized, _logNotifier
+    global loggingInitialized, logNotifier
 
     if loggingInitialized:
         return # Already initialized
@@ -89,9 +89,9 @@ def initLogging():
 
     # UI bridge for live log viewer (append-only when tab open; no-op otherwise)
     try:
-        if _logNotifier is None:
-            _logNotifier = LogNotifier()
-        uiHandler = _QtLogHandler(_logNotifier)
+        if logNotifier is None:
+            logNotifier = LogNotifier()
+        uiHandler = qtLogHandler(logNotifier)
         uiHandler.setLevel(logging.DEBUG)
         logger.addHandler(uiHandler)
     except Exception:
@@ -101,19 +101,19 @@ def initLogging():
     loggingInitialized = True
 
     # Capture hard crashes (segfaults, etc.) into the same log when possible
-    _enableFaultHandler(filePath)
+    enableFaultHandler(filePath)
 
     if Config.debug:
         logger.debug("initLogging: Logging initialized with console level {} and file at {}".format(logging.getLevelName(consoleLevel), filePath))
 
-def _enableFaultHandler(filePath):
+def enableFaultHandler(filePath):
     """Dump fatal interpreter/native faults into app.log (best-effort)."""
-    global _faultLogFile
+    global faultLogFile
     try:
-        if _faultLogFile is not None:
+        if faultLogFile is not None:
             return
-        _faultLogFile = open(filePath, 'a', encoding='utf-8')
-        faulthandler.enable(file=_faultLogFile, all_threads=True)
+        faultLogFile = open(filePath, 'a', encoding='utf-8')
+        faulthandler.enable(file=faultLogFile, all_threads=True)
     except Exception:
         try:
             faulthandler.enable(all_threads=True)
@@ -168,7 +168,7 @@ def logException(context, exc=None):
             pass
 
 # File log line: "2026-07-24 12:34:56,789 [ERROR] message"
-_LOG_LINE_RE = re.compile(
+logLineRe = re.compile(
     r'^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:,\d+)?)\s+\[([A-Za-z]+)\]\s?(.*)$'
 )
 
@@ -219,7 +219,7 @@ def loadAllAppLogEntries(newestFirst=True):
         current = None
         for raw in lines:
             line = raw.rstrip('\n')
-            m = _LOG_LINE_RE.match(line)
+            m = logLineRe.match(line)
             if m:
                 if current is not None:
                     entries.append(current)
@@ -267,8 +267,8 @@ def installExceptionHooks(showDialog=True):
     Install global handlers so uncaught exceptions are logged and do not tear down the process.
     KeyboardInterrupt / SystemExit still propagate normally.
     """
-    global _exceptionHooksInstalled
-    if _exceptionHooksInstalled:
+    global exceptionHooksInstalled
+    if exceptionHooksInstalled:
         return
 
     def exceptionHook(excType, excValue, excTb):
@@ -293,9 +293,9 @@ def installExceptionHooks(showDialog=True):
             if app is None:
                 return
             # Avoid dialog storms if many exceptions fire
-            if getattr(app, '_dataDoctorShowingErrorDialog', False):
+            if getattr(app, 'dataDoctorShowingErrorDialog', False):
                 return
-            app._dataDoctorShowingErrorDialog = True
+            app.dataDoctorShowingErrorDialog = True
             try:
                 QMessageBox.critical(
                     None,
@@ -306,7 +306,7 @@ def installExceptionHooks(showDialog=True):
                     "See app.log for details."
                 )
             finally:
-                app._dataDoctorShowingErrorDialog = False
+                app.dataDoctorShowingErrorDialog = False
         except Exception:
             pass
 
@@ -323,7 +323,7 @@ def installExceptionHooks(showDialog=True):
                 pass
         threading.excepthook = threadExceptionHook
 
-    _exceptionHooksInstalled = True
+    exceptionHooksInstalled = True
     if Config.debug:
         logMessage("DEBUG", "installExceptionHooks: Global exception hooks installed")
 
