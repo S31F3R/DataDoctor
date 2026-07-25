@@ -131,19 +131,18 @@ class uiMain(QMainWindow):
         self.btnExportCSV.clicked.connect(self.btnExportCSVPressed)
         self.btnOptions.clicked.connect(self.btnOptionsPressed)
         self.btnInfo.clicked.connect(self.btnInfoPressed)
-        if self.btnViewLog:
-            self.btnViewLog.clicked.connect(self.btnViewLogPressed)
+        if self.btnViewLog:self.btnViewLog.clicked.connect(self.btnViewLogPressed)
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
-        if self.btnUpload:
-            self.btnUpload.clicked.connect(self.btnUploadPressed)
+        if self.btnUpload:self.btnUpload.clicked.connect(self.btnUploadPressed)
         self.mainTable.horizontalHeader().sectionClicked.connect(lambda col: Query.customSortTable(self.mainTable, col, self.winDataDictionary.mainTable))
         self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)
         self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
         self.mainTable.itemChanged.connect(self.onMainTableItemChanged)
+        
         # Edit triggers / locks applied after each query via Upload.snapshotBaseline
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
         self.btnRunQuery.clicked.connect(self.runCustomQuery)
