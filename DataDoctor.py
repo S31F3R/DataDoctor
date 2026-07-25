@@ -1251,7 +1251,10 @@ if __name__ == '__main__':
         Utils.applyStylesAndFonts(app, winMain.mainTable, winQuery.listQueryList)
 
         # Load data dictionary and quick looks (best-effort; do not block startup)
+        # ensureDataDictionarySchema runs inside load/build (valuePrecision + precisionOverride)
         try:
+            Logic.ensureDataDictionarySchema()
+            Logic.loadAquariusRoundingSpecs()
             Utils.loadDataDictionary(winDataDictionary.mainTable)
         except Exception as e:
             Logic.logException("Startup: loadDataDictionary failed", e)

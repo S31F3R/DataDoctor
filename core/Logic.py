@@ -487,6 +487,9 @@ def installExceptionHooks(showDialog=True):
 
 def buildDataDictionary(table, columns=None, whereClause=None):
     table.clear()
+    # Keep schema current before any SELECT * / column list
+    ensureDataDictionarySchema()
+    loadAquariusRoundingSpecs()
     dbPath = resourcePath('core/bunker.db')
 
     try:
@@ -503,6 +506,16 @@ def buildDataDictionary(table, columns=None, whereClause=None):
             if not rows:
                 if Config.debug:
                     logMessage("DEBUG", "dataDictionary table empty")
+                # Still set headers when empty so editor shows new columns
+                if columns is not None:
+                    headers = list(columns)
+                else:
+                    cur.execute('PRAGMA table_info(dataDictionary)')
+                    headers = [r[1] for r in cur.fetchall()]
+                table.setColumnCount(len(headers))
+                for c, header in enumerate(headers):
+                    table.setHorizontalHeaderItem(c, QTableWidgetItem(header.strip()))
+                table.setRowCount(0)
                 return
             headers = [desc[0] for desc in cur.description]
             table.setColumnCount(len(headers))
@@ -869,10 +882,307 @@ def formatRawNumber(value):
         s = '0'
     return s
 
-def valuePrecision(value):
-    """Format value to 2 decimals if |v|<1000, 1 if 1000-9999, 0 if >=10000.
 
-    Raw mode: full precision in fixed-point (never scientific notation).
+# ---------------------------------------------------------------------------
+# Aquarius value-precision rules (valuePrecision.json → bunker.db + formatting)
+# ---------------------------------------------------------------------------
+
+# Identifier → RoundingSpec (e.g. "Discharge" → "DEC(3)"); loaded once
+_aquariusRoundingById = None
+_aquariusIdentifierList = None
+
+# Default when combo blank / no override / identifier has no RoundingSpec
+DEFAULT_ROUNDING_SPEC = 'DEC(2)'
+
+# Aquarius RoundingSpec: DEC(n) | SIG(n) | SIG(n,m)
+_roundingSpecRe = re.compile(
+    r'^\s*(DEC|SIG)\s*\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\)\s*$',
+    re.IGNORECASE,
+)
+
+# dataType keyword → Aquarius Identifier for seed defaults
+_FLOW_KEYWORDS = ('flow', 'cfs', 'diversion')
+_STAGE_KEYWORDS = ('stage', 'gage height', 'level')
+
+
+def loadAquariusRoundingSpecs(forceReload=False):
+    """
+    Load documentation/valuePrecision.json.
+    Returns (identifierList, identifier → RoundingSpec|None).
+    Identifiers without RoundingSpec still appear in the combobox.
+    """
+    global _aquariusRoundingById, _aquariusIdentifierList
+    if _aquariusRoundingById is not None and not forceReload:
+        return _aquariusIdentifierList, _aquariusRoundingById
+
+    byId = {}
+    ordered = []
+    path = resourcePath('documentation/valuePrecision.json')
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+        params = payload.get('Parameters') if isinstance(payload, dict) else None
+        if not isinstance(params, list):
+            logMessage('WARN', f'loadAquariusRoundingSpecs: no Parameters list in {path}')
+            params = []
+        for p in params:
+            if not isinstance(p, dict):
+                continue
+            ident = (p.get('Identifier') or '').strip()
+            if not ident:
+                continue
+            ordered.append(ident)
+            spec = p.get('RoundingSpec')
+            byId[ident] = (str(spec).strip() if spec else None)
+        if Config.debug:
+            withSpec = sum(1 for v in byId.values() if v)
+            logMessage(
+                'DEBUG',
+                f'loadAquariusRoundingSpecs: {len(ordered)} identifiers, {withSpec} with RoundingSpec',
+            )
+    except Exception as e:
+        logException(f'loadAquariusRoundingSpecs failed ({path})', e)
+
+    _aquariusRoundingById = byId
+    _aquariusIdentifierList = ordered
+    return ordered, byId
+
+
+def aquariusIdentifierList():
+    """Sorted-for-display list of Aquarius parameter Identifiers for the combobox."""
+    ordered, _ = loadAquariusRoundingSpecs()
+    # Keep API order but present alphabetically in UI for scanability
+    return sorted(ordered, key=lambda s: s.lower())
+
+
+def seedValuePrecisionFromDataType(dataType):
+    """
+    Map HDB/dataType text → Aquarius Identifier for bunker seed.
+    flow/cfs/diversion → Discharge; stage/gage height/level → Stage; else blank.
+    """
+    if not dataType:
+        return None
+    d = str(dataType).lower()
+    if any(k in d for k in _FLOW_KEYWORDS):
+        return 'Discharge'
+    if any(k in d for k in _STAGE_KEYWORDS):
+        return 'Stage'
+    return None
+
+
+def normalizeRoundingSpec(spec):
+    """Return canonical 'DEC(n)' / 'SIG(n)' / 'SIG(n,m)' or None if invalid/empty."""
+    if spec is None:
+        return None
+    s = str(spec).strip()
+    if not s:
+        return None
+    m = _roundingSpecRe.match(s)
+    if not m:
+        return None
+    kind = m.group(1).upper()
+    a = int(m.group(2))
+    b = m.group(3)
+    if b is not None:
+        return f'{kind}({a},{int(b)})'
+    return f'{kind}({a})'
+
+
+def resolveRoundingSpec(identifier=None, override=None):
+    """
+    Effective RoundingSpec for a dictionary row.
+    precedence: precisionOverride → valuePrecision Identifier's Aquarius spec → DEC(2).
+    Blank identifier / unknown Identifier with no spec → DEC(2).
+    """
+    normOverride = normalizeRoundingSpec(override)
+    if normOverride:
+        return normOverride
+
+    ident = (identifier or '').strip()
+    if ident:
+        _, byId = loadAquariusRoundingSpecs()
+        # Case-insensitive Identifier match
+        spec = byId.get(ident)
+        if spec is None:
+            for k, v in byId.items():
+                if k.lower() == ident.lower():
+                    spec = v
+                    break
+        norm = normalizeRoundingSpec(spec) if spec else None
+        if norm:
+            return norm
+    return DEFAULT_ROUNDING_SPEC
+
+
+def _dictTableColIndex(table, name):
+    """Case-insensitive header index; -1 if missing (no WARN log)."""
+    if table is None or not name:
+        return -1
+    nameLower = name.strip().lower()
+    for c in range(table.columnCount()):
+        header = table.horizontalHeaderItem(c)
+        if header and header.text().strip().lower() == nameLower:
+            return c
+    return -1
+
+
+def roundingSpecFromDictionaryRow(dataDictionaryTable, rowIndex):
+    """Read valuePrecision + precisionOverride from a data-dictionary table row."""
+    if dataDictionaryTable is None or rowIndex is None or rowIndex < 0:
+        return DEFAULT_ROUNDING_SPEC
+
+    vpCol = _dictTableColIndex(dataDictionaryTable, 'valuePrecision')
+    poCol = _dictTableColIndex(dataDictionaryTable, 'precisionOverride')
+
+    identifier = ''
+    override = ''
+    if vpCol >= 0:
+        it = dataDictionaryTable.item(rowIndex, vpCol)
+        identifier = it.text().strip() if it and it.text() else ''
+    if poCol >= 0:
+        it = dataDictionaryTable.item(rowIndex, poCol)
+        override = it.text().strip() if it and it.text() else ''
+    return resolveRoundingSpec(identifier=identifier, override=override)
+
+
+def roundingSpecForDataId(dataDictionaryTable, dataId, dictIndex=None):
+    """Resolve RoundingSpec for a series dataID via the in-memory data dictionary table."""
+    if dataDictionaryTable is None or not dataId:
+        return DEFAULT_ROUNDING_SPEC
+
+    # Local O(1) index if not provided
+    if dictIndex is None:
+        dictIndex = {}
+        idCol = _dictTableColIndex(dataDictionaryTable, 'dataID')
+        if idCol >= 0:
+            for r in range(dataDictionaryTable.rowCount()):
+                it = dataDictionaryTable.item(r, idCol)
+                if it:
+                    key = it.text().strip()
+                    if key and key not in dictIndex:
+                        dictIndex[key] = r
+
+    target = dataId.strip() if dataId else ''
+    row = dictIndex.get(target, -1)
+    if row < 0:
+        # Fallback linear scan
+        idCol = _dictTableColIndex(dataDictionaryTable, 'dataID')
+        if idCol >= 0:
+            for r in range(dataDictionaryTable.rowCount()):
+                it = dataDictionaryTable.item(r, idCol)
+                if it and it.text().strip() == target:
+                    row = r
+                    break
+    return roundingSpecFromDictionaryRow(dataDictionaryTable, row)
+
+
+def _toDecimal(value):
+    """
+    Convert input to Decimal without float binary noise when possible.
+    Prefer raw strings (table/API text); fall back to str(float).
+    """
+    from decimal import Decimal, InvalidOperation
+    if value is None:
+        raise InvalidOperation('None')
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, str):
+        s = value.strip().replace(',', '')
+        if not s:
+            raise InvalidOperation('empty')
+        return Decimal(s)
+    if isinstance(value, (int,)):
+        return Decimal(value)
+    # float or numpy scalar — str() can still be ugly; use short round-trip
+    return Decimal(format(float(value), '.15g'))
+
+
+def applyRoundingSpec(value, spec=None):
+    """
+    Apply a RoundingSpec string to a numeric value (bankers / half-even).
+    Invalid/empty spec → DEC(2). Returns formatted string.
+
+    DEC(n): n decimal places, ROUND_HALF_EVEN
+    SIG(n): n significant figures, ROUND_HALF_EVEN
+    SIG(n,m): n significant figures; m = minimum decimal places in display
+    """
+    from decimal import Decimal, ROUND_HALF_EVEN, InvalidOperation
+    from math import log10, floor
+
+    try:
+        d = _toDecimal(value)
+    except (ValueError, TypeError, InvalidOperation, ArithmeticError):
+        return value if value is not None else ''
+
+    if d.is_nan():
+        return ''
+    if d.is_infinite():
+        return str(d)
+
+    norm = normalizeRoundingSpec(spec) or DEFAULT_ROUNDING_SPEC
+    m = _roundingSpecRe.match(norm)
+    if not m:
+        norm = DEFAULT_ROUNDING_SPEC
+        m = _roundingSpecRe.match(norm)
+
+    kind = m.group(1).upper()
+    a = int(m.group(2))
+    b = m.group(3)
+
+    if kind == 'DEC':
+        n = max(0, a)
+        quant = Decimal('1') if n == 0 else Decimal('1').scaleb(-n)
+        rounded = d.quantize(quant, rounding=ROUND_HALF_EVEN)
+        return f'{rounded:.{n}f}'
+
+    # SIG(n) / SIG(n,m)
+    sig = max(1, a)
+    if d == 0:
+        minDec = max(0, int(b)) if b is not None else 0
+        return f'{0:.{minDec}f}' if minDec else '0'
+
+    # Round to sig significant figures via quantize on scientific magnitude
+    # order = floor(log10(|d|)); decimals = sig - 1 - order
+    absD = abs(d)
+    order = int(floor(log10(float(absD))))
+    decimals = sig - 1 - order
+    quant = Decimal('1').scaleb(-decimals) if decimals != 0 else Decimal('1')
+    # For large numbers decimals is negative → quantize to tens/hundreds
+    if decimals < 0:
+        # quantize with 1e|decimals| as unit
+        unit = Decimal('1').scaleb(-decimals)  # e.g. decimals=-2 → 100
+        rounded = (d / unit).to_integral_value(rounding=ROUND_HALF_EVEN) * unit
+    else:
+        rounded = d.quantize(quant, rounding=ROUND_HALF_EVEN)
+
+    if b is not None:
+        minDec = max(0, int(b))
+        if rounded == 0:
+            return f'{0:.{minDec}f}'
+        order2 = int(floor(log10(float(abs(rounded))))) if rounded != 0 else 0
+        dispDec = max(minDec, sig - 1 - order2, 0)
+        return f'{rounded:.{dispDec}f}'
+
+    # Display with just enough fractional digits for `sig` figures
+    if rounded == 0:
+        return '0'
+    order2 = int(floor(log10(float(abs(rounded))))) if rounded != 0 else 0
+    dispDec = max(0, sig - 1 - order2)
+    if dispDec == 0:
+        return f'{int(rounded)}' if rounded == rounded.to_integral_value() else f'{rounded:.0f}'
+    return f'{rounded:.{dispDec}f}'
+
+
+def valuePrecision(value, rule=None, identifier=None, override=None):
+    """
+    Format a cell value for display.
+
+    rule: explicit RoundingSpec (DEC/SIG). If omitted, built from
+    identifier (Aquarius param name) + override (precisionOverride text).
+    Blank everything → DEC(2).
+
+    Raw mode: full precision fixed-point (never scientific notation).
+    Rounding uses bankers rounding (round half to even) via Python round().
     """
     try:
         v = float(value)
@@ -881,12 +1191,164 @@ def valuePrecision(value):
 
     if Config.rawData:
         return formatRawNumber(v)
-    if abs(v) < 1000:
-        return '%.2f' % v
-    elif abs(v) < 10000:
-        return '%.1f' % v
+
+    if rule is not None and str(rule).strip():
+        spec = normalizeRoundingSpec(rule) or resolveRoundingSpec(identifier, override)
     else:
-        return '%.0f' % v
+        spec = resolveRoundingSpec(identifier=identifier, override=override)
+    return applyRoundingSpec(v, spec)
+
+
+def ensureDataDictionarySchema():
+    """
+    Ensure bunker.db dataDictionary has valuePrecision + precisionOverride
+    immediately after datatype. Seeds valuePrecision from dataType keywords once
+    for new columns (existing non-empty values are left alone).
+    """
+    dbPath = resourcePath('core/bunker.db')
+    if not os.path.isfile(dbPath):
+        logMessage('ERROR', f'ensureDataDictionarySchema: missing {dbPath}')
+        return False
+
+    targetOrder = [
+        'dataID', 'siteID', 'database', 'siteName', 'commonName', 'datatype',
+        'valuePrecision', 'precisionOverride',
+        'expectedMin', 'expectedMax', 'cuttoffMin', 'cutoffMax', 'rateOfChange',
+    ]
+
+    try:
+        with sqlite3.connect(dbPath) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='dataDictionary'"
+            )
+            if not cur.fetchone():
+                logMessage('ERROR', 'ensureDataDictionarySchema: dataDictionary table missing')
+                return False
+
+            cur.execute('PRAGMA table_info(dataDictionary)')
+            info = cur.fetchall()
+            colNames = [row[1] for row in info]
+            colLower = {c.lower(): c for c in colNames}
+
+            hasVp = 'valueprecision' in colLower
+            hasPo = 'precisionoverride' in colLower
+
+            if hasVp and hasPo:
+                # Already present — verify order is correct enough (vp/po after datatype)
+                # If order wrong, rebuild once.
+                lowerList = [c.lower() for c in colNames]
+                try:
+                    iDt = lowerList.index('datatype')
+                    iVp = lowerList.index('valueprecision')
+                    iPo = lowerList.index('precisionoverride')
+                    orderOk = iDt < iVp < iPo
+                except ValueError:
+                    orderOk = False
+                if orderOk:
+                    if Config.debug:
+                        logMessage('DEBUG', 'ensureDataDictionarySchema: schema already OK')
+                    return True
+
+            # Rebuild table with correct column order (SQLite cannot insert mid-table)
+            logMessage(
+                'INFO',
+                'ensureDataDictionarySchema: migrating dataDictionary '
+                f'(had valuePrecision={hasVp}, precisionOverride={hasPo})',
+            )
+
+            # Map existing columns case-insensitively
+            def pick(rowDict, *names):
+                for n in names:
+                    if n in rowDict:
+                        return rowDict[n]
+                    for k, v in rowDict.items():
+                        if k.lower() == n.lower():
+                            return v
+                return None
+
+            cur.execute('SELECT * FROM dataDictionary')
+            oldRows = cur.fetchall()
+            oldHeaders = [d[0] for d in cur.description]
+
+            newRows = []
+            for old in oldRows:
+                rd = dict(zip(oldHeaders, old))
+                dataType = pick(rd, 'datatype', 'dataType')
+                existingVp = pick(rd, 'valuePrecision', 'valueprecision')
+                existingPo = pick(rd, 'precisionOverride', 'precisionoverride')
+                # Seed only when column was missing or value empty
+                if existingVp is not None and str(existingVp).strip():
+                    vp = str(existingVp).strip()
+                else:
+                    vp = seedValuePrecisionFromDataType(dataType)
+                if existingPo is not None and str(existingPo).strip():
+                    po = str(existingPo).strip()
+                else:
+                    po = None
+
+                newRows.append((
+                    pick(rd, 'dataID', 'dataid'),
+                    pick(rd, 'siteID', 'siteid'),
+                    pick(rd, 'database'),
+                    pick(rd, 'siteName', 'sitename'),
+                    pick(rd, 'commonName', 'commonname'),
+                    dataType,
+                    vp,
+                    po,
+                    pick(rd, 'expectedMin', 'expectedmin'),
+                    pick(rd, 'expectedMax', 'expectedmax'),
+                    pick(rd, 'cuttoffMin', 'cuttoffmin', 'cutoffMin'),
+                    pick(rd, 'cutoffMax', 'cutoffmax'),
+                    pick(rd, 'rateOfChange', 'rateofchange'),
+                ))
+
+            cur.execute('DROP TABLE IF EXISTS dataDictionary_migrating')
+            cur.execute(
+                '''
+                CREATE TABLE dataDictionary_migrating (
+                    dataID TEXT,
+                    siteID TEXT,
+                    database TEXT,
+                    siteName TEXT,
+                    commonName TEXT,
+                    datatype TEXT,
+                    valuePrecision TEXT,
+                    precisionOverride TEXT,
+                    expectedMin REAL,
+                    expectedMax REAL,
+                    cuttoffMin REAL,
+                    cutoffMax REAL,
+                    rateOfChange REAL
+                )
+                '''
+            )
+            cur.executemany(
+                '''
+                INSERT INTO dataDictionary_migrating (
+                    dataID, siteID, database, siteName, commonName, datatype,
+                    valuePrecision, precisionOverride,
+                    expectedMin, expectedMax, cuttoffMin, cutoffMax, rateOfChange
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ''',
+                newRows,
+            )
+            cur.execute('DROP TABLE dataDictionary')
+            cur.execute('ALTER TABLE dataDictionary_migrating RENAME TO dataDictionary')
+            conn.commit()
+
+            # Counts for log
+            seededDischarge = sum(1 for r in newRows if r[6] == 'Discharge')
+            seededStage = sum(1 for r in newRows if r[6] == 'Stage')
+            logMessage(
+                'INFO',
+                f'ensureDataDictionarySchema: migrated {len(newRows)} rows '
+                f'(Discharge={seededDischarge}, Stage={seededStage})',
+            )
+            return True
+    except Exception as e:
+        logException('ensureDataDictionarySchema failed', e)
+        return False
 
 def cleanShutdown():
     pool = QThreadPool.globalInstance()

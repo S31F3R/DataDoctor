@@ -829,8 +829,16 @@ def applyStylesAndFonts(app, mainTable, queryList):
         pass
 
 def loadDataDictionary(table):
-    """Load the data dictionary into the provided table."""
+    """Load the data dictionary into the provided table (migrates schema if needed)."""
+    Logic.ensureDataDictionarySchema()
     Logic.buildDataDictionary(table)
+    # Combobox delegate for valuePrecision (editor window only — safe no-op if no parent UI)
+    try:
+        parent = table.window() if table is not None else None
+        if parent is not None and hasattr(parent, 'applyValuePrecisionDelegate'):
+            parent.applyValuePrecisionDelegate()
+    except Exception:
+        pass
 
 def loadQuickLooks(cbQuickLook):
     """Load all Quick Looks into the provided combobox."""

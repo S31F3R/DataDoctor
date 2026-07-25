@@ -41,6 +41,20 @@ def modifyTable(
     labelsDict = labelsDict or {}
     queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
 
+    # Per-series rounding rules (same as buildTable) so re-format does not drop DEC(3) etc.
+    dictTable = None
+    dictIndex = None
+    if mainWindow is not None:
+        winDd = getattr(mainWindow, 'winDataDictionary', None)
+        if winDd is not None:
+            dictTable = getattr(winDd, 'mainTable', None)
+        dictIndex = getattr(table, 'dataDictIndex', None)
+
+    def ruleForId(dataId):
+        if dictTable is None:
+            return Logic.DEFAULT_ROUNDING_SPEC
+        return Logic.roundingSpecForDataId(dictTable, dataId, dictIndex=dictIndex)
+
     # --- Extract all cell text once (one grid walk) ---
     def yieldProgress(msg, pct=None):
         if progressDialog is None:
@@ -74,6 +88,7 @@ def modifyTable(
     finalHeaders = []    # list[str]
     finalRoles = []      # list of list[dict|None] UserRole per cell
     columnMetadata = []
+    finalRules = []      # RoundingSpec per final display column
 
     table.setUpdatesEnabled(False)
     table.blockSignals(True)
@@ -84,6 +99,10 @@ def modifyTable(
         sIdx = pIdx + 1
         primaryVals = np.full(numRows, np.nan)
         secondaryVals = np.full(numRows, np.nan)
+        pRule = ruleForId(dataIds[pIdx] if pIdx < len(dataIds) else None)
+        sRule = ruleForId(dataIds[sIdx] if sIdx < len(dataIds) else None)
+        # Deltas: use primary series rule (same units as primary)
+        dRule = pRule
 
         for r in range(numRows):
             try:
@@ -107,9 +126,9 @@ def modifyTable(
                 hasP = np.isfinite(primaryVals[r])
                 hasS = np.isfinite(secondaryVals[r])
                 d = deltas[r]
-                pStr = Logic.valuePrecision(primaryVals[r]) if hasP else ''
-                sStr = Logic.valuePrecision(secondaryVals[r]) if hasS else ''
-                dStr = Logic.valuePrecision(d) if np.isfinite(d) else ''
+                pStr = Logic.valuePrecision(primaryVals[r], rule=pRule) if hasP else ''
+                sStr = Logic.valuePrecision(secondaryVals[r], rule=sRule) if hasS else ''
+                dStr = Logic.valuePrecision(d, rule=dRule) if np.isfinite(d) else ''
                 roles[r] = {
                     'primaryVal': pStr,
                     'secondaryVal': sStr,
@@ -123,6 +142,7 @@ def modifyTable(
                 mergedText[r] = pStr if hasP else (sStr if hasS else '')
             finalCols.append(mergedText)
             finalRoles.append(roles)
+            finalRules.append(pRule)
             # Header: keep primary header (two-line style)
             finalHeaders.append(headers[pIdx] if pIdx < len(headers) else f"Overlay {pairIndex}")
 
@@ -143,13 +163,15 @@ def modifyTable(
                 'lookupId': lookupId,
             })
         else:
-            # Keep both columns as normal
+            # Keep both columns as normal (already formatted in buildTable; keep text)
             finalCols.append(list(grid[pIdx]))
             finalRoles.append([None] * numRows)
             finalHeaders.append(headers[pIdx])
+            finalRules.append(pRule)
             finalCols.append(list(grid[sIdx]))
             finalRoles.append([None] * numRows)
             finalHeaders.append(headers[sIdx])
+            finalRules.append(sRule)
 
             primaryDb = databases[pairIndex * 2]
             primaryId = dataIds[pairIndex * 2]
@@ -178,10 +200,11 @@ def modifyTable(
             dCol = [''] * numRows
             for r in range(numRows):
                 d = deltas[r]
-                dCol[r] = Logic.valuePrecision(d) if np.isfinite(d) else ''
+                dCol[r] = Logic.valuePrecision(d, rule=dRule) if np.isfinite(d) else ''
             finalCols.append(dCol)
             finalRoles.append([None] * numRows)
             finalHeaders.append("Delta")
+            finalRules.append(dRule)
             if not overlayChecked:
                 lookupId = [lookupIdPrimary, lookupIdSecondary]
             columnMetadata.append({
@@ -201,6 +224,7 @@ def modifyTable(
         finalCols.append(list(grid[last]))
         finalRoles.append([None] * numRows)
         finalHeaders.append(headers[last])
+        finalRules.append(ruleForId(dataIds[-1] if dataIds else None))
         lastDb = databases[-1]
         lastId = dataIds[-1]
         lookupIdLast = labelsDict.get(lastId, lastId) if lastDb == 'AQUARIUS' else lastId
@@ -214,6 +238,7 @@ def modifyTable(
 
     # --- Single rewrite of the table (no removeColumn loop) ---
     outCols = len(finalCols)
+    table.columnRoundingRules = list(finalRules)
     yieldProgress(f"Overlay/delta: writing {outCols} columns × {numRows} rows...", 97)
 
     # Preserve vertical header timestamps
@@ -334,6 +359,7 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
             pStr = Logic.valuePrecision(primaryVal) if hasP else ''
             sStr = Logic.valuePrecision(secondaryVal) if hasS else ''
             dStr = Logic.valuePrecision(d) if np.isfinite(d) else ''
+            # Legacy path — prefer main modifyTable rewrite which has per-series rules
             item.setData(Qt.ItemDataRole.UserRole, {
                 'primaryVal': pStr,
                 'secondaryVal': sStr,

@@ -10,6 +10,20 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
+[ ] valuePrecision + precisionOverride (bunker.db + formatting)
+   Steps:
+     a. Open Data Dictionary — columns after datatype:
+        valuePrecision (combobox), precisionOverride (text).
+     b. Seed check: flow/cfs/diversion rows → Discharge; stage/gage height/level
+        → Stage; others blank.
+     c. Combobox lists Aquarius Identifiers (from valuePrecision.json); blank allowed.
+     d. precisionOverride accepts DEC(#) or SIG(#) [or SIG(n,m)]; invalid blocks Save.
+     e. Query a Discharge-seeded series → values show DEC(3) bankers rounding.
+     f. Blank valuePrecision series → DEC(2) default.
+     g. Set precisionOverride=DEC(4) on a row, Save, re-query → 4 decimals win.
+     h. rawData option still shows full precision (no DEC/SIG).
+   Notes: Logic.ensureDataDictionarySchema; ValuePrecisionDelegate; buildTable rules.
+
 [ ] Logging: full Python tracebacks + Qt (QT_LOGGING_RULES) in app.log / Log Viewer
    Steps:
      a. Trigger a handled error path (or force one) → ERROR line in Log Viewer

@@ -1,10 +1,74 @@
 # uiDataDictionary.py
 
 import sqlite3
-from PyQt6.QtWidgets import QMainWindow, QTableWidget, QPushButton, QLineEdit
+from PyQt6.QtWidgets import (
+    QMainWindow, QTableWidget, QPushButton, QLineEdit, QComboBox,
+    QStyledItemDelegate, QMessageBox,
+)
+from PyQt6.QtCore import QTimer, Qt
 from PyQt6 import uic
-from PyQt6.QtCore import QTimer
 from core import Logic, Utils, Config
+
+
+class ValuePrecisionDelegate(QStyledItemDelegate):
+    """
+    Combobox editor for the valuePrecision column.
+    Items are Aquarius parameter Identifiers (from valuePrecision.json).
+    Blank row = no Identifier → formatting falls back to DEC(2).
+    Uses a delegate (not setCellWidget) so 30k-row tables stay light.
+    """
+
+    def __init__(self, identifiers, parent=None):
+        super().__init__(parent)
+        # identifiers: list[str] of Aquarius Identifiers
+        self.identifiers = list(identifiers) if identifiers else []
+
+    def createEditor(self, parent, option, index):
+        combo = QComboBox(parent)
+        combo.setEditable(False)
+        combo.addItem('')  # blank → default DEC(2) at format time
+        for ident in self.identifiers:
+            _, byId = Logic.loadAquariusRoundingSpecs()
+            spec = byId.get(ident)
+            # Show rule next to name for operators; model stores Identifier only
+            label = f'{ident}  [{spec}]' if spec else ident
+            combo.addItem(label, ident)
+        combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        return combo
+
+    def setEditorData(self, editor, index):
+        current = (index.data(Qt.ItemDataRole.DisplayRole) or '').strip()
+        # Prefer userData (Identifier); fall back to matching display text
+        idx = editor.findData(current)
+        if idx < 0:
+            idx = editor.findText(current)
+        if idx < 0 and current:
+            # Match Identifier ignoring trailing "  [SPEC]"
+            for i in range(editor.count()):
+                data = editor.itemData(i)
+                if data and str(data).lower() == current.lower():
+                    idx = i
+                    break
+                if editor.itemText(i).split('  [')[0].strip().lower() == current.lower():
+                    idx = i
+                    break
+        editor.setCurrentIndex(max(0, idx))
+
+    def setModelData(self, editor, model, index):
+        # Store bare Identifier (or '') — not the "Name [DEC(n)]" label
+        data = editor.currentData()
+        if data is None:
+            text = editor.currentText().strip()
+            # Strip optional "  [SPEC]" suffix if user somehow has free text
+            if '  [' in text:
+                text = text.split('  [', 1)[0].strip()
+            model.setData(index, text, Qt.ItemDataRole.EditRole)
+        else:
+            model.setData(index, str(data), Qt.ItemDataRole.EditRole)
+
+    def updateEditorGeometry(self, editor, option, index):
+        editor.setGeometry(option.rect)
+
 
 class uiDataDictionary(QMainWindow):
     """Data dictionary editor: Manages labels for time-series IDs."""
@@ -19,6 +83,7 @@ class uiDataDictionary(QMainWindow):
         self.btnAddRow = self.findChild(QPushButton, 'btnAddRow')
         self.btnDeleteRow = self.findChild(QPushButton, 'btnDeleteRow')
         self.qleSearch = self.findChild(QLineEdit, 'qleSearch') # Find the search QLineEdit
+        self._valuePrecisionDelegate = None
 
         # Set up debounce timer for search
         self.searchTimer = QTimer(self)
@@ -58,42 +123,88 @@ class uiDataDictionary(QMainWindow):
         self.mainTable.setStyleSheet(Utils.thickScrollBarStyle(retro=retro, minHandle=48, track=20))
         if Config.debug:
             Logic.logMessage("DEBUG", f"DataDictionary scrollbar style applied (retro={retro})")
+
+    def applyValuePrecisionDelegate(self):
+        """Attach combobox editor to the valuePrecision column (by header name)."""
+        if self.mainTable is None:
+            return
+        col = -1
+        for c in range(self.mainTable.columnCount()):
+            h = self.mainTable.horizontalHeaderItem(c)
+            if h and h.text().strip().lower() == 'valueprecision':
+                col = c
+                break
+        if col < 0:
+            if Config.debug:
+                Logic.logMessage("DEBUG", "applyValuePrecisionDelegate: valuePrecision column not found")
+            return
+        identifiers = Logic.aquariusIdentifierList()
+        self._valuePrecisionDelegate = ValuePrecisionDelegate(identifiers, self.mainTable)
+        self.mainTable.setItemDelegateForColumn(col, self._valuePrecisionDelegate)
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"applyValuePrecisionDelegate: combo on col {col} with {len(identifiers)} identifiers",
+            )
     
     def showEvent(self, event):
         if Config.debug:
             Logic.logMessage("DEBUG", f"uiDataDictionary showEvent")
         # Re-apply in case retro mode changed while window was closed
         self.applyDictionaryScrollStyle()
+        self.applyValuePrecisionDelegate()
         Utils.centerWindowToParent(self)
         super().showEvent(event)
     
     def btnSavePressed(self):
-        columns = [self.mainTable.horizontalHeaderItem(c).text().strip() for c in range(self.mainTable.columnCount()) if self.mainTable.horizontalHeaderItem(c)]
+        # Commit any open combobox editor before reading cells
+        if self.mainTable is not None:
+            # Force focus away from the editor so setModelData runs
+            self.mainTable.setFocus()
+            self.mainTable.clearFocus()
+
+        columns = [
+            self.mainTable.horizontalHeaderItem(c).text().strip()
+            for c in range(self.mainTable.columnCount())
+            if self.mainTable.horizontalHeaderItem(c)
+        ]
 
         if not columns:
             Logic.logMessage("WARN", "No columns found in DataDictionary table for saving")
             return
+
+        # REAL numeric columns (by name)
+        realCols = {
+            'expectedmin', 'expectedmax', 'cuttoffmin', 'cutoffmin',
+            'cutoffmax', 'rateofchange',
+        }
         dataRows = []
+        badOverrides = []
 
         for r in range(self.mainTable.rowCount()):
             rowData = []
             isEmptyRow = True
 
             for c in range(self.mainTable.columnCount()):
+                colName = columns[c] if c < len(columns) else ''
+                colLower = colName.lower()
                 item = self.mainTable.item(r, c)
-                cellText = item.text().strip() if item else ''
+                cellText = item.text().strip() if item and item.text() else ''
 
-                # Attempt float conversion for REAL columns (based on naming pattern)
-                if columns[c].startswith('123_'):
+                if colLower == 'precisionoverride' and cellText:
+                    if Logic.normalizeRoundingSpec(cellText) is None:
+                        badOverrides.append((r + 1, cellText))
+
+                if colLower in realCols:
                     try:
-                        cellText = float(cellText) if cellText else None
+                        cellVal = float(cellText) if cellText else None
                     except ValueError:
-                        pass # Keep as str if invalid
+                        cellVal = cellText if cellText else None
                 else:
-                    cellText = cellText if cellText else None
-                rowData.append(cellText)
+                    cellVal = cellText if cellText else None
+                rowData.append(cellVal)
 
-                if cellText is not None and cellText != '':
+                if cellVal is not None and cellVal != '':
                     isEmptyRow = False
             if not isEmptyRow:
                 dataRows.append(rowData)
@@ -103,24 +214,49 @@ class uiDataDictionary(QMainWindow):
             else:
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Skipped empty row {r}")
+
+        if badOverrides:
+            preview = '\n'.join(f'  row {rn}: {val!r}' for rn, val in badOverrides[:8])
+            extra = f'\n  ... and {len(badOverrides) - 8} more' if len(badOverrides) > 8 else ''
+            QMessageBox.warning(
+                self,
+                "Invalid precisionOverride",
+                "precisionOverride must be blank or SIG(#) / DEC(#) "
+                "(optionally SIG(n,m) for Aquarius-style specs).\n\n"
+                f"Invalid entries:\n{preview}{extra}\n\nSave canceled.",
+            )
+            return
+
         dbPath = Logic.resourcePath('core/bunker.db')
 
         try:
+            Logic.ensureDataDictionarySchema()
             with sqlite3.connect(dbPath) as conn:
                 cur = conn.cursor()
                 cur.execute("DELETE FROM dataDictionary")
 
                 for row in dataRows:
                     placeholders = ','.join('?' for _ in row)
-                    cur.execute(f"INSERT INTO dataDictionary ({','.join(columns)}) VALUES ({placeholders})", row)
+                    # Quote column names for safety
+                    colSql = ','.join(f'"{c}"' for c in columns)
+                    cur.execute(
+                        f"INSERT INTO dataDictionary ({colSql}) VALUES ({placeholders})",
+                        row,
+                    )
                 conn.commit()
         except Exception as e:
-            Logic.logMessage("ERROR", f"Failed to save DataDictionary to DB: {e}")
+            Logic.logException("Failed to save DataDictionary to DB", e)
+            QMessageBox.warning(self, "Save Failed", f"Could not save data dictionary:\n{e}")
             return
         for c in range(self.mainTable.columnCount()):
             self.mainTable.resizeColumnToContents(c)
         if Config.debug:
             Logic.logMessage("DEBUG", f"DataDictionary saved with {len(dataRows)} rows and columns resized")
+        QMessageBox.information(
+            self,
+            "Saved",
+            f"Data dictionary saved ({len(dataRows)} rows).",
+        )
     
     def btnAddRowPressed(self):
         self.mainTable.setRowCount(self.mainTable.rowCount() + 1)

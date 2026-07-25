@@ -556,6 +556,21 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     align = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
     rawData = Config.rawData
+    # Per-series RoundingSpec from data dictionary (valuePrecision + precisionOverride)
+    seriesRules = []
+    for i in range(numCols):
+        lid = None
+        if lookupIds and i < len(lookupIds):
+            lid = lookupIds[i]
+        elif buildHeader and i < len(buildHeader):
+            lid = buildHeader[i]
+        seriesRules.append(
+            Logic.roundingSpecForDataId(dataDictionaryTable, lid, dictIndex=dictIndex)
+            if dataDictionaryTable is not None
+            else Logic.DEFAULT_ROUNDING_SPEC
+        )
+    table.columnRoundingRules = list(seriesRules)
+
     # Yield often enough that Windows does not show "Not Responding"
     yieldEvery = 200 if totalCells > 200000 else 500 if numRows > 2000 else 1000
     progressBase = 90
@@ -572,7 +587,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         for colIdx in range(min(numCols, len(rowData))):
             cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
             if not rawData and cellText:
-                display = Logic.valuePrecision(cellText)
+                rule = seriesRules[colIdx] if colIdx < len(seriesRules) else Logic.DEFAULT_ROUNDING_SPEC
+                display = Logic.valuePrecision(cellText, rule=rule)
             else:
                 display = cellText
             item = QTableWidgetItem(display)
