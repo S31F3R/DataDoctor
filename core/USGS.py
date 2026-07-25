@@ -277,7 +277,7 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                 dateTimeStr = point["dateTime"].replace("T", " ").split(".")[0]
                 try:
                     dateTime = datetime.fromisoformat(dateTimeStr.replace(" ", "T"))
-                    formattedTs = dateTime.strftime("%m/%d/%y %H:%M:00")
+                    formattedTs = Query.formatTimestamp(dateTime, interval)
                     outputData.append("{},{}".format(formattedTs, value))
                 except ValueError as e:
                     Logic.logMessage(
@@ -286,7 +286,7 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                     )
 
             resultDict[uid] = {
-                "data": Query.gapCheck(timestamps, outputData, uid),
+                "data": Query.gapCheck(timestamps, outputData, uid, interval=interval),
                 "rawResponse": emptyLegacyRawResponse(),
             }
 
@@ -588,7 +588,7 @@ def featuresToOutput(features, timeSeriesId, interval, offsetHours):
                 localDt = apiDt.replace(hour=0, minute=0, second=0, microsecond=0)
             else:
                 localDt = utcToLocal(apiDt, offsetHours)
-            formattedTs = localDt.strftime("%m/%d/%y %H:%M:00")
+            formattedTs = Query.formatTimestamp(localDt, interval)
             qualifier = props.get("qualifier")
             if qualifier is None:
                 qualifier = ""
@@ -694,7 +694,7 @@ def apiReadNewMethod(dataID, interval, startDate, endDate):
             "points": pointList or [],
         }
         resultDict[uid] = {
-            "data": Query.gapCheck(timestamps, outputData, uid),
+            "data": Query.gapCheck(timestamps, outputData, uid, interval=interval),
             "rawResponse": rawResponse,
         }
 

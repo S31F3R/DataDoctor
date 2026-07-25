@@ -9,6 +9,113 @@ from PyQt6.QtGui import QColor, QBrush, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
 from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils, Upload
 
+# ---------------------------------------------------------------------------
+# Display timestamps by interval
+#   HOUR / INSTANT → mm/dd/yy HH:MM:00
+#   DAY            → mm/dd/yy          (drop time)
+#   MONTH          → mm/yy             (drop day)
+#   YEAR / WATER YEAR → yyyy
+# ---------------------------------------------------------------------------
+
+_TS_FMT_HOUR = '%m/%d/%y %H:%M:00'
+_TS_FMT_DAY = '%m/%d/%y'
+_TS_FMT_MONTH = '%m/%y'
+_TS_FMT_YEAR = '%Y'
+
+# Parse order: most specific first
+_TS_PARSE_FORMATS = (
+    '%m/%d/%y %H:%M:00',
+    '%m/%d/%y %H:%M:%S',
+    '%m/%d/%y %H:%M',
+    '%m/%d/%y',
+    '%m/%y',
+    '%Y',
+)
+
+
+def waterYearNumber(dt):
+    """USBR-style water year: Oct–Sep, labeled by the calendar year it ends in."""
+    if dt.month >= 10:
+        return dt.year + 1
+    return dt.year
+
+
+def timestampFormatForInterval(intervalStr):
+    """strftime pattern for table / series display for this interval."""
+    if not intervalStr:
+        return _TS_FMT_HOUR
+    iv = str(intervalStr).strip().upper()
+    if iv == 'DAY':
+        return _TS_FMT_DAY
+    if iv == 'MONTH':
+        return _TS_FMT_MONTH
+    if iv in ('YEAR', 'WATER YEAR'):
+        return _TS_FMT_YEAR
+    # HOUR, INSTANT:n, unknown → full datetime
+    return _TS_FMT_HOUR
+
+
+def formatTimestamp(dt, intervalStr=None):
+    """Format a datetime for display / gap alignment for the given interval."""
+    if dt is None:
+        return ''
+    iv = (intervalStr or '').strip().upper()
+    if iv == 'WATER YEAR':
+        return f'{waterYearNumber(dt):04d}'
+    return dt.strftime(timestampFormatForInterval(intervalStr))
+
+
+def periodStart(dt, intervalStr=None):
+    """
+    Collapse a datetime to the start of its interval period (for ordering / match).
+    Used so a mid-month daily point still belongs to that month's mm/yy bucket, etc.
+    """
+    if dt is None:
+        return None
+    iv = (intervalStr or '').strip().upper()
+    if iv == 'DAY':
+        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    if iv == 'MONTH':
+        return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if iv == 'YEAR':
+        return datetime(dt.year, 1, 1)
+    if iv == 'WATER YEAR':
+        # Order by water-year label (end calendar year)
+        return datetime(waterYearNumber(dt), 1, 1)
+    if iv == 'HOUR':
+        return dt.replace(minute=0, second=0, microsecond=0)
+    if iv.startswith('INSTANT:'):
+        return dt.replace(second=0, microsecond=0)
+    return dt
+
+
+def parseDisplayTimestamp(tsStr):
+    """
+    Parse a vertical-header / series timestamp string into datetime.
+    Supports hour, day, month (day=1), and year-only forms.
+    Returns None if unparseable.
+    """
+    if tsStr is None:
+        return None
+    s = str(tsStr).strip()
+    if not s:
+        return None
+    for fmt in _TS_PARSE_FORMATS:
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def addMonths(dt, months=1):
+    """Advance dt by `months` calendar months (day clamped to 1st for MONTH steps)."""
+    monthIndex = dt.month - 1 + months
+    year = dt.year + monthIndex // 12
+    month = monthIndex % 12 + 1
+    return dt.replace(year=year, month=month, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)
 
@@ -26,10 +133,8 @@ class sortWorker(QRunnable):
             def sortKey(row):
                 # row = {'ts': str, 'cells': [cellDict|None, ...]}
                 if self.byTimestamp:
-                    try:
-                        return datetime.strptime(row['ts'], '%m/%d/%y %H:%M:00')
-                    except ValueError:
-                        return datetime.min
+                    dt = parseDisplayTimestamp(row['ts'])
+                    return dt if dt is not None else datetime.min
                 try:
                     cell = row['cells'][self.col] if self.col < len(row['cells']) else None
                     text = cell['text'] if cell else ''
@@ -159,7 +264,9 @@ class queryWorker(QRunnable):
 
                             if Config.debug:
                                 Logic.logMessage("DEBUG", f"queryWorker: USGS Site Name for {dataID}: {groupLabels[dataID]!r}")
-                        alignedData = gapCheck(self.timestamps, outputData, dataID)
+                        alignedData = gapCheck(
+                            self.timestamps, outputData, dataID, interval=interval
+                        )
                         values = [line.split(',')[1] if line else '' for line in alignedData]
                         groupResult[dataID] = values
                     else:
@@ -192,60 +299,111 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
     except ValueError as e:
         Logic.logMessage("ERROR", "Invalid date format in buildTimestamps: {}".format(e))
         return []
-    if intervalStr == 'HOUR':
+
+    iv = (intervalStr or '').strip().upper()
+    timestamps = []
+
+    if iv == 'HOUR':
         delta = timedelta(hours=1)
-        start = start.replace(minute=0, second=0)
-    elif intervalStr.startswith('INSTANT:'):
+        current = start.replace(minute=0, second=0, microsecond=0)
+        while current <= end:
+            timestamps.append(formatTimestamp(current, iv))
+            current += delta
+    elif iv.startswith('INSTANT:'):
         try:
             minutes = int(intervalStr.split(':')[1])
             delta = timedelta(minutes=minutes)
-            start = start.replace(second=0)
-            if minutes == 1:
-                pass
-            elif minutes == 15:
-                minute = (start.minute // 15) * 15
-                start = start.replace(minute=minute)
+            current = start.replace(second=0, microsecond=0)
+            if minutes == 15:
+                current = current.replace(minute=(current.minute // 15) * 15)
             elif minutes == 60:
-                start = start.replace(minute=0)
-            else:
+                current = current.replace(minute=0)
+            elif minutes != 1:
                 Logic.logMessage("ERROR", "Unsupported INSTANT interval: {}".format(intervalStr))
                 return []
+            while current <= end:
+                timestamps.append(formatTimestamp(current, intervalStr))
+                current += delta
         except (IndexError, ValueError) as e:
             Logic.logMessage("ERROR", "Invalid INSTANT interval format: {}".format(e))
             return []
-    elif intervalStr == 'DAY':
-        delta = timedelta(days=1)
-        start = start.replace(hour=0, minute=0, second=0)
+    elif iv == 'DAY':
+        # mm/dd/yy — drop time
+        current = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        endDay = end.replace(hour=0, minute=0, second=0, microsecond=0)
+        while current <= endDay:
+            timestamps.append(formatTimestamp(current, iv))
+            current += timedelta(days=1)
+    elif iv == 'MONTH':
+        # mm/yy — drop day
+        current = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        endMonth = end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        while current <= endMonth:
+            timestamps.append(formatTimestamp(current, iv))
+            current = addMonths(current, 1)
+    elif iv == 'YEAR':
+        # yyyy
+        for year in range(start.year, end.year + 1):
+            timestamps.append(f'{year:04d}')
+    elif iv == 'WATER YEAR':
+        # yyyy of water year (Oct–Sep, labeled by end calendar year)
+        wyStart = waterYearNumber(start)
+        wyEnd = waterYearNumber(end)
+        for year in range(wyStart, wyEnd + 1):
+            timestamps.append(f'{year:04d}')
     else:
         Logic.logMessage("ERROR", "Unknown intervalStr: {}".format(intervalStr))
         return []
-    timestamps = []
-    current = start
-    # Inclusive end so a full-interval end time (e.g. 14:00 on HOUR) is not dropped
-    while current <= end:
-        ts = current.strftime('%m/%d/%y %H:%M:00')
-        timestamps.append(ts)
-        current += delta
-        if delta.total_seconds() <= 0:
-            break
+
     if Config.debug:
-        Logic.logMessage("DEBUG", "Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
+        Logic.logMessage(
+            "DEBUG",
+            "Generated {} timestamps ({}), sample first 3: {}".format(
+                len(timestamps), iv or intervalStr, timestamps[:3]
+            ),
+        )
     return timestamps
 
-def gapCheck(timestamps, data, dataID=''):
+def gapCheck(timestamps, data, dataID='', interval=None):
+    """
+    Align data rows to expected timestamps.
+    `timestamps` are already interval-formatted (from buildTimestamps).
+    Actual rows are re-keyed with formatTimestamp(..., interval) so DAY/MONTH/YEAR match.
+    """
     if Config.debug:
-        Logic.logMessage("DEBUG", "gapCheck for dataID '{}': timestamps len={}, data len={}".format(dataID, len(timestamps), len(data)))
+        Logic.logMessage(
+            "DEBUG",
+            "gapCheck for dataID '{}': timestamps len={}, data len={}, interval={}".format(
+                dataID, len(timestamps), len(data), interval
+            ),
+        )
     if not timestamps:
         return data
-    try:
-        expectedDateTimes = [datetime.strptime(ts, '%m/%d/%y %H:%M:00') for ts in timestamps]
-    except ValueError as e:
-        Logic.logMessage("ERROR", "Invalid timestamp format in timestamps: {}".format(e))
-        return data
+
+    expected = []
+    for ts in timestamps:
+        dt = parseDisplayTimestamp(ts)
+        if dt is None:
+            Logic.logMessage("ERROR", "Invalid timestamp in expected list: {!r}".format(ts))
+            return data
+        expected.append((ts, dt))
+
+    # Infer interval from first expected string if not provided
+    if not interval and timestamps:
+        sample = timestamps[0]
+        if len(sample) == 4 and sample.isdigit():
+            interval = 'YEAR'
+        elif len(sample) == 5 and sample[2] == '/':
+            interval = 'MONTH'
+        elif ' ' not in sample and sample.count('/') == 2:
+            interval = 'DAY'
+        else:
+            interval = 'HOUR'
+
     newData = []
     removed = []
     i = 0
-    for expectedDateTime in expectedDateTimes:
+    for tsStr, expectedDateTime in expected:
         found = False
         while i < len(data):
             line = data[i]
@@ -253,32 +411,38 @@ def gapCheck(timestamps, data, dataID=''):
                 i += 1
                 continue
             parts = line.split(',')
-            if len(parts) < 2:                
+            if len(parts) < 2:
                 Logic.logMessage("WARN", "Malformed data row skipped: '{}' for '{}'".format(line, dataID))
                 i += 1
                 continue
             actualTimestampStr = parts[0].strip()
-            try:
-                actualDateTime = datetime.strptime(actualTimestampStr, '%m/%d/%y %H:%M:%S')
-            except ValueError:
-                Logic.logMessage("WARN", "Invalid ts skipped: '{}' in '{}' for '{}'".format(actualTimestampStr, line, dataID))  
+            actualDateTime = parseDisplayTimestamp(actualTimestampStr)
+            if actualDateTime is None:
+                Logic.logMessage(
+                    "WARN",
+                    "Invalid ts skipped: '{}' in '{}' for '{}'".format(
+                        actualTimestampStr, line, dataID
+                    ),
+                )
                 i += 1
                 continue
-            if actualDateTime == expectedDateTime:
-                if not actualTimestampStr.endswith(':00'):
-                    actualTimestampStr = actualDateTime.strftime('%m/%d/%y %H:%M:00')
-                    line = actualTimestampStr + ',' + ','.join(parts[1:])
-                newData.append(line)
+
+            # Normalize actual to interval display key / period for compare
+            actualKey = formatTimestamp(actualDateTime, interval)
+            actualPeriod = periodStart(actualDateTime, interval)
+            expectedPeriod = periodStart(expectedDateTime, interval)
+            if actualKey == tsStr or actualPeriod == expectedPeriod:
+                # Canonical expected display string + original value column(s)
+                newData.append(f'{tsStr},{",".join(parts[1:])}')
                 found = True
                 i += 1
                 break
-            elif actualDateTime < expectedDateTime:
+            elif actualPeriod is not None and expectedPeriod is not None and actualPeriod < expectedPeriod:
                 removed.append(actualTimestampStr)
                 i += 1
             else:
                 break
         if not found:
-            tsStr = expectedDateTime.strftime('%m/%d/%y %H:%M:00')
             newData.append(tsStr + ',')
     while i < len(data):
         line = data[i]
@@ -706,10 +870,10 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
                 if tsItem:
                     tsStr = tsItem.text()
                     try:
-                        tsDt = datetime.strptime(tsStr, '%m/%d/%y %H:%M:00')
-                        if tsDt <= now:
+                        tsDt = parseDisplayTimestamp(tsStr)
+                        if tsDt is not None and tsDt <= now:
                             item.setBackground(blueMissing)
-                    except ValueError:
+                    except (ValueError, TypeError):
                         pass
                 continue
             try:

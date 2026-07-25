@@ -10,6 +10,15 @@ Workflow:
 Need retest (this pass)
 --------------------------------------------------------------------------------
 
+[ ] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
+   Steps:
+     a. DAY query → vertical header like 03/15/24 (no time).
+     b. MONTH query → header like 03/24 (mm/yy).
+     c. YEAR and WATER YEAR → header like 2024 (yyyy only).
+     d. HOUR / INSTANT unchanged (mm/dd/yy HH:MM:00).
+     e. Sort by timestamp and cell details still work on coarser headers.
+   Notes: Query.formatTimestamp / buildTimestamps / gapCheck interval-aware.
+
 [ ] valuePrecision + precisionOverride (bunker.db + formatting)
    Steps:
      a. Open Data Dictionary — columns after datatype:

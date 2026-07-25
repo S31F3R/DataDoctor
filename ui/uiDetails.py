@@ -457,22 +457,39 @@ class uiDetails(QWidget):
             Logic.logMessage("WARN", f"Invalid response for USBR: expected list, got {type(response).__name__}")
             return
         
-        # Convert timestampStr ('mm/dd/yy HH:MM:00') to match query format ('YYYY-MM-DD HH24:MI:SS')
+        # Convert display timestamp (hour/day/month/year forms) to Oracle meta key
+        from core.Query import parseDisplayTimestamp, periodStart
         try:
-            tsDate = datetime.strptime(timestampStr, '%m/%d/%y %H:%M:00')
+            tsDate = parseDisplayTimestamp(timestampStr)
+            if tsDate is None:
+                raise ValueError(f'unparseable timestamp {timestampStr!r}')
+            # Meta rows use full Y-m-d H:M:S; match on period for coarser intervals
             matchKey = tsDate.strftime('%Y-%m-%d %H:%M:%S')
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Converted timestampStr {timestampStr} to matchKey {matchKey}")
-        except ValueError as e:
+        except (ValueError, TypeError) as e:
             Logic.logMessage("ERROR", f"Failed to convert timestampStr {timestampStr}: {e}")
             return
         
         # Determine match field based on periodOffset (for HOUR)
         matchField = 'End Date/Time' if interval == 'HOUR' and Config.periodOffset else 'Start Date/Time'
         
-        # Filter row by exact match on matchField
+        # Filter row by exact match, else same interval period (daily/monthly/yearly headers)
         matchingRow = next((row for row in response if row.get(matchField) == matchKey), None)
+        if matchingRow is None and interval and str(interval).upper() in (
+            'DAY', 'MONTH', 'YEAR', 'WATER YEAR'
+        ):
+            targetPeriod = periodStart(tsDate, interval)
+            for row in response:
+                raw = row.get(matchField) or ''
+                try:
+                    rowDt = datetime.strptime(str(raw), '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    continue
+                if periodStart(rowDt, interval) == targetPeriod:
+                    matchingRow = row
+                    break
         
         if not matchingRow:
             Logic.logMessage("WARN", f"No matching metadata for {matchKey} in USBR response")
@@ -667,7 +684,10 @@ class uiDetails(QWidget):
             dtStr = dtStr[:-3] + dtStr[-2:]
 
         # Try formats
-        formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']
+        formats = [
+            '%m/%d/%y %H:%M:00', '%m/%d/%y %H:%M:%S', '%m/%d/%y', '%m/%y', '%Y',
+            '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S',
+        ]
 
         for fmt in formats:
             try:

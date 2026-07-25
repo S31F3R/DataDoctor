@@ -7,7 +7,7 @@ import os
 import threading
 import queue
 from datetime import datetime, timedelta
-from core import Logic, Config
+from core import Logic, Config, Query
 
 queryLimit = 500 # Configurable max points per API call
 maxThreads = 15 # Configurable max number of threads
@@ -185,7 +185,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
             parseDate = date.split('T')
             parseDate[1] = parseDate[1].split('.')[0]
             dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}')
-            formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+            formattedTs = Query.formatTimestamp(dateTime, interval)
             value = point['Value'].get('Numeric', None)
 
             if value is not None:
@@ -233,7 +233,9 @@ def apiRead(dataIDs, startDate, endDate, interval):
         else:
             result[uid] = data
     for uid in result:
-        result[uid]['data'].sort(key=lambda x: datetime.strptime(x.split(',')[0], '%m/%d/%y %H:%M:00'))
+        result[uid]['data'].sort(
+            key=lambda x: Query.parseDisplayTimestamp(x.split(',')[0]) or datetime.min
+        )
     if Config.debug:
         Logic.logMessage("DEBUG", f"Combined results from {numTasks} tasks with {len(result)} UIDs")
     for uid in dataIDs:

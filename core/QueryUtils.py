@@ -494,13 +494,23 @@ def applyUsbrRbaseFallbackColors(table, mainWindow, progressDialog=None):
             if not tsItem:
                 continue
             tsStr = tsItem.text()
-            try:
-                tsDate = datetime.strptime(tsStr, '%m/%d/%y %H:%M:00')
-                matchKey = tsDate.strftime('%Y-%m-%d %H:%M:%S')
-            except ValueError:
+            from core.Query import parseDisplayTimestamp, periodStart
+            tsDate = parseDisplayTimestamp(tsStr)
+            if tsDate is None:
                 continue
+            matchKey = tsDate.strftime('%Y-%m-%d %H:%M:%S')
 
             rowMeta = byEnd.get(matchKey) or byStart.get(matchKey)
+            if not rowMeta:
+                # Coarser display intervals: match any meta row in the same calendar day
+                for key, meta in list(byEnd.items()) + list(byStart.items()):
+                    try:
+                        rowDt = datetime.strptime(key, '%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        continue
+                    if periodStart(rowDt, 'DAY') == periodStart(tsDate, 'DAY'):
+                        rowMeta = meta
+                        break
             if not rowMeta:
                 continue
             intervalVal = (rowMeta.get('Interval Value') or '').strip()

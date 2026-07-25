@@ -210,7 +210,7 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                     dateTime = dateTime - timedelta(hours=12)
                 elif amPm == 'PM' and hour < 12:
                     dateTime = dateTime + timedelta(hours=12)
-                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+                formattedTs = Query.formatTimestamp(dateTime, interval)
                 outputData.append(f'{formattedTs},{value}')
             resultDict[SDID] = outputData
     if not resultDict:
@@ -437,10 +437,10 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             if value is None:
                 continue  # Skip if no value
 
-            # Format timestamp from timeKey
+            # Format timestamp from timeKey (interval-aware display: day/month/year)
             try:
                 dateTime = datetime.strptime(timeKey, '%Y-%m-%d %H:%M:%S')
-                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+                formattedTs = Query.formatTimestamp(dateTime, interval)
                 valStr = str(value) if value is not None else ''
                 outputData.append(f'{formattedTs},{valStr}')
             except ValueError as e:
@@ -601,7 +601,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
     # Sort per SDID
     for SDIDStr in resultDict:
-        resultDict[SDIDStr]['data'].sort(key=lambda x: datetime.strptime(x.split(',')[0], '%m/%d/%y %H:%M:00'))
+        resultDict[SDIDStr]['data'].sort(
+            key=lambda x: Query.parseDisplayTimestamp(x.split(',')[0]) or datetime.min
+        )
         resultDict[SDIDStr]['rawResponse'].sort(key=lambda m: datetime.strptime(m['Start Date/Time'], '%Y-%m-%d %H:%M:%S'))
 
     # Apply gapCheck
@@ -611,7 +613,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         SDIDStr = str(SDID)
 
         if SDIDStr in resultDict:
-            resultDict[SDIDStr]['data'] = Query.gapCheck(timestamps, resultDict[SDIDStr]['data'], SDIDStr)
+            resultDict[SDIDStr]['data'] = Query.gapCheck(
+                timestamps, resultDict[SDIDStr]['data'], SDIDStr, interval=interval
+            )
             
             if Config.debug: 
                 Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[SDIDStr]['data'])} rows for SDID {SDID}")
