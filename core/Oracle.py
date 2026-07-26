@@ -7,9 +7,10 @@ import keyring
 import time
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Tuple, Dict
 from core import Logic, Config
 
 # After a bad password, refuse further connect attempts for this process so we
@@ -23,9 +24,22 @@ authFailureMessage = None
 clientInitLock = threading.Lock()
 clientInitialized = False
 
+# Oracle docs: quoted passwords may not contain double-quote or return/newline.
+# Also reject other control characters (unsafe / non-printable).
+ORACLE_PASSWORD_FORBIDDEN_DISPLAY = (
+    'double quote (")',
+    'newline / carriage return',
+    'other control characters (ASCII < 32)',
+)
+
 
 class OracleAuthError(RuntimeError):
     """Wrong username/password or locked account — do not retry."""
+    pass
+
+
+class OraclePasswordExpiredError(OracleAuthError):
+    """Password expired (ORA-28001) — user can change it in Options → USBR."""
     pass
 
 def clearAuthFailure():
@@ -33,8 +47,56 @@ def clearAuthFailure():
     global authFailureMessage
     authFailureMessage = None
 
+def _oracleErrorCode(exc) -> Optional[int]:
+    """Extract numeric Oracle error code when present."""
+    try:
+        if hasattr(exc, 'args') and exc.args:
+            err = exc.args[0]
+            code = getattr(err, 'code', None)
+            if code is not None:
+                return int(code)
+    except Exception:
+        pass
+    text = str(exc) if exc is not None else ''
+    m = re.search(r'ORA-(\d+)', text, re.IGNORECASE)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            pass
+    return None
+
+def isPasswordExpiredError(exc) -> bool:
+    """True if Oracle reports password expired (ORA-28001)."""
+    if _oracleErrorCode(exc) == 28001:
+        return True
+    text = (str(exc) if exc is not None else '').upper()
+    return 'ORA-28001' in text or 'PASSWORD HAS EXPIRED' in text or 'PASSWORD EXPIRED' in text
+
+def isUserMissingError(exc) -> bool:
+    """
+    True when the account is not present (or not usable) on this database.
+    On connect, a non-existent user typically surfaces as ORA-01017.
+    ORA-01918 is 'user does not exist' on ALTER USER.
+    """
+    code = _oracleErrorCode(exc)
+    if code in (1017, 1918):
+        return True
+    text = (str(exc) if exc is not None else '').upper()
+    if 'ORA-01017' in text or 'ORA-1017' in text or 'ORA-01918' in text:
+        return True
+    if 'INVALID USERNAME' in text or 'INVALID PASSWORD' in text:
+        return True
+    if 'USERNAME/PASSWORD' in text and 'INVALID' in text:
+        return True
+    if 'DOES NOT EXIST' in text and 'USER' in text:
+        return True
+    return False
+
 def isAuthError(exc) -> bool:
-    """True if this looks like bad credentials / locked account."""
+    """True if this looks like bad credentials / locked account / expired password."""
+    if isPasswordExpiredError(exc):
+        return True
     text = str(exc) if exc is not None else ''
     upper = text.upper()
     # Common Oracle auth codes
@@ -63,6 +125,279 @@ def isAuthError(exc) -> bool:
     except Exception:
         pass
     return False
+
+def passwordExpiredMessage() -> str:
+    """User-facing message for ORA-28001 (no secrets)."""
+    return (
+        "Your Oracle/HDB password has expired.\n\n"
+        "You can change it in Options under the USBR tab "
+        "(Oracle username and password).\n\n"
+        "Further connect attempts are blocked this session until "
+        "credentials are updated, to avoid locking the account."
+    )
+
+def genericAuthFailureMessage() -> str:
+    return (
+        "Oracle login failed: wrong username/password or account locked. "
+        "Fix credentials in Options — further connect attempts are blocked "
+        "this session to avoid locking the account."
+    )
+
+def validateOraclePassword(password: str) -> Tuple[bool, str]:
+    """
+    Validate an Oracle password for length and forbidden characters.
+    Returns (ok, errorMessage). errorMessage is empty when ok.
+    Never echoes the password itself.
+    """
+    minLen = int(getattr(Config, 'oraclePasswordMinLength', 12) or 12)
+    forbiddenList = ', '.join(ORACLE_PASSWORD_FORBIDDEN_DISPLAY)
+
+    if password is None:
+        password = ''
+
+    length = len(password)
+    badChars = []
+    for ch in password:
+        if ch == '"':
+            if '"' not in badChars:
+                badChars.append('"')
+        elif ch in ('\n', '\r'):
+            label = 'newline/carriage return'
+            if label not in badChars:
+                badChars.append(label)
+        elif ord(ch) < 32:
+            label = f'control char (ASCII {ord(ch)})'
+            if label not in badChars:
+                badChars.append(label)
+
+    if length < minLen or badChars:
+        lines = [
+            "Invalid Oracle password.",
+            "",
+            f"Minimum length: {minLen} character(s).",
+        ]
+        if length < minLen:
+            lines.append(f"Your password is {length} character(s).")
+        lines.append("")
+        lines.append(f"Characters not allowed: {forbiddenList}.")
+        if badChars:
+            lines.append(f"Found: {', '.join(badChars)}.")
+        return False, '\n'.join(lines)
+
+    return True, ''
+
+def databaseToDsn(dbName: str) -> str:
+    """USBR-LCHDB → lchdb."""
+    s = str(dbName or '').strip()
+    if '-' in s:
+        return s.split('-', 1)[1].lower()
+    return s.lower()
+
+def changePasswordOnDsn(
+    dsn: str,
+    username: str,
+    oldPassword: str,
+    newPassword: str,
+    dbLabel: Optional[str] = None,
+) -> Tuple[str, str]:
+    """
+    Change password on one Oracle DSN using the old password to authenticate.
+
+    Matches HDB practice (ALTER USER ... IDENTIFIED BY ... REPLACE ...),
+    implemented via oracledb Connection.changepassword (no password in SQL/logs).
+
+    Returns (status, detail) where status is:
+      'success' — password changed
+      'missing' — user not present / invalid credentials for this DB (skip in UI)
+      'error'   — user likely exists but change failed (include detail)
+
+    Does NOT set the global authFailureMessage (per-DB skips must not block others).
+    Never logs password values.
+    """
+    label = dbLabel or dsn
+    ensureOracleClientReady()
+    conn = None
+    try:
+        try:
+            conn = oracledb.connect(user=username, password=oldPassword, dsn=dsn)
+        except Exception as e:
+            if isPasswordExpiredError(e):
+                # Expired: change as part of connect (newpassword=)
+                try:
+                    conn = oracledb.connect(
+                        user=username,
+                        password=oldPassword,
+                        newpassword=newPassword,
+                        dsn=dsn,
+                    )
+                    Logic.logMessage(
+                        "INFO",
+                        f"Oracle password changed on {label} ({dsn}) for user {username} "
+                        f"(password was expired)",
+                    )
+                    return 'success', ''
+                except Exception as e2:
+                    if isUserMissingError(e2):
+                        if Config.debug:
+                            Logic.logMessage(
+                                "DEBUG",
+                                f"Oracle password change skipped on {label}: user not found / auth failed",
+                            )
+                        return 'missing', _safeErrorText(e2)
+                    Logic.logMessage(
+                        "ERROR",
+                        f"Oracle password change failed on {label} (expired path): {_safeErrorText(e2)}",
+                    )
+                    return 'error', _safeErrorText(e2)
+
+            if isUserMissingError(e):
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"Oracle password change skipped on {label}: user not found / auth failed",
+                    )
+                return 'missing', _safeErrorText(e)
+
+            # Other connect failures (TNS, network, locked, etc.)
+            Logic.logMessage(
+                "ERROR",
+                f"Oracle password change connect failed on {label}: {_safeErrorText(e)}",
+            )
+            return 'error', _safeErrorText(e)
+
+        # Connected with current password — change it
+        try:
+            if hasattr(conn, 'changepassword'):
+                conn.changepassword(oldPassword, newPassword)
+            else:
+                # Fallback: ALTER USER ... REPLACE (Examples.txt); never log this SQL
+                cursor = conn.cursor()
+                try:
+                    # Username is an identifier; passwords double-quoted per Oracle rules
+                    # (forbidden chars already validated — no " or control chars).
+                    sql = (
+                        f'ALTER USER "{username}" IDENTIFIED BY "{newPassword}" '
+                        f'REPLACE "{oldPassword}"'
+                    )
+                    cursor.execute(sql)
+                    try:
+                        conn.commit()
+                    except Exception:
+                        pass
+                finally:
+                    try:
+                        cursor.close()
+                    except Exception:
+                        pass
+                    sql = None
+
+            Logic.logMessage(
+                "INFO",
+                f"Oracle password changed successfully on {label} ({dsn}) for user {username}",
+            )
+            return 'success', ''
+        except Exception as e:
+            if isUserMissingError(e):
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"Oracle password change skipped on {label} after connect: user missing",
+                    )
+                return 'missing', _safeErrorText(e)
+            Logic.logMessage(
+                "ERROR",
+                f"Oracle password change failed on {label}: {_safeErrorText(e)}",
+            )
+            return 'error', _safeErrorText(e)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        conn = None
+
+def _safeErrorText(exc) -> str:
+    """Stringify an exception without assuming secrets are present."""
+    try:
+        text = str(exc).strip() if exc is not None else 'Unknown error'
+    except Exception:
+        text = 'Unknown error'
+    # Collapse whitespace; cap length for popups
+    text = ' '.join(text.split())
+    if len(text) > 300:
+        text = text[:297] + '...'
+    return text or 'Unknown error'
+
+def changePasswordOnAllHdb(
+    username: str,
+    oldPassword: str,
+    newPassword: str,
+) -> Dict[str, Any]:
+    """
+    Change the Oracle password on every HDB database in parallel (one thread each).
+
+    Returns:
+      {
+        'success': ['USBR-LCHDB', ...],
+        'errors':  [('USBR-YAOHDB', 'reason'), ...],
+      }
+    Databases where the account did not exist are omitted (not success, not error).
+    """
+    databases = list(getattr(Config, 'hdbOracleDatabases', ()) or ())
+    success: List[str] = []
+    errors: List[Tuple[str, str]] = []
+    lock = threading.Lock()
+
+    if not databases:
+        Logic.logMessage("WARN", "changePasswordOnAllHdb: no HDB databases configured")
+        return {'success': success, 'errors': errors}
+
+    Logic.logMessage(
+        "INFO",
+        f"Oracle password change starting for user {username} on {len(databases)} HDB database(s)",
+    )
+
+    def worker(dbName: str):
+        dsn = databaseToDsn(dbName)
+        status, detail = changePasswordOnDsn(
+            dsn=dsn,
+            username=username,
+            oldPassword=oldPassword,
+            newPassword=newPassword,
+            dbLabel=dbName,
+        )
+        with lock:
+            if status == 'success':
+                success.append(dbName)
+            elif status == 'error':
+                errors.append((dbName, detail))
+            # 'missing' → intentional silence in UI summary
+
+    maxWorkers = max(1, len(databases))
+    with ThreadPoolExecutor(max_workers=maxWorkers) as executor:
+        futures = [executor.submit(worker, db) for db in databases]
+        for fut in as_completed(futures):
+            try:
+                fut.result()
+            except Exception as e:
+                Logic.logMessage(
+                    "ERROR",
+                    f"changePasswordOnAllHdb: unexpected worker failure: {_safeErrorText(e)}",
+                )
+
+    # Stable order for UI (config order)
+    order = {name: i for i, name in enumerate(databases)}
+    success.sort(key=lambda n: order.get(n, 999))
+    errors.sort(key=lambda pair: order.get(pair[0], 999))
+
+    Logic.logMessage(
+        "INFO",
+        f"Oracle password change finished for user {username}: "
+        f"{len(success)} succeeded, {len(errors)} error(s), "
+        f"{len(databases) - len(success) - len(errors)} skipped (user not found)",
+    )
+    return {'success': success, 'errors': errors}
 
 def pathHasDir(envValue, directory, sep):
     """True if directory already appears as a PATH-style entry."""
@@ -229,12 +564,15 @@ class oracleConnection:
         except OracleAuthError:
             raise
         except oracledb.Error as e:
-            if isAuthError(e):
-                authFailureMessage = (
-                    "Oracle login failed: wrong username/password or account locked. "
-                    "Fix credentials in Options — further connect attempts are blocked "
-                    "this session to avoid locking the account."
+            if isPasswordExpiredError(e):
+                authFailureMessage = passwordExpiredMessage()
+                Logic.logMessage(
+                    "ERROR",
+                    f"oracleConnection.connect: Password expired for {self.dsn}: {e}",
                 )
+                raise OraclePasswordExpiredError(authFailureMessage) from e
+            if isAuthError(e):
+                authFailureMessage = genericAuthFailureMessage()
                 Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
                 raise OracleAuthError(authFailureMessage) from e
             Logic.logException(f"oracleConnection.connect: Error connecting to Oracle ({self.dsn})", e)
@@ -242,12 +580,15 @@ class oracleConnection:
             password = None
             raise
         except Exception as e:
-            if isAuthError(e):
-                authFailureMessage = (
-                    "Oracle login failed: wrong username/password or account locked. "
-                    "Fix credentials in Options — further connect attempts are blocked "
-                    "this session to avoid locking the account."
+            if isPasswordExpiredError(e):
+                authFailureMessage = passwordExpiredMessage()
+                Logic.logMessage(
+                    "ERROR",
+                    f"oracleConnection.connect: Password expired for {self.dsn}: {e}",
                 )
+                raise OraclePasswordExpiredError(authFailureMessage) from e
+            if isAuthError(e):
+                authFailureMessage = genericAuthFailureMessage()
                 Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
                 raise OracleAuthError(authFailureMessage) from e
             Logic.logException(f"oracleConnection.connect: Unexpected error ({self.dsn})", e)

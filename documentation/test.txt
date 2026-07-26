@@ -19,7 +19,7 @@ Need retest (this pass)
      e. Sort by timestamp and cell details still work on coarser headers.
    Notes: Query.formatTimestamp / buildTimestamps / gapCheck interval-aware.
 
-[ ] valuePrecision + precisionOverride (bunker.db + formatting)
+[x] valuePrecision + precisionOverride (bunker.db + formatting)
    Steps:
      a. Open Data Dictionary — columns after datatype:
         valuePrecision (combobox), precisionOverride (text).

@@ -5,10 +5,52 @@ import sys
 import json
 import keyring
 from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox, QPushButton, QTabWidget, QMessageBox, QWidget
-from PyQt6.QtCore import QTimer, QEvent
+from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QIcon
 from PyQt6 import uic
 from core import Logic, Utils, Config
+
+class hdbPasswordChangeSignals(QObject):
+    """Signals for background multi-DB HDB password change."""
+    finished = pyqtSignal(object)  # result dict: success list, errors list of (db, msg)
+
+
+class hdbPasswordChangeWorker(QRunnable):
+    """
+    Run changePasswordOnAllHdb off the UI thread.
+    Passwords are held only for this run and never logged.
+    """
+    def __init__(self, username, oldPassword, newPassword, signals):
+        super().__init__()
+        self.username = username
+        self.oldPassword = oldPassword
+        self.newPassword = newPassword
+        self.signals = signals
+
+    def run(self):
+        result = {'success': [], 'errors': []}
+        try:
+            from core.Oracle import changePasswordOnAllHdb
+            result = changePasswordOnAllHdb(
+                username=self.username,
+                oldPassword=self.oldPassword,
+                newPassword=self.newPassword,
+            )
+        except Exception as e:
+            Logic.logException("hdbPasswordChangeWorker failed", e)
+            result = {
+                'success': [],
+                'errors': [('(all databases)', str(e))],
+            }
+        finally:
+            # Drop secret references as soon as work finishes
+            self.oldPassword = None
+            self.newPassword = None
+        try:
+            self.signals.finished.emit(result)
+        except Exception:
+            pass
+
 
 class uiOptions(QDialog):
     """Options editor: Stores database connection information and application settings."""
@@ -16,6 +58,7 @@ class uiOptions(QDialog):
         super().__init__(parent=winMain)
         uic.loadUi(Logic.resourcePath('ui/winOptions.ui'), self)
         self.winMain = winMain
+        self._passwordChangeSignals = None  # keep alive while worker runs
 
         # Define controls
         self.cbUTCOffset = self.findChild(QComboBox, 'cbUTCOffset')
@@ -194,7 +237,12 @@ class uiOptions(QDialog):
         Utils.buttonStyle(self.btnShowUSGSKey, None, None)
         Utils.buttonStyle(self.btnShowOraclePassword, None, None)
 
-        # Create events
+        # Create events — own the Save path so validation can cancel close
+        # (winOptions.ui also connects accepted → accept; disconnect that first)
+        try:
+            self.btnbOptions.accepted.disconnect()
+        except TypeError:
+            pass
         self.btnbOptions.accepted.connect(self.onSavePressed)
         self.btnShowPassword.clicked.connect(self.togglePasswordVisibility)
         self.btnShowUSGSKey.clicked.connect(self.toggleUSGSKeyVisibility)
@@ -418,6 +466,46 @@ class uiOptions(QDialog):
             Logic.logMessage("DEBUG", "Settings loaded")
 
     def onSavePressed(self):
+        # --- Capture prior Oracle credentials before keyring overwrite ---
+        try:
+            priorOracleUser = keyring.get_password("DataDoctor", "oracleUser") or ""
+            priorOraclePassword = keyring.get_password("DataDoctor", "oraclePassword") or ""
+        except Exception as e:
+            priorOracleUser = ""
+            priorOraclePassword = ""
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"onSavePressed: could not read prior Oracle keyring values: {e}")
+
+        newOracleUser = (self.qleOracleUser.text() or "").strip()
+        newOraclePassword = self.qleOraclePassword.text() or ""
+        priorUserStripped = (priorOracleUser or "").strip()
+
+        # Validate new/changed Oracle password (chars + min length) before any save
+        passwordBeingSetOrChanged = bool(newOraclePassword) and (
+            newOraclePassword != priorOraclePassword
+        )
+        if passwordBeingSetOrChanged:
+            try:
+                from core.Oracle import validateOraclePassword
+                ok, errMsg = validateOraclePassword(newOraclePassword)
+            except Exception as e:
+                ok, errMsg = False, f"Could not validate Oracle password: {e}"
+            if not ok:
+                QMessageBox.warning(self, "Invalid Oracle Password", errMsg)
+                return  # keep Options open; do not save
+
+        # Password-only change on existing account → push to all HDB databases.
+        # Skip when username changed, or when user/password were previously blank
+        # (first-time credential entry is local keyring only, not a multi-DB alter).
+        hdbPasswordChangeRequested = (
+            bool(priorUserStripped)
+            and bool(priorOraclePassword)
+            and bool(newOracleUser)
+            and newOracleUser == priorUserStripped
+            and bool(newOraclePassword)
+            and newOraclePassword != priorOraclePassword
+        )
+
         configPath = Utils.getConfigPath()
         config = {}
 
@@ -504,8 +592,8 @@ class uiOptions(QDialog):
             ("aqUser", self.qleAQUser.text()),
             ("aqPassword", self.qleAQPassword.text()),
             ("usgsApiKey", self.qleUSGSAPIKey.text()),
-            ("oracleUser", self.qleOracleUser.text()),
-            ("oraclePassword", self.qleOraclePassword.text())
+            ("oracleUser", newOracleUser if newOracleUser else self.qleOracleUser.text()),
+            ("oraclePassword", newOraclePassword)
         ]
 
         oracleCredsUpdated = False
@@ -535,3 +623,96 @@ class uiOptions(QDialog):
             except Exception as e:
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"clearAuthFailure skipped: {e}")
+
+        # Multi-DB HDB password update (parallel); uses prior password to authenticate
+        if hdbPasswordChangeRequested:
+            self._startHdbPasswordChange(
+                username=newOracleUser,
+                oldPassword=priorOraclePassword,
+                newPassword=newOraclePassword,
+            )
+
+        # Close Options (we disconnected the UI auto-accept)
+        super().accept()
+
+    def _startHdbPasswordChange(self, username, oldPassword, newPassword):
+        """Kick off parallel HDB password updates; results popup when finished."""
+        # Parent signals to main window so they survive after Options closes
+        winMain = self.winMain
+        parent = winMain if winMain is not None else self
+        signals = hdbPasswordChangeSignals(parent)
+        if winMain is not None:
+            winMain._hdbPasswordChangeSignals = signals
+        else:
+            self._passwordChangeSignals = signals
+
+        def onFinished(result):
+            try:
+                uiOptions._showHdbPasswordChangeResults(parent, result)
+            except Exception as e:
+                Logic.logException("HDB password change result popup failed", e)
+            finally:
+                if winMain is not None:
+                    winMain._hdbPasswordChangeSignals = None
+
+        signals.finished.connect(onFinished)
+        worker = hdbPasswordChangeWorker(username, oldPassword, newPassword, signals)
+        Logic.logMessage(
+            "INFO",
+            f"Starting HDB password change for user {username} on all USBR databases",
+        )
+        QThreadPool.globalInstance().start(worker)
+
+    @staticmethod
+    def _showHdbPasswordChangeResults(parent, result):
+        """Popup summarizing which DBs changed and which errored (not missing users)."""
+        success = list((result or {}).get('success') or [])
+        errors = list((result or {}).get('errors') or [])
+
+        if not success and not errors:
+            # Everything skipped (user not on any DB) — still inform quietly via log only
+            Logic.logMessage(
+                "INFO",
+                "HDB password change: no databases updated "
+                "(account not found on any HDB, or no targets)",
+            )
+            QMessageBox.information(
+                parent,
+                "HDB Password Update",
+                "Password change finished.\n\n"
+                "No databases were updated. The account was not found on any "
+                "USBR HDB database (or none could be reached with the prior credentials).",
+            )
+            return
+
+        lines = ["HDB password update finished.", ""]
+        if success:
+            lines.append("Password changed on:")
+            for db in success:
+                lines.append(f"  • {db}")
+            lines.append("")
+        if errors:
+            lines.append("Errors (account present but password was not changed):")
+            for item in errors:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    db, msg = item[0], item[1]
+                else:
+                    db, msg = str(item), ''
+                if msg:
+                    lines.append(f"  • {db}: {msg}")
+                else:
+                    lines.append(f"  • {db}")
+
+        # INFO summary without secrets
+        Logic.logMessage(
+            "INFO",
+            "HDB password change results: changed on [{}]; errors on [{}]".format(
+                ', '.join(success) if success else 'none',
+                ', '.join(
+                    (e[0] if isinstance(e, (list, tuple)) and e else str(e))
+                    for e in errors
+                ) if errors else 'none',
+            ),
+        )
+
+        QMessageBox.information(parent, "HDB Password Update", '\n'.join(lines).rstrip())

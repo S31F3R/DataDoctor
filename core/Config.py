@@ -18,6 +18,20 @@ overlayChecked = False
 systemTextColor = ""
 enableSQL = False
 
+# Oracle / HDB credential policy (Options → USBR password change)
+oraclePasswordMinLength = 12
+
+# All Oracle HDB databases used for multi-DB password change (display name → TNS alias)
+# PNHYD / GPHYD are not included (not standard HDB Oracle write targets).
+hdbOracleDatabases = (
+    'USBR-LCHDB',
+    'USBR-YAOHDB',
+    'USBR-UCHDB2',
+    'USBR-ECOHDB',
+    'USBR-LBOHDB',
+    'USBR-KBOHDB',
+)
+
 # ---------------------------------------------------------------------------
 # HDB MODIFY_R_BASE write defaults (Options UI later for some of these)
 # DO_UPDATE_Y_OR_N is always 'Y' (not exposed).

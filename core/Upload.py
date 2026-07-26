@@ -1210,7 +1210,13 @@ def runUpload(mainWindow):
             try:
                 Logic.logMessage("ERROR", f"Upload.runUpload background failed: {message}")
                 if isAuthError:
-                    QMessageBox.warning(mainWindow, "Oracle Login Failed", message)
+                    upper = (message or '').upper()
+                    title = (
+                        "Oracle Password Expired"
+                        if ('EXPIRED' in upper or 'ORA-28001' in upper)
+                        else "Oracle Login Failed"
+                    )
+                    QMessageBox.warning(mainWindow, title, message)
                 else:
                     QMessageBox.warning(
                         mainWindow,

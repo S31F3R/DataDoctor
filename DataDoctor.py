@@ -19,7 +19,6 @@ from ui.uiQuery import uiQuery
 from ui.uiDetails import uiDetails
 from core.Oracle import oracleConnection
 
-
 class mainTableKeyFilter(QObject):
     """Delete key clears selected editable cells (single or range) without double-click."""
 
@@ -32,7 +31,6 @@ class mainTableKeyFilter(QObject):
             if Upload.clearSelectedCells(self.mainWindow):
                 return True
         return super().eventFilter(obj, event)
-
 
 class sqlQuerySignals(QObject):
     finished = pyqtSignal(object)   # list of row dicts
@@ -157,6 +155,7 @@ class uiMain(QMainWindow):
         self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
         self.mainTable.itemChanged.connect(self.onMainTableItemChanged)
+
         # Delete key → clear selected cell(s) as blank edits (range supported)
         self.mainTableKeyFilter = mainTableKeyFilter(self)
         self.mainTable.installEventFilter(self.mainTableKeyFilter)
@@ -478,7 +477,6 @@ class uiMain(QMainWindow):
         if getattr(self, 'sqlQueryRunning', False):
             QMessageBox.information(self, "Run Query", "A SQL query is already running.")
             return
-
         sqlText = self.pteSQL.toPlainText().strip()
 
         if not sqlText:
@@ -486,18 +484,17 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", "runCustomQuery: No SQL text to run")
             return
-
         db = self.cbDatabase.currentText()
         dsn = db.split('-')[1].lower() if '-' in db else db.lower() # e.g., 'USBR-LCHDB' -> 'lchdb'
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query (background)")
-
         self.sqlQueryRunning = True
+
         if self.btnRunQuery:
             self.btnRunQuery.setEnabled(False)
-
         signals = sqlQuerySignals()
+
         # Keep reference so signals aren't GC'd before emit
         self.sqlQuerySignals = signals
         signals.finished.connect(self.onSqlQueryFinished)
@@ -507,6 +504,7 @@ class uiMain(QMainWindow):
 
     def onSqlQueryFinished(self, results):
         self.sqlQueryRunning = False
+
         if self.btnRunQuery:
             self.btnRunQuery.setEnabled(True)
 
@@ -540,10 +538,17 @@ class uiMain(QMainWindow):
 
     def onSqlQueryFailed(self, message, isAuthError):
         self.sqlQueryRunning = False
+
         if self.btnRunQuery:
             self.btnRunQuery.setEnabled(True)
         if isAuthError:
-            QMessageBox.warning(self, "Oracle Login Failed", message)
+            upper = (message or '').upper()
+            title = (
+                "Oracle Password Expired"
+                if ('EXPIRED' in upper or 'ORA-28001' in upper)
+                else "Oracle Login Failed"
+            )
+            QMessageBox.warning(self, title, message)
         else:
             QMessageBox.warning(self, "Query Error", f"Failed to execute query: {message}")
 
@@ -600,8 +605,10 @@ class uiMain(QMainWindow):
 
         currentWidget = self.tabWidget.currentWidget() if self.tabWidget else None
         sqlTab = self.tabSQL or self.findChild(QWidget, 'tabSQL')
+
         # Detect SQL tab by objectName / index — identity (is) is unreliable across findChild wrappers
         isSqlTab = False
+
         if currentWidget is not None and self.tabWidget is not None:
             sqlIndex = self.tabWidget.indexOf(sqlTab) if sqlTab is not None else -1
             isSqlTab = (
@@ -628,7 +635,6 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", "btnExportCSVPressed: No data to export")
             return
-
         config = Utils.loadConfig()
         lastExportPath = config.get('lastExportPath', os.path.expanduser("~/Documents"))
         lastExportPath = os.path.normpath(os.path.abspath(lastExportPath)) if lastExportPath else os.path.expanduser("~/Documents")
@@ -645,8 +651,8 @@ class uiMain(QMainWindow):
         try:
             with open(fileName, 'w', newline='', encoding='utf-8-sig') as csvFile:
                 writer = csv.writer(csvFile)
-
                 headers = []
+
                 for c in range(exportTable.columnCount()):
                     headerItem = exportTable.horizontalHeaderItem(c)
                     headers.append(headerItem.text() if headerItem else f"Column {c}")
@@ -701,6 +707,7 @@ class uiMain(QMainWindow):
                     if Config.debug:
                         Logic.logMessage("DEBUG", "btnRefreshPressed: Canceled due to pending edits")
                     return
+
                 # Retrieve last delta and overlay states from globals, default to False if not set
                 deltaChecked = getattr(Config, 'lastDeltaChecked', False)
                 overlayChecked = getattr(Config, 'lastOverlayChecked', False)
@@ -1030,7 +1037,6 @@ class uiMain(QMainWindow):
             Logic.logException("showMetadataDetails failed", e)
             QMessageBox.warning(self, "Details Error", f"Failed to show details:\n{e}")
 
-
     def onTabCloseRequested(self, index):
         # removeTab hides the page but keeps the widget so we can re-add log/SQL/query tabs
         self.tabWidget.removeTab(index)
@@ -1081,11 +1087,13 @@ class uiMain(QMainWindow):
             'DEBUG': QColor(108, 113, 120),
         }
         defaultColor = QColor(200, 200, 200) if Config.retroMode else QColor(40, 40, 40)
+
         # Role 'log' is intentionally larger than UI (especially in retro)
         mono = Utils.makeFontForRole('log')
         fmt = QTextCharFormat()
         fmt.setForeground(levelColors.get(level, defaultColor))
         fmt.setFont(mono)
+
         if level in ('ERROR', 'CRITICAL'):
             fmt.setFontWeight(QFont.Weight.Bold)
         return fmt
@@ -1093,6 +1101,7 @@ class uiMain(QMainWindow):
     def insertLogLine(self, cursor, text, level):
         """Insert one log record with role font + extra line spacing."""
         blockFmt = QTextBlockFormat()
+
         # PyQt6 expects heightType as int, not the LineHeightTypes enum object
         blockFmt.setLineHeight(
             self.logViewerLineHeight(),
@@ -1109,6 +1118,7 @@ class uiMain(QMainWindow):
         """
         if not self.pteLog or not self.tabLog or not self.tabWidget:
             return
+            
         # Tab closed (removeTab): skip. Open but not current: still update so it is fresh on switch.
         if self.tabWidget.indexOf(self.tabLog) == -1:
             return

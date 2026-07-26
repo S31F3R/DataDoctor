@@ -1,6 +1,0 @@
-alter user 
-$UserName 
-identified by 
-"$NewPassword" 
-replace 
-"$OldPassword"

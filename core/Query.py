@@ -1492,9 +1492,18 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     except Exception as e:
         Logic.logException("executeQuery failed", e)
         try:
-            from core.Oracle import OracleAuthError
-            title = "Oracle Login Failed" if isinstance(e, OracleAuthError) else "Query Error"
-            QMessageBox.warning(mainWindow, title, str(e) if isinstance(e, OracleAuthError) else f"Query failed:\n{e}")
+            from core.Oracle import OracleAuthError, OraclePasswordExpiredError
+            if isinstance(e, OraclePasswordExpiredError):
+                title = "Oracle Password Expired"
+            elif isinstance(e, OracleAuthError):
+                title = "Oracle Login Failed"
+            else:
+                title = "Query Error"
+            QMessageBox.warning(
+                mainWindow,
+                title,
+                str(e) if isinstance(e, OracleAuthError) else f"Query failed:\n{e}",
+            )
         except Exception:
             try:
                 QMessageBox.warning(mainWindow, "Query Error", f"Query failed:\n{e}")
