@@ -441,6 +441,8 @@ def autoSizeTableColumns(table, sampleRows=100):
             finalWidth = maxCell + (headerWidth - maxCell) + 10
         else:
             finalWidth += 20
+        # Extra pad so selected/highlighted header text is not clipped
+        finalWidth += 2
         table.setColumnWidth(c, finalWidth)
 
     if Config.debug:

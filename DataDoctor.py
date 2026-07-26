@@ -8,7 +8,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QTableWidgetItem,
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
                              QVBoxLayout, QHBoxLayout, QSplitter, QLabel)
-from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
+from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, QEvent, pyqtSignal
 from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config, Upload
@@ -18,6 +18,21 @@ from ui.uiOptions import uiOptions
 from ui.uiQuery import uiQuery
 from ui.uiDetails import uiDetails
 from core.Oracle import oracleConnection
+
+
+class mainTableKeyFilter(QObject):
+    """Delete key clears selected editable cells (single or range) without double-click."""
+
+    def __init__(self, mainWindow):
+        super().__init__(mainWindow)
+        self.mainWindow = mainWindow
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Delete:
+            if Upload.clearSelectedCells(self.mainWindow):
+                return True
+        return super().eventFilter(obj, event)
+
 
 class sqlQuerySignals(QObject):
     finished = pyqtSignal(object)   # list of row dicts
@@ -142,7 +157,11 @@ class uiMain(QMainWindow):
         self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
         self.mainTable.itemChanged.connect(self.onMainTableItemChanged)
-        
+        # Delete key → clear selected cell(s) as blank edits (range supported)
+        self.mainTableKeyFilter = mainTableKeyFilter(self)
+        self.mainTable.installEventFilter(self.mainTableKeyFilter)
+        self.mainTable.viewport().installEventFilter(self.mainTableKeyFilter)
+
         # Edit triggers / locks applied after each query via Upload.snapshotBaseline
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
         self.btnRunQuery.clicked.connect(self.runCustomQuery)

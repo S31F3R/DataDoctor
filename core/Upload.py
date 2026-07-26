@@ -522,6 +522,58 @@ def onItemChanged(mainWindow, item):
         table.blockSignals(False)
 
 
+def clearSelectedCells(mainWindow):
+    """
+    Clear text on selected editable cells (Delete key).
+    Leaves blanks so existing itemChanged / upload tracking marks them as edits.
+    Returns True if the key was handled (at least one editable cell in selection).
+    """
+    if mainWindow is None:
+        return False
+    if isPublicQuery(mainWindow):
+        return False
+    table = mainWindow.mainTable
+    if table is None or table.rowCount() == 0:
+        return False
+
+    # Let the in-cell editor handle Delete while typing
+    if table.state() == QAbstractItemView.State.EditingState:
+        return False
+
+    indexes = table.selectedIndexes()
+    if not indexes:
+        return False
+
+    from PyQt6.QtWidgets import QTableWidgetItem
+
+    cells = {(idx.row(), idx.column()) for idx in indexes}
+    handled = False
+
+    for r, c in cells:
+        if columnIsLocked(mainWindow, c):
+            continue
+        item = table.item(r, c)
+        if item is None:
+            item = QTableWidgetItem('')
+            item.setTextAlignment(
+                Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+            )
+            table.setItem(r, c, item)
+        if not (item.flags() & Qt.ItemFlag.ItemIsEditable):
+            continue
+        handled = True
+        # setText('') fires itemChanged → onItemChanged → magenta dirty edit
+        if item.text() != '':
+            item.setText('')
+
+    if Config.debug and handled:
+        Logic.logMessage(
+            "DEBUG",
+            f"Upload.clearSelectedCells: cleared selection ({len(cells)} cell index(es))",
+        )
+    return handled
+
+
 def collectUploadRows(mainWindow):
     """
     Build list of dicts ready for DB write from user-edited cells only.
