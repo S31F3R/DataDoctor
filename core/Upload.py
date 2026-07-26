@@ -152,7 +152,7 @@ def resolveUploadDateTimes(uploadRow):
 
     Returns (intervalStr, startDt, endDt, sdid) using the same rules as modify:
       HOUR + EOP → START = display − 1h, END = display
-      HOUR + BOP → START = display, END = null
+      HOUR + BOP → START = display, END = display + 1h
       other      → START = display, END = null
     """
     # Lazy import: Query imports Upload for snapshotBaseline (avoid circular import)
@@ -173,16 +173,15 @@ def dateTimeParams(interval, displayDt):
     """
     Choose START_DATE_TIME / END_DATE_TIME for MODIFY_R_BASE / DELETE_R_BASE.
 
-    Procedures do not accept a null START_DATE_TIME, so EOP hour writes
-    must supply both ends of the period:
+    HOUR data always sends both ends of the period (procedures need a full range):
 
       HOUR + EOP (Config.periodOffset True):
         END_DATE_TIME   = display timestamp (end of period)
         START_DATE_TIME = display timestamp − 1 hour
 
       HOUR + BOP (Config.periodOffset False):
-        START_DATE_TIME = display timestamp
-        END_DATE_TIME   = null
+        START_DATE_TIME = display timestamp (beginning of period)
+        END_DATE_TIME   = display timestamp + 1 hour
 
       All other intervals:
         START_DATE_TIME = display timestamp
@@ -194,10 +193,15 @@ def dateTimeParams(interval, displayDt):
         raise ValueError(f'Timestamp must be datetime, got {type(displayDt)}')
 
     iv = str(interval or '').strip().upper()
-    # EOP hour: display ts is end-of-period; procedure needs a real start as well
-    if iv == 'HOUR' and Config.periodOffset:
-        endDt = displayDt
-        startDt = displayDt - timedelta(hours=1)
+    if iv == 'HOUR':
+        if Config.periodOffset:
+            # EOP: display is end-of-period
+            endDt = displayDt
+            startDt = displayDt - timedelta(hours=1)
+        else:
+            # BOP: display is beginning-of-period
+            startDt = displayDt
+            endDt = displayDt + timedelta(hours=1)
         return startDt, endDt
     return displayDt, None
 
@@ -626,7 +630,7 @@ def buildDeleteRBaseParams(uploadRow):
         sdid,                                   # SITE_DATATYPE_ID
         interval,                               # INTERVAL
         startDt,                                # START_DATE_TIME
-        endDt,                                  # END_DATE_TIME (null for BOP / non-hour)
+        endDt,                                  # END_DATE_TIME (HOUR always set; else null)
         int(Config.hdbAgenId),                  # AGEN_ID
         int(Config.hdbLoadingApplicationId),    # LOADING_APPLICATION_ID
     ]
