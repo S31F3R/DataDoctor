@@ -1,5 +1,6 @@
 # Upload.py
-# Track table edits, prepare write payloads, and upload to HDB (MODIFY_R_BASE).
+# Track table edits, prepare write payloads, and upload to HDB
+# (MODIFY_R_BASE for values; DELETE_R_BASE for blank cells).
 # Aquarius writes are stubbed (popup + success styling until implemented).
 
 import queue
@@ -43,6 +44,17 @@ modifyRBaseParamNames = (
     'DO_UPDATE_Y_OR_N',
     'DATA_FLAGS',
     'TIME_ZONE',
+)
+
+# DELETE_R_BASE — blank cell edit; same date/interval/agen/loading rules as MODIFY
+# SDID is required to identify the series (same parse as MODIFY).
+deleteRBaseParamNames = (
+    'SITE_DATATYPE_ID',
+    'INTERVAL',
+    'START_DATE_TIME',
+    'END_DATE_TIME',
+    'AGEN_ID',
+    'LOADING_APPLICATION_ID',
 )
 
 
@@ -117,6 +129,12 @@ def parseSdid(dataId):
     raise ValueError(f'Invalid SITE_DATATYPE_ID (dataId): {dataId!r}')
 
 
+def isBlankUploadValue(valueText):
+    """True if the edited cell is empty / whitespace-only (→ DELETE_R_BASE)."""
+    text = '' if valueText is None else str(valueText).strip()
+    return text == ''
+
+
 def parseUploadValue(valueText):
     """Parse cell text to Decimal for VALUE; reject blanks / non-numeric."""
     text = '' if valueText is None else str(valueText).strip()
@@ -128,11 +146,34 @@ def parseUploadValue(valueText):
         raise ValueError(f'Invalid numeric value {valueText!r}: {e}') from e
 
 
+def resolveUploadDateTimes(uploadRow):
+    """
+    Shared START/END datetime resolution for MODIFY_R_BASE and DELETE_R_BASE.
+
+    Returns (intervalStr, startDt, endDt, sdid) using the same rules as modify:
+      HOUR + EOP → START = display − 1h, END = display
+      HOUR + BOP → START = display, END = null
+      other      → START = display, END = null
+    """
+    # Lazy import: Query imports Upload for snapshotBaseline (avoid circular import)
+    from core import Query
+
+    sdid = parseSdid(uploadRow.get('dataId'))
+    interval = modifyInterval(uploadRow.get('interval'))
+    displayTs = uploadRow.get('timestamp', '')
+    displayDt = Query.parseDisplayTimestamp(displayTs)
+    if displayDt is None:
+        raise ValueError(f'Unparseable timestamp: {displayTs!r}')
+
+    startDt, endDt = dateTimeParams(uploadRow.get('interval'), displayDt)
+    return interval, startDt, endDt, sdid
+
+
 def dateTimeParams(interval, displayDt):
     """
-    Choose START_DATE_TIME / END_DATE_TIME for MODIFY_R_BASE.
+    Choose START_DATE_TIME / END_DATE_TIME for MODIFY_R_BASE / DELETE_R_BASE.
 
-    MODIFY_R_BASE does not accept a null START_DATE_TIME, so EOP hour writes
+    Procedures do not accept a null START_DATE_TIME, so EOP hour writes
     must supply both ends of the period:
 
       HOUR + EOP (Config.periodOffset True):
@@ -532,7 +573,7 @@ def collectUploadRows(mainWindow):
 
 
 # ---------------------------------------------------------------------------
-# HDB MODIFY_R_BASE write path
+# HDB MODIFY_R_BASE / DELETE_R_BASE write path
 # ---------------------------------------------------------------------------
 
 def buildModifyRBaseParams(uploadRow):
@@ -542,17 +583,7 @@ def buildModifyRBaseParams(uploadRow):
     Defaults come from Config (AGEN_ID, OVERWRITE_FLAG, DATA_FLAGS, TIME_ZONE
     are designed to become Options-driven later; None → Oracle NULL).
     """
-    # Lazy import: Query imports Upload for snapshotBaseline (avoid circular import)
-    from core import Query
-
-    sdid = parseSdid(uploadRow.get('dataId'))
-    interval = modifyInterval(uploadRow.get('interval'))
-    displayTs = uploadRow.get('timestamp', '')
-    displayDt = Query.parseDisplayTimestamp(displayTs)
-    if displayDt is None:
-        raise ValueError(f'Unparseable timestamp: {displayTs!r}')
-
-    startDt, endDt = dateTimeParams(uploadRow.get('interval'), displayDt)
+    interval, startDt, endDt, sdid = resolveUploadDateTimes(uploadRow)
     value = parseUploadValue(uploadRow.get('value'))
 
     # Future Options: overwrite / data flags / time zone / agen
@@ -581,43 +612,81 @@ def buildModifyRBaseParams(uploadRow):
     return params
 
 
+def buildDeleteRBaseParams(uploadRow):
+    """
+    Build positional param list for DELETE_R_BASE (blank cell edit).
+
+    Inputs (plus SITE_DATATYPE_ID to identify the series — same as MODIFY):
+      INTERVAL, START_DATE_TIME, END_DATE_TIME, AGEN_ID, LOADING_APPLICATION_ID
+
+    Date/interval/agen/loading filled with the same helpers as MODIFY_R_BASE.
+    """
+    interval, startDt, endDt, sdid = resolveUploadDateTimes(uploadRow)
+    params = [
+        sdid,                                   # SITE_DATATYPE_ID
+        interval,                               # INTERVAL
+        startDt,                                # START_DATE_TIME
+        endDt,                                  # END_DATE_TIME (null for BOP / non-hour)
+        int(Config.hdbAgenId),                  # AGEN_ID
+        int(Config.hdbLoadingApplicationId),    # LOADING_APPLICATION_ID
+    ]
+    return params
+
+
 def writeOneHdbValue(oracleConn, uploadRow, threadId=0):
-    """Call MODIFY_R_BASE for a single cell; commit on success (via callproc helper)."""
-    params = buildModifyRBaseParams(uploadRow)
+    """
+    Call MODIFY_R_BASE (numeric value) or DELETE_R_BASE (blank cell).
+    Commit on success (via callproc helper).
+    """
     db = uploadRow.get('database', '')
     dsn = databaseToDsn(db)
+    blank = isBlankUploadValue(uploadRow.get('value'))
+
+    if blank:
+        params = buildDeleteRBaseParams(uploadRow)
+        procName = 'DELETE_R_BASE'
+        paramNames = list(deleteRBaseParamNames)
+        action = 'delete'
+    else:
+        params = buildModifyRBaseParams(uploadRow)
+        procName = 'MODIFY_R_BASE'
+        paramNames = list(modifyRBaseParamNames)
+        action = 'modify'
+
+    # Stash for summary / debug (mutate copy only if needed by caller)
+    uploadRow['hdbAction'] = action
 
     if Config.debug:
         paired = ', '.join(
             f"{n}={Oracle.oracleConnection._formatParamForLog(v)}"
-            for n, v in zip(modifyRBaseParamNames, params)
+            for n, v in zip(paramNames, params)
         )
         Logic.logMessage(
             "DEBUG",
             f"Upload.writeOneHdbValue thread={threadId} dsn={dsn} db={db} "
             f"cell=({uploadRow.get('row')},{uploadRow.get('col')}) "
-            f"MODIFY_R_BASE [{paired}]",
+            f"{procName} [{paired}]",
         )
 
     oracleConn.callStoredProcedureWithRetry(
-        'MODIFY_R_BASE',
+        procName,
         params=params,
         commit=True,
-        paramNames=list(modifyRBaseParamNames),
+        paramNames=paramNames,
     )
 
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
-            f"Upload.writeOneHdbValue thread={threadId}: OK "
+            f"Upload.writeOneHdbValue thread={threadId}: OK {action} "
             f"SDID={params[0]} interval={params[1]} ts={uploadRow.get('timestamp')!r} "
-            f"value={params[4]}",
+            f"value={uploadRow.get('value')!r}",
         )
 
 
 def writeHdbRows(uploadRows):
     """
-    Write HDB rows via MODIFY_R_BASE.
+    Write HDB rows via MODIFY_R_BASE (value) or DELETE_R_BASE (blank).
 
     Separate Oracle connections per database (no DB links on write).
     Within each DB: worker threads each hold one reusable session (like sqlRead).
@@ -911,10 +980,25 @@ def _finishUploadUi(
 
         if nHdb:
             byDb = {}
+            byDbDelete = {}
+            byDbModify = {}
             for r in hdbSuccessRows:
-                byDb[r['database']] = byDb.get(r['database'], 0) + 1
-            for db, n in sorted(byDb.items()):
-                lines.append(f"  {db}: {n} value(s) written to HDB (MODIFY_R_BASE)")
+                db = r['database']
+                byDb[db] = byDb.get(db, 0) + 1
+                if r.get('hdbAction') == 'delete' or isBlankUploadValue(r.get('value')):
+                    byDbDelete[db] = byDbDelete.get(db, 0) + 1
+                else:
+                    byDbModify[db] = byDbModify.get(db, 0) + 1
+            for db in sorted(byDb.keys()):
+                nMod = byDbModify.get(db, 0)
+                nDel = byDbDelete.get(db, 0)
+                parts = []
+                if nMod:
+                    parts.append(f"{nMod} modified (MODIFY_R_BASE)")
+                if nDel:
+                    parts.append(f"{nDel} deleted (DELETE_R_BASE)")
+                detail = ', '.join(parts) if parts else f"{byDb[db]} value(s)"
+                lines.append(f"  {db}: {detail}")
 
         if nAq:
             lines.append(
@@ -961,7 +1045,7 @@ def runUpload(mainWindow):
     """
     btnUpload entry point:
       - Collect user edits
-      - HDB (USBR-*): real MODIFY_R_BASE write (threaded, per-DSN connections)
+      - HDB (USBR-*): MODIFY_R_BASE for values; DELETE_R_BASE for blank cells
       - Aquarius: popup that write is not implemented, then teal success styling
       - No CSV dry-run
     """
