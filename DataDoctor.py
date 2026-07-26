@@ -719,7 +719,7 @@ class uiMain(QMainWindow):
         Upload.onItemChanged(self, item)
 
     def btnUploadPressed(self):
-        """Dry-run write of pending user edits to documentation/*.csv."""
+        """Upload pending user edits: HDB via MODIFY_R_BASE; Aquarius stubbed for now."""
         Upload.runUpload(self)
 
     def showHeaderContextMenu(self, pos):

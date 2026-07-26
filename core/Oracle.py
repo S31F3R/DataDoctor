@@ -7,6 +7,7 @@ import keyring
 import time
 import re
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import List, Any, Optional
 from core import Logic, Config
@@ -27,12 +28,10 @@ class OracleAuthError(RuntimeError):
     """Wrong username/password or locked account — do not retry."""
     pass
 
-
 def clearAuthFailure():
     """Call after the user updates Oracle credentials in Options."""
     global authFailureMessage
     authFailureMessage = None
-
 
 def isAuthError(exc) -> bool:
     """True if this looks like bad credentials / locked account."""
@@ -65,7 +64,6 @@ def isAuthError(exc) -> bool:
         pass
     return False
 
-
 def pathHasDir(envValue, directory, sep):
     """True if directory already appears as a PATH-style entry."""
     if not envValue:
@@ -77,7 +75,6 @@ def pathHasDir(envValue, directory, sep):
         if os.path.normcase(os.path.normpath(part)) == dirNorm:
             return True
     return False
-
 
 def ensureClientOnPath(clientDir):
     """Prepend Instant Client to the process library path at most once."""
@@ -117,7 +114,6 @@ def ensureClientOnPath(clientDir):
     os.environ[key] = candidate
     if Config.debug:
         Logic.logMessage("DEBUG", f"oracleConnection: Prepended Instant Client to {key} (len={len(candidate)})")
-
 
 def ensureOracleClientReady():
     """
@@ -200,7 +196,6 @@ def ensureOracleClientReady():
                 )
 
         clientInitialized = True
-
 
 class oracleConnection:
     def __init__(self, dsn: str):
@@ -417,21 +412,129 @@ class oracleConnection:
             self.reconnect()
             return self.executeCustomQuery(query, params=params, fetchAll=fetchAll)
 
-    def callStoredProcedure(self, procedureName: str, params: Optional[List[Any]] = None) -> List[Any]:
-        """Call an Oracle stored procedure and return output values."""
-        if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
+    def callStoredProcedure(
+        self,
+        procedureName: str,
+        params: Optional[List[Any]] = None,
+        commit: bool = True,
+        paramNames: Optional[List[str]] = None,
+    ) -> List[Any]:
+        """
+        Call an Oracle stored procedure with positional parameters.
+
+        params: values in procedure-definition order (None → NULL).
+        commit: if True, commit after a successful call (needed for DML procedures).
+        paramNames: optional labels for DEBUG logging only.
+        """
+        if not self.connection:
+            raise RuntimeError("No active connection. Call connect() first.")
+
+        paramList = list(params) if params is not None else []
         cursor = self.connection.cursor()
+        startTime = time.time()
 
         try:
-            output = cursor.callproc(procedureName, params or [])
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.callStoredProcedure: Called {procedureName} with params: {params}")
-            return output
+            if Config.debug:
+                if paramNames and len(paramNames) == len(paramList):
+                    paired = ', '.join(
+                        f"{n}={self._formatParamForLog(v)}" for n, v in zip(paramNames, paramList)
+                    )
+                else:
+                    paired = ', '.join(self._formatParamForLog(v) for v in paramList)
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.callStoredProcedure: {procedureName} on {self.dsn} "
+                    f"params=[{paired}]",
+                )
+
+            output = cursor.callproc(procedureName, paramList)
+
+            if commit:
+                self.connection.commit()
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"oracleConnection.callStoredProcedure: committed {procedureName} "
+                        f"on {self.dsn}",
+                    )
+
+            elapsed = time.time() - startTime
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.callStoredProcedure: {procedureName} OK in {elapsed:.3f}s",
+                )
+            return list(output) if output is not None else []
         except oracledb.Error as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.callStoredProcedure: Error calling procedure: {e}")
+            # Best-effort rollback so a failed write does not leave a dirty txn
+            try:
+                if commit and self.connection is not None:
+                    self.connection.rollback()
+            except Exception:
+                pass
+            Logic.logException(
+                f"oracleConnection.callStoredProcedure: {procedureName} failed on {self.dsn}",
+                e,
+            )
+            raise
+        except Exception as e:
+            try:
+                if commit and self.connection is not None:
+                    self.connection.rollback()
+            except Exception:
+                pass
+            Logic.logException(
+                f"oracleConnection.callStoredProcedure: unexpected error calling "
+                f"{procedureName} on {self.dsn}",
+                e,
+            )
             raise
         finally:
-            cursor.close()
-            if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.callStoredProcedure: Cursor closed")
+            try:
+                cursor.close()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _formatParamForLog(value):
+        """Safe short string for DEBUG (no secrets expected in proc params)."""
+        if value is None:
+            return 'NULL'
+        if isinstance(value, datetime):
+            return value.strftime('%Y-%m-%d %H:%M:%S')
+        text = repr(value)
+        if len(text) > 80:
+            return text[:77] + '...'
+        return text
+
+    def callStoredProcedureWithRetry(
+        self,
+        procedureName: str,
+        params: Optional[List[Any]] = None,
+        commit: bool = True,
+        paramNames: Optional[List[str]] = None,
+    ) -> List[Any]:
+        """
+        Call a stored procedure; on lost-connection errors, reconnect once and retry.
+        Used by long-lived worker sessions that reuse one connection across writes.
+        """
+        try:
+            return self.callStoredProcedure(
+                procedureName, params=params, commit=commit, paramNames=paramNames
+            )
+        except Exception as e:
+            if isAuthError(e) or not self.isConnectionError(e):
+                raise
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.callStoredProcedureWithRetry: connection error on "
+                    f"{self.dsn}, reconnecting once: {e}",
+                )
+            self.reconnect()
+            return self.callStoredProcedure(
+                procedureName, params=params, commit=commit, paramNames=paramNames
+            )
 
     def close(self):
         """Close connection and clean up TNS_ADMIN directory."""

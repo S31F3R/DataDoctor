@@ -1,13 +1,17 @@
 # Upload.py
-# Track table edits, prepare write payloads, and dry-run export to documentation/*.csv
+# Track table edits, prepare write payloads, and upload to HDB (MODIFY_R_BASE).
+# Aquarius writes are stubbed (popup + success styling until implemented).
 
-import csv
-import os
-from PyQt6.QtCore import Qt
+import queue
+import threading
+from decimal import Decimal, InvalidOperation
+from datetime import datetime
+
+from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QAbstractItemView, QMessageBox
 
-from core import Logic, Config
+from core import Logic, Config, Oracle
 
 # User-edited / pending upload (magenta + white) — not used by QAQC
 editBg = QColor(0xC2, 0x18, 0x5B)  # #C2185B
@@ -19,6 +23,32 @@ uploadOkFg = QColor(255, 255, 255)
 
 editKey = 'uploadEdit'
 
+# Parallel writers per HDB database (mirrors USBR.sqlRead style)
+maxWriteThreads = 8
+
+# MODIFY_R_BASE parameter names in procedure order (DEBUG labels only)
+modifyRBaseParamNames = (
+    'SITE_DATATYPE_ID',
+    'INTERVAL',
+    'START_DATE_TIME',
+    'END_DATE_TIME',
+    'VALUE',
+    'AGEN_ID',
+    'OVERWRITE_FLAG',
+    'VALIDATION',
+    'COLLECTION_SYSTEM_ID',
+    'LOADING_APPLICATION_ID',
+    'METHOD_ID',
+    'COMPUTATION_ID',
+    'DO_UPDATE_Y_OR_N',
+    'DATA_FLAGS',
+    'TIME_ZONE',
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers: DB kind / DSN / interval / style
+# ---------------------------------------------------------------------------
 
 def isUsgsDb(db):
     if not db:
@@ -27,9 +57,95 @@ def isUsgsDb(db):
     return s == 'USGS' or s.startswith('USGS')
 
 
+def isHdbDb(db):
+    """USBR HDB databases (USBR-LCHDB, USBR-UCHDB2, ...)."""
+    if not db:
+        return False
+    return str(db).strip().upper().startswith('USBR-')
+
+
+def isAquariusDb(db):
+    if not db:
+        return False
+    return str(db).strip().upper() == 'AQUARIUS'
+
+
 def isPublicQuery(mainWindow):
     qt = getattr(mainWindow, 'lastQueryType', None) or getattr(mainWindow, 'currentQueryType', None) or ''
     return str(qt).strip().lower() == 'public'
+
+
+def databaseToDsn(dbName):
+    """
+    Map UI database name to Oracle TNS alias.
+    USBR-LCHDB → lchdb; USBR-UCHDB2 → uchdb2.
+    Writing cannot use database links — connect to each DSN separately.
+    """
+    s = str(dbName or '').strip()
+    if '-' in s:
+        return s.split('-', 1)[1].lower()
+    return s.lower()
+
+
+def modifyInterval(interval):
+    """Map UI interval string to HDB MODIFY_R_BASE INTERVAL value (lowercase)."""
+    iv = str(interval or '').strip().upper()
+    if iv.startswith('INSTANT'):
+        return 'instant'
+    if iv == 'WATER YEAR':
+        return 'wy'
+    if iv in ('HOUR', 'DAY', 'MONTH', 'YEAR'):
+        return iv.lower()
+    if not iv:
+        raise ValueError('Interval is empty; cannot write to HDB')
+    return iv.lower()
+
+
+def parseSdid(dataId):
+    """
+    SITE_DATATYPE_ID from dataId. Strips trailing -mrid when present (e.g. 20179-0 → 20179).
+    """
+    s = str(dataId or '').strip()
+    if not s:
+        raise ValueError('dataId is empty')
+    if '-' in s:
+        left, right = s.rsplit('-', 1)
+        if left.isdigit() and right.isdigit():
+            return int(left)
+    if s.isdigit():
+        return int(s)
+    raise ValueError(f'Invalid SITE_DATATYPE_ID (dataId): {dataId!r}')
+
+
+def parseUploadValue(valueText):
+    """Parse cell text to Decimal for VALUE; reject blanks / non-numeric."""
+    text = '' if valueText is None else str(valueText).strip()
+    if text == '':
+        raise ValueError('Value is blank')
+    try:
+        return Decimal(text)
+    except (InvalidOperation, ValueError) as e:
+        raise ValueError(f'Invalid numeric value {valueText!r}: {e}') from e
+
+
+def dateTimeParams(interval, displayDt):
+    """
+    Choose START_DATE_TIME vs END_DATE_TIME for MODIFY_R_BASE.
+
+    HOUR + EOP (Config.periodOffset True)  → END_DATE_TIME set, START null
+    HOUR + BOP (Config.periodOffset False) → START_DATE_TIME set, END null
+    All other intervals                    → START_DATE_TIME set, END null
+    """
+    if displayDt is None:
+        raise ValueError('Timestamp datetime is None')
+    if not isinstance(displayDt, datetime):
+        raise ValueError(f'Timestamp must be datetime, got {type(displayDt)}')
+
+    iv = str(interval or '').strip().upper()
+    # EOP for hour data: table timestamps come from end_date_time
+    if iv == 'HOUR' and Config.periodOffset:
+        return None, displayDt
+    return displayDt, None
 
 
 def getUserDict(item):
@@ -152,21 +268,6 @@ def primaryMeta(meta):
         'db': str(db),
         'interval': interval or '',
     }
-
-
-def documentationDir():
-    """Project documentation folder (dev and bundled)."""
-    path = Logic.resourcePath('documentation')
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
-def outputCsvPath(dbName):
-    """e.g. USBR-LCHDB → documentation/outputUSBR-LCHDB.csv"""
-    safe = ''.join(ch if ch.isalnum() or ch in '-_' else '_' for ch in str(dbName).strip())
-    if not safe:
-        safe = 'UNKNOWN'
-    return os.path.join(documentationDir(), f'output{safe}.csv')
 
 
 def columnIsLocked(mainWindow, col, meta=None):
@@ -365,7 +466,7 @@ def onItemChanged(mainWindow, item):
 
 def collectUploadRows(mainWindow):
     """
-    Build list of dicts ready for CSV / future DB write from user-edited cells only.
+    Build list of dicts ready for DB write from user-edited cells only.
     Overlay values go to the primary series; user must edit the cell deliberately.
     """
     rows = []
@@ -417,45 +518,273 @@ def collectUploadRows(mainWindow):
     return rows
 
 
-def writeUploadCsvs(uploadRows):
+# ---------------------------------------------------------------------------
+# HDB MODIFY_R_BASE write path
+# ---------------------------------------------------------------------------
+
+def buildModifyRBaseParams(uploadRow):
     """
-    Group by database; overwrite documentation/output{DB}.csv (long form).
-    Returns (writtenPaths, cellCoordsMarked) or raises on failure.
+    Build positional param list for MODIFY_R_BASE from one upload row.
+
+    Defaults come from Config (AGEN_ID, OVERWRITE_FLAG, DATA_FLAGS, TIME_ZONE
+    are designed to become Options-driven later; None → Oracle NULL).
     """
+    # Lazy import: Query imports Upload for snapshotBaseline (avoid circular import)
+    from core import Query
+
+    sdid = parseSdid(uploadRow.get('dataId'))
+    interval = modifyInterval(uploadRow.get('interval'))
+    displayTs = uploadRow.get('timestamp', '')
+    displayDt = Query.parseDisplayTimestamp(displayTs)
+    if displayDt is None:
+        raise ValueError(f'Unparseable timestamp: {displayTs!r}')
+
+    startDt, endDt = dateTimeParams(uploadRow.get('interval'), displayDt)
+    value = parseUploadValue(uploadRow.get('value'))
+
+    # Future Options: overwrite / data flags / time zone / agen
+    overwrite = Config.hdbOverwriteFlag
+    dataFlags = Config.hdbDataFlags
+    timeZone = Config.hdbTimeZone
+    agenId = Config.hdbAgenId
+
+    params = [
+        sdid,                                   # SITE_DATATYPE_ID
+        interval,                               # INTERVAL
+        startDt,                                # START_DATE_TIME (or None)
+        endDt,                                  # END_DATE_TIME (or None)
+        value,                                  # VALUE
+        int(agenId),                            # AGEN_ID
+        overwrite,                              # OVERWRITE_FLAG (None → NULL)
+        str(Config.hdbValidation),              # VALIDATION
+        int(Config.hdbCollectionSystemId),      # COLLECTION_SYSTEM_ID
+        int(Config.hdbLoadingApplicationId),    # LOADING_APPLICATION_ID
+        int(Config.hdbMethodId),                # METHOD_ID
+        int(Config.hdbComputationId),           # COMPUTATION_ID
+        str(Config.hdbDoUpdateYorN or 'Y'),     # DO_UPDATE_Y_OR_N (always Y for now)
+        dataFlags,                              # DATA_FLAGS (None → NULL)
+        timeZone,                               # TIME_ZONE (None → NULL)
+    ]
+    return params
+
+
+def writeOneHdbValue(oracleConn, uploadRow, threadId=0):
+    """Call MODIFY_R_BASE for a single cell; commit on success (via callproc helper)."""
+    params = buildModifyRBaseParams(uploadRow)
+    db = uploadRow.get('database', '')
+    dsn = databaseToDsn(db)
+
+    if Config.debug:
+        paired = ', '.join(
+            f"{n}={Oracle.oracleConnection._formatParamForLog(v)}"
+            for n, v in zip(modifyRBaseParamNames, params)
+        )
+        Logic.logMessage(
+            "DEBUG",
+            f"Upload.writeOneHdbValue thread={threadId} dsn={dsn} db={db} "
+            f"cell=({uploadRow.get('row')},{uploadRow.get('col')}) "
+            f"MODIFY_R_BASE [{paired}]",
+        )
+
+    oracleConn.callStoredProcedureWithRetry(
+        'MODIFY_R_BASE',
+        params=params,
+        commit=True,
+        paramNames=list(modifyRBaseParamNames),
+    )
+
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"Upload.writeOneHdbValue thread={threadId}: OK "
+            f"SDID={params[0]} interval={params[1]} ts={uploadRow.get('timestamp')!r} "
+            f"value={params[4]}",
+        )
+
+
+def writeHdbRows(uploadRows):
+    """
+    Write HDB rows via MODIFY_R_BASE.
+
+    Separate Oracle connections per database (no DB links on write).
+    Within each DB: worker threads each hold one reusable session (like sqlRead).
+
+    Returns (successRows, failedRows) where failedRows entries include 'error'.
+    """
+    successRows = []
+    failedRows = []
+    resultLock = threading.Lock()
+
+    if not uploadRows:
+        return successRows, failedRows
+
     byDb = {}
     for row in uploadRows:
         byDb.setdefault(row['database'], []).append(row)
 
-    written = []
-    for db, rows in byDb.items():
-        path = outputCsvPath(db)
-        with open(path, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.writer(f)
-            writer.writerow([
-                'Database', 'DataID', 'Interval', 'Timestamp',
-                'Value', 'OriginalValue', 'Reason',
-            ])
-            # Stable order: timestamp, dataId
-            rowsSorted = sorted(rows, key=lambda x: (x.get('timestamp', ''), x.get('dataId', '')))
-            for r in rowsSorted:
-                writer.writerow([
-                    r['database'],
-                    r['dataId'],
-                    r['interval'],
-                    r['timestamp'],
-                    r['value'],
-                    r['originalValue'],
-                    r['reason'],
-                ])
-        written.append(path)
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Upload.writeUploadCsvs: wrote {len(rows)} rows → {path}")
+    if Config.debug:
+        summary = ', '.join(f"{db}={len(rows)}" for db, rows in sorted(byDb.items()))
+        Logic.logMessage(
+            "DEBUG",
+            f"Upload.writeHdbRows: {len(uploadRows)} row(s) across {len(byDb)} DB(s): {summary}",
+        )
 
-    return written
+    def processDatabase(dbName, rows):
+        dsn = databaseToDsn(dbName)
+        taskQueue = queue.Queue()
+        for r in rows:
+            taskQueue.put(r)
+
+        numThreads = min(maxWriteThreads, max(1, len(rows)))
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"Upload.writeHdbRows: DB={dbName} dsn={dsn} rows={len(rows)} "
+                f"threads={numThreads}",
+            )
+
+        workerErrors = []
+        workerErrorsLock = threading.Lock()
+
+        def worker(threadId):
+            oracleConn = None
+            tasksDone = 0
+            try:
+                if getattr(Oracle, 'authFailureMessage', None):
+                    raise Oracle.OracleAuthError(Oracle.authFailureMessage)
+
+                oracleConn = Oracle.oracleConnection(dsn)
+                oracleConn.connect()
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"Upload HDB-write worker {threadId} ({dsn}): connection opened",
+                    )
+
+                while True:
+                    try:
+                        row = taskQueue.get_nowait()
+                    except queue.Empty:
+                        break
+                    try:
+                        writeOneHdbValue(oracleConn, row, threadId=threadId)
+                        with resultLock:
+                            successRows.append(row)
+                        tasksDone += 1
+                    except Exception as e:
+                        errText = str(e)
+                        Logic.logException(
+                            f"Upload HDB-write worker {threadId} ({dsn}) failed "
+                            f"SDID={row.get('dataId')} ts={row.get('timestamp')!r} "
+                            f"value={row.get('value')!r}",
+                            e,
+                        )
+                        failedEntry = dict(row)
+                        failedEntry['error'] = errText
+                        with resultLock:
+                            failedRows.append(failedEntry)
+                        with workerErrorsLock:
+                            workerErrors.append(e)
+                        if isinstance(e, Oracle.OracleAuthError) or Oracle.isAuthError(e):
+                            # Drain remaining tasks as auth failures so they don't hang
+                            while True:
+                                try:
+                                    leftover = taskQueue.get_nowait()
+                                except queue.Empty:
+                                    break
+                                failLeft = dict(leftover)
+                                failLeft['error'] = errText
+                                with resultLock:
+                                    failedRows.append(failLeft)
+                                try:
+                                    taskQueue.task_done()
+                                except Exception:
+                                    pass
+                            break
+                    finally:
+                        try:
+                            taskQueue.task_done()
+                        except Exception:
+                            pass
+            except Exception as e:
+                Logic.logException(
+                    f"Upload HDB-write worker {threadId} ({dsn}) failed to start session",
+                    e,
+                )
+                with workerErrorsLock:
+                    workerErrors.append(e)
+                # Mark all remaining queue items failed
+                while True:
+                    try:
+                        leftover = taskQueue.get_nowait()
+                    except queue.Empty:
+                        break
+                    failLeft = dict(leftover)
+                    failLeft['error'] = str(e)
+                    with resultLock:
+                        failedRows.append(failLeft)
+                    try:
+                        taskQueue.task_done()
+                    except Exception:
+                        pass
+            finally:
+                if oracleConn is not None:
+                    try:
+                        oracleConn.close()
+                    except Exception as e:
+                        Logic.logException(
+                            f"Upload HDB-write worker {threadId} ({dsn}): close failed",
+                            e,
+                        )
+                    if Config.debug:
+                        Logic.logMessage(
+                            "DEBUG",
+                            f"Upload HDB-write worker {threadId} ({dsn}): "
+                            f"closed after {tasksDone} success(es)",
+                        )
+
+        threads = []
+        for i in range(numThreads):
+            t = threading.Thread(
+                target=worker,
+                args=(i,),
+                name=f"HDB-write-{dsn}-{i}",
+            )
+            threads.append(t)
+            t.start()
+        for t in threads:
+            t.join()
+
+        if Config.debug and workerErrors:
+            Logic.logMessage(
+                "WARN",
+                f"Upload.writeHdbRows: DB={dbName} finished with "
+                f"{len(workerErrors)} worker error(s)",
+            )
+
+    # Parallel across databases (each DB has its own connection pool of workers)
+    dbThreads = []
+    for dbName, rows in byDb.items():
+        t = threading.Thread(
+            target=processDatabase,
+            args=(dbName, rows),
+            name=f"HDB-write-db-{databaseToDsn(dbName)}",
+        )
+        dbThreads.append(t)
+        t.start()
+    for t in dbThreads:
+        t.join()
+
+    Logic.logMessage(
+        "INFO",
+        f"Upload.writeHdbRows: done — {len(successRows)} ok, {len(failedRows)} failed "
+        f"of {len(uploadRows)} total",
+    )
+    return successRows, failedRows
 
 
 def markUploaded(mainWindow, uploadRows):
-    """After successful file write: success colors, clear dirty, update originalText."""
+    """After successful write: success colors, clear dirty, update originalText."""
     table = mainWindow.mainTable
     if table is None:
         return
@@ -496,15 +825,141 @@ def markUploaded(mainWindow, uploadRows):
         table.blockSignals(False)
 
 
+# ---------------------------------------------------------------------------
+# Background worker + UI entry point
+# ---------------------------------------------------------------------------
+
+class uploadSignals(QObject):
+    """Signals from background HDB write worker back to the UI thread."""
+    finished = pyqtSignal(object)  # result dict
+    failed = pyqtSignal(str, bool)  # message, isAuthError
+
+
+class uploadWorker(QRunnable):
+    """Run HDB writes off the UI thread."""
+
+    def __init__(self, hdbRows, signals):
+        super().__init__()
+        self.hdbRows = hdbRows
+        self.signals = signals
+
+    def run(self):
+        try:
+            successRows, failedRows = writeHdbRows(self.hdbRows)
+            self.signals.finished.emit({
+                'successRows': successRows,
+                'failedRows': failedRows,
+            })
+        except Exception as e:
+            isAuth = False
+            try:
+                isAuth = isinstance(e, Oracle.OracleAuthError) or Oracle.isAuthError(e)
+            except Exception:
+                pass
+            Logic.logException("Upload.uploadWorker failed", e)
+            self.signals.failed.emit(str(e), isAuth)
+
+
+def _setUploadUiBusy(mainWindow, busy):
+    """Disable upload control while a write is in progress."""
+    try:
+        mainWindow.uploadRunning = bool(busy)
+        btn = getattr(mainWindow, 'btnUpload', None)
+        if btn is not None:
+            btn.setEnabled(not busy)
+    except Exception:
+        pass
+
+
+def _finishUploadUi(
+    mainWindow,
+    hdbSuccessRows,
+    failedRows,
+    aquariusCount=0,
+    otherSkipped=None,
+    markHdb=True,
+):
+    """
+    Mark HDB successes teal (if markHdb) and show a summary dialog (UI thread).
+    Aquarius cells are marked earlier in runUpload after the stub popup.
+    """
+    otherSkipped = otherSkipped or []
+    hdbSuccessRows = hdbSuccessRows or []
+    failedRows = failedRows or []
+    try:
+        if markHdb and hdbSuccessRows:
+            markUploaded(mainWindow, hdbSuccessRows)
+
+        lines = []
+        nHdb = len(hdbSuccessRows)
+        nFail = len(failedRows)
+        nAq = aquariusCount
+        nOk = nHdb + nAq
+
+        if nHdb:
+            byDb = {}
+            for r in hdbSuccessRows:
+                byDb[r['database']] = byDb.get(r['database'], 0) + 1
+            for db, n in sorted(byDb.items()):
+                lines.append(f"  {db}: {n} value(s) written to HDB (MODIFY_R_BASE)")
+
+        if nAq:
+            lines.append(
+                f"  AQUARIUS: {nAq} value(s) marked success "
+                f"(write not implemented yet)"
+            )
+
+        if nFail:
+            lines.append(f"\nFailed ({nFail}):")
+            for r in failedRows[:25]:
+                lines.append(
+                    f"  {r.get('database')} SDID={r.get('dataId')} "
+                    f"@ {r.get('timestamp')}: {r.get('error', 'unknown error')}"
+                )
+            if nFail > 25:
+                lines.append(f"  … and {nFail - 25} more (see app.log)")
+
+        if otherSkipped:
+            lines.append(f"\nSkipped unsupported ({len(otherSkipped)}):")
+            for r in otherSkipped[:10]:
+                lines.append(
+                    f"  {r.get('database')} dataId={r.get('dataId')} @ {r.get('timestamp')}"
+                )
+
+        header = f"Upload finished: {nOk} succeeded"
+        if nFail:
+            header += f", {nFail} failed"
+        body = header + (('\n\n' + '\n'.join(lines)) if lines else '')
+
+        if nFail and nOk == 0:
+            QMessageBox.warning(mainWindow, "Upload Failed", body)
+        elif nFail:
+            QMessageBox.warning(mainWindow, "Upload Partial Success", body)
+        else:
+            QMessageBox.information(mainWindow, "Upload Complete", body)
+
+        Logic.logMessage("INFO", f"Upload UI summary: {header}")
+    except Exception as e:
+        Logic.logException("Upload._finishUploadUi failed", e)
+        QMessageBox.warning(mainWindow, "Upload Error", f"Upload finished with UI error:\n{e}")
+
+
 def runUpload(mainWindow):
     """
-    btnUpload entry point: collect user edits, write CSVs, mark success.
-    Public queries have editing locked; no special dialog for that case.
+    btnUpload entry point:
+      - Collect user edits
+      - HDB (USBR-*): real MODIFY_R_BASE write (threaded, per-DSN connections)
+      - Aquarius: popup that write is not implemented, then teal success styling
+      - No CSV dry-run
     """
     try:
         table = mainWindow.mainTable
         if table is None or table.rowCount() == 0:
             QMessageBox.information(mainWindow, "Upload", "No data in the table to upload.")
+            return
+
+        if getattr(mainWindow, 'uploadRunning', False):
+            QMessageBox.information(mainWindow, "Upload", "An upload is already in progress.")
             return
 
         if not getattr(mainWindow, 'uploadBaselineReady', False):
@@ -521,26 +976,113 @@ def runUpload(mainWindow):
             )
             return
 
-        paths = writeUploadCsvs(uploadRows)
-        markUploaded(mainWindow, uploadRows)
+        hdbRows = [r for r in uploadRows if isHdbDb(r['database'])]
+        aquariusRows = [r for r in uploadRows if isAquariusDb(r['database'])]
+        otherRows = [
+            r for r in uploadRows
+            if not isHdbDb(r['database']) and not isAquariusDb(r['database'])
+        ]
 
-        byDb = {}
-        for r in uploadRows:
-            byDb[r['database']] = byDb.get(r['database'], 0) + 1
-        summaryLines = [f"  {db}: {n} value(s) → {os.path.basename(outputCsvPath(db))}" for db, n in sorted(byDb.items())]
-        pathList = '\n'.join(paths)
-        QMessageBox.information(
-            mainWindow,
-            "Upload Complete",
-            f"Wrote {len(uploadRows)} value(s) to {len(paths)} file(s) "
-            f"(dry-run; files overwritten each upload):\n\n"
-            + '\n'.join(summaryLines)
-            + f"\n\n{pathList}",
-        )
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"Upload.runUpload: total={len(uploadRows)} hdb={len(hdbRows)} "
+                f"aquarius={len(aquariusRows)} other={len(otherRows)} "
+                f"periodOffset(EOP)={Config.periodOffset} "
+                f"agenId={Config.hdbAgenId} overwrite={Config.hdbOverwriteFlag!r} "
+                f"dataFlags={Config.hdbDataFlags!r} timeZone={Config.hdbTimeZone!r}",
+            )
+
+        if otherRows:
+            for r in otherRows:
+                Logic.logMessage(
+                    "WARN",
+                    f"Upload.runUpload: skipping unsupported database "
+                    f"{r.get('database')!r} dataId={r.get('dataId')} ts={r.get('timestamp')}",
+                )
+
+        # Aquarius: not implemented — inform user, still apply success styling
+        if aquariusRows:
+            QMessageBox.information(
+                mainWindow,
+                "Aquarius Write",
+                "Aquarius write hasn't been written into the program yet.",
+            )
+            markUploaded(mainWindow, aquariusRows)
+            Logic.logMessage(
+                "INFO",
+                f"Upload.runUpload: Aquarius stub — marked {len(aquariusRows)} cell(s) "
+                f"as success without writing",
+            )
+
+        # Only Aquarius / skipped others — no HDB work
+        if not hdbRows:
+            if aquariusRows or otherRows:
+                _finishUploadUi(
+                    mainWindow,
+                    hdbSuccessRows=[],
+                    failedRows=[],
+                    aquariusCount=len(aquariusRows),
+                    otherSkipped=otherRows,
+                    markHdb=False,
+                )
+            return
+
+        # HDB write on background thread so UI stays responsive
+        _setUploadUiBusy(mainWindow, True)
+
+        signals = uploadSignals()
+        # Keep reference so signals aren't GC'd before emit
+        mainWindow.uploadSignals = signals
+        # Capture for closures (immutable snapshots)
+        aquariusCount = len(aquariusRows)
+        otherSkipped = list(otherRows)
+
+        def onFinished(result):
+            try:
+                hdbSuccess = list(result.get('successRows') or [])
+                failedRows = list(result.get('failedRows') or [])
+                _finishUploadUi(
+                    mainWindow,
+                    hdbSuccessRows=hdbSuccess,
+                    failedRows=failedRows,
+                    aquariusCount=aquariusCount,
+                    otherSkipped=otherSkipped,
+                    markHdb=True,
+                )
+            finally:
+                _setUploadUiBusy(mainWindow, False)
+
+        def onFailed(message, isAuthError):
+            try:
+                Logic.logMessage("ERROR", f"Upload.runUpload background failed: {message}")
+                if isAuthError:
+                    QMessageBox.warning(mainWindow, "Oracle Login Failed", message)
+                else:
+                    QMessageBox.warning(
+                        mainWindow,
+                        "Upload Error",
+                        f"HDB upload failed:\n{message}",
+                    )
+                if aquariusCount:
+                    Logic.logMessage(
+                        "INFO",
+                        f"Upload.runUpload: HDB failed but {aquariusCount} "
+                        f"Aquarius stub cell(s) remain marked success",
+                    )
+            finally:
+                _setUploadUiBusy(mainWindow, False)
+
+        signals.finished.connect(onFinished)
+        signals.failed.connect(onFailed)
+        worker = uploadWorker(hdbRows, signals)
+        QThreadPool.globalInstance().start(worker)
+
         Logic.logMessage(
             "INFO",
-            f"Upload dry-run: {len(uploadRows)} rows → {paths}",
+            f"Upload.runUpload: started background HDB write for {len(hdbRows)} value(s)",
         )
     except Exception as e:
+        _setUploadUiBusy(mainWindow, False)
         Logic.logException("Upload.runUpload failed", e)
-        QMessageBox.warning(mainWindow, "Upload Error", f"Failed to write upload files:\n{e}")
+        QMessageBox.warning(mainWindow, "Upload Error", f"Failed to start upload:\n{e}")

@@ -17,3 +17,20 @@ deltaChecked = False
 overlayChecked = False
 systemTextColor = ""
 enableSQL = False
+
+# ---------------------------------------------------------------------------
+# HDB MODIFY_R_BASE write defaults (Options UI later for some of these)
+# DO_UPDATE_Y_OR_N is always 'Y' (not exposed).
+# OVERWRITE_FLAG / DATA_FLAGS / TIME_ZONE default None → Oracle NULL for now.
+# AGEN_ID will become a combo; TIME_ZONE needs HDB research.
+# ---------------------------------------------------------------------------
+hdbAgenId = 7
+hdbCollectionSystemId = 5
+hdbMethodId = 13
+hdbLoadingApplicationId = 33
+hdbComputationId = 1
+hdbValidation = 'Z'
+hdbDoUpdateYorN = 'Y'
+hdbOverwriteFlag = None   # None → NULL; future option may pass 'O'
+hdbDataFlags = None       # None → NULL; future option
+hdbTimeZone = None        # None → NULL; research later
