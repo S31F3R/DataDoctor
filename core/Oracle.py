@@ -75,9 +75,12 @@ def isPasswordExpiredError(exc) -> bool:
 
 def isUserMissingError(exc) -> bool:
     """
-    True when the account is not present (or not usable) on this database.
-    On connect, a non-existent user typically surfaces as ORA-01017.
-    ORA-01918 is 'user does not exist' on ALTER USER.
+    True when Oracle reports the account is not present on this database.
+
+    ORA-01918 = user does not exist (definitive, usually from ALTER USER).
+    ORA-01017 on connect = invalid username/password — Oracle does not
+    distinguish "no such user" from "wrong password", so we treat it as
+    skip-for-this-DB (not a change failure to surface as a password-policy error).
     """
     code = _oracleErrorCode(exc)
     if code in (1017, 1918):
@@ -85,13 +88,55 @@ def isUserMissingError(exc) -> bool:
     text = (str(exc) if exc is not None else '').upper()
     if 'ORA-01017' in text or 'ORA-1017' in text or 'ORA-01918' in text:
         return True
-    if 'INVALID USERNAME' in text or 'INVALID PASSWORD' in text:
-        return True
-    if 'USERNAME/PASSWORD' in text and 'INVALID' in text:
-        return True
     if 'DOES NOT EXIST' in text and 'USER' in text:
         return True
+    # Do NOT treat generic "invalid password" text alone as missing after connect
+    # succeeds — that can be a failed REPLACE/old-password check we should surface.
+    if 'INVALID USERNAME/PASSWORD' in text or 'USERNAME/PASSWORD' in text and 'INVALID' in text:
+        return True
     return False
+
+def oracleUserIdent(username: str) -> str:
+    """
+    Normalize Oracle username for unquoted SQL identifiers.
+
+    Unquoted Oracle identifiers are stored/matched as UPPERCASE. Quoting the
+    username (e.g. ALTER USER "jsmith") looks for a case-sensitive name and
+    often yields ORA-01918 even when the account exists as JSMITH.
+    """
+    u = (username or '').strip()
+    if not u:
+        raise ValueError('Oracle username is empty')
+    if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_#$]*', u):
+        raise ValueError(
+            'Oracle username has invalid characters for password change '
+            '(use letters, digits, _, #, $ only)'
+        )
+    return u.upper()
+
+def buildAlterUserPasswordSql(username: str, newPassword: str, oldPassword: str) -> str:
+    """
+    Build ALTER USER ... IDENTIFIED BY ... REPLACE ... matching HDB practice.
+
+    Valid form (Oracle docs / Examples.txt):
+      ALTER USER username IDENTIFIED BY "newPassword" REPLACE "oldPassword"
+
+    - Username: unquoted, uppercased (standard Oracle identifier)
+    - Passwords: double-quoted so special characters / case are preserved
+    - Never log the returned string (contains secrets)
+    """
+    userIdent = oracleUserIdent(username)
+    # Forbidden chars already validated on newPassword; still refuse " in either
+    if '"' in (newPassword or '') or '"' in (oldPassword or ''):
+        raise ValueError('Oracle passwords cannot contain double quotes')
+    if '\n' in (newPassword or '') or '\r' in (newPassword or ''):
+        raise ValueError('Oracle passwords cannot contain newlines')
+    if '\n' in (oldPassword or '') or '\r' in (oldPassword or ''):
+        raise ValueError('Oracle passwords cannot contain newlines')
+    return (
+        f'ALTER USER {userIdent} IDENTIFIED BY "{newPassword}" '
+        f'REPLACE "{oldPassword}"'
+    )
 
 def isAuthError(exc) -> bool:
     """True if this looks like bad credentials / locked account / expired password."""
@@ -193,6 +238,28 @@ def databaseToDsn(dbName: str) -> str:
         return s.split('-', 1)[1].lower()
     return s.lower()
 
+def _executeAlterUserPassword(conn, username: str, oldPassword: str, newPassword: str) -> None:
+    """
+    Run ALTER USER ... IDENTIFIED BY "new" REPLACE "old" on an open connection.
+    Never logs the SQL (contains secrets).
+    """
+    sql = buildAlterUserPasswordSql(username, newPassword, oldPassword)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(sql)
+        # DDL usually auto-commits; best-effort commit for non-DDL drivers
+        try:
+            conn.commit()
+        except Exception:
+            pass
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        sql = None
+
+
 def changePasswordOnDsn(
     dsn: str,
     username: str,
@@ -203,59 +270,74 @@ def changePasswordOnDsn(
     """
     Change password on one Oracle DSN using the old password to authenticate.
 
-    Matches HDB practice (ALTER USER ... IDENTIFIED BY ... REPLACE ...),
-    implemented via oracledb Connection.changepassword (no password in SQL/logs).
+    Primary method (HDB / Examples.txt):
+      ALTER USER username IDENTIFIED BY "newPassword" REPLACE "oldPassword"
+
+    Username is unquoted UPPERCASE; passwords are double-quoted.
+    Fallback: connection.changepassword(old, new).
+    Expired password: connect(..., newpassword=new).
 
     Returns (status, detail) where status is:
       'success' — password changed
-      'missing' — user not present / invalid credentials for this DB (skip in UI)
-      'error'   — user likely exists but change failed (include detail)
+      'missing' — skip in UI (ORA-01017 connect / ORA-01918 user missing)
+      'error'   — authenticated or reachable but change failed (include detail)
 
     Does NOT set the global authFailureMessage (per-DB skips must not block others).
-    Never logs password values.
+    Never logs password values or the ALTER USER SQL.
     """
     label = dbLabel or dsn
     ensureOracleClientReady()
+
+    try:
+        userIdent = oracleUserIdent(username)
+    except ValueError as e:
+        return 'error', str(e)
+
+    # Connect as the account (Oracle auth accepts any case; we use original then upper)
+    connectUser = (username or '').strip()
     conn = None
     try:
         try:
-            conn = oracledb.connect(user=username, password=oldPassword, dsn=dsn)
+            conn = oracledb.connect(user=connectUser, password=oldPassword, dsn=dsn)
         except Exception as e:
             if isPasswordExpiredError(e):
                 # Expired: change as part of connect (newpassword=)
                 try:
                     conn = oracledb.connect(
-                        user=username,
+                        user=connectUser,
                         password=oldPassword,
                         newpassword=newPassword,
                         dsn=dsn,
                     )
                     Logic.logMessage(
                         "INFO",
-                        f"Oracle password changed on {label} ({dsn}) for user {username} "
+                        f"Oracle password changed on {label} ({dsn}) for user {userIdent} "
                         f"(password was expired)",
                     )
                     return 'success', ''
                 except Exception as e2:
                     if isUserMissingError(e2):
-                        if Config.debug:
-                            Logic.logMessage(
-                                "DEBUG",
-                                f"Oracle password change skipped on {label}: user not found / auth failed",
-                            )
+                        Logic.logMessage(
+                            "INFO",
+                            f"Oracle password change skipped on {label}: "
+                            f"login failed after expired password ({_safeErrorText(e2)})",
+                        )
                         return 'missing', _safeErrorText(e2)
                     Logic.logMessage(
                         "ERROR",
-                        f"Oracle password change failed on {label} (expired path): {_safeErrorText(e2)}",
+                        f"Oracle password change failed on {label} (expired path): "
+                        f"{_safeErrorText(e2)}",
                     )
                     return 'error', _safeErrorText(e2)
 
             if isUserMissingError(e):
-                if Config.debug:
-                    Logic.logMessage(
-                        "DEBUG",
-                        f"Oracle password change skipped on {label}: user not found / auth failed",
-                    )
+                # ORA-01017: wrong password OR user not on this DB — skip (do not claim
+                # "user does not exist" as a hard fact; log ORA code for diagnosis)
+                Logic.logMessage(
+                    "INFO",
+                    f"Oracle password change skipped on {label}: "
+                    f"could not log in with prior credentials ({_safeErrorText(e)})",
+                )
                 return 'missing', _safeErrorText(e)
 
             # Other connect failures (TNS, network, locked, etc.)
@@ -265,48 +347,43 @@ def changePasswordOnDsn(
             )
             return 'error', _safeErrorText(e)
 
-        # Connected with current password — change it
+        # Connected — change password via ALTER USER (Examples.txt / Oracle standard)
         try:
-            if hasattr(conn, 'changepassword'):
-                conn.changepassword(oldPassword, newPassword)
-            else:
-                # Fallback: ALTER USER ... REPLACE (Examples.txt); never log this SQL
-                cursor = conn.cursor()
-                try:
-                    # Username is an identifier; passwords double-quoted per Oracle rules
-                    # (forbidden chars already validated — no " or control chars).
-                    sql = (
-                        f'ALTER USER "{username}" IDENTIFIED BY "{newPassword}" '
-                        f'REPLACE "{oldPassword}"'
-                    )
-                    cursor.execute(sql)
-                    try:
-                        conn.commit()
-                    except Exception:
-                        pass
-                finally:
-                    try:
-                        cursor.close()
-                    except Exception:
-                        pass
-                    sql = None
+            try:
+                _executeAlterUserPassword(conn, userIdent, oldPassword, newPassword)
+            except Exception as alterErr:
+                # Fallback to driver API if ALTER USER is blocked/unavailable
+                if hasattr(conn, 'changepassword'):
+                    if Config.debug:
+                        Logic.logMessage(
+                            "DEBUG",
+                            f"Oracle ALTER USER failed on {label}, trying changepassword: "
+                            f"{_safeErrorText(alterErr)}",
+                        )
+                    conn.changepassword(oldPassword, newPassword)
+                else:
+                    raise
 
             Logic.logMessage(
                 "INFO",
-                f"Oracle password changed successfully on {label} ({dsn}) for user {username}",
+                f"Oracle password changed successfully on {label} ({dsn}) for user {userIdent}",
             )
             return 'success', ''
         except Exception as e:
-            if isUserMissingError(e):
-                if Config.debug:
-                    Logic.logMessage(
-                        "DEBUG",
-                        f"Oracle password change skipped on {label} after connect: user missing",
-                    )
+            code = _oracleErrorCode(e)
+            # Only ORA-01918 is definitive "user does not exist" after a successful login
+            if code == 1918 or (
+                'ORA-01918' in (str(e) or '').upper()
+            ):
+                Logic.logMessage(
+                    "INFO",
+                    f"Oracle password change skipped on {label}: user {userIdent} does not exist",
+                )
                 return 'missing', _safeErrorText(e)
             Logic.logMessage(
                 "ERROR",
-                f"Oracle password change failed on {label}: {_safeErrorText(e)}",
+                f"Oracle password change failed on {label} for user {userIdent}: "
+                f"{_safeErrorText(e)}",
             )
             return 'error', _safeErrorText(e)
     finally:

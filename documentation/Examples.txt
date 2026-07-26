@@ -1,0 +1,26 @@
+# Valid Oracle self-service password change (HDB / standard Oracle)
+#
+# Form:
+#   ALTER USER username IDENTIFIED BY "newPassword" REPLACE "oldPassword"
+#
+# Rules:
+# - Username is an unquoted identifier → Oracle stores/matches it as UPPERCASE.
+#   Do NOT double-quote the username unless the account was created with quotes
+#   (quoted "jsmith" ≠ unquoted JSMITH → ORA-01918 user does not exist).
+# - Passwords should be double-quoted so special characters and case are kept.
+# - Passwords cannot contain double quotes (") or newline/return characters.
+# - REPLACE is required for non-DBA users when a password verify function is set.
+# - You must be connected as that user (or as a DBA) before running ALTER USER.
+# - For an already-expired password, connect with newpassword= instead of ALTER USER.
+#
+# Template used by DataDoctor (values substituted in code; never logged):
+
+alter user
+$UserName
+identified by
+"$NewPassword"
+replace
+"$OldPassword"
+
+# Equivalent single line (username uppercased, passwords quoted):
+# ALTER USER SCOTT IDENTIFIED BY "NewPass123!" REPLACE "OldPass123!"

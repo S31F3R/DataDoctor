@@ -626,11 +626,26 @@ class uiOptions(QDialog):
 
         # Multi-DB HDB password update (parallel); uses prior password to authenticate
         if hdbPasswordChangeRequested:
-            self._startHdbPasswordChange(
-                username=newOracleUser,
-                oldPassword=priorOraclePassword,
-                newPassword=newOraclePassword,
+            reply = QMessageBox.question(
+                self,
+                "Update HDB Password",
+                "Oracle password update detected.\n\n"
+                "Update this password on all USBR HDB databases?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
             )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._startHdbPasswordChange(
+                    username=newOracleUser,
+                    oldPassword=priorOraclePassword,
+                    newPassword=newOraclePassword,
+                )
+            else:
+                Logic.logMessage(
+                    "INFO",
+                    "HDB password change declined by user "
+                    "(local Options credentials were still saved)",
+                )
 
         # Close Options (we disconnected the UI auto-accept)
         super().accept()
@@ -670,18 +685,22 @@ class uiOptions(QDialog):
         errors = list((result or {}).get('errors') or [])
 
         if not success and not errors:
-            # Everything skipped (user not on any DB) — still inform quietly via log only
+            # All DBs skipped (ORA-01017 / no login) — not the same as proven ORA-01918
             Logic.logMessage(
                 "INFO",
                 "HDB password change: no databases updated "
-                "(account not found on any HDB, or no targets)",
+                "(could not log in with prior credentials on any HDB)",
             )
             QMessageBox.information(
                 parent,
                 "HDB Password Update",
                 "Password change finished.\n\n"
-                "No databases were updated. The account was not found on any "
-                "USBR HDB database (or none could be reached with the prior credentials).",
+                "No databases were updated.\n\n"
+                "Could not log in to any USBR HDB with the previous password. "
+                "That usually means either:\n"
+                "  • this account is not present on those databases, or\n"
+                "  • the previous password saved in Options was incorrect.\n\n"
+                "Your new password was still saved locally in Options.",
             )
             return
 
