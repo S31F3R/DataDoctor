@@ -19,7 +19,9 @@ systemTextColor = ""
 enableSQL = False
 
 # Oracle / HDB credential policy (Options → USBR password change)
+# Pre-12.2 Oracle max was 30 characters; keep 30 for HDB compatibility.
 oraclePasswordMinLength = 12
+oraclePasswordMaxLength = 30
 
 # All Oracle HDB databases used for multi-DB password change (display name → TNS alias)
 # PNHYD / GPHYD are not included (not standard HDB Oracle write targets).

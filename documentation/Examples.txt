@@ -9,6 +9,8 @@
 #   (quoted "jsmith" ≠ unquoted JSMITH → ORA-01918 user does not exist).
 # - Passwords should be double-quoted so special characters and case are kept.
 # - Passwords cannot contain double quotes (") or newline/return characters.
+# - App enforces min/max length (Config.oraclePasswordMinLength / oraclePasswordMaxLength;
+#   classic Oracle max is 30 characters).
 # - REPLACE is required for non-DBA users when a password verify function is set.
 # - You must be connected as that user (or as a DBA) before running ALTER USER.
 # - For an already-expired password, connect with newpassword= instead of ALTER USER.

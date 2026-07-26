@@ -195,6 +195,9 @@ def validateOraclePassword(password: str) -> Tuple[bool, str]:
     Never echoes the password itself.
     """
     minLen = int(getattr(Config, 'oraclePasswordMinLength', 12) or 12)
+    maxLen = int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30)
+    if maxLen < minLen:
+        maxLen = minLen
     forbiddenList = ', '.join(ORACLE_PASSWORD_FORBIDDEN_DISPLAY)
 
     if password is None:
@@ -215,13 +218,16 @@ def validateOraclePassword(password: str) -> Tuple[bool, str]:
             if label not in badChars:
                 badChars.append(label)
 
-    if length < minLen or badChars:
+    tooShort = length < minLen
+    tooLong = length > maxLen
+    if tooShort or tooLong or badChars:
         lines = [
             "Invalid Oracle password.",
             "",
             f"Minimum length: {minLen} character(s).",
+            f"Maximum length: {maxLen} character(s).",
         ]
-        if length < minLen:
+        if tooShort or tooLong:
             lines.append(f"Your password is {length} character(s).")
         lines.append("")
         lines.append(f"Characters not allowed: {forbiddenList}.")

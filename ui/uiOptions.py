@@ -142,7 +142,9 @@ class uiOptions(QDialog):
                     self.qleOraclePassword = Utils.customPasswordEdit(parent)
                     self.qleOraclePassword.setObjectName('qleOraclePassword')
                     self.qleOraclePassword.setPlaceholderText(oldOraclePassword.placeholderText())
-                    self.qleOraclePassword.setMaxLength(oldOraclePassword.maxLength())
+                    self.qleOraclePassword.setMaxLength(
+                        int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30)
+                    )
                     self.qleOraclePassword.setAlignment(oldOraclePassword.alignment())
                     self.qleOraclePassword.setStyleSheet(oldOraclePassword.styleSheet())
                     self.qleOraclePassword.setEnabled(oldOraclePassword.isEnabled())
@@ -163,7 +165,9 @@ class uiOptions(QDialog):
                 self.qleOraclePassword = Utils.customPasswordEdit(parent)
                 self.qleOraclePassword.setObjectName('qleOraclePassword')
                 self.qleOraclePassword.setPlaceholderText(oldOraclePassword.placeholderText())
-                self.qleOraclePassword.setMaxLength(oldOraclePassword.maxLength())
+                self.qleOraclePassword.setMaxLength(
+                    int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30)
+                )
                 self.qleOraclePassword.setAlignment(oldOraclePassword.alignment())
                 self.qleOraclePassword.setStyleSheet(oldOraclePassword.styleSheet())
                 self.qleOraclePassword.setEnabled(oldOraclePassword.isEnabled())
@@ -654,6 +658,7 @@ class uiOptions(QDialog):
         """Kick off parallel HDB password updates; results popup when finished."""
         # Parent signals to main window so they survive after Options closes
         winMain = self.winMain
+        optionsDialog = self  # reused dialog instance (hidden after accept)
         parent = winMain if winMain is not None else self
         signals = hdbPasswordChangeSignals(parent)
         if winMain is not None:
@@ -662,8 +667,15 @@ class uiOptions(QDialog):
             self._passwordChangeSignals = signals
 
         def onFinished(result):
+            reverted = False
             try:
-                uiOptions._showHdbPasswordChangeResults(parent, result)
+                success = list((result or {}).get('success') or [])
+                # Zero successful HDB updates → restore prior password locally
+                if not success and oldPassword is not None:
+                    reverted = uiOptions._revertOraclePassword(optionsDialog, oldPassword)
+                uiOptions._showHdbPasswordChangeResults(
+                    parent, result, passwordReverted=reverted
+                )
             except Exception as e:
                 Logic.logException("HDB password change result popup failed", e)
             finally:
@@ -679,17 +691,81 @@ class uiOptions(QDialog):
         QThreadPool.globalInstance().start(worker)
 
     @staticmethod
-    def _showHdbPasswordChangeResults(parent, result):
+    def _revertOraclePassword(optionsDialog, oldPassword):
+        """
+        Restore the previous Oracle password in keyring and winOptions field.
+        Called when no HDB database accepted the new password.
+        Returns True if keyring was restored. Never logs the password.
+        """
+        restored = False
+        try:
+            if oldPassword is not None and str(oldPassword) != '':
+                keyring.set_password("DataDoctor", "oraclePassword", oldPassword)
+                restored = True
+                Logic.logMessage(
+                    "INFO",
+                    "HDB password change failed on all databases; "
+                    "restored previous Oracle password in Options/keyring",
+                )
+        except Exception as e:
+            Logic.logMessage(
+                "ERROR",
+                f"Failed to restore previous Oracle password to keyring: {e}",
+            )
+
+        # Put old value back into the Options password field (dialog is reused)
+        try:
+            field = None
+            if optionsDialog is not None:
+                field = getattr(optionsDialog, 'qleOraclePassword', None)
+            if field is None:
+                # Fallback: main window's stored Options instance
+                winMain = getattr(optionsDialog, 'winMain', None) if optionsDialog else None
+                if winMain is not None:
+                    opts = getattr(winMain, 'winOptions', None)
+                    if opts is not None:
+                        field = getattr(opts, 'qleOraclePassword', None)
+            if field is not None and oldPassword is not None:
+                field.setText(oldPassword)
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        "Restored previous Oracle password into qleOraclePassword",
+                    )
+        except Exception as e:
+            Logic.logMessage(
+                "ERROR",
+                f"Failed to restore Oracle password field in Options: {e}",
+            )
+
+        # Allow reconnect with restored credentials
+        if restored:
+            try:
+                from core.Oracle import clearAuthFailure
+                clearAuthFailure()
+            except Exception:
+                pass
+
+        return restored
+
+    @staticmethod
+    def _showHdbPasswordChangeResults(parent, result, passwordReverted=False):
         """Popup summarizing which DBs changed and which errored (not missing users)."""
         success = list((result or {}).get('success') or [])
         errors = list((result or {}).get('errors') or [])
 
         if not success and not errors:
-            # All DBs skipped (ORA-01017 / no login) — not the same as proven ORA-01918
+            # All DBs skipped (ORA-01017 / no login)
             Logic.logMessage(
                 "INFO",
                 "HDB password change: no databases updated "
                 "(could not log in with prior credentials on any HDB)",
+            )
+            revertNote = (
+                "\n\nYour previous password was restored in Options."
+                if passwordReverted
+                else "\n\nCould not restore the previous password automatically; "
+                     "re-enter it in Options → USBR if needed."
             )
             QMessageBox.information(
                 parent,
@@ -699,8 +775,8 @@ class uiOptions(QDialog):
                 "Could not log in to any USBR HDB with the previous password. "
                 "That usually means either:\n"
                 "  • this account is not present on those databases, or\n"
-                "  • the previous password saved in Options was incorrect.\n\n"
-                "Your new password was still saved locally in Options.",
+                "  • the previous password saved in Options was incorrect."
+                + revertNote,
             )
             return
 
@@ -722,15 +798,22 @@ class uiOptions(QDialog):
                 else:
                     lines.append(f"  • {db}")
 
+        # All failed (errors only, zero success) — local password was reverted
+        if not success and passwordReverted:
+            lines.append("")
+            lines.append("No databases accepted the new password.")
+            lines.append("Your previous password was restored in Options.")
+
         # INFO summary without secrets
         Logic.logMessage(
             "INFO",
-            "HDB password change results: changed on [{}]; errors on [{}]".format(
+            "HDB password change results: changed on [{}]; errors on [{}]{}".format(
                 ', '.join(success) if success else 'none',
                 ', '.join(
                     (e[0] if isinstance(e, (list, tuple)) and e else str(e))
                     for e in errors
                 ) if errors else 'none',
+                '; local password reverted' if (not success and passwordReverted) else '',
             ),
         )
 
