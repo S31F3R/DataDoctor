@@ -1,6 +1,7 @@
 # QueryUtils.py
 
 import numpy as np
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from PyQt6.QtCore import Qt, QCoreApplication
 from PyQt6.QtGui import QColor, QBrush
@@ -99,24 +100,24 @@ def modifyTable(
         sIdx = pIdx + 1
         primaryVals = np.full(numRows, np.nan)
         secondaryVals = np.full(numRows, np.nan)
+        # Exact string→Decimal deltas (avoids float binary noise / scientific notation)
+        deltaDecimals = [None] * numRows
         pRule = ruleForId(dataIds[pIdx] if pIdx < len(dataIds) else None)
         sRule = ruleForId(dataIds[sIdx] if sIdx < len(dataIds) else None)
         # Deltas: use primary series rule (same units as primary)
         dRule = pRule
 
         for r in range(numRows):
-            try:
-                if grid[pIdx][r]:
-                    primaryVals[r] = float(grid[pIdx][r])
-            except ValueError:
-                pass
-            try:
-                if grid[sIdx][r]:
-                    secondaryVals[r] = float(grid[sIdx][r])
-            except ValueError:
-                pass
-
-        deltas = computeDeltas(primaryVals, secondaryVals)
+            pText = grid[pIdx][r] if pIdx < len(grid) else ''
+            sText = grid[sIdx][r] if sIdx < len(grid) else ''
+            pDec = parseDecimalText(pText)
+            sDec = parseDecimalText(sText)
+            if pDec is not None:
+                primaryVals[r] = float(pDec)
+            if sDec is not None:
+                secondaryVals[r] = float(sDec)
+            if pDec is not None and sDec is not None:
+                deltaDecimals[r] = pDec - sDec
 
         if overlayChecked:
             # Merge secondary into primary column offline
@@ -125,10 +126,10 @@ def modifyTable(
             for r in range(numRows):
                 hasP = np.isfinite(primaryVals[r])
                 hasS = np.isfinite(secondaryVals[r])
-                d = deltas[r]
+                # Prefer Decimal delta from display strings; never use str(float) path
                 pStr = Logic.valuePrecision(primaryVals[r], rule=pRule) if hasP else ''
                 sStr = Logic.valuePrecision(secondaryVals[r], rule=sRule) if hasS else ''
-                dStr = Logic.valuePrecision(d, rule=dRule) if np.isfinite(d) else ''
+                dStr = formatDeltaValue(deltaDecimals[r], dRule)
                 roles[r] = {
                     'primaryVal': pStr,
                     'secondaryVal': sStr,
@@ -199,8 +200,7 @@ def modifyTable(
         if deltaChecked:
             dCol = [''] * numRows
             for r in range(numRows):
-                d = deltas[r]
-                dCol[r] = Logic.valuePrecision(d, rule=dRule) if np.isfinite(d) else ''
+                dCol[r] = formatDeltaValue(deltaDecimals[r], dRule)
             finalCols.append(dCol)
             finalRoles.append([None] * numRows)
             finalHeaders.append("Delta")
@@ -334,9 +334,7 @@ def modifyTable(
 
 
 def processDelta(primaryVals, secondaryVals):
-    deltas = np.subtract(primaryVals, secondaryVals)
-    deltas[~ (np.isfinite(primaryVals) & np.isfinite(secondaryVals))] = np.nan
-    return deltas
+    return computeDeltas(primaryVals, secondaryVals)
 
 
 def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, queryInfos, pairIndex):
@@ -344,21 +342,20 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
     for r in range(numRows):
         item = table.item(r, pIdx)
         if item:
-            try:
-                primaryVal = float(item.text()) if item.text() else np.nan
-            except ValueError:
-                primaryVal = np.nan
+            pText = item.text().strip() if item.text() else ''
             sItem = table.item(r, sIdx)
-            try:
-                secondaryVal = float(sItem.text()) if sItem and sItem.text() else np.nan
-            except ValueError:
-                secondaryVal = np.nan
-            hasP = np.isfinite(primaryVal)
-            hasS = np.isfinite(secondaryVal)
-            d = deltas[r]
-            pStr = Logic.valuePrecision(primaryVal) if hasP else ''
-            sStr = Logic.valuePrecision(secondaryVal) if hasS else ''
-            dStr = Logic.valuePrecision(d) if np.isfinite(d) else ''
+            sText = sItem.text().strip() if sItem and sItem.text() else ''
+            pDec = parseDecimalText(pText)
+            sDec = parseDecimalText(sText)
+            hasP = pDec is not None
+            hasS = sDec is not None
+            pStr = Logic.valuePrecision(pText) if hasP else ''
+            sStr = Logic.valuePrecision(sText) if hasS else ''
+            dStr = (
+                formatDeltaValue(pDec - sDec)
+                if hasP and hasS
+                else ''
+            )
             # Legacy path — prefer main modifyTable rewrite which has per-series rules
             item.setData(Qt.ItemDataRole.UserRole, {
                 'primaryVal': pStr,
@@ -538,9 +535,57 @@ def applyUsbrRbaseFallbackColors(table, mainWindow, progressDialog=None):
         Logic.logMessage("DEBUG", "applyUsbrRbaseFallbackColors: finished pass")
 
 
+def parseDecimalText(text):
+    """
+    Parse a cell string to Decimal without float binary noise.
+    Returns None for blank / non-numeric.
+    """
+    if text is None:
+        return None
+    s = str(text).strip().replace(',', '')
+    if not s:
+        return None
+    try:
+        return Decimal(s)
+    except (InvalidOperation, ValueError, ArithmeticError):
+        return None
+
+
+def formatDeltaValue(deltaDec, rule=None):
+    """
+    Format a primary−secondary delta for the table / overlay UserRole.
+
+    Uses Decimal math + valuePrecision so raw mode never shows scientific
+    notation (e.g. 1e-12) for tiny residual differences.
+    """
+    if deltaDec is None:
+        return ''
+    try:
+        if not isinstance(deltaDec, Decimal):
+            deltaDec = Decimal(str(deltaDec))
+    except (InvalidOperation, ValueError, ArithmeticError):
+        return ''
+    if deltaDec.is_nan() or deltaDec.is_infinite():
+        return ''
+    # Exact zero
+    if deltaDec == 0:
+        return Logic.valuePrecision(0, rule=rule)
+    # Pass through valuePrecision (raw → formatRawNumber fixed-point; else DEC/SIG)
+    # Use string form so _toDecimal / float path does not reintroduce binary noise.
+    return Logic.valuePrecision(format(deltaDec, 'f'), rule=rule)
+
+
 def computeDeltas(primaryVals, secondaryVals):
+    """
+    Float/numpy delta array (legacy helpers / tests).
+    Prefer Decimal path in modifyTable for display strings.
+    """
     deltas = np.subtract(primaryVals, secondaryVals)
     deltas[~ (np.isfinite(primaryVals) & np.isfinite(secondaryVals))] = np.nan
+    # Collapse pure float noise to 0 so residual 1e-15 does not color as mismatch
+    with np.errstate(invalid='ignore'):
+        noise = np.isfinite(deltas) & (np.abs(deltas) < 1e-12)
+        deltas[noise] = 0.0
     return deltas
 
 
@@ -553,7 +598,10 @@ def addDeltaColumn(table, insertIdx, deltas):
 
     for r in range(numRows):
         d = deltas[r]
-        dStr = Logic.valuePrecision(d) if np.isfinite(d) else ''
+        if np.isfinite(d):
+            dStr = formatDeltaValue(Decimal(str(d)))
+        else:
+            dStr = ''
         item = QTableWidgetItem(dStr)
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
         item.setForeground(Config.systemTextColor)

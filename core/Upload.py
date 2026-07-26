@@ -5,7 +5,7 @@
 import queue
 import threading
 from decimal import Decimal, InvalidOperation
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush
@@ -130,11 +130,22 @@ def parseUploadValue(valueText):
 
 def dateTimeParams(interval, displayDt):
     """
-    Choose START_DATE_TIME vs END_DATE_TIME for MODIFY_R_BASE.
+    Choose START_DATE_TIME / END_DATE_TIME for MODIFY_R_BASE.
 
-    HOUR + EOP (Config.periodOffset True)  → END_DATE_TIME set, START null
-    HOUR + BOP (Config.periodOffset False) → START_DATE_TIME set, END null
-    All other intervals                    → START_DATE_TIME set, END null
+    MODIFY_R_BASE does not accept a null START_DATE_TIME, so EOP hour writes
+    must supply both ends of the period:
+
+      HOUR + EOP (Config.periodOffset True):
+        END_DATE_TIME   = display timestamp (end of period)
+        START_DATE_TIME = display timestamp − 1 hour
+
+      HOUR + BOP (Config.periodOffset False):
+        START_DATE_TIME = display timestamp
+        END_DATE_TIME   = null
+
+      All other intervals:
+        START_DATE_TIME = display timestamp
+        END_DATE_TIME   = null
     """
     if displayDt is None:
         raise ValueError('Timestamp datetime is None')
@@ -142,9 +153,11 @@ def dateTimeParams(interval, displayDt):
         raise ValueError(f'Timestamp must be datetime, got {type(displayDt)}')
 
     iv = str(interval or '').strip().upper()
-    # EOP for hour data: table timestamps come from end_date_time
+    # EOP hour: display ts is end-of-period; procedure needs a real start as well
     if iv == 'HOUR' and Config.periodOffset:
-        return None, displayDt
+        endDt = displayDt
+        startDt = displayDt - timedelta(hours=1)
+        return startDt, endDt
     return displayDt, None
 
 
