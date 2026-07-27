@@ -9,8 +9,8 @@ import queue
 from datetime import datetime, timedelta
 from core import Logic, Config, Query
 
-queryLimit = 500 # Configurable max points per API call
-maxThreads = 15 # Configurable max number of threads
+queryLimit = 30000 # Configurable max points per API call
+maxThreads = 50 # Configurable max number of threads
 
 def apiRead(dataIDs, startDate, endDate, interval):
     if Config.debug:
