@@ -4,20 +4,24 @@ import os
 import sys
 import json
 import keyring
-from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox, QPushButton, QTabWidget, QMessageBox, QWidget
-from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal
+from PyQt6.QtWidgets import (
+    QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox,
+    QPushButton, QTabWidget, QMessageBox, QWidget, QVBoxLayout, QLabel,
+)
+from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal, Qt
 from PyQt6.QtGui import QIcon
 from PyQt6 import uic
 from core import Logic, Utils, Config
 
 class hdbPasswordChangeSignals(QObject):
     """Signals for background multi-DB HDB password change."""
-    finished = pyqtSignal(object)  # result dict: success list, errors list of (db, msg)
+    finished = pyqtSignal(object)  # first-pass result dict
+    singleFinished = pyqtSignal(str, str, str)  # dbName, status, detail
 
 
 class hdbPasswordChangeWorker(QRunnable):
     """
-    Run changePasswordOnAllHdb off the UI thread.
+    Run changePasswordOnAllHdb off the UI thread (first parallel pass).
     Passwords are held only for this run and never logged.
     """
     def __init__(self, username, oldPassword, newPassword, signals):
@@ -28,7 +32,7 @@ class hdbPasswordChangeWorker(QRunnable):
         self.signals = signals
 
     def run(self):
-        result = {'success': [], 'errors': []}
+        result = {'success': [], 'errors': [], 'authFailed': []}
         try:
             from core.Oracle import changePasswordOnAllHdb
             result = changePasswordOnAllHdb(
@@ -41,13 +45,46 @@ class hdbPasswordChangeWorker(QRunnable):
             result = {
                 'success': [],
                 'errors': [('(all databases)', str(e))],
+                'authFailed': [],
             }
         finally:
-            # Drop secret references as soon as work finishes
             self.oldPassword = None
             self.newPassword = None
         try:
             self.signals.finished.emit(result)
+        except Exception:
+            pass
+
+
+class hdbSinglePasswordChangeWorker(QRunnable):
+    """Retry password change on one HDB database (after user supplies per-DB old password)."""
+    def __init__(self, dbName, username, oldPassword, newPassword, signals):
+        super().__init__()
+        self.dbName = dbName
+        self.username = username
+        self.oldPassword = oldPassword
+        self.newPassword = newPassword
+        self.signals = signals
+
+    def run(self):
+        status, detail = 'error', 'Unknown error'
+        try:
+            from core.Oracle import changePasswordOnDsn, databaseToDsn
+            status, detail = changePasswordOnDsn(
+                dsn=databaseToDsn(self.dbName),
+                username=self.username,
+                oldPassword=self.oldPassword,
+                newPassword=self.newPassword,
+                dbLabel=self.dbName,
+            )
+        except Exception as e:
+            Logic.logException(f"hdbSinglePasswordChangeWorker failed for {self.dbName}", e)
+            status, detail = 'error', str(e)
+        finally:
+            self.oldPassword = None
+            self.newPassword = None
+        try:
+            self.signals.singleFinished.emit(self.dbName, status, detail or '')
         except Exception:
             pass
 
@@ -655,8 +692,12 @@ class uiOptions(QDialog):
         super().accept()
 
     def _startHdbPasswordChange(self, username, oldPassword, newPassword):
-        """Kick off parallel HDB password updates; results popup when finished."""
-        # Parent signals to main window so they survive after Options closes
+        """
+        Kick off HDB password updates:
+          1) Parallel pass with Options-stored old password
+          2) For each DB with wrong password, sequential masked prompt + retry
+          3) Final summary (revert local password only if none succeeded)
+        """
         winMain = self.winMain
         optionsDialog = self  # reused dialog instance (hidden after accept)
         parent = winMain if winMain is not None else self
@@ -666,29 +707,217 @@ class uiOptions(QDialog):
         else:
             self._passwordChangeSignals = signals
 
-        def onFinished(result):
-            reverted = False
-            try:
-                success = list((result or {}).get('success') or [])
-                # Zero successful HDB updates → restore prior password locally
-                if not success and oldPassword is not None:
-                    reverted = uiOptions._revertOraclePassword(optionsDialog, oldPassword)
-                uiOptions._showHdbPasswordChangeResults(
-                    parent, result, passwordReverted=reverted
-                )
-            except Exception as e:
-                Logic.logException("HDB password change result popup failed", e)
-            finally:
-                if winMain is not None:
-                    winMain._hdbPasswordChangeSignals = None
+        state = {
+            'parent': parent,
+            'optionsDialog': optionsDialog,
+            'winMain': winMain,
+            'signals': signals,
+            'username': username,
+            'newPassword': newPassword,
+            'storedOldPassword': oldPassword,
+            'success': [],
+            'errors': [],
+            'authQueue': [],
+        }
 
-        signals.finished.connect(onFinished)
+        def onFirstPassFinished(result):
+            try:
+                state['success'] = list((result or {}).get('success') or [])
+                state['errors'] = list((result or {}).get('errors') or [])
+                authFailed = list((result or {}).get('authFailed') or [])
+                # Config order for stable sequential prompts
+                order = {n: i for i, n in enumerate(getattr(Config, 'hdbOracleDatabases', ()) or ())}
+                authFailed.sort(key=lambda n: order.get(n, 999))
+                state['authQueue'] = authFailed
+                Logic.logMessage(
+                    "INFO",
+                    f"HDB password first pass: {len(state['success'])} ok, "
+                    f"{len(state['errors'])} error(s), "
+                    f"{len(state['authQueue'])} need per-DB password",
+                )
+                uiOptions._processHdbAuthQueue(state)
+            except Exception as e:
+                Logic.logException("HDB password change first-pass handler failed", e)
+                uiOptions._finalizeHdbPasswordChange(state)
+
+        signals.finished.connect(onFirstPassFinished)
         worker = hdbPasswordChangeWorker(username, oldPassword, newPassword, signals)
         Logic.logMessage(
             "INFO",
             f"Starting HDB password change for user {username} on all USBR databases",
         )
         QThreadPool.globalInstance().start(worker)
+
+    @staticmethod
+    def _processHdbAuthQueue(state):
+        """
+        Sequentially prompt for each DB that rejected the stored old password,
+        then retry that DB alone. One popup at a time.
+        """
+        parent = state['parent']
+        queue = state.get('authQueue') or []
+
+        if not queue:
+            uiOptions._finalizeHdbPasswordChange(state)
+            return
+
+        dbName = queue.pop(0)
+        state['authQueue'] = queue
+        username = state.get('username') or ''
+
+        dbOldPassword = uiOptions._promptDbOldPassword(parent, dbName, username)
+        if not dbOldPassword:
+            Logic.logMessage(
+                "INFO",
+                f"HDB password prompt cancelled/skipped for {dbName}",
+            )
+            state['errors'].append((dbName, 'Skipped (no password entered)'))
+            uiOptions._processHdbAuthQueue(state)
+            return
+
+        signals = state['signals']
+        # Disconnect previous single-finished handlers to avoid stacking
+        try:
+            signals.singleFinished.disconnect()
+        except TypeError:
+            pass
+
+        def onSingleFinished(doneDb, status, detail):
+            try:
+                if status == 'success':
+                    if doneDb not in state['success']:
+                        state['success'].append(doneDb)
+                    Logic.logMessage(
+                        "INFO",
+                        f"HDB password changed on {doneDb} after per-DB password prompt",
+                    )
+                elif status == 'auth':
+                    # Still wrong after user entry — report, do not re-prompt forever
+                    state['errors'].append(
+                        (doneDb, detail or 'Wrong password for this database')
+                    )
+                    Logic.logMessage(
+                        "INFO",
+                        f"HDB password still wrong on {doneDb} after per-DB prompt",
+                    )
+                elif status == 'missing':
+                    # Definitive missing user — silent (do not list)
+                    Logic.logMessage(
+                        "INFO",
+                        f"HDB password change skipped on {doneDb}: user not found",
+                    )
+                else:
+                    state['errors'].append((doneDb, detail or 'Password change failed'))
+            except Exception as e:
+                Logic.logException(f"HDB single-retry handler failed for {doneDb}", e)
+                state['errors'].append((doneDb, str(e)))
+            finally:
+                # Next DB in queue (or finalize)
+                uiOptions._processHdbAuthQueue(state)
+
+        signals.singleFinished.connect(onSingleFinished)
+        worker = hdbSinglePasswordChangeWorker(
+            dbName=dbName,
+            username=username,
+            oldPassword=dbOldPassword,
+            newPassword=state['newPassword'],
+            signals=signals,
+        )
+        dbOldPassword = None  # drop local ref; worker holds until run ends
+        QThreadPool.globalInstance().start(worker)
+
+    @staticmethod
+    def _promptDbOldPassword(parent, dbName, username):
+        """
+        Modal masked password prompt for one HDB database.
+        Returns the password string, or None if cancelled / empty.
+        Never logs the password.
+        """
+        maxLen = int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30)
+        dialog = QDialog(parent)
+        dialog.setWindowTitle("HDB Current Password")
+        dialog.setModal(True)
+        layout = QVBoxLayout(dialog)
+
+        label = QLabel(
+            f"Could not change the password on <b>{dbName}</b>.<br><br>"
+            f"The password currently saved in Options does not work on this database "
+            f"(passwords often differ across HDBs).<br><br>"
+            f"Enter the <b>current</b> password for user <b>{username}</b> on "
+            f"<b>{dbName}</b>:",
+            dialog,
+        )
+        label.setWordWrap(True)
+        label.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(label)
+
+        pwdEdit = QLineEdit(dialog)
+        pwdEdit.setEchoMode(QLineEdit.EchoMode.Password)
+        pwdEdit.setMaxLength(maxLen)
+        pwdEdit.setPlaceholderText("Current password for this database")
+        layout.addWidget(pwdEdit)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        pwdEdit.setFocus()
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        text = pwdEdit.text() or ''
+        pwdEdit.clear()
+        if not text:
+            return None
+        return text
+
+    @staticmethod
+    def _finalizeHdbPasswordChange(state):
+        """Apply revert if needed, show summary, clear secrets from state."""
+        parent = state.get('parent')
+        optionsDialog = state.get('optionsDialog')
+        winMain = state.get('winMain')
+        storedOld = state.get('storedOldPassword')
+        success = list(state.get('success') or [])
+        errors = list(state.get('errors') or [])
+
+        # Stable order for display
+        order = {n: i for i, n in enumerate(getattr(Config, 'hdbOracleDatabases', ()) or ())}
+        success.sort(key=lambda n: order.get(n, 999))
+        errors.sort(key=lambda pair: order.get(pair[0] if isinstance(pair, (list, tuple)) else str(pair), 999))
+
+        result = {'success': success, 'errors': errors}
+        reverted = False
+        try:
+            if not success and storedOld is not None:
+                reverted = uiOptions._revertOraclePassword(optionsDialog, storedOld)
+            uiOptions._showHdbPasswordChangeResults(
+                parent, result, passwordReverted=reverted
+            )
+        except Exception as e:
+            Logic.logException("HDB password change finalize failed", e)
+        finally:
+            # Drop secrets
+            state['newPassword'] = None
+            state['storedOldPassword'] = None
+            if winMain is not None:
+                winMain._hdbPasswordChangeSignals = None
+            try:
+                sig = state.get('signals')
+                if sig is not None:
+                    try:
+                        sig.finished.disconnect()
+                    except TypeError:
+                        pass
+                    try:
+                        sig.singleFinished.disconnect()
+                    except TypeError:
+                        pass
+            except Exception:
+                pass
 
     @staticmethod
     def _revertOraclePassword(optionsDialog, oldPassword):
@@ -755,11 +984,10 @@ class uiOptions(QDialog):
         errors = list((result or {}).get('errors') or [])
 
         if not success and not errors:
-            # All DBs skipped (ORA-01017 / no login)
+            # Nothing changed and nothing reported (all silent missing, or no targets)
             Logic.logMessage(
                 "INFO",
-                "HDB password change: no databases updated "
-                "(could not log in with prior credentials on any HDB)",
+                "HDB password change: no databases updated",
             )
             revertNote = (
                 "\n\nYour previous password was restored in Options."
@@ -771,11 +999,8 @@ class uiOptions(QDialog):
                 parent,
                 "HDB Password Update",
                 "Password change finished.\n\n"
-                "No databases were updated.\n\n"
-                "Could not log in to any USBR HDB with the previous password. "
-                "That usually means either:\n"
-                "  • this account is not present on those databases, or\n"
-                "  • the previous password saved in Options was incorrect."
+                "No databases were updated "
+                "(account not found on any HDB, or none were reachable)."
                 + revertNote,
             )
             return
@@ -787,7 +1012,7 @@ class uiOptions(QDialog):
                 lines.append(f"  • {db}")
             lines.append("")
         if errors:
-            lines.append("Errors (account present but password was not changed):")
+            lines.append("Not updated:")
             for item in errors:
                 if isinstance(item, (list, tuple)) and len(item) >= 2:
                     db, msg = item[0], item[1]
@@ -798,7 +1023,7 @@ class uiOptions(QDialog):
                 else:
                     lines.append(f"  • {db}")
 
-        # All failed (errors only, zero success) — local password was reverted
+        # Zero success after prompts/retries — local password was reverted
         if not success and passwordReverted:
             lines.append("")
             lines.append("No databases accepted the new password.")

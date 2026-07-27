@@ -73,28 +73,43 @@ def isPasswordExpiredError(exc) -> bool:
     text = (str(exc) if exc is not None else '').upper()
     return 'ORA-28001' in text or 'PASSWORD HAS EXPIRED' in text or 'PASSWORD EXPIRED' in text
 
-def isUserMissingError(exc) -> bool:
-    """
-    True when Oracle reports the account is not present on this database.
-
-    ORA-01918 = user does not exist (definitive, usually from ALTER USER).
-    ORA-01017 on connect = invalid username/password — Oracle does not
-    distinguish "no such user" from "wrong password", so we treat it as
-    skip-for-this-DB (not a change failure to surface as a password-policy error).
-    """
-    code = _oracleErrorCode(exc)
-    if code in (1017, 1918):
+def isUserDoesNotExistError(exc) -> bool:
+    """True for ORA-01918 (user does not exist) — definitive missing account."""
+    if _oracleErrorCode(exc) == 1918:
         return True
     text = (str(exc) if exc is not None else '').upper()
-    if 'ORA-01017' in text or 'ORA-1017' in text or 'ORA-01918' in text:
+    return 'ORA-01918' in text or ('DOES NOT EXIST' in text and 'USER' in text)
+
+def isLoginAuthError(exc) -> bool:
+    """
+    True for ORA-01017 invalid username/password on connect.
+
+    Oracle does not distinguish wrong password from unknown user. For HDB
+    password change we treat this as 'auth' so the UI can prompt for that
+    database's current password (passwords often differ across HDBs).
+    """
+    if isUserDoesNotExistError(exc):
+        return False
+    code = _oracleErrorCode(exc)
+    if code == 1017:
         return True
-    if 'DOES NOT EXIST' in text and 'USER' in text:
+    text = (str(exc) if exc is not None else '').upper()
+    if 'ORA-01017' in text or 'ORA-1017' in text:
         return True
-    # Do NOT treat generic "invalid password" text alone as missing after connect
-    # succeeds — that can be a failed REPLACE/old-password check we should surface.
-    if 'INVALID USERNAME/PASSWORD' in text or 'USERNAME/PASSWORD' in text and 'INVALID' in text:
+    if 'INVALID USERNAME/PASSWORD' in text:
+        return True
+    if 'USERNAME/PASSWORD' in text and 'INVALID' in text:
+        return True
+    if 'INVALID USERNAME' in text or 'INVALID PASSWORD' in text:
         return True
     return False
+
+def isUserMissingError(exc) -> bool:
+    """
+    Legacy helper: login auth failure or definitive missing user.
+    Prefer isLoginAuthError / isUserDoesNotExistError for password-change flow.
+    """
+    return isLoginAuthError(exc) or isUserDoesNotExistError(exc)
 
 def oracleUserIdent(username: str) -> str:
     """
@@ -285,8 +300,9 @@ def changePasswordOnDsn(
 
     Returns (status, detail) where status is:
       'success' — password changed
-      'missing' — skip in UI (ORA-01017 connect / ORA-01918 user missing)
-      'error'   — authenticated or reachable but change failed (include detail)
+      'auth'    — ORA-01017: wrong password for this DB (UI may prompt for another)
+      'missing' — ORA-01918: user does not exist (silent skip)
+      'error'   — reachable but change failed (include detail)
 
     Does NOT set the global authFailureMessage (per-DB skips must not block others).
     Never logs password values or the ALTER USER SQL.
@@ -322,11 +338,17 @@ def changePasswordOnDsn(
                     )
                     return 'success', ''
                 except Exception as e2:
-                    if isUserMissingError(e2):
+                    if isLoginAuthError(e2):
                         Logic.logMessage(
                             "INFO",
-                            f"Oracle password change skipped on {label}: "
-                            f"login failed after expired password ({_safeErrorText(e2)})",
+                            f"Oracle password change needs per-DB password on {label} "
+                            f"(expired path login failed: {_safeErrorText(e2)})",
+                        )
+                        return 'auth', _safeErrorText(e2)
+                    if isUserDoesNotExistError(e2):
+                        Logic.logMessage(
+                            "INFO",
+                            f"Oracle password change skipped on {label}: user does not exist",
                         )
                         return 'missing', _safeErrorText(e2)
                     Logic.logMessage(
@@ -336,13 +358,19 @@ def changePasswordOnDsn(
                     )
                     return 'error', _safeErrorText(e2)
 
-            if isUserMissingError(e):
-                # ORA-01017: wrong password OR user not on this DB — skip (do not claim
-                # "user does not exist" as a hard fact; log ORA code for diagnosis)
+            if isLoginAuthError(e):
+                # Wrong password for this DB (or user not present — UI may prompt once)
                 Logic.logMessage(
                     "INFO",
-                    f"Oracle password change skipped on {label}: "
-                    f"could not log in with prior credentials ({_safeErrorText(e)})",
+                    f"Oracle password change needs per-DB password on {label}: "
+                    f"{_safeErrorText(e)}",
+                )
+                return 'auth', _safeErrorText(e)
+
+            if isUserDoesNotExistError(e):
+                Logic.logMessage(
+                    "INFO",
+                    f"Oracle password change skipped on {label}: user does not exist",
                 )
                 return 'missing', _safeErrorText(e)
 
@@ -376,11 +404,8 @@ def changePasswordOnDsn(
             )
             return 'success', ''
         except Exception as e:
-            code = _oracleErrorCode(e)
             # Only ORA-01918 is definitive "user does not exist" after a successful login
-            if code == 1918 or (
-                'ORA-01918' in (str(e) or '').upper()
-            ):
+            if isUserDoesNotExistError(e):
                 Logic.logMessage(
                     "INFO",
                     f"Oracle password change skipped on {label}: user {userIdent} does not exist",
@@ -422,19 +447,21 @@ def changePasswordOnAllHdb(
 
     Returns:
       {
-        'success': ['USBR-LCHDB', ...],
-        'errors':  [('USBR-YAOHDB', 'reason'), ...],
+        'success':    ['USBR-LCHDB', ...],
+        'errors':     [('USBR-YAOHDB', 'reason'), ...],
+        'authFailed': ['USBR-ECOHDB', ...],  # ORA-01017 — UI may prompt per DB
       }
-    Databases where the account did not exist are omitted (not success, not error).
+    Databases where the account did not exist (ORA-01918) are omitted.
     """
     databases = list(getattr(Config, 'hdbOracleDatabases', ()) or ())
     success: List[str] = []
     errors: List[Tuple[str, str]] = []
+    authFailed: List[str] = []
     lock = threading.Lock()
 
     if not databases:
         Logic.logMessage("WARN", "changePasswordOnAllHdb: no HDB databases configured")
-        return {'success': success, 'errors': errors}
+        return {'success': success, 'errors': errors, 'authFailed': authFailed}
 
     Logic.logMessage(
         "INFO",
@@ -453,6 +480,8 @@ def changePasswordOnAllHdb(
         with lock:
             if status == 'success':
                 success.append(dbName)
+            elif status == 'auth':
+                authFailed.append(dbName)
             elif status == 'error':
                 errors.append((dbName, detail))
             # 'missing' → intentional silence in UI summary
@@ -473,14 +502,16 @@ def changePasswordOnAllHdb(
     order = {name: i for i, name in enumerate(databases)}
     success.sort(key=lambda n: order.get(n, 999))
     errors.sort(key=lambda pair: order.get(pair[0], 999))
+    authFailed.sort(key=lambda n: order.get(n, 999))
 
     Logic.logMessage(
         "INFO",
-        f"Oracle password change finished for user {username}: "
+        f"Oracle password change pass finished for user {username}: "
         f"{len(success)} succeeded, {len(errors)} error(s), "
-        f"{len(databases) - len(success) - len(errors)} skipped (user not found)",
+        f"{len(authFailed)} need per-DB password, "
+        f"{len(databases) - len(success) - len(errors) - len(authFailed)} skipped (user not found)",
     )
-    return {'success': success, 'errors': errors}
+    return {'success': success, 'errors': errors, 'authFailed': authFailed}
 
 def pathHasDir(envValue, directory, sep):
     """True if directory already appears as a PATH-style entry."""
