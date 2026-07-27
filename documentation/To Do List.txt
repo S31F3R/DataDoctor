@@ -1,13 +1,63 @@
+####### TASKS #######
+-Go through all the bugs and fix them, unless there are questions. Move forward if in bug-smashing branch. if not, switch to bug-smashing, pull from testing, then run through tasks
+-Add ability to double click a query in the Query List and have it show back up in the text box for edit, but just the dataID part. allow this to be changed and when add query is hit, update the query in the exact spot it was double clicked in
+-Create an update script that merges user bunker.db files with one packaged from the program. This will help avoid wiping out user specific edits/additions
+    -Could make all new upgrades place zip in a pre created folder called Update. From there, the script can unzip and update the files
+    -Script would need to be taylored to different release versions, like windows launcher version script would act differently than linux raw python version
+    -Only fields that can be changed are dataType, siteName, valuePrecision, and database. only change if dataID and siteID match up with what was in there previously
+    -Create script in launcher area. I'll create other areas for Linux, Mac, etc later .Launcher is windows specific so script can be a .cmd or .py
+-Add a feature to detect if HDB linking fails. If it fails, try the query with the approperate database
+    -This may require having the queries already seperated prior to this, just in case it happens
+-Make it so the sql quickLooks can be re-ordered by moving up and down. This order needs to load this way on next open
+-Need scripts that package up the project into zip files. Each zip will need to package it differently, depending on the platform it's for. Scripts can be placed into a folder called "scripts" in the root of the project
+    -Windows:
+        -zip would need to take everything under launcher as the root of the zip
+        -Copy .venv, core, quickLook, ui over to the Project Files folder. LICENSE file should be copied over to root
+        -Copy oracle over to Project Files
+        -When DataDoctor.py is copied over, change it to DataDoctor.pyw
+-.cer or .pfx certs are what we have for Aquarius. our code is asking for a .pem file. is there a way to change this to accept the other certs? if not, can the code create the .pem if a .cer or .pfx is placed? if so, look for thoes files and convert to .pem if in that folder then clean out the old file
+
 ####### CURRENT BUGS #######
+-Clicking on a cell makes the header light up and change size. This makes the headers not fit the column anymore. Can we make it not change size?
 -Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
+-Overlay isn't taking a missing primary but data in secondary as a data edit. this is supposed to send secondary to primary when user hits upload data button
+    -This type of automatic edit should not pompt the message box if the edit wasn't sent and a new query was performed
+-Validate if the new USGS API still needs 65, 60, etc specificed. Since it's using a UID method, It might just need site-timeSeriesUID instead of site-timeSeriesUID-parameter
+    -Is it possible to run the queries without the time_series_id?
+        -If this is possible, if more than 1 time_series_id is found with the same parameter_code, can we have a popup that displays all of them and have the user pick the one they want?
+-Catch the other Oracle errors on password changes. Only display sucessful changes, wrong use/password, and locked accounts
+    -Already catching user doesn't exist. Just trying nto avoid error spam that won't make sense to users
+-UCHDB2 schema is under UCHDB
+    -Add schema into the config. Currnt logic will be used unless datbase is in the config. Can use existing by doing this:
+        hdbOracleDatabases = (
+            'USBR-LCHDB|LCHDBA',
+            'USBR-YAOHDB|YAOHDBA',
+            'USBR-UCHDB2|UCHDBA',
+            'USBR-ECOHDB|ECOHDBA',
+            'USBR-LBOHDB|LBOHDBA',
+            'USBR-KBOHDB|KBOHDBA',
+        )
+    -Need to make sure the | and data after that is not passed in any labels or comboboxes. That information is query information only    
+-Meta data bug with the UI not sizing up on inital upload when switching to Aquarius Details first then to UCBR-LCHDB Details. If I click on USBR-LCHDB Details first then Aquarius, no issue
+    -This bug only happens after right clicking on a cell to open the window. The tab hit first (after the default Overlay Details tab) sets the width, the next tab will size up only but not size down
+-Tooltips are missing on a lot of buttons on winMain. Add tooltips to all buttons in winMain
+    -Upload btn has an old tooltip, need to update it
+-If USGS meta data is already being pulled in during a public query, make it abailable via right click context menu. this is ONLY for USGS data, no other sites have public meta data
+-valuePrecision.json needs to be moved from documentation over to core
+-Clean up test.txt after a confirmed [x] and make that part of the standard workflow
+-Validate program uses packaged oracle if present. System Oracle should only be used if packaged isn't there
+    -Which sqlnet.ora file is being used? Is there any logic to use the packaged one?
+    -tnsnames.ora method has been working perfectly, no need to change this
 
 ####### NEW FEATURES #######
 -Need to build a query that updates dataDictionary without replacing user updated fields
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
     -Add a plot that graphs delta pair and overlays delta as a seperate line
+-Need to expand options for USBR and add the following options:
+    -Apply Overwrite Flag
 
 ####### MAIN INTERFACE MODIFICATIONS #######
 -Stress relief button that makes screaming goat sounds
@@ -16,6 +66,9 @@
 -Aquarius daily TZ offset (UC 2300 vs expected 0000)
     -Data review tool shows 00:00; issue tied to location TZ vs UTC offset in query
      meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
+
+####### WIKI IDEAS #######
+-QAQC and how it works with Data Dictionary
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme

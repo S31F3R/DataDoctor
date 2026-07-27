@@ -33,7 +33,7 @@ Need retest (this pass)
      h. rawData option still shows full precision (no DEC/SIG).
    Notes: Logic.ensureDataDictionarySchema; ValuePrecisionDelegate; buildTable rules.
 
-[ ] Logging: full Python tracebacks + Qt (QT_LOGGING_RULES) in app.log / Log Viewer
+[x] Logging: full Python tracebacks + Qt (QT_LOGGING_RULES) in app.log / Log Viewer
    Steps:
      a. Trigger a handled error path (or force one) → ERROR line in Log Viewer
         includes full Traceback body attached to that record.
