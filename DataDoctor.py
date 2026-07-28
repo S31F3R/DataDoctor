@@ -129,6 +129,27 @@ class uiMain(QMainWindow):
             if btn:
                 Utils.buttonStyle(btn, iconName, iconSize=iconSize)
 
+        # Ensure every main toolbar / data-tab button has a tooltip
+        # (.ui supplies most; fill gaps and keep Upload text current)
+        mainTooltips = {
+            self.btnPublicQuery: "Public data query (USGS / public sources)",
+            self.btnInternalQuery: "Internal data query (HDB / Aquarius / USGS)",
+            self.btnDataDictionary: "Data Dictionary",
+            self.btnExportCSV: "Export current table to CSV",
+            self.btnOptions: "Options (credentials, retro mode, SQL, QAQC)",
+            self.btnViewLog: "View application logs",
+            self.btnInfo: "About Data Doctor",
+            self.btnRefresh: "Refresh current query",
+            self.btnUndo: "Reset column sort to timestamp order",
+            self.btnUpload: "Upload edited cells to HDB (MODIFY / DELETE)",
+            self.btnRunQuery: "Run SQL query",
+            self.btnSaveSnippet: "Save SQL snippet",
+            self.btnDeleteSnippet: "Delete selected SQL snippet",
+        }
+        for btn, tip in mainTooltips.items():
+            if btn is not None:
+                btn.setToolTip(tip)
+
         # Set up layout
         centralLayout = self.centralWidget().layout()
 
@@ -828,34 +849,44 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")              
             menu = QMenu(self)
             
-            # Add metadata details if internal query, normal type
+            # Add metadata details:
+            #   - Internal: Aquarius / USBR / USGS (normal columns)
+            #   - Public: USGS only (public OGC metadata is already pulled with the query)
             colType = self.columnMetadata[col].get('type') if col < len(self.columnMetadata) else None
-            if self.currentQueryType == 'internal' and colType == 'normal':
+            isInternal = self.currentQueryType == 'internal'
+            isPublic = self.currentQueryType == 'public'
+            allowUsgsPublic = isPublic and db == 'USGS-NWIS'
+
+            if colType == 'normal' and (isInternal or allowUsgsPublic):
 
                 # Extract interval from queryInfos (e.g., '20179|HOUR|USBR-LCHDB' -> 'HOUR')
                 queryInfo = self.columnMetadata[col].get('queryInfos', ['|'])[0]
                 interval = queryInfo.split('|')[1] if '|' in queryInfo else 'HOUR' # Default to HOUR if missing
                 
-                if db == 'AQUARIUS' and isinstance(response, dict):
+                if isInternal and db == 'AQUARIUS' and isinstance(response, dict):
                     detailsAction = menu.addAction("Show details")
                     detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'AQUARIUS', interval))
 
                     if Config.debug:
                         Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for AQUARIUS")
-                elif db and str(db).startswith('USBR') and isinstance(response, list):
+                elif isInternal and db and str(db).startswith('USBR') and isinstance(response, list):
                     detailsAction = menu.addAction("Show details")
                     detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USBR', interval))
                     
                     if Config.debug:
                         Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USBR")
                 elif db == 'USGS-NWIS':
-                    # Always offer details for internal USGS (OGC full meta, legacy blanks)
+                    # Internal or public USGS — OGC full meta when available; legacy blanks
                     usgsResponse = response if isinstance(response, dict) else {"kind": "legacy", "seriesMeta": {}, "points": []}
                     detailsAction = menu.addAction("Show details")
                     detailsAction.triggered.connect(lambda r=row, c=col, ts=timestampStr, sl=seriesLabel, resp=usgsResponse, iv=interval: self.showMetadataDetails(r, c, ts, sl, resp, 'USGS', iv))
                     
                     if Config.debug:
-                        Logic.logMessage("DEBUG", f"showCellContextMenu: Added 'Show details' for USGS (kind={usgsResponse.get('kind')})")
+                        Logic.logMessage(
+                            "DEBUG",
+                            f"showCellContextMenu: Added 'Show details' for USGS "
+                            f"(queryType={self.currentQueryType}, kind={usgsResponse.get('kind')})",
+                        )
             
             # Add single action for overlay columns
             isOverlay = colType == 'overlay'

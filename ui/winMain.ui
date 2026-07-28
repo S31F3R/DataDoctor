@@ -122,7 +122,7 @@
          </rect>
         </property>
         <property name="toolTip">
-         <string>Reset colum sort</string>
+         <string>Reset column sort to timestamp order</string>
         </property>
         <property name="text">
          <string/>
@@ -148,7 +148,7 @@
          </rect>
         </property>
         <property name="toolTip">
-         <string>Upload changed data (dry-run to documentation/*.csv)</string>
+         <string>Upload edited cells to HDB (MODIFY / DELETE)</string>
         </property>
         <property name="text">
          <string/>
@@ -221,7 +221,7 @@
          </rect>
         </property>
         <property name="toolTip">
-         <string>Information</string>
+         <string>Run SQL query</string>
         </property>
         <property name="text">
          <string/>
@@ -247,7 +247,7 @@
          </rect>
         </property>
         <property name="toolTip">
-         <string>Information</string>
+         <string>Save SQL snippet</string>
         </property>
         <property name="text">
          <string/>
@@ -302,7 +302,7 @@
          </rect>
         </property>
         <property name="toolTip">
-         <string>Information</string>
+         <string>Delete selected SQL snippet</string>
         </property>
         <property name="text">
          <string/>
@@ -359,6 +359,9 @@
       <layout class="QHBoxLayout" name="horizontalLayout">
        <item>
         <widget class="QPushButton" name="btnPublicQuery">
+         <property name="toolTip">
+          <string>Public data query (USGS / public sources)</string>
+         </property>
          <property name="text">
           <string/>
          </property>
@@ -376,6 +379,9 @@
        </item>
        <item>
         <widget class="QPushButton" name="btnInternalQuery">
+         <property name="toolTip">
+          <string>Internal data query (HDB / Aquarius / USGS)</string>
+         </property>
          <property name="text">
           <string/>
          </property>
@@ -442,6 +448,9 @@
        </item>
        <item>
         <widget class="QPushButton" name="btnOptions">
+         <property name="toolTip">
+          <string>Options (credentials, retro mode, SQL, QAQC)</string>
+         </property>
          <property name="text">
           <string/>
          </property>
