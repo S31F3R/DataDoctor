@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QTableWidgetItem,
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
-                             QVBoxLayout, QHBoxLayout, QSplitter, QLabel)
+                             QVBoxLayout, QHBoxLayout, QSplitter, QLabel, QAbstractItemView)
 from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, QEvent, pyqtSignal
 from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
 from PyQt6 import uic
@@ -130,13 +130,13 @@ class uiMain(QMainWindow):
                 Utils.buttonStyle(btn, iconName, iconSize=iconSize)
 
         # Ensure every main toolbar / data-tab button has a tooltip
-        # (.ui supplies most; fill gaps and keep Upload text current)
+        # Keep labels short (no parenthetical lists on Public/Internal/Options)
         mainTooltips = {
-            self.btnPublicQuery: "Public data query (USGS / public sources)",
-            self.btnInternalQuery: "Internal data query (HDB / Aquarius / USGS)",
+            self.btnPublicQuery: "Public Queries",
+            self.btnInternalQuery: "Internal Queries",
             self.btnDataDictionary: "Data Dictionary",
             self.btnExportCSV: "Export current table to CSV",
-            self.btnOptions: "Options (credentials, retro mode, SQL, QAQC)",
+            self.btnOptions: "Options",
             self.btnViewLog: "View application logs",
             self.btnInfo: "About Data Doctor",
             self.btnRefresh: "Refresh current query",
@@ -187,7 +187,18 @@ class uiMain(QMainWindow):
         self.btnRunQuery.clicked.connect(self.runCustomQuery)
         self.btnSaveSnippet.clicked.connect(self.saveSnippet)
         self.listSnippets.doubleClicked.connect(self.loadSnippet)
-        self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)            
+        self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
+        # SQL snippets: drag-reorder + context menu up/down; order in user.config
+        if self.listSnippets:
+            self.listSnippets.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+            self.listSnippets.setDefaultDropAction(Qt.DropAction.MoveAction)
+            self.listSnippets.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            self.listSnippets.customContextMenuRequested.connect(self.showSnippetContextMenu)
+            try:
+                self.listSnippets.model().rowsMoved.connect(self.onSnippetsReordered)
+            except Exception:
+                pass
+            self.listSnippets.setToolTip("Drag to reorder, or right-click Move Up/Down")
 
         # Ensure tab widget expands
         self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -390,16 +401,32 @@ class uiMain(QMainWindow):
         super().closeEvent(event)
 
     def loadSnippets(self):
-        """Load SQL snippets from quickLook/sql into listSnippets."""
+        """Load SQL snippets from quickLook/sql into listSnippets (saved order first)."""
         try:
             sqlDir = Utils.getSqlSnippetDir()
 
             if self.listSnippets:
                 self.listSnippets.clear()
+                namesOnDisk = []
                 if os.path.isdir(sqlDir):
-                    for file in sorted(os.listdir(sqlDir)):
+                    for file in os.listdir(sqlDir):
                         if file.endswith(".sql"):
-                            self.listSnippets.addItem(file[:-4]) # Add name without .sql
+                            namesOnDisk.append(file[:-4])
+                # Prefer user-saved order; append any new files alphabetically at end
+                config = Utils.loadConfig()
+                savedOrder = config.get('sqlSnippetOrder') or []
+                ordered = []
+                seen = set()
+                for name in savedOrder:
+                    if name in namesOnDisk and name not in seen:
+                        ordered.append(name)
+                        seen.add(name)
+                for name in sorted(namesOnDisk, key=lambda s: s.lower()):
+                    if name not in seen:
+                        ordered.append(name)
+                        seen.add(name)
+                for name in ordered:
+                    self.listSnippets.addItem(name)
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Loaded {self.listSnippets.count()} SQL snippets")
             else:
@@ -407,6 +434,60 @@ class uiMain(QMainWindow):
                     Logic.logMessage("WARN", "listSnippets not found, skipping loadSnippets")
         except Exception as e:
             Logic.logException("loadSnippets failed", e)
+
+    def currentSnippetOrder(self):
+        """Return snippet names in current list order."""
+        if not self.listSnippets:
+            return []
+        return [
+            self.listSnippets.item(i).text()
+            for i in range(self.listSnippets.count())
+            if self.listSnippets.item(i)
+        ]
+
+    def saveSnippetOrder(self):
+        """Persist listSnippets order to user.config for next open."""
+        try:
+            config = Utils.loadConfig()
+            config['sqlSnippetOrder'] = self.currentSnippetOrder()
+            with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
+                json.dump(config, configFile, indent=2)
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"saveSnippetOrder: {config['sqlSnippetOrder']}",
+                )
+        except Exception as e:
+            Logic.logException("saveSnippetOrder failed", e)
+
+    def onSnippetsReordered(self, *args):
+        """Drag-drop finished — save order."""
+        self.saveSnippetOrder()
+
+    def showSnippetContextMenu(self, pos):
+        """Right-click: Move Up / Move Down for SQL snippet order."""
+        if not self.listSnippets:
+            return
+        item = self.listSnippets.itemAt(pos)
+        if item is None:
+            return
+        row = self.listSnippets.row(item)
+        menu = QMenu(self)
+        actUp = menu.addAction("Move Up")
+        actDown = menu.addAction("Move Down")
+        actUp.setEnabled(row > 0)
+        actDown.setEnabled(row < self.listSnippets.count() - 1)
+        chosen = menu.exec(self.listSnippets.mapToGlobal(pos))
+        if chosen == actUp and row > 0:
+            taken = self.listSnippets.takeItem(row)
+            self.listSnippets.insertItem(row - 1, taken)
+            self.listSnippets.setCurrentRow(row - 1)
+            self.saveSnippetOrder()
+        elif chosen == actDown and row < self.listSnippets.count() - 1:
+            taken = self.listSnippets.takeItem(row)
+            self.listSnippets.insertItem(row + 1, taken)
+            self.listSnippets.setCurrentRow(row + 1)
+            self.saveSnippetOrder()
 
     def saveSnippet(self):
         """Save current pteSQL content as .sql snippet."""
@@ -431,6 +512,7 @@ class uiMain(QMainWindow):
             with open(filePath, 'w', encoding='utf-8') as f:
                 f.write(sqlText)
             self.loadSnippets() # Reload list to show new snippet immediately
+            self.saveSnippetOrder()
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"saveSnippet: Saved snippet {name} to {filePath} and reloaded list")
@@ -482,6 +564,7 @@ class uiMain(QMainWindow):
             if os.path.exists(filePath):
                 os.remove(filePath)
                 self.listSnippets.takeItem(self.listSnippets.row(selected))
+                self.saveSnippetOrder()
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"deleteSnippet: Deleted {name} from {filePath} and removed from list")

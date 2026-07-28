@@ -51,6 +51,8 @@ class uiQuery(QMainWindow):
         # Define controls
         self.queryType = None
         self.winMain = winMain
+        # Row index being edited after double-click (None = Add appends a new row)
+        self.editingQueryIndex = None
         self.btnQuery = self.findChild(QPushButton, 'btnQuery')
         self.qleDataID = self.findChild(QLineEdit, 'qleDataID')
         self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
@@ -139,6 +141,8 @@ class uiQuery(QMainWindow):
         self.btnDown1.clicked.connect(self.btnDown1Pressed)
         self.btnQueryOptionsInfo.clicked.connect(self.btnQueryOptionsInfoPressed)
         self.cbDatabase.currentTextChanged.connect(self.onDatabaseChanged)
+        if self.listQueryList:
+            self.listQueryList.itemDoubleClicked.connect(self.onQueryListDoubleClicked)
 
         # Install event filters
         self.qleDataID.installEventFilter(self)
@@ -430,6 +434,37 @@ class uiQuery(QMainWindow):
             if Logic.Config.debug:
                 Logic.logMessage("DEBUG", f"btnDeleteQuickLookPressed: Attempted to delete example Quick Look '{quickLookName}'—skipped")
 
+    def onQueryListDoubleClicked(self, item):
+        """Load only the dataID of a list row into the text box for in-place edit."""
+        if item is None or self.listQueryList is None:
+            return
+        text = item.text().strip()
+        parts = text.split('|')
+        if len(parts) != 3:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"onQueryListDoubleClicked: invalid row {text!r}")
+            return
+        dataId, interval, database = parts
+        self.editingQueryIndex = self.listQueryList.row(item)
+        if self.qleDataID:
+            self.qleDataID.setText(dataId)
+            self.qleDataID.setFocus()
+            self.qleDataID.selectAll()
+        # Keep combos aligned with the row so the user sees context (dataID is what they edit)
+        if self.cbInterval and interval:
+            idx = self.cbInterval.findText(interval)
+            if idx >= 0:
+                self.cbInterval.setCurrentIndex(idx)
+        if self.cbDatabase and database is not None:
+            idx = self.cbDatabase.findText(database)
+            if idx >= 0:
+                self.cbDatabase.setCurrentIndex(idx)
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"onQueryListDoubleClicked: editing index={self.editingQueryIndex} dataID={dataId!r}",
+            )
+
     def btnAddQueryPressed(self):
         dataID = self.qleDataID.text().strip()
         interval = self.cbInterval.currentText()
@@ -440,6 +475,18 @@ class uiQuery(QMainWindow):
                 Logic.logMessage("DEBUG", "btnAddQueryPressed: No Data ID entered, skipping")
             return
 
+        # In-place edit: keep interval/database from the original list row (only dataID changes)
+        editIdx = self.editingQueryIndex
+        if (
+            editIdx is not None
+            and self.listQueryList is not None
+            and 0 <= editIdx < self.listQueryList.count()
+        ):
+            oldParts = self.listQueryList.item(editIdx).text().strip().split('|')
+            if len(oldParts) == 3:
+                interval = oldParts[1]
+                database = oldParts[2]
+
         # USGS: optional param on OGC; Site-Parameter may need multi-series pick
         if database == 'USGS-NWIS':
             try:
@@ -447,7 +494,7 @@ class uiQuery(QMainWindow):
                 resolved = USGS.resolveUsgsDataId(dataID, parent=self)
                 if resolved is None:
                     classified = USGS.classifyUid(dataID)
-                    if classified and classified[0] == 'ogc_lookup':
+                    if classified and classified[0] == 'ogcLookup':
                         QMessageBox.warning(
                             self,
                             "USGS Data ID",
@@ -474,13 +521,23 @@ class uiQuery(QMainWindow):
                 Logic.logException("btnAddQueryPressed: USGS resolve failed", e)
 
         itemText = f"{dataID}|{interval}|{database}"
-        self.listQueryList.addItem(itemText)
+        if (
+            editIdx is not None
+            and self.listQueryList is not None
+            and 0 <= editIdx < self.listQueryList.count()
+        ):
+            self.listQueryList.item(editIdx).setText(itemText)
+            self.listQueryList.setCurrentRow(editIdx)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"btnAddQueryPressed: Updated index {editIdx}: {itemText}")
+        else:
+            self.listQueryList.addItem(itemText)
+            self.listQueryList.scrollToBottom()
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"btnAddQueryPressed: Added item: {itemText}")
+        self.editingQueryIndex = None
         self.qleDataID.clear()
         self.qleDataID.setFocus()
-        self.listQueryList.scrollToBottom()
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"btnAddQueryPressed: Added item: {itemText}")
 
     def btnRemoveQueryPressed(self):
         selectedItems = self.listQueryList.selectedItems()
@@ -489,13 +546,28 @@ class uiQuery(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", "btnRemoveQueryPressed: No items selected, skipping")
             return
+        # Clear in-place edit index if that row is being removed
+        removedRows = {self.listQueryList.row(item) for item in selectedItems}
+        if self.editingQueryIndex is not None and self.editingQueryIndex in removedRows:
+            self.editingQueryIndex = None
+            if self.qleDataID:
+                self.qleDataID.clear()
         for item in selectedItems:
             self.listQueryList.takeItem(self.listQueryList.row(item))
+        # Adjust edit index if a row above it was removed
+        if self.editingQueryIndex is not None:
+            below = sum(1 for r in removedRows if r < self.editingQueryIndex)
+            self.editingQueryIndex -= below
+            if self.editingQueryIndex < 0 or self.editingQueryIndex >= self.listQueryList.count():
+                self.editingQueryIndex = None
         if Config.debug:
             Logic.logMessage("DEBUG", f"btnRemoveQueryPressed: Removed {len(selectedItems)} items")
 
     def btnClearQueryPressed(self):
         self.listQueryList.clear()
+        self.editingQueryIndex = None
+        if self.qleDataID:
+            self.qleDataID.clear()
         if Config.debug:
             Logic.logMessage("DEBUG", "btnClearQueryPressed: Cleared query list")
 
@@ -505,9 +577,10 @@ class uiQuery(QMainWindow):
             "DataID Formats",
             "AQUARIUS Format:\nUID\n\n"
             "USBR Format:\nSDID\nSDID-MRID\n\n"
-            "USGS Format:\nSite-Method-Parameter\n"
-            "  Method = numeric methodID (legacy waterservices)\n"
-            "  or 32-char hex time_series_id (modern OGC API)",
+            "USGS Format:\n"
+            "  Site-time_series_id[-parameter]  (OGC; parameter optional)\n"
+            "  Site-parameter  (looks up time_series_id; picker if multiple)\n"
+            "  Site-methodID-parameter  (legacy waterservices)",
         )
         if Config.debug:
             Logic.logMessage("DEBUG", "Data ID info displayed")

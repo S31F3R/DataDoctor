@@ -64,16 +64,21 @@ def apiRead(dataIDs, startDate, endDate, interval):
         Logic.logMessage("ERROR", "Missing Aquarius credentials.")
         return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
 
-    # Authenticate session with fallback for SSL verification
+    # Authenticate session with fallback for SSL verification.
+    # Accepts .pem, or auto-converts .cer / .crt / .pfx / .p12 in certs/ → aquarius.pem
     authData = {'Username': user, 'EncryptedPassword': password}
-    certPath = Logic.resourcePath('certs/aquarius.pem')
+    certPath = Logic.ensureAquariusPem()
     verifyMode = True
 
     for attempt in ['system', 'customCert', 'unverified']:
         try:
-            if attempt == 'customCert' and not os.path.exists(certPath):
+            if attempt == 'customCert' and (not certPath or not os.path.exists(certPath)):
                 if Config.debug:
-                    Logic.logMessage("DEBUG", "No certificate found at '{}', skipping to unverified.".format(certPath))
+                    Logic.logMessage(
+                        "DEBUG",
+                        "No Aquarius certificate found under certs/ "
+                        "(.pem / .cer / .pfx); skipping customCert.",
+                    )
                 continue
             verifyMode = certPath if attempt == 'customCert' else False if attempt == 'unverified' else True
             authResponse = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=authData, verify=verifyMode)
@@ -82,7 +87,12 @@ def apiRead(dataIDs, startDate, endDate, interval):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Authentication succeeded with verify={verifyMode}")
             if attempt == 'unverified' and Config.debug:
-                Logic.logMessage("WARN", "SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.")
+                Logic.logMessage(
+                    "WARN",
+                    "SSL verification disabled due to cert issues. "
+                    "Add aquarius.pem (or .cer / .pfx) to the certs/ folder "
+                    "or system trust store for secure connection.",
+                )
             break
         except requests.exceptions.SSLError as e:
             if Config.debug:

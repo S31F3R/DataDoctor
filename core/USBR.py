@@ -217,12 +217,50 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         Logic.logMessage("WARN", "No data after processing all batches.")
     return resultDict
 
-def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
+def isDbLinkError(exc):
+    """True if this looks like a failed Oracle database link (not auth)."""
+    if exc is None:
+        return False
+    try:
+        if Oracle.isAuthError(exc):
+            return False
+    except Exception:
+        pass
+    text = str(exc).upper() if exc is not None else ''
+    # Common link / remote-access failures
+    markers = (
+        'ORA-02019',  # connection description for remote database not found
+        'ORA-02068',  # following severe error from...
+        'ORA-02063',  # preceding line from...
+        'ORA-02085',  # database link ... connects to ...
+        'ORA-12154',  # TNS could not resolve (sometimes via link)
+        'ORA-12514',
+        'ORA-12541',
+        'ORA-12545',
+        'DATABASE LINK',
+        'DBLINK',
+    )
+    return any(m in text for m in markers)
+
+
+def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', forceDirect=False):
+    """
+    Read HDB data. When querying a non-primary DB, uses database link @dsn
+    from the primary connection. If the link fails, retries with a direct
+    connection to the target DSN (forceDirect).
+    """
     global primaryDsn
     if Config.debug:
-        Logic.logMessage("DEBUG", f"USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
+        Logic.logMessage(
+            "DEBUG",
+            f"USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, "
+            f"start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}, "
+            f"forceDirect={forceDirect}",
+        )
 
     # Parse svr to short lower if full format
+    if '|' in str(svr):
+        svr = str(svr).split('|', 1)[0].strip()
     if '-' in svr:
         svr = svr.split('-')[1].lower()
 
@@ -231,12 +269,23 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         primaryDsn = svr
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Set primaryDsn to first svr: {primaryDsn}")         
-    dsn = primaryDsn
+            Logic.logMessage("DEBUG", f"Set primaryDsn to first svr: {primaryDsn}")
 
     # Schema from Config.hdbOracleDatabases (|SCHEMA) when present; else legacy derivation
     from core.Utils import hdbSchemaForDatabase
-    schema = hdbSchemaForDatabase(f'USBR-{primaryDsn.upper()}')
+    targetSchema = hdbSchemaForDatabase(f'USBR-{svr.upper()}')
+
+    # Direct connect to target when forced or when this IS the primary
+    useDirect = forceDirect or (svr == primaryDsn)
+    if useDirect:
+        dsn = svr
+        link = ''
+        # Maps live on the same DB we're reading
+        schema = targetSchema
+    else:
+        dsn = primaryDsn
+        link = f'@{svr}'
+        schema = hdbSchemaForDatabase(f'USBR-{primaryDsn.upper()}')
 
     # Map interval to table suffix (consistent with apiRead)
     intervalMap = {
@@ -251,10 +300,6 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     }
 
     tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
-
-    # Derive target schema and link from svr
-    targetSchema = hdbSchemaForDatabase(f'USBR-{svr.upper()}')
-    link = f'@{svr}' if svr != primaryDsn else ''
 
     # Table names
     baseTable = f'{targetSchema}.r_base{link}'  # Always r_base for metadata
@@ -593,6 +638,17 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         resultDict[SDIDStr]['rawResponse'].extend(partial['rawResponse'])
 
     if workerErrors and not resultDict:
+        # Link failed entirely → retry with direct connection to target DSN
+        if link and not forceDirect and any(isDbLinkError(e) for e in workerErrors):
+            Logic.logMessage(
+                "WARN",
+                f"sqlRead: database link to {svr} failed; retrying with direct connection "
+                f"(no @{svr})",
+            )
+            return sqlRead(
+                svr, SDIDs, startDate, endDate, interval,
+                mrid=mrid, table=table, forceDirect=True,
+            )
         # Nothing succeeded — surface the first worker failure (e.g. client setup)
         raise workerErrors[0]
     if workerErrors and Config.debug:
@@ -601,6 +657,28 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             f"sqlRead: {len(workerErrors)} worker task(s) failed; continuing with partial results "
             f"for {len(resultDict)} SDIDs",
         )
+    # Partial results with link errors: still try direct for empty SDIDs once
+    if (
+        link
+        and not forceDirect
+        and workerErrors
+        and any(isDbLinkError(e) for e in workerErrors)
+        and any(str(s) not in resultDict for s in SDIDs)
+    ):
+        Logic.logMessage(
+            "WARN",
+            f"sqlRead: partial link failure for {svr}; retrying missing SDIDs via direct connect",
+        )
+        missing = [s for s in SDIDs if str(s) not in resultDict]
+        try:
+            directPartial = sqlRead(
+                svr, missing, startDate, endDate, interval,
+                mrid=mrid, table=table, forceDirect=True,
+            )
+            if isinstance(directPartial, dict):
+                resultDict.update(directPartial)
+        except Exception as e:
+            Logic.logException("sqlRead: direct fallback for missing SDIDs failed", e)
 
     # Sort per SDID
     for SDIDStr in resultDict:
