@@ -595,8 +595,74 @@ class uiOptions(QDialog):
             )
 
             if reply == QMessageBox.StandardButton.Ok:
-                python = sys.executable
-                os.execl(python, python, *sys.argv)
+                # Windows: os.execl often fails (pythonw, paths, launcher). Prefer
+                # QProcess.startDetached + clean quit on all platforms.
+                restarted = False
+                try:
+                    from PyQt6.QtCore import QProcess
+                    from PyQt6.QtWidgets import QApplication
+                    program = sys.executable
+                    # sys.argv[0] is the script/module; remaining are extra args
+                    arguments = list(sys.argv)
+                    cwd = os.getcwd()
+                    # startDetached(program, arguments) — arguments include script path
+                    ok = QProcess.startDetached(program, arguments, cwd)
+                    if ok:
+                        restarted = True
+                        Logic.logMessage(
+                            "INFO",
+                            f"Restarting DataDoctor via QProcess.startDetached: {program} {arguments}",
+                        )
+                        app = QApplication.instance()
+                        if app is not None:
+                            app.quit()
+                        else:
+                            sys.exit(0)
+                    else:
+                        Logic.logMessage(
+                            "WARN",
+                            "QProcess.startDetached returned False; trying subprocess",
+                        )
+                except Exception as e:
+                    Logic.logException("Retro restart via QProcess failed", e)
+
+                if not restarted:
+                    try:
+                        import subprocess
+                        # close_fds=False is more reliable on Windows
+                        kwargs = {}
+                        if sys.platform == 'win32':
+                            kwargs['close_fds'] = False
+                            # DETACHED_PROCESS so child survives parent exit
+                            CREATE_NEW_PROCESS_GROUP = 0x00000200
+                            DETACHED_PROCESS = 0x00000008
+                            kwargs['creationflags'] = CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
+                        subprocess.Popen([sys.executable] + list(sys.argv), cwd=os.getcwd(), **kwargs)
+                        restarted = True
+                        Logic.logMessage("INFO", "Restarting DataDoctor via subprocess.Popen")
+                        from PyQt6.QtWidgets import QApplication
+                        app = QApplication.instance()
+                        if app is not None:
+                            app.quit()
+                        else:
+                            sys.exit(0)
+                    except Exception as e:
+                        Logic.logException("Retro restart via subprocess failed", e)
+
+                if not restarted and sys.platform != 'win32':
+                    # Last resort on Unix only (historically reliable there)
+                    try:
+                        os.execl(sys.executable, sys.executable, *sys.argv)
+                    except Exception as e:
+                        Logic.logException("Retro restart via os.execl failed", e)
+
+                if not restarted:
+                    QMessageBox.warning(
+                        self,
+                        "Restart Failed",
+                        "Could not restart DataDoctor automatically.\n\n"
+                        "Please close and reopen the program for retro mode to apply.",
+                    )
             else:
                 self.chkbRetroMode.setChecked(previousRetro)
                 config['retroMode'] = previousRetro
@@ -726,13 +792,27 @@ class uiOptions(QDialog):
                 state['errors'] = list((result or {}).get('errors') or [])
                 authFailed = list((result or {}).get('authFailed') or [])
                 # Config order for stable sequential prompts
-                order = {n: i for i, n in enumerate(getattr(Config, 'hdbOracleDatabases', ()) or ())}
+                # Order by display name (strip |SCHEMA from config entries)
+                rawOrder = list(getattr(Config, 'hdbOracleDatabases', ()) or ())
+                order = {}
+                for i, entry in enumerate(rawOrder):
+                    name = str(entry).split('|', 1)[0].strip() if entry else ''
+                    if name:
+                        order[name] = i
                 authFailed.sort(key=lambda n: order.get(n, 999))
                 state['authQueue'] = authFailed
+                # success / errors already use display names from Oracle layer
+                state['success'] = [str(s).split('|', 1)[0].strip() for s in state['success']]
+                state['errors'] = [
+                    (str(pair[0]).split('|', 1)[0].strip(), pair[1])
+                    if isinstance(pair, (list, tuple)) and len(pair) >= 2
+                    else pair
+                    for pair in state['errors']
+                ]
                 Logic.logMessage(
                     "INFO",
                     f"HDB password first pass: {len(state['success'])} ok, "
-                    f"{len(state['errors'])} error(s), "
+                    f"{len(state['errors'])} locked/user-facing error(s), "
                     f"{len(state['authQueue'])} need per-DB password",
                 )
                 uiOptions._processHdbAuthQueue(state)
@@ -806,8 +886,15 @@ class uiOptions(QDialog):
                         "INFO",
                         f"HDB password change skipped on {doneDb}: user not found",
                     )
+                elif status == 'locked':
+                    state['errors'].append((doneDb, detail or 'Account locked'))
                 else:
-                    state['errors'].append((doneDb, detail or 'Password change failed'))
+                    # Non-auth / non-locked failures: log only (avoid UI spam)
+                    Logic.logMessage(
+                        "ERROR",
+                        f"HDB password change failed on {doneDb} (not shown in UI): "
+                        f"{detail or status}",
+                    )
             except Exception as e:
                 Logic.logException(f"HDB single-retry handler failed for {doneDb}", e)
                 state['errors'].append((doneDb, str(e)))
@@ -884,8 +971,12 @@ class uiOptions(QDialog):
         success = list(state.get('success') or [])
         errors = list(state.get('errors') or [])
 
-        # Stable order for display
-        order = {n: i for i, n in enumerate(getattr(Config, 'hdbOracleDatabases', ()) or ())}
+        # Stable order for display (strip |SCHEMA from config keys)
+        order = {}
+        for i, entry in enumerate(getattr(Config, 'hdbOracleDatabases', ()) or ()):
+            name = str(entry).split('|', 1)[0].strip() if entry else ''
+            if name:
+                order[name] = i
         success.sort(key=lambda n: order.get(n, 999))
         errors.sort(key=lambda pair: order.get(pair[0] if isinstance(pair, (list, tuple)) else str(pair), 999))
 

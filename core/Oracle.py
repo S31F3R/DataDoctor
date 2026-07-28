@@ -253,11 +253,29 @@ def validateOraclePassword(password: str) -> Tuple[bool, str]:
     return True, ''
 
 def databaseToDsn(dbName: str) -> str:
-    """USBR-LCHDB → lchdb."""
+    """USBR-LCHDB or USBR-LCHDB|LCHDBA → lchdb (strip optional |SCHEMA)."""
     s = str(dbName or '').strip()
+    if '|' in s:
+        s = s.split('|', 1)[0].strip()
     if '-' in s:
         return s.split('-', 1)[1].lower()
     return s.lower()
+
+
+def hdbDisplayName(dbName: str) -> str:
+    """Strip |SCHEMA so UI/logs never show query-only schema suffixes."""
+    s = str(dbName or '').strip()
+    if '|' in s:
+        return s.split('|', 1)[0].strip()
+    return s
+
+
+def isAccountLockedError(exc) -> bool:
+    """True for ORA-28000 account locked."""
+    if _oracleErrorCode(exc) == 28000:
+        return True
+    text = (str(exc) if exc is not None else '').upper()
+    return 'ORA-28000' in text or 'ACCOUNT IS LOCKED' in text or 'ACCOUNT LOCKED' in text
 
 def _executeAlterUserPassword(conn, username: str, oldPassword: str, newPassword: str) -> None:
     """
@@ -301,13 +319,14 @@ def changePasswordOnDsn(
     Returns (status, detail) where status is:
       'success' — password changed
       'auth'    — ORA-01017: wrong password for this DB (UI may prompt for another)
+      'locked'  — ORA-28000: account locked (shown to user)
       'missing' — ORA-01918: user does not exist (silent skip)
-      'error'   — reachable but change failed (include detail)
+      'error'   — other failure (logged only; not shown as spam to users)
 
     Does NOT set the global authFailureMessage (per-DB skips must not block others).
     Never logs password values or the ALTER USER SQL.
     """
-    label = dbLabel or dsn
+    label = hdbDisplayName(dbLabel or dsn)
     ensureOracleClientReady()
 
     try:
@@ -345,6 +364,12 @@ def changePasswordOnDsn(
                             f"(expired path login failed: {_safeErrorText(e2)})",
                         )
                         return 'auth', _safeErrorText(e2)
+                    if isAccountLockedError(e2):
+                        Logic.logMessage(
+                            "INFO",
+                            f"Oracle password change: account locked on {label}",
+                        )
+                        return 'locked', 'Account locked'
                     if isUserDoesNotExistError(e2):
                         Logic.logMessage(
                             "INFO",
@@ -367,6 +392,13 @@ def changePasswordOnDsn(
                 )
                 return 'auth', _safeErrorText(e)
 
+            if isAccountLockedError(e):
+                Logic.logMessage(
+                    "INFO",
+                    f"Oracle password change: account locked on {label}",
+                )
+                return 'locked', 'Account locked'
+
             if isUserDoesNotExistError(e):
                 Logic.logMessage(
                     "INFO",
@@ -374,7 +406,7 @@ def changePasswordOnDsn(
                 )
                 return 'missing', _safeErrorText(e)
 
-            # Other connect failures (TNS, network, locked, etc.)
+            # Other connect failures (TNS, network, etc.) — log only, no UI spam
             Logic.logMessage(
                 "ERROR",
                 f"Oracle password change connect failed on {label}: {_safeErrorText(e)}",
@@ -411,6 +443,12 @@ def changePasswordOnDsn(
                     f"Oracle password change skipped on {label}: user {userIdent} does not exist",
                 )
                 return 'missing', _safeErrorText(e)
+            if isAccountLockedError(e):
+                Logic.logMessage(
+                    "INFO",
+                    f"Oracle password change: account locked on {label} during ALTER",
+                )
+                return 'locked', 'Account locked'
             Logic.logMessage(
                 "ERROR",
                 f"Oracle password change failed on {label} for user {userIdent}: "
@@ -448,12 +486,15 @@ def changePasswordOnAllHdb(
     Returns:
       {
         'success':    ['USBR-LCHDB', ...],
-        'errors':     [('USBR-YAOHDB', 'reason'), ...],
+        'errors':     [('USBR-YAOHDB', 'reason'), ...],  # only locked (user-facing)
         'authFailed': ['USBR-ECOHDB', ...],  # ORA-01017 — UI may prompt per DB
       }
-    Databases where the account did not exist (ORA-01918) are omitted.
+    Databases where the account did not exist (ORA-01918) or other non-auth
+    failures (TNS/network) are omitted from the UI summary (logged only).
     """
-    databases = list(getattr(Config, 'hdbOracleDatabases', ()) or ())
+    rawDatabases = list(getattr(Config, 'hdbOracleDatabases', ()) or ())
+    # Normalize to display labels only (strip |SCHEMA)
+    databases = [hdbDisplayName(db) for db in rawDatabases if hdbDisplayName(db)]
     success: List[str] = []
     errors: List[Tuple[str, str]] = []
     authFailed: List[str] = []
@@ -482,9 +523,10 @@ def changePasswordOnAllHdb(
                 success.append(dbName)
             elif status == 'auth':
                 authFailed.append(dbName)
-            elif status == 'error':
-                errors.append((dbName, detail))
-            # 'missing' → intentional silence in UI summary
+            elif status == 'locked':
+                # User-facing: locked accounts only (not TNS/network spam)
+                errors.append((dbName, detail or 'Account locked'))
+            # 'missing' / 'error' → intentional silence in UI summary (still in app.log)
 
     maxWorkers = max(1, len(databases))
     with ThreadPoolExecutor(max_workers=maxWorkers) as executor:
@@ -507,9 +549,10 @@ def changePasswordOnAllHdb(
     Logic.logMessage(
         "INFO",
         f"Oracle password change pass finished for user {username}: "
-        f"{len(success)} succeeded, {len(errors)} error(s), "
+        f"{len(success)} succeeded, {len(errors)} locked/user-facing error(s), "
         f"{len(authFailed)} need per-DB password, "
-        f"{len(databases) - len(success) - len(errors) - len(authFailed)} skipped (user not found)",
+        f"{len(databases) - len(success) - len(errors) - len(authFailed)} skipped "
+        f"(user not found or non-auth connect error)",
     )
     return {'success': success, 'errors': errors, 'authFailed': authFailed}
 
@@ -568,6 +611,17 @@ def ensureOracleClientReady():
     """
     One-time Instant Client init + TNS_ADMIN. Safe to call from any thread;
     concurrent callers block until the first setup finishes.
+
+    Instant Client priority:
+      1. Packaged oracle/client next to the app (preferred)
+      2. System Instant Client already on PATH / LD_LIBRARY_PATH
+      3. Thin mode (no Instant Client) — last resort
+
+    sqlnet.ora / TNS_ADMIN:
+      - If TNS_ADMIN is already set in the environment, keep it (user/system tnsnames).
+      - Else, if packaged oracle/network/admin exists, point TNS_ADMIN there so the
+        bundled sqlnet.ora is used.
+      - tnsnames.ora path from Options is unchanged (works independently).
     """
     global clientInitialized
     if clientInitialized:
@@ -581,14 +635,6 @@ def ensureOracleClientReady():
         if platform.architecture()[0] != "64bit":
             raise RuntimeError("Only 64-bit platforms supported.")
 
-        clientDirPath = "oracle/client"
-        clientDir = Path(Logic.resourcePath(clientDirPath))
-        if not clientDir.exists():
-            raise FileNotFoundError(
-                f"Oracle Instant Client directory not found: {clientDir}. "
-                "Please download and unzip the Instant Client 23.9 for your platform into oracle/client."
-            )
-
         expectedFiles = {
             "windows": ["oci.dll"],
             "linux": ["libociei.so"],
@@ -597,51 +643,106 @@ def ensureOracleClientReady():
         requiredFiles = expectedFiles.get(system)
         if not requiredFiles:
             raise RuntimeError(f"Unsupported platform: {system}")
-        if Config.debug:
-            Logic.logMessage(
-                "DEBUG",
-                f"oracleConnection.setup: Checking for platform-specific files in {clientDir}: {requiredFiles}",
-            )
-        filesExist = all((clientDir / f).exists() for f in requiredFiles)
-        if not filesExist:
-            raise FileNotFoundError(
-                f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. "
-                "Please download and unzip the correct Instant Client 23.9 for your platform into oracle/client."
-            )
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"oracleConnection.setup: Validated Instant Client files for {system}")
 
-        ensureClientOnPath(clientDir)
+        clientDirPath = "oracle/client"
+        clientDir = Path(Logic.resourcePath(clientDirPath))
+        packagedReady = (
+            clientDir.exists()
+            and all((clientDir / f).exists() for f in requiredFiles)
+        )
 
-        try:
-            oracledb.init_oracle_client(lib_dir=str(clientDir))
-        except Exception as e:
-            # Already initialized in this process is fine
-            msg = str(e).lower()
-            if "already been initialized" in msg or "has already been called" in msg:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "oracleConnection.setup: Instant Client already initialized")
-            else:
-                raise
-
-        if Config.debug:
-            Logic.logMessage(
-                "DEBUG",
-                f"oracleConnection.setup: Initialized oracledb with clientDir {clientDir}",
-            )
-
-        # TNS_ADMIN: prefer existing env (user tnsnames), else bundled admin
-        envTns = os.environ.get('TNS_ADMIN')
-        if envTns:
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"oracleConnection.setup: Using env TNS_ADMIN: {envTns} (no copy)")
-        else:
-            resourceAdmin = Logic.resourcePath('oracle/network/admin')
-            os.environ['TNS_ADMIN'] = resourceAdmin
+        if packagedReady:
             if Config.debug:
                 Logic.logMessage(
                     "DEBUG",
-                    f"oracleConnection.setup: Set TNS_ADMIN to program's path: {resourceAdmin} (no copy)",
+                    f"oracleConnection.setup: Using packaged Instant Client at {clientDir}",
+                )
+            ensureClientOnPath(clientDir)
+            try:
+                oracledb.init_oracle_client(lib_dir=str(clientDir))
+            except Exception as e:
+                msg = str(e).lower()
+                if "already been initialized" in msg or "has already been called" in msg:
+                    if Config.debug:
+                        Logic.logMessage(
+                            "DEBUG",
+                            "oracleConnection.setup: Instant Client already initialized",
+                        )
+                else:
+                    raise
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.setup: Initialized oracledb with packaged clientDir {clientDir}",
+                )
+        else:
+            # Packaged client missing — try system Instant Client, then thin mode
+            if clientDir.exists():
+                Logic.logMessage(
+                    "WARN",
+                    f"oracleConnection.setup: Packaged Instant Client incomplete at {clientDir}; "
+                    f"trying system Oracle client",
+                )
+            else:
+                Logic.logMessage(
+                    "WARN",
+                    f"oracleConnection.setup: Packaged Instant Client not found at {clientDir}; "
+                    f"trying system Oracle client",
+                )
+            try:
+                oracledb.init_oracle_client()  # system search path / ORACLE_HOME
+                Logic.logMessage(
+                    "INFO",
+                    "oracleConnection.setup: Using system Instant Client (packaged not available)",
+                )
+            except Exception as e:
+                msg = str(e).lower()
+                if "already been initialized" in msg or "has already been called" in msg:
+                    if Config.debug:
+                        Logic.logMessage(
+                            "DEBUG",
+                            "oracleConnection.setup: Instant Client already initialized (system)",
+                        )
+                else:
+                    # Thin mode — works for many DSNs; TCPS/wallet may still need thick client
+                    Logic.logMessage(
+                        "WARN",
+                        f"oracleConnection.setup: No Instant Client available "
+                        f"({_safeErrorText(e)}); continuing in thin mode",
+                    )
+
+        # TNS_ADMIN / sqlnet.ora: env wins; else prefer packaged network/admin
+        envTns = os.environ.get('TNS_ADMIN')
+        resourceAdmin = Logic.resourcePath('oracle/network/admin')
+        packagedAdminExists = os.path.isdir(resourceAdmin)
+
+        if envTns:
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.setup: Using env TNS_ADMIN: {envTns} "
+                    f"(sqlnet.ora from that directory if present)",
+                )
+        elif packagedAdminExists:
+            os.environ['TNS_ADMIN'] = resourceAdmin
+            sqlnetPath = os.path.join(resourceAdmin, 'sqlnet.ora')
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.setup: Set TNS_ADMIN to packaged path: {resourceAdmin} "
+                    f"(sqlnet.ora present={os.path.isfile(sqlnetPath)})",
+                )
+            else:
+                Logic.logMessage(
+                    "INFO",
+                    f"oracleConnection.setup: Using packaged sqlnet.ora/TNS_ADMIN at {resourceAdmin}",
+                )
+        else:
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    "oracleConnection.setup: No TNS_ADMIN env and no packaged "
+                    "oracle/network/admin — Oracle default name resolution only",
                 )
 
         clientInitialized = True
