@@ -91,9 +91,12 @@ def databaseToDsn(dbName):
     """
     Map UI database name to Oracle TNS alias.
     USBR-LCHDB → lchdb; USBR-UCHDB2 → uchdb2.
+    Strips optional |SCHEMA from Config entries.
     Writing cannot use database links — connect to each DSN separately.
     """
     s = str(dbName or '').strip()
+    if '|' in s:
+        s = s.split('|', 1)[0].strip()
     if '-' in s:
         return s.split('-', 1)[1].lower()
     return s.lower()
@@ -390,10 +393,16 @@ def snapshotBaseline(table, mainWindow=None):
     """
     After query/QAQC colors are applied: store original text + colors per cell
     so later edits can be flagged and reverted styles restored.
+
+    Overlay special case: missing primary with secondary data is treated as an
+    automatic edit (secondary → primary on upload). Those cells are marked dirty
+    with originalText='' and autoOverlayFill=True so re-query does not prompt
+    about "unsaved edits" for fills the user never typed.
     """
     if table is None:
         return
     table.blockSignals(True)
+    autoFillCount = 0
     try:
         from PyQt6.QtWidgets import QTableWidgetItem
 
@@ -409,20 +418,43 @@ def snapshotBaseline(table, mainWindow=None):
                 user = getUserDict(item)
                 bg, fg = captureItemColors(item)
                 text = item.text() if item.text() is not None else ''
+
+                # Secondary-only overlay → auto edit to write secondary into primary
+                autoOverlayFill = False
+                originalText = text
+                dirty = False
+                if (
+                    isinstance(user, dict)
+                    and user.get('overlay')
+                    and mainWindow is not None
+                    and not isPublicQuery(mainWindow)
+                ):
+                    pStr = str(user.get('primaryVal', '') or '').strip()
+                    sStr = str(user.get('secondaryVal', '') or '').strip()
+                    if not pStr and sStr:
+                        autoOverlayFill = True
+                        originalText = ''  # primary was empty — upload is a real write
+                        dirty = True
+                        autoFillCount += 1
+
                 user[editKey] = {
-                    'originalText': text,
+                    'originalText': originalText,
                     'baselineBg': bg,
                     'baselineFg': fg,
-                    'dirty': False,
+                    'dirty': dirty,
                     'uploaded': False,
+                    'autoOverlayFill': autoOverlayFill,
                 }
                 setUserDict(item, user)
+                if dirty:
+                    applyEditStyle(item)
         if mainWindow is not None:
             mainWindow.uploadBaselineReady = True
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
-                f"Upload.snapshotBaseline: {table.rowCount()}×{table.columnCount()} cells",
+                f"Upload.snapshotBaseline: {table.rowCount()}×{table.columnCount()} cells"
+                f", autoOverlayFill={autoFillCount}",
             )
     finally:
         table.blockSignals(False)
@@ -430,8 +462,15 @@ def snapshotBaseline(table, mainWindow=None):
     applyEditability(table, mainWindow)
 
 
-def countPendingEdits(mainWindow):
-    """Number of cells with unsaved (dirty) edits."""
+def countPendingEdits(mainWindow, includeAutoOverlayFill=False):
+    """
+    Number of cells with unsaved (dirty) edits.
+
+    By default, autoOverlayFill cells (secondary-only overlay fills flagged for
+    upload) are excluded so re-query / refresh does not warn about automatic
+    edits the user never typed. Pass includeAutoOverlayFill=True to count them
+    (e.g. upload path already uses dirty only via collectUploadRows).
+    """
     if mainWindow is None:
         return 0
     table = mainWindow.mainTable
@@ -444,8 +483,11 @@ def countPendingEdits(mainWindow):
             if item is None:
                 continue
             _, edit = getEditState(item)
-            if edit.get('dirty'):
-                n += 1
+            if not edit.get('dirty'):
+                continue
+            if edit.get('autoOverlayFill') and not includeAutoOverlayFill:
+                continue
+            n += 1
     return n
 
 
@@ -453,12 +495,14 @@ def confirmDiscardPendingEdits(parent, actionDescription="run a new query"):
     """
     If dirty edits exist, warn and ask to discard or cancel.
     Returns True if safe to proceed (no edits, or user chose discard).
+
+    Auto overlay fills (secondary-only → primary) do not trigger this prompt.
     """
     mainWindow = parent
     # uiQuery passes itself; prefer winMain when present
     if hasattr(parent, 'winMain') and parent.winMain is not None:
         mainWindow = parent.winMain
-    count = countPendingEdits(mainWindow)
+    count = countPendingEdits(mainWindow, includeAutoOverlayFill=False)
     if count <= 0:
         return True
 
@@ -505,19 +549,26 @@ def onItemChanged(mainWindow, item):
         if current != original:
             edit['dirty'] = True
             edit['uploaded'] = False
+            # Manual edit (or change away from auto fill) is a real user edit
+            if edit.get('autoOverlayFill') and current != (user.get('secondaryVal') or ''):
+                edit['autoOverlayFill'] = False
             user[editKey] = edit
             setUserDict(item, user)
             applyEditStyle(item)
         else:
             # Restored to original — clear dirty; keep uploaded style if already uploaded
             wasUploaded = bool(edit.get('uploaded'))
+            wasAuto = bool(edit.get('autoOverlayFill'))
             edit['dirty'] = False
+            edit['autoOverlayFill'] = False
             user[editKey] = edit
             setUserDict(item, user)
             if wasUploaded:
                 applyUploadOkStyle(item)
             else:
                 applyColors(item, edit.get('baselineBg'), edit.get('baselineFg'))
+            # If user cleared an auto-fill back to '' (original), that is fine
+            _ = wasAuto
     finally:
         table.blockSignals(False)
 
@@ -613,6 +664,7 @@ def collectUploadRows(mainWindow):
                 originalText = ''
             value = item.text() if item.text() is not None else ''
 
+            reason = 'overlaySecondaryFill' if edit.get('autoOverlayFill') else 'userEdit'
             rows.append({
                 'database': primary['db'],
                 'dataId': primary['dataId'],
@@ -620,7 +672,7 @@ def collectUploadRows(mainWindow):
                 'timestamp': timestamp,
                 'value': value,
                 'originalValue': originalText,
-                'reason': 'userEdit',
+                'reason': reason,
                 'row': r,
                 'col': c,
             })

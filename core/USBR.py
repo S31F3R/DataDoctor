@@ -233,7 +233,10 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         if Config.debug:
             Logic.logMessage("DEBUG", f"Set primaryDsn to first svr: {primaryDsn}")         
     dsn = primaryDsn
-    schema = primaryDsn.upper().rstrip('2') + 'A' if primaryDsn.endswith('2') else primaryDsn.upper() + 'A'
+
+    # Schema from Config.hdbOracleDatabases (|SCHEMA) when present; else legacy derivation
+    from core.Utils import hdbSchemaForDatabase
+    schema = hdbSchemaForDatabase(f'USBR-{primaryDsn.upper()}')
 
     # Map interval to table suffix (consistent with apiRead)
     intervalMap = {
@@ -250,7 +253,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
 
     # Derive target schema and link from svr
-    targetSchema = svr.upper().rstrip('2') + 'A' if svr.endswith('2') else svr.upper() + 'A'
+    targetSchema = hdbSchemaForDatabase(f'USBR-{svr.upper()}')
     link = f'@{svr}' if svr != primaryDsn else ''
 
     # Table names

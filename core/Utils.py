@@ -393,6 +393,9 @@ def applyTableRowMetrics(table, font=None):
         vHeader.setMinimumSectionSize(max(metrics.height() + 2, 16))
 
         hHeader = table.horizontalHeader()
+        # Cell selection must not resize header sections (style "selected" chrome)
+        hHeader.setHighlightSections(False)
+        vHeader.setHighlightSections(False)
         if Config.retroMode:
             hHeader.setMinimumHeight(tableHeaderBarHeight(font, metrics))
         else:
@@ -416,6 +419,15 @@ def autoSizeTableColumns(table, sampleRows=100):
     numRows = table.rowCount()
     if numCols == 0:
         return
+
+    # Prevent selection highlight from changing section metrics / clipping labels
+    try:
+        hHeader = table.horizontalHeader()
+        vHeader = table.verticalHeader()
+        hHeader.setHighlightSections(False)
+        vHeader.setHighlightSections(False)
+    except Exception:
+        pass
 
     font = table.font()
     metrics = QFontMetrics(font)
@@ -441,7 +453,7 @@ def autoSizeTableColumns(table, sampleRows=100):
             finalWidth = maxCell + (headerWidth - maxCell) + 10
         else:
             finalWidth += 20
-        # Extra pad so selected/highlighted header text is not clipped
+        # Extra pad so multi-line header text is not clipped at edges
         finalWidth += 2
         table.setColumnWidth(c, finalWidth)
 
@@ -846,8 +858,59 @@ def loadQuickLooks(cbQuickLook):
     """Load all Quick Looks into the provided combobox."""
     Logic.loadAllQuickLooks(cbQuickLook)
 
+def hdbDatabaseLabel(entry):
+    """
+    Strip optional |SCHEMA suffix from an hdbOracleDatabases entry.
+    'USBR-UCHDB2|UCHDBA' → 'USBR-UCHDB2'; bare names pass through.
+    """
+    s = str(entry or '').strip()
+    if '|' in s:
+        return s.split('|', 1)[0].strip()
+    return s
+
+
+def hdbSchemaForDatabase(dbName):
+    """
+    Resolve HDB Oracle schema for a database label (e.g. USBR-UCHDB2 → UCHDBA).
+
+    Prefer Config.hdbOracleDatabases 'LABEL|SCHEMA' entries. Fall back to the
+    historical rstrip('2')+'A' derivation when the DB is not listed.
+    """
+    label = hdbDatabaseLabel(dbName)
+    if not label:
+        return ''
+
+    # Match against config entries (with or without USBR- prefix on either side)
+    entries = getattr(Config, 'hdbOracleDatabases', ()) or ()
+    labelUpper = label.upper()
+    shortUpper = labelUpper.split('-', 1)[-1] if '-' in labelUpper else labelUpper
+
+    for entry in entries:
+        entryStr = str(entry or '').strip()
+        if not entryStr:
+            continue
+        if '|' in entryStr:
+            namePart, schemaPart = entryStr.split('|', 1)
+            namePart = namePart.strip()
+            schemaPart = schemaPart.strip()
+        else:
+            namePart, schemaPart = entryStr, ''
+        nameUpper = namePart.upper()
+        nameShort = nameUpper.split('-', 1)[-1] if '-' in nameUpper else nameUpper
+        if nameUpper == labelUpper or nameShort == shortUpper:
+            if schemaPart:
+                return schemaPart.upper()
+            break
+
+    # Legacy derivation: uchdb2 → UCHDBA, lchdb → LCHDBA
+    dsn = shortUpper.lower()
+    if dsn.endswith('2'):
+        return dsn.upper().rstrip('2') + 'A'
+    return dsn.upper() + 'A'
+
+
 def loadDatabase(comboBox, queryType=None):
-    """Populate the database combo box with static databases."""
+    """Populate the database combo box with static databases (no |SCHEMA in labels)."""
     if comboBox:
         if Config.debug:
             Logic.logMessage("DEBUG", "Populating cbDatabase")
@@ -856,13 +919,21 @@ def loadDatabase(comboBox, queryType=None):
         if queryType == 'internal' and queryType != 'sql': 
             comboBox.addItem('AQUARIUS')
 
-        # Populate database combobox        
-        comboBox.addItem('USBR-LCHDB')
-        comboBox.addItem('USBR-YAOHDB')
-        comboBox.addItem('USBR-UCHDB2')
-        comboBox.addItem('USBR-ECOHDB')
-        comboBox.addItem('USBR-LBOHDB')
-        comboBox.addItem('USBR-KBOHDB')
+        # HDB databases from config — display name only (strip |SCHEMA)
+        seen = set()
+        for entry in getattr(Config, 'hdbOracleDatabases', ()) or ():
+            name = hdbDatabaseLabel(entry)
+            if name and name not in seen:
+                comboBox.addItem(name)
+                seen.add(name)
+
+        # Fallback if config empty
+        if not seen:
+            for name in (
+                'USBR-LCHDB', 'USBR-YAOHDB', 'USBR-UCHDB2',
+                'USBR-ECOHDB', 'USBR-LBOHDB', 'USBR-KBOHDB',
+            ):
+                comboBox.addItem(name)
 
         if queryType != 'sql':
             comboBox.addItem('USGS-NWIS')

@@ -907,7 +907,7 @@ _STAGE_KEYWORDS = ('stage', 'gage height', 'level')
 
 def loadAquariusRoundingSpecs(forceReload=False):
     """
-    Load documentation/valuePrecision.json.
+    Load core/valuePrecision.json (falls back to documentation/ for older installs).
     Returns (identifierList, identifier → RoundingSpec|None).
     Identifiers without RoundingSpec still appear in the combobox.
     """
@@ -917,7 +917,12 @@ def loadAquariusRoundingSpecs(forceReload=False):
 
     byId = {}
     ordered = []
-    path = resourcePath('documentation/valuePrecision.json')
+    path = resourcePath('core/valuePrecision.json')
+    if not os.path.isfile(path):
+        # Legacy location (pre-move from documentation/)
+        legacy = resourcePath('documentation/valuePrecision.json')
+        if os.path.isfile(legacy):
+            path = legacy
     try:
         with open(path, 'r', encoding='utf-8') as f:
             payload = json.load(f)

@@ -678,6 +678,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     header.setStretchLastSection(False)
     vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    # Cell selection must not light up / resize header sections
+    header.setHighlightSections(False)
+    vHeader.setHighlightSections(False)
 
     # Row height before setRowCount so new sections pick up the platform-tuned size
     # (non-retro Windows is tighter; Linux Noto +10; retro keeps roomier pad)
