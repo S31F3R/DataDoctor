@@ -18,38 +18,10 @@
 -.cer or .pfx certs are what we have for Aquarius. our code is asking for a .pem file. is there a way to change this to accept the other certs? if not, can the code create the .pem if a .cer or .pfx is placed? if so, look for thoes files and convert to .pem if in that folder then clean out the old file
 
 ####### CURRENT BUGS #######
--Clicking on a cell makes the header light up and change size. This makes the headers not fit the column anymore. Can we make it not change size?
--Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
--Overlay isn't taking a missing primary but data in secondary as a data edit. this is supposed to send secondary to primary when user hits upload data button
-    -This type of automatic edit should not pompt the message box if the edit wasn't sent and a new query was performed
--Validate if the new USGS API still needs 65, 60, etc specificed. Since it's using a UID method, It might just need site-timeSeriesUID instead of site-timeSeriesUID-parameter
-    -Is it possible to run the queries without the time_series_id?
-        -If this is possible, if more than 1 time_series_id is found with the same parameter_code, can we have a popup that displays all of them and have the user pick the one they want?
--Catch the other Oracle errors on password changes. Only display sucessful changes, wrong use/password, and locked accounts
-    -Already catching user doesn't exist. Just trying nto avoid error spam that won't make sense to users
--UCHDB2 schema is under UCHDB
-    -Add schema into the config. Currnt logic will be used unless datbase is in the config. Can use existing by doing this:
-        hdbOracleDatabases = (
-            'USBR-LCHDB|LCHDBA',
-            'USBR-YAOHDB|YAOHDBA',
-            'USBR-UCHDB2|UCHDBA',
-            'USBR-ECOHDB|ECOHDBA',
-            'USBR-LBOHDB|LBOHDBA',
-            'USBR-KBOHDB|KBOHDBA',
-        )
-    -Need to make sure the | and data after that is not passed in any labels or comboboxes. That information is query information only    
--Meta data bug with the UI not sizing up on inital upload when switching to Aquarius Details first then to UCBR-LCHDB Details. If I click on USBR-LCHDB Details first then Aquarius, no issue
-    -This bug only happens after right clicking on a cell to open the window. The tab hit first (after the default Overlay Details tab) sets the width, the next tab will size up only but not size down
--Tooltips are missing on a lot of buttons on winMain. Add tooltips to all buttons in winMain
-    -Upload btn has an old tooltip, need to update it
--If USGS meta data is already being pulled in during a public query, make it abailable via right click context menu. this is ONLY for USGS data, no other sites have public meta data
--valuePrecision.json needs to be moved from documentation over to core
--Clean up test.txt after a confirmed [x] and make that part of the standard workflow
--Validate program uses packaged oracle if present. System Oracle should only be used if packaged isn't there
-    -Which sqlnet.ora file is being used? Is there any logic to use the packaged one?
-    -tnsnames.ora method has been working perfectly, no need to change this
+-Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
+    -Code updated to QProcess.startDetached + subprocess fallback — needs Windows retest (see test.txt)
 
 ####### NEW FEATURES #######
 -Need to build a query that updates dataDictionary without replacing user updated fields
@@ -80,3 +52,4 @@
 -When work starts on a bug: remove it from here, add it to documentation/test.txt with steps
 -When Seifer confirms a test item: mark [x] in test.txt (and leave off this list)
 -If a test fails: keep in test.txt with notes; do not put back on To Do until abandoned
+-Clean up test.txt after confirmed [x] items (standard workflow): drop long steps for [x] into a short Confirmed list; keep retest items detailed
