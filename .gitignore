@@ -58,3 +58,6 @@ documentation/*.grok
 # Oracle client
 oracle/client
 oracle/client/*
+
+# Certs
+certs/*
