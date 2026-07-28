@@ -69,6 +69,9 @@ class uiDetails(QWidget):
         """
         Size the window to content, capped at maxVisibleMetaRows.
         Extra rows get a vertical scrollbar (app stylesheet themes it).
+
+        Always allows shrink as well as grow (tab switches Aquarius ↔ USBR
+        must resize down when the second tab is narrower).
         """
         if table is None:
             return
@@ -114,13 +117,26 @@ class uiDetails(QWidget):
             + 30
             + extraHeight
         )
-        self.resize(max(contentWidth, 280), max(height, 120))
+        targetW = max(int(contentWidth), 280)
+        targetH = max(int(height), 120)
+
+        # Clear any min size that would block shrinking when switching to a
+        # narrower tab (Aquarius 4-col → USBR 2-col is the classic case).
+        self.setMinimumSize(0, 0)
+        if hasattr(self, 'tabWidget') and self.tabWidget:
+            self.tabWidget.setMinimumSize(0, 0)
+        table.setMinimumSize(0, 0)
+        self.resize(targetW, targetH)
+        # Pin a soft max slightly above content so the window cannot stay stuck
+        # at a previous larger size from layout constraints; clear after paint.
+        self.setMaximumSize(16777215, 16777215)
 
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
                 f"sizeWindowToTable: rows={rowCount}, visible={visibleRows}, "
-                f"scroll={needsScroll}, size={self.width()}x{self.height()}"
+                f"scroll={needsScroll}, size={self.width()}x{self.height()} "
+                f"(target {targetW}x{targetH})"
             )
 
     def resizeToCurrentTab(self, index):
@@ -144,6 +160,16 @@ class uiDetails(QWidget):
             tabTable.setHorizontalHeaderLabels(["Type", "Value"])
         elif colCount == 2:
             tabTable.setHorizontalHeaderLabels(["Type", "Value"])
+        elif colCount >= 4:
+            tabTable.setHorizontalHeaderLabels(
+                ["Metadata Type", "Details", "Start Time", "End Time"]
+            )
+
+        # Force column re-measure for this tab only (do not keep prior tab widths)
+        tabTable.horizontalHeader().setMinimumSectionSize(0)
+        for c in range(tabTable.columnCount()):
+            tabTable.setColumnWidth(c, 1)  # reset so resizeColumnsToContents remeasures
+        tabTable.resizeColumnsToContents()
 
         extra = self.tabWidget.tabBar().height() + 20
         self.sizeWindowToTable(tabTable, extraHeight=extra)

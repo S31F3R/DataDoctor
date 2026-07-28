@@ -1,8 +1,12 @@
 # USGS.py
 #
-# DataID format: Site-Method-Parameter
-#   e.g. 09428500-14eef6ee402b4c50a7341a0efccf0cd4-00065  (time_series_id)
-#   e.g. 09428500-158041-00065                            (legacy numeric methodID)
+# DataID formats:
+#   Site-time_series_id-Parameter   e.g. 09428500-14eef6ee402b4c50a7341a0efccf0cd4-00065
+#   Site-time_series_id             e.g. 09428500-14eef6ee402b4c50a7341a0efccf0cd4
+#       (parameter optional for OGC — time_series_id alone is enough for the API)
+#   Site-Parameter                  e.g. 09428500-00065
+#       (looks up time_series_id(s) via OGC metadata; UI may prompt if multiple)
+#   Site-methodID-Parameter         e.g. 09428500-158041-00065  (legacy numeric methodID)
 #
 # Routing:
 #   - 32-char hex method  → modern OGC API (api.waterdata.usgs.gov)
@@ -47,21 +51,45 @@ def isNumericMethodId(method):
 
 def classifyUid(uid):
     """
-    Parse Site-Method-Parameter.
-    Returns ('ogc', site, method, param5), ('legacy', site, method, param5),
-    or None if invalid.
+    Parse USGS DataID forms.
+
+    Returns:
+      ('ogc', site, tsid, param5_or_empty)
+      ('legacy', site, method, param5)
+      ('ogc_lookup', site, None, param5)  — Site-Parameter; needs tsid resolution
+      None if invalid
+
+    OGC notes:
+      - Parameter code is NOT required for the continuous/daily items query
+        (filter is time_series_id only). Keeping it in the DataID is optional
+        and still useful for labels / metadata display.
+      - Site-Parameter (no tsid) is resolved via time-series-metadata; if more
+        than one series matches, the UI should prompt the user to pick one.
     """
-    parts = uid.split("-")
-    if len(parts) != 3:
+    parts = [p for p in str(uid or '').split("-") if p != '']
+    if len(parts) == 3:
+        site, method, param = parts
+        if not site:
+            return None
+        param5 = (param or '').zfill(5) if param else ''
+        if isTimeSeriesId(method):
+            return ("ogc", site, method.lower(), param5)
+        if isNumericMethodId(method) and param and param.isdigit():
+            return ("legacy", site, method, param5)
         return None
-    site, method, param = parts
-    if not site or not param:
+
+    if len(parts) == 2:
+        site, second = parts
+        if not site or not second:
+            return None
+        # Site-time_series_id (parameter optional)
+        if isTimeSeriesId(second):
+            return ("ogc", site, second.lower(), '')
+        # Site-Parameter (5-digit style param code) → look up time_series_id(s)
+        if second.isdigit() and len(second) <= 5:
+            return ("ogc_lookup", site, None, second.zfill(5))
         return None
-    param5 = param.zfill(5)
-    if isTimeSeriesId(method):
-        return ("ogc", site, method.lower(), param5)
-    if isNumericMethodId(method):
-        return ("legacy", site, method, param5)
+
     return None
 
 
@@ -504,6 +532,155 @@ def fetchTimeSeriesMetadata(tsid, headers, cache):
     return props
 
 
+def lookupTimeSeriesBySiteParam(site, param5, headers=None):
+    """
+    Find OGC time series for a monitoring location + parameter_code.
+
+    Returns a list of dicts:
+      {'id': tsid, 'parameter_code': ..., 'parameter_name': ...,
+       'statistic_id': ..., 'computation_period_identifier': ...,
+       'web_description': ...}
+    """
+    site = (site or "").strip()
+    param5 = (param5 or "").zfill(5) if param5 else ""
+    if not site or not param5:
+        return []
+    headers = headers or apiHeaders()
+    mid = site if site.upper().startswith("USGS-") else "USGS-{}".format(site)
+    # OGC time-series-metadata filters (best-effort; API may ignore unknown keys)
+    params = {
+        "f": "json",
+        "monitoring_location_id": mid,
+        "parameter_code": param5,
+        "limit": "100",
+    }
+    url = "{}/time-series-metadata/items?{}".format(baseUrl, urlencode(params))
+    features = fetchJsonFeatures(url, headers)
+    results = []
+    seen = set()
+    for feature in features or []:
+        props = feature.get("properties") or {}
+        tsid = (props.get("id") or feature.get("id") or "").lower()
+        if not tsid or not isTimeSeriesId(tsid) or tsid in seen:
+            continue
+        # Prefer exact parameter_code match when the API returns a broader set
+        pcode = str(props.get("parameter_code") or "").zfill(5)
+        if pcode and pcode != param5:
+            continue
+        seen.add(tsid)
+        results.append({
+            "id": tsid,
+            "parameter_code": pcode or param5,
+            "parameter_name": props.get("parameter_name") or "",
+            "statistic_id": props.get("statistic_id") or "",
+            "computation_period_identifier": props.get("computation_period_identifier") or "",
+            "web_description": props.get("web_description") or "",
+            "unit_of_measure": props.get("unit_of_measure") or "",
+        })
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            "USGS.lookupTimeSeriesBySiteParam: site={} param={} → {} series".format(
+                site, param5, len(results)
+            ),
+        )
+    return results
+
+
+def resolveUsgsDataId(uid, parent=None):
+    """
+    Resolve a USGS DataID to a concrete queryable form on the UI thread.
+
+    - Full Site-tsid[-param] → returned unchanged (param optional for OGC).
+    - Site-Parameter (ogc_lookup) → fetch matching time_series_ids;
+        1 match: rewrite to Site-tsid-param
+        N matches: QInputDialog for user pick (if parent provided)
+        0 matches: return None
+
+    Returns the resolved DataID string, or None if cancelled / not found.
+    """
+    classified = classifyUid(uid)
+    if not classified:
+        return None
+    kind = classified[0]
+    if kind in ("ogc", "legacy"):
+        # Already concrete. For OGC without param, keep as Site-tsid (valid).
+        return str(uid).strip()
+
+    if kind != "ogc_lookup":
+        return None
+
+    _, site, _, param5 = classified
+    try:
+        matches = lookupTimeSeriesBySiteParam(site, param5)
+    except Exception as e:
+        Logic.logException("USGS.resolveUsgsDataId lookup failed", e)
+        matches = []
+
+    if not matches:
+        Logic.logMessage(
+            "WARN",
+            "USGS.resolveUsgsDataId: no time series for site={} param={}".format(
+                site, param5
+            ),
+        )
+        return None
+
+    if len(matches) == 1:
+        tsid = matches[0]["id"]
+        resolved = "{}-{}-{}".format(site, tsid, param5)
+        if Config.debug:
+            Logic.logMessage("DEBUG", "USGS.resolveUsgsDataId: single match → {}".format(resolved))
+        return resolved
+
+    # Multiple — need user pick
+    labels = []
+    for m in matches:
+        parts = [
+            m.get("id", "")[:8] + "…",
+            m.get("parameter_name") or m.get("parameter_code") or "",
+            m.get("statistic_id") or "",
+            m.get("computation_period_identifier") or "",
+            m.get("web_description") or "",
+        ]
+        labels.append(" | ".join(p for p in parts if p))
+
+    if parent is None:
+        # Non-UI context: do not guess — leave unresolved
+        Logic.logMessage(
+            "WARN",
+            "USGS.resolveUsgsDataId: {} matches for {}-{} but no UI parent to pick".format(
+                len(matches), site, param5
+            ),
+        )
+        return None
+
+    try:
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        choice, ok = QInputDialog.getItem(
+            parent,
+            "Select USGS Time Series",
+            "Multiple time series found for site {} parameter {}.\n"
+            "Pick the series to use:".format(site, param5),
+            labels,
+            0,
+            False,
+        )
+        if not ok or not choice:
+            return None
+        idx = labels.index(choice)
+        tsid = matches[idx]["id"]
+        resolved = "{}-{}-{}".format(site, tsid, param5)
+        Logic.logMessage(
+            "INFO",
+            "USGS.resolveUsgsDataId: user picked {} → {}".format(tsid, resolved),
+        )
+        return resolved
+    except Exception as e:
+        Logic.logException("USGS.resolveUsgsDataId picker failed", e)
+        return None
+
+
 def fetchMonitoringLocation(site, headers, cache):
     """Site-level metadata from monitoring-locations collection."""
     site = (site or "").strip()
@@ -785,8 +962,8 @@ def apiRead(dataID, interval, startDate, endDate):
         if not classified:
             Logic.logMessage(
                 "WARN",
-                "Invalid USGS uid '{}' — expected Site-Method-Parameter "
-                "(Method = numeric methodID or 32-char hex time_series_id).".format(uid),
+                "Invalid USGS uid '{}' — expected Site-time_series_id[-Parameter], "
+                "Site-Parameter, or Site-methodID-Parameter.".format(uid),
             )
             resultDict[uid] = {
                 "data": [],
@@ -796,6 +973,32 @@ def apiRead(dataID, interval, startDate, endDate):
         kind = classified[0]
         if kind == "ogc":
             ogcIds.append(uid)
+        elif kind == "legacy":
+            legacyIds.append(uid)
+        elif kind == "ogc_lookup":
+            # Resolve Site-Parameter → Site-tsid-param (no UI parent in worker;
+            # single match only; multi-match should have been resolved in uiQuery).
+            resolved = resolveUsgsDataId(uid, parent=None)
+            if resolved and resolved != uid:
+                Logic.logMessage(
+                    "INFO",
+                    "USGS.apiRead: resolved '{}' → '{}'".format(uid, resolved),
+                )
+                # Keep original key for the caller's DataID, but fetch under resolved form
+                sub = apiReadNewMethod([resolved], interval, startDate, endDate)
+                if isinstance(sub, dict) and resolved in sub:
+                    resultDict[uid] = sub[resolved]
+                else:
+                    resultDict[uid] = {"data": [], "rawResponse": emptyOgcRawResponse()}
+            else:
+                Logic.logMessage(
+                    "WARN",
+                    "USGS.apiRead: could not auto-resolve '{}' "
+                    "(0 or multiple time series — use Add Query to pick, or include time_series_id).".format(
+                        uid
+                    ),
+                )
+                resultDict[uid] = {"data": [], "rawResponse": emptyOgcRawResponse()}
         else:
             legacyIds.append(uid)
 

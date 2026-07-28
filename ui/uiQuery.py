@@ -270,6 +270,24 @@ class uiQuery(QMainWindow):
                     continue
 
                 dataId, interval, database = parts
+                if database == 'USGS-NWIS':
+                    try:
+                        from core import USGS
+                        resolved = USGS.resolveUsgsDataId(dataId, parent=self)
+                        if resolved is None:
+                            QMessageBox.warning(
+                                self,
+                                "USGS Data ID",
+                                f"Could not resolve USGS Data ID '{dataId}' in the query list.\n"
+                                "Include time_series_id, or pick a series when prompted.",
+                            )
+                            return
+                        if resolved != dataId:
+                            dataId = resolved
+                            # Keep list in sync with resolved form
+                            self.listQueryList.item(i).setText(f"{dataId}|{interval}|{database}")
+                    except Exception as e:
+                        Logic.logException("btnQueryPressed: USGS list resolve failed", e)
                 mrid = '0'
                 sdid = dataId
 
@@ -283,6 +301,22 @@ class uiQuery(QMainWindow):
                 dataId = self.qleDataID.text().strip()
                 interval = self.cbInterval.currentText()
                 database = self.cbDatabase.currentText()
+                # USGS Site-Parameter may need multi-series pick (same as Add Query)
+                if database == 'USGS-NWIS':
+                    try:
+                        from core import USGS
+                        resolved = USGS.resolveUsgsDataId(dataId, parent=self)
+                        if resolved is None:
+                            QMessageBox.warning(
+                                self,
+                                "USGS Data ID",
+                                f"Could not resolve USGS Data ID '{dataId}'.\n"
+                                "Include time_series_id, or pick a series when prompted.",
+                            )
+                            return
+                        dataId = resolved
+                    except Exception as e:
+                        Logic.logException("btnQueryPressed: USGS resolve failed", e)
                 mrid = '0'
                 sdid = dataId
 
@@ -405,6 +439,39 @@ class uiQuery(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", "btnAddQueryPressed: No Data ID entered, skipping")
             return
+
+        # USGS: optional param on OGC; Site-Parameter may need multi-series pick
+        if database == 'USGS-NWIS':
+            try:
+                from core import USGS
+                resolved = USGS.resolveUsgsDataId(dataID, parent=self)
+                if resolved is None:
+                    classified = USGS.classifyUid(dataID)
+                    if classified and classified[0] == 'ogc_lookup':
+                        QMessageBox.warning(
+                            self,
+                            "USGS Data ID",
+                            f"No time series found for '{dataID}', or selection was cancelled.\n\n"
+                            "Use Site-time_series_id or Site-time_series_id-parameter,\n"
+                            "or Site-parameter (e.g. 09428500-00065) when only one series exists.",
+                        )
+                        return
+                    # Invalid form
+                    if classified is None:
+                        QMessageBox.warning(
+                            self,
+                            "USGS Data ID",
+                            "Invalid USGS Data ID.\n\n"
+                            "Accepted forms:\n"
+                            "  Site-time_series_id[-parameter]\n"
+                            "  Site-parameter (looks up time_series_id)\n"
+                            "  Site-methodID-parameter (legacy)",
+                        )
+                        return
+                else:
+                    dataID = resolved
+            except Exception as e:
+                Logic.logException("btnAddQueryPressed: USGS resolve failed", e)
 
         itemText = f"{dataID}|{interval}|{database}"
         self.listQueryList.addItem(itemText)
