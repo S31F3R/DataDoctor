@@ -8,7 +8,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QTableWidgetItem,
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
                              QVBoxLayout, QHBoxLayout, QSplitter, QLabel, QAbstractItemView)
-from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, QEvent, pyqtSignal
+from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, QEvent, pyqtSignal, QTimer
 from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
 from PyQt6 import uic
 from core import Logic, Query, Utils, Config, Upload
@@ -186,10 +186,13 @@ class uiMain(QMainWindow):
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
         self.btnRunQuery.clicked.connect(self.runCustomQuery)
         self.btnSaveSnippet.clicked.connect(self.saveSnippet)
-        self.listSnippets.doubleClicked.connect(self.loadSnippet)
-        self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
+        if self.listSnippets is not None:
+            self.listSnippets.doubleClicked.connect(self.loadSnippet)
+        if self.btnDeleteSnippet is not None:
+            self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
         # SQL snippets: drag-reorder + context menu up/down; order in user.config
-        if self.listSnippets:
+        # NOTE: empty QListWidget is falsy in PyQt6 (len==0) — always test is not None
+        if self.listSnippets is not None:
             self.listSnippets.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
             self.listSnippets.setDefaultDropAction(Qt.DropAction.MoveAction)
             self.listSnippets.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -405,39 +408,40 @@ class uiMain(QMainWindow):
         try:
             sqlDir = Utils.getSqlSnippetDir()
 
-            if self.listSnippets:
-                self.listSnippets.clear()
-                namesOnDisk = []
-                if os.path.isdir(sqlDir):
-                    for file in os.listdir(sqlDir):
-                        if file.endswith(".sql"):
-                            namesOnDisk.append(file[:-4])
-                # Prefer user-saved order; append any new files alphabetically at end
-                config = Utils.loadConfig()
-                savedOrder = config.get('sqlSnippetOrder') or []
-                ordered = []
-                seen = set()
-                for name in savedOrder:
-                    if name in namesOnDisk and name not in seen:
-                        ordered.append(name)
-                        seen.add(name)
-                for name in sorted(namesOnDisk, key=lambda s: s.lower()):
-                    if name not in seen:
-                        ordered.append(name)
-                        seen.add(name)
-                for name in ordered:
-                    self.listSnippets.addItem(name)
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Loaded {self.listSnippets.count()} SQL snippets")
-            else:
+            if self.listSnippets is None:
                 if Config.debug:
                     Logic.logMessage("WARN", "listSnippets not found, skipping loadSnippets")
+                return
+
+            self.listSnippets.clear()
+            namesOnDisk = []
+            if os.path.isdir(sqlDir):
+                for file in os.listdir(sqlDir):
+                    if file.endswith(".sql"):
+                        namesOnDisk.append(file[:-4])
+            # Prefer user-saved order; append any new files alphabetically at end
+            config = Utils.loadConfig()
+            savedOrder = config.get('sqlSnippetOrder') or []
+            ordered = []
+            seen = set()
+            for name in savedOrder:
+                if name in namesOnDisk and name not in seen:
+                    ordered.append(name)
+                    seen.add(name)
+            for name in sorted(namesOnDisk, key=lambda s: s.lower()):
+                if name not in seen:
+                    ordered.append(name)
+                    seen.add(name)
+            for name in ordered:
+                self.listSnippets.addItem(name)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Loaded {self.listSnippets.count()} SQL snippets")
         except Exception as e:
             Logic.logException("loadSnippets failed", e)
 
     def currentSnippetOrder(self):
         """Return snippet names in current list order."""
-        if not self.listSnippets:
+        if self.listSnippets is None:
             return []
         return [
             self.listSnippets.item(i).text()
@@ -461,12 +465,13 @@ class uiMain(QMainWindow):
             Logic.logException("saveSnippetOrder failed", e)
 
     def onSnippetsReordered(self, *args):
-        """Drag-drop finished — save order."""
-        self.saveSnippetOrder()
+        """Drag-drop finished — save order after Qt finishes the move."""
+        # Defer so InternalMove has committed the new row order
+        QTimer.singleShot(0, self.saveSnippetOrder)
 
     def showSnippetContextMenu(self, pos):
         """Right-click: Move Up / Move Down for SQL snippet order."""
-        if not self.listSnippets:
+        if self.listSnippets is None:
             return
         item = self.listSnippets.itemAt(pos)
         if item is None:
@@ -491,7 +496,7 @@ class uiMain(QMainWindow):
 
     def saveSnippet(self):
         """Save current pteSQL content as .sql snippet."""
-        if not self.pteSQL:
+        if self.pteSQL is None:
             if Config.debug:
                 Logic.logMessage("WARN", "pteSQL not found, skipping saveSnippet")
             return
@@ -519,7 +524,7 @@ class uiMain(QMainWindow):
 
     def loadSnippet(self, index):
         """Load selected snippet into pteSQL on double-click."""
-        if not self.listSnippets or not self.pteSQL:
+        if self.listSnippets is None or self.pteSQL is None:
             if Config.debug:
                 Logic.logMessage("WARN", "listSnippets or pteSQL not found, skipping loadSnippet")
             return
@@ -542,7 +547,7 @@ class uiMain(QMainWindow):
 
     def deleteSnippet(self):
         """Delete selected snippet file and remove from listSnippets."""
-        if not self.listSnippets:
+        if self.listSnippets is None:
             if Config.debug:
                 Logic.logMessage("WARN", "listSnippets not found, skipping deleteSnippet")
             return
@@ -1348,7 +1353,7 @@ class uiMain(QMainWindow):
             
             if Config.debug:
                 Logic.logMessage("DEBUG", "Refreshed cbDatabase with sizing")
-        if self.listSnippets:
+        if self.listSnippets is not None:
             self.loadSnippets()
 
             if Config.debug:

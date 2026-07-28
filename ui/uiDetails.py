@@ -69,24 +69,52 @@ class uiDetails(QWidget):
                 table.setColumnCount(4)
             table.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
 
+    def _relaxTabPageSizes(self, currentIndex=None):
+        """
+        QTabWidget sizeHint is the MAX of all pages. Mark non-current pages as
+        Ignored so the layout does not keep the window stuck at the widest tab.
+        """
+        if not hasattr(self, 'tabWidget') or not self.tabWidget:
+            return
+        if currentIndex is None:
+            currentIndex = self.tabWidget.currentIndex()
+        self.tabWidget.setMinimumSize(0, 0)
+        self.tabWidget.setMaximumSize(maxWidgetSize, maxWidgetSize)
+        self.tabWidget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        for i in range(self.tabWidget.count()):
+            page = self.tabWidget.widget(i)
+            if page is None:
+                continue
+            page.setMinimumSize(0, 0)
+            page.setMaximumSize(maxWidgetSize, maxWidgetSize)
+            if i == currentIndex:
+                page.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+            else:
+                # Prevent wide hidden Aquarius tables from driving min size
+                page.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+            for child in page.findChildren(QTableWidget):
+                child.setMinimumSize(0, 0)
+                child.setMaximumSize(maxWidgetSize, maxWidgetSize)
+                if i == currentIndex:
+                    child.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+                else:
+                    child.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+
     def forceWindowSize(self, targetW, targetH):
         """
         Apply an exact window size that can shrink as well as grow.
 
         resize() alone is ignored when layout minimumSizeHint is still large
-        from a previous (wider) tab. setFixedSize pins geometry; unlock after.
+        from a previous (wider) tab. Keep setFixedSize — unlocking immediately
+        lets QTabWidget re-expand to the widest page sizeHint.
         """
         targetW = max(int(targetW), 280)
         targetH = max(int(targetH), 120)
         self.setMinimumSize(0, 0)
         self.setMaximumSize(maxWidgetSize, maxWidgetSize)
-        if hasattr(self, 'tabWidget') and self.tabWidget:
-            self.tabWidget.setMinimumSize(0, 0)
-            self.tabWidget.setMaximumSize(maxWidgetSize, maxWidgetSize)
-        # Pin then unlock so the next tab can shrink again
+        self._relaxTabPageSizes()
+        # Pin fixed size so layout cannot re-inflate after we shrink
         self.setFixedSize(targetW, targetH)
-        self.setMinimumSize(0, 0)
-        self.setMaximumSize(maxWidgetSize, maxWidgetSize)
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
@@ -111,6 +139,7 @@ class uiDetails(QWidget):
         header.setStretchLastSection(False)
         table.setMinimumSize(0, 0)
         table.setMaximumSize(maxWidgetSize, maxWidgetSize)
+        table.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         header.setMinimumSectionSize(0)
         for c in range(table.columnCount()):
             table.setColumnWidth(c, 10)
@@ -151,10 +180,11 @@ class uiDetails(QWidget):
             contentWidth = max(contentWidth, tabBarWidth)
 
         rowsHeight = sum(table.rowHeight(i) for i in range(visibleRows)) if visibleRows else 0
+        titleH = self.lblTitle.height() if hasattr(self, 'lblTitle') and self.lblTitle else 24
         height = (
             rowsHeight
             + table.horizontalHeader().height()
-            + self.lblTitle.height()
+            + titleH
             + table.frameWidth() * 2
             + 30
             + extraHeight
@@ -184,6 +214,9 @@ class uiDetails(QWidget):
         if not tabTable:
             return
 
+        # Non-current pages must not drive sizeHint (Aquarius 4-col stays wide otherwise)
+        self._relaxTabPageSizes(currentIndex=index)
+
         # Re-assert column layout for this tab (prevents bleed across tab switches)
         colCount = tabTable.columnCount()
         if colCount > 2 and tabTable.horizontalHeaderItem(0) and tabTable.horizontalHeaderItem(0).text() == "Type":
@@ -200,8 +233,27 @@ class uiDetails(QWidget):
         extra = self.tabWidget.tabBar().height() + 20
         self.sizeWindowToTable(tabTable, extraHeight=extra)
 
+        # Deferred re-apply: layout pass after tab switch often re-expands once
+        QTimer.singleShot(0, lambda idx=index: self._deferredResizeTab(idx))
+
         if Config.debug:
             Logic.logMessage("DEBUG", f"Resized to current tab {index}: {self.width()}x{self.height()}")
+
+    def _deferredResizeTab(self, index):
+        """Second pass after Qt finishes tab layout (keeps shrink sticky)."""
+        if not hasattr(self, 'tabWidget') or not self.tabWidget:
+            return
+        if self.tabWidget.currentIndex() != index:
+            return
+        currentTab = self.tabWidget.widget(index)
+        if not currentTab:
+            return
+        tabTable = currentTab.findChild(QTableWidget)
+        if not tabTable:
+            return
+        self._relaxTabPageSizes(currentIndex=index)
+        extra = self.tabWidget.tabBar().height() + 20
+        self.sizeWindowToTable(tabTable, extraHeight=extra)
 
     def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None, multiTypes=None, responsesList=None, intervalsList=None):
         """

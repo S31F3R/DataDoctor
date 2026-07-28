@@ -1,5 +1,4 @@
 ####### TASKS #######
--Go through all the bugs and fix them, unless there are questions. Move forward if in bug-smashing branch. if not, switch to bug-smashing, pull from testing, then run through tasks
 -(done → test.txt) Double-click query list edit dataID; SQL snippet reorder; Aquarius cer/pfx; HDB link fallback; packageWindows + updateBunker
 -Expand update flow later: zip drops into an Update/ folder and platform-specific unpackers (Linux/Mac scripts TBD)
 -Linux/Mac package scripts (Windows: scripts/packageWindows.py exists)

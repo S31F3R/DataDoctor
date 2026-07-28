@@ -138,17 +138,42 @@ platformLayoutYNudge = {
 compactListObjectNames = frozenset({'listSnippets', 'listQueryList'})
 
 
+def _findWindowsLauncherExe(script, cwd):
+    """
+    Prefer the VB.NET 'Data Doctor.exe' when present next to the install layout
+    (zip root / launcher folder / parent of Project Files).
+    """
+    candidates = []
+    roots = []
+    for base in (cwd, os.path.dirname(script) if script else '', Config.appRoot or ''):
+        if not base:
+            continue
+        base = os.path.abspath(base)
+        roots.append(base)
+        roots.append(os.path.dirname(base))  # Project Files → zip root
+        roots.append(os.path.dirname(os.path.dirname(base)))
+    seen = set()
+    for root in roots:
+        if not root or root in seen:
+            continue
+        seen.add(root)
+        for name in ('Data Doctor.exe', 'DataDoctor.exe'):
+            path = os.path.join(root, name)
+            if os.path.isfile(path):
+                candidates.append(path)
+    return candidates[0] if candidates else None
+
+
 def restartApplication():
     """
     Relaunch this process then quit the current app.
 
     Windows cannot reliably use os.execl (pythonw, spaces, VB launcher).
     Strategy:
-      1. Absolute paths for python + script
-      2. On Windows: write a temp .cmd that waits briefly, starts the app,
-         then deletes itself — so the parent can exit without killing the child
-      3. On Unix: QProcess.startDetached / subprocess, then quit
-      4. Unix last resort: os.execl
+      1. Prefer re-launching Data Doctor.exe when the VB launcher is present
+      2. Else absolute python + script paths
+      3. On Windows: temp .cmd waits for this process to exit, then starts app
+      4. On Unix: QProcess.startDetached / subprocess, then quit
 
     Returns True if a restart was scheduled, False on hard failure.
     Retro mode (and other config) must already be saved before calling.
@@ -158,12 +183,28 @@ def restartApplication():
         # sys.argv[0] may be relative; resolve against cwd
         argv0 = sys.argv[0] if sys.argv else ''
         script = os.path.abspath(argv0) if argv0 else ''
+        if script and not os.path.isfile(script):
+            # .pyw / alternate extension near app root
+            for alt in (
+                script,
+                script + 'w' if not script.endswith('w') else script[:-1],
+                os.path.join(Config.appRoot or '', 'DataDoctor.py'),
+                os.path.join(Config.appRoot or '', 'DataDoctor.pyw'),
+            ):
+                if alt and os.path.isfile(alt):
+                    script = os.path.abspath(alt)
+                    break
         extra = list(sys.argv[1:]) if len(sys.argv) > 1 else []
         cwd = os.getcwd()
 
         # Prefer project root when script path is known
         if script and os.path.isfile(script):
             cwd = os.path.dirname(script) or cwd
+        if Config.appRoot and os.path.isdir(Config.appRoot):
+            # Script lives under Project Files/; keep that as cwd for imports
+            if os.path.isfile(os.path.join(Config.appRoot, 'DataDoctor.py')) or \
+               os.path.isfile(os.path.join(Config.appRoot, 'DataDoctor.pyw')):
+                cwd = Config.appRoot
 
         if Config.debug:
             Logic.logMessage(
@@ -173,44 +214,75 @@ def restartApplication():
             )
 
         if sys.platform == 'win32':
-            # Build quoted command line for the child
-            if script and os.path.isfile(script):
+            launcher = _findWindowsLauncherExe(script, cwd)
+            if launcher:
+                childParts = [f'"{launcher}"']
+                # Launcher owns python/script; do not pass our argv
+                childCwd = os.path.dirname(launcher) or cwd
+                Logic.logMessage(
+                    "INFO",
+                    f"restartApplication: using Windows launcher {launcher!r}",
+                )
+            elif script and os.path.isfile(script):
                 childParts = [f'"{program}"', f'"{script}"'] + [f'"{a}"' for a in extra]
+                childCwd = cwd
             else:
-                # Frozen / launcher: re-exec executable only
+                # Frozen / bare executable
                 childParts = [f'"{program}"'] + [f'"{a}"' for a in extra]
+                childCwd = cwd
             childCmd = ' '.join(childParts)
-            # .cmd: wait ~1s so parent can exit, then start, then self-delete
+            # Wait ~2s so this process can fully exit (file locks / single-instance).
+            # Use start "" so the new GUI is independent of this cmd session.
             batLines = [
                 '@echo off',
-                'ping -n 2 127.0.0.1 >nul',
-                f'cd /d "{cwd}"',
+                'setlocal',
+                'timeout /t 2 /nobreak >nul 2>&1',
+                'if errorlevel 1 ping -n 3 127.0.0.1 >nul',
+                f'cd /d "{childCwd}"',
                 f'start "" {childCmd}',
-                'del "%~f0"',
+                'del "%~f0" >nul 2>&1',
                 '',
             ]
             fd, batPath = tempfile.mkstemp(suffix='.cmd', prefix='DataDoctorRestart_')
             os.close(fd)
             with open(batPath, 'w', encoding='utf-8', newline='\r\n') as f:
                 f.write('\r\n'.join(batLines))
-            # Launch cmd detached; do not wait
-            CREATE_NO_WINDOW = 0x08000000
-            DETACHED_PROCESS = 0x00000008
-            CREATE_NEW_PROCESS_GROUP = 0x00000200
-            flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
-            subprocess.Popen(
-                ['cmd.exe', '/c', batPath],
-                cwd=cwd,
-                close_fds=True,
-                creationflags=flags,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            Logic.logMessage(
-                "INFO",
-                f"restartApplication: scheduled Windows restart via {batPath}",
-            )
+
+            # Prefer os.startfile (ShellExecute) — more reliable than Popen+CREATE_NO_WINDOW
+            # which often never runs the batch under pythonw / packaged launches.
+            launched = False
+            try:
+                os.startfile(batPath)  # nosec B606 — our own temp restart script
+                launched = True
+                Logic.logMessage(
+                    "INFO",
+                    f"restartApplication: scheduled Windows restart via startfile {batPath}",
+                )
+            except Exception as e:
+                Logic.logMessage(
+                    "WARN",
+                    f"restartApplication: startfile failed ({e}); trying detached cmd",
+                )
+
+            if not launched:
+                # DETACHED only — do NOT use CREATE_NO_WINDOW; it can prevent the .cmd
+                # from running under some Windows / pythonw combinations.
+                DETACHED_PROCESS = 0x00000008
+                CREATE_NEW_PROCESS_GROUP = 0x00000200
+                flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+                subprocess.Popen(
+                    ['cmd.exe', '/c', 'call', batPath],
+                    cwd=childCwd,
+                    close_fds=True,
+                    creationflags=flags,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                Logic.logMessage(
+                    "INFO",
+                    f"restartApplication: scheduled Windows restart via cmd {batPath}",
+                )
         else:
             # Linux / macOS
             args = [program]
@@ -219,7 +291,8 @@ def restartApplication():
             args.extend(extra)
             try:
                 from PyQt6.QtCore import QProcess
-                ok = QProcess.startDetached(program, args[1:] if len(args) > 1 else [], cwd)
+                # startDetached(program, arguments, workingDirectory)
+                ok = QProcess.startDetached(program, args[1:], cwd)
                 if not ok:
                     raise RuntimeError('QProcess.startDetached returned False')
                 Logic.logMessage("INFO", f"restartApplication: QProcess.startDetached {args}")
@@ -232,15 +305,22 @@ def restartApplication():
         app = QApplication.instance()
 
         def quitApp():
-            if app is not None:
-                app.quit()
-            else:
+            try:
+                if app is not None:
+                    # Force exit even if a modal Options dialog is still open
+                    app.closeAllWindows()
+                    app.quit()
+                else:
+                    os._exit(0)  # library API
+            except Exception:
                 os._exit(0)  # library API
 
         if app is not None:
-            QTimer.singleShot(250, quitApp)
+            # Windows: give startfile/cmd a moment; Unix: shorter is fine
+            delayMs = 400 if sys.platform == 'win32' else 250
+            QTimer.singleShot(delayMs, quitApp)
         else:
-            time.sleep(0.25)
+            time.sleep(0.3)
             os._exit(0)  # library API
         return True
     except Exception as e:

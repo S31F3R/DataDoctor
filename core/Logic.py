@@ -62,98 +62,244 @@ def resourcePath(relativePath):
     return os.path.normpath(os.path.join(basePath, relativePath))
 
 
-def ensureAquariusPem():
+def _aquariusCertSearchDirs():
     """
-    Ensure certs/aquarius.pem exists for requests SSL verify.
+    Candidate certs/ folders (first existing wins for sources; first writable for output).
 
-    Looks under resourcePath('certs/'):
-      1. aquarius.pem already present → use it
-      2. any .pem → use first (prefer name aquarius*)
-      3. .cer / .crt → convert to PEM (text copy or DER→base64)
-      4. .pfx / .p12 → convert via openssl if available (empty password, then
-         keyring DataDoctor/aqCertPassword if set)
-
-    On successful conversion from .cer/.pfx, writes aquarius.pem and leaves the
-    source file in place (does not delete user certs). Returns pem path or None.
+    Users often drop certs next to the launcher zip root, under Project Files/,
+    or in the app config dir — not only resourcePath('certs').
     """
-    import base64
-    import shutil
-    import subprocess
-
-    certsDir = resourcePath('certs')
+    dirs = []
+    appRoot = getattr(Config, 'appRoot', '') or ''
     try:
-        os.makedirs(certsDir, exist_ok=True)
+        dirs.append(resourcePath('certs'))
     except Exception:
         pass
-
-    pemPath = os.path.join(certsDir, 'aquarius.pem')
-    if os.path.isfile(pemPath) and os.path.getsize(pemPath) > 0:
-        return pemPath
-
-    if not os.path.isdir(certsDir):
-        return None
-
-    entries = []
+    for base in (
+        appRoot,
+        os.path.dirname(appRoot) if appRoot else '',
+        os.getcwd(),
+        os.path.dirname(os.getcwd()),
+    ):
+        if base:
+            dirs.append(os.path.join(os.path.abspath(base), 'certs'))
     try:
-        entries = [
-            os.path.join(certsDir, f)
-            for f in os.listdir(certsDir)
-            if os.path.isfile(os.path.join(certsDir, f))
-        ]
+        dirs.append(os.path.join(Utils.getConfigDir(), 'certs'))
+    except Exception:
+        pass
+    # De-dupe while preserving order
+    seen = set()
+    out = []
+    for d in dirs:
+        if not d:
+            continue
+        norm = os.path.normpath(d)
+        key = os.path.normcase(norm)
+        if key not in seen:
+            seen.add(key)
+            out.append(norm)
+    return out
+
+
+def _writeAquariusPem(pemPath, data, binary=False):
+    """Write PEM bytes/text; return True on success."""
+    try:
+        parent = os.path.dirname(pemPath)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        if binary:
+            with open(pemPath, 'wb') as out:
+                out.write(data)
+        else:
+            with open(pemPath, 'w', encoding='ascii') as out:
+                out.write(data if isinstance(data, str) else data.decode('ascii', errors='replace'))
+        return os.path.isfile(pemPath) and os.path.getsize(pemPath) > 0
     except Exception as e:
-        logException("ensureAquariusPem: list certs failed", e)
+        logException(f"ensureAquariusPem: write {pemPath} failed", e)
+        return False
+
+
+def _cerToPemText(raw):
+    """Convert .cer/.crt bytes (PEM or DER) to PEM text."""
+    import base64
+    if not raw:
+        return None
+    if b'-----BEGIN' in raw:
+        return raw.decode('utf-8', errors='replace')
+    # DER → PEM CERTIFICATE
+    b64 = base64.encodebytes(raw).decode('ascii')
+    body = ''.join(b64.splitlines())
+    lines = ['-----BEGIN CERTIFICATE-----']
+    for i in range(0, len(body), 64):
+        lines.append(body[i:i + 64])
+    lines.append('-----END CERTIFICATE-----')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def _pfxToPemViaOpenssl(src, pemPath, passwords):
+    import shutil
+    import subprocess
+    openssl = shutil.which('openssl')
+    if not openssl:
+        return False
+    for pwd in passwords:
+        try:
+            # OpenSSL 3 often needs -legacy for older PFX; try both
+            for extra in ([], ['-legacy']):
+                cmd = [
+                    openssl, 'pkcs12', '-in', src, '-nokeys', '-clcerts',
+                    '-out', pemPath, '-passin', f'pass:{pwd}',
+                ] + extra
+                result = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=30,
+                )
+                if result.returncode == 0 and os.path.isfile(pemPath) and os.path.getsize(pemPath) > 0:
+                    return True
+        except Exception as e:
+            logException(f"ensureAquariusPem: openssl pfx {src} failed", e)
+    return False
+
+
+def _pfxToPemViaCryptography(src, pemPath, passwords):
+    """Optional pure-Python PFX extract when openssl is missing."""
+    try:
+        from cryptography.hazmat.primitives.serialization import Encoding, pkcs12
+    except Exception:
+        return False
+    try:
+        with open(src, 'rb') as f:
+            raw = f.read()
+    except Exception as e:
+        logException(f"ensureAquariusPem: read pfx {src} failed", e)
+        return False
+    for pwd in passwords:
+        try:
+            pwdBytes = pwd.encode('utf-8') if pwd else None
+            key, cert, additional = pkcs12.load_key_and_certificates(raw, pwdBytes)
+            chunks = []
+            if cert is not None:
+                chunks.append(cert.public_bytes(Encoding.PEM).decode('ascii'))
+            for extra in additional or []:
+                if extra is not None:
+                    chunks.append(extra.public_bytes(Encoding.PEM).decode('ascii'))
+            if not chunks:
+                continue
+            if _writeAquariusPem(pemPath, ''.join(chunks), binary=False):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def ensureAquariusPem():
+    """
+    Ensure aquarius.pem exists for requests SSL verify.
+
+    Search order for sources (any certs/ folder that exists):
+      resourcePath, appRoot, parent of appRoot (launcher zip root), cwd,
+      user config certs/
+
+    Prefer:
+      1. aquarius.pem already present → use it
+      2. any .pem → copy to aquarius.pem (prefer name aquarius*)
+      3. .cer / .crt → convert to PEM (text copy or DER→base64)
+      4. .pfx / .p12 → openssl if available, else cryptography if installed
+         (empty password, then keyring DataDoctor/aqCertPassword)
+
+    Writes aquarius.pem next to the source when possible, else under the user
+    config certs/ folder. Leaves source files in place. Returns pem path or None.
+    """
+    import shutil
+
+    searchDirs = _aquariusCertSearchDirs()
+    for d in searchDirs:
+        try:
+            os.makedirs(d, exist_ok=True)
+        except Exception:
+            pass
+
+    # Already-built PEM anywhere
+    for d in searchDirs:
+        candidate = os.path.join(d, 'aquarius.pem')
+        if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
+            if Config.debug:
+                logMessage("DEBUG", f"ensureAquariusPem: using existing {candidate}")
+            return candidate
+
+    # Collect all source files across dirs
+    entries = []
+    for d in searchDirs:
+        if not os.path.isdir(d):
+            continue
+        try:
+            for f in os.listdir(d):
+                path = os.path.join(d, f)
+                if os.path.isfile(path):
+                    entries.append(path)
+        except Exception as e:
+            logException(f"ensureAquariusPem: list {d} failed", e)
+
+    if not entries:
+        if Config.debug:
+            logMessage(
+                "DEBUG",
+                "ensureAquariusPem: no cert files found in " + ", ".join(searchDirs),
+            )
         return None
 
-    # Prefer any existing PEM named aquarius*, then any .pem
+    def pemOutPath(src):
+        """Prefer writing next to source; fall back to first writable search dir."""
+        local = os.path.join(os.path.dirname(src), 'aquarius.pem')
+        try:
+            # Touch-test parent
+            os.makedirs(os.path.dirname(local), exist_ok=True)
+            return local
+        except Exception:
+            pass
+        for d in searchDirs:
+            try:
+                os.makedirs(d, exist_ok=True)
+                return os.path.join(d, 'aquarius.pem')
+            except Exception:
+                continue
+        return local
+
+    # Prefer any existing PEM named aquarius*, then any .pem (not aquarius.pem handled above)
     pems = [p for p in entries if p.lower().endswith('.pem')]
     aquariusPems = [p for p in pems if 'aquarius' in os.path.basename(p).lower()]
     for src in aquariusPems + pems:
-        if src == pemPath:
+        pemPath = pemOutPath(src)
+        if os.path.normcase(os.path.abspath(src)) == os.path.normcase(os.path.abspath(pemPath)):
+            if os.path.getsize(src) > 0:
+                return src
             continue
         try:
             shutil.copy2(src, pemPath)
-            logMessage("INFO", f"ensureAquariusPem: using {src} → aquarius.pem")
+            logMessage("INFO", f"ensureAquariusPem: using {src} → {pemPath}")
             return pemPath
         except Exception as e:
             logException(f"ensureAquariusPem: copy {src} failed", e)
 
     # .cer / .crt → PEM
-    cerFiles = [
-        p for p in entries
-        if p.lower().endswith(('.cer', '.crt'))
-    ]
-    # Prefer aquarius* names
+    cerFiles = [p for p in entries if p.lower().endswith(('.cer', '.crt'))]
     cerFiles.sort(key=lambda p: (0 if 'aquarius' in os.path.basename(p).lower() else 1, p.lower()))
     for src in cerFiles:
         try:
             with open(src, 'rb') as f:
                 raw = f.read()
-            if not raw:
+            pemText = _cerToPemText(raw)
+            if not pemText:
                 continue
-            if b'-----BEGIN' in raw:
-                with open(pemPath, 'wb') as out:
-                    out.write(raw)
-            else:
-                # DER → PEM CERTIFICATE
-                b64 = base64.encodebytes(raw).decode('ascii')
-                body = ''.join(b64.splitlines())
-                lines = ['-----BEGIN CERTIFICATE-----']
-                for i in range(0, len(body), 64):
-                    lines.append(body[i:i + 64])
-                lines.append('-----END CERTIFICATE-----')
-                lines.append('')
-                with open(pemPath, 'w', encoding='ascii') as out:
-                    out.write('\n'.join(lines))
-            logMessage("INFO", f"ensureAquariusPem: converted {src} → aquarius.pem")
-            return pemPath
+            pemPath = pemOutPath(src)
+            if _writeAquariusPem(pemPath, pemText, binary=False):
+                logMessage("INFO", f"ensureAquariusPem: converted {src} → {pemPath}")
+                return pemPath
         except Exception as e:
             logException(f"ensureAquariusPem: convert cer {src} failed", e)
 
-    # .pfx / .p12 → need openssl
-    pfxFiles = [
-        p for p in entries
-        if p.lower().endswith(('.pfx', '.p12'))
-    ]
+    # .pfx / .p12
+    pfxFiles = [p for p in entries if p.lower().endswith(('.pfx', '.p12'))]
     pfxFiles.sort(key=lambda p: (0 if 'aquarius' in os.path.basename(p).lower() else 1, p.lower()))
     if pfxFiles:
         passwords = ['']
@@ -170,30 +316,29 @@ def ensureAquariusPem():
             logMessage(
                 "WARN",
                 "ensureAquariusPem: .pfx found but openssl not on PATH; "
-                "export the cert as .cer/.pem or install OpenSSL",
+                "trying cryptography if installed, else export as .cer/.pem",
             )
-        else:
-            for src in pfxFiles:
-                for pwd in passwords:
-                    try:
-                        # Export certs only (enough for server verify of Aquarius TLS)
-                        cmd = [
-                            openssl, 'pkcs12', '-in', src, '-nokeys', '-clcerts',
-                            '-out', pemPath, '-passin', f'pass:{pwd}',
-                        ]
-                        result = subprocess.run(
-                            cmd, capture_output=True, text=True, timeout=30,
-                        )
-                        if result.returncode == 0 and os.path.isfile(pemPath) and os.path.getsize(pemPath) > 0:
-                            logMessage(
-                                "INFO",
-                                f"ensureAquariusPem: converted {src} → aquarius.pem via openssl",
-                            )
-                            return pemPath
-                    except Exception as e:
-                        logException(f"ensureAquariusPem: openssl pfx {src} failed", e)
+        for src in pfxFiles:
+            pemPath = pemOutPath(src)
+            if openssl and _pfxToPemViaOpenssl(src, pemPath, passwords):
+                logMessage(
+                    "INFO",
+                    f"ensureAquariusPem: converted {src} → {pemPath} via openssl",
+                )
+                return pemPath
+            if _pfxToPemViaCryptography(src, pemPath, passwords):
+                logMessage(
+                    "INFO",
+                    f"ensureAquariusPem: converted {src} → {pemPath} via cryptography",
+                )
+                return pemPath
 
-    return None if not os.path.isfile(pemPath) else pemPath
+    # Final scan for any aquarius.pem that may have been written
+    for d in searchDirs:
+        candidate = os.path.join(d, 'aquarius.pem')
+        if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
+            return candidate
+    return None
 
 def initLogging():
     global loggingInitialized, logNotifier

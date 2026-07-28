@@ -32,13 +32,6 @@ Need retest (longer tests — Seifer tomorrow)
      d. Cancel picker → not added to list.
    Notes: USGS.classifyUid / resolveUsgsDataId; OGC filter is time_series_id only.
 
-[ ] Packaged Oracle preferred; system fallback
-   Steps:
-     a. With oracle/client present → uses packaged Instant Client (DEBUG log).
-     b. Without packaged client → system Instant Client or thin mode (WARN/INFO log).
-     c. sqlnet.ora: if TNS_ADMIN unset, packaged oracle/network/admin is used.
-     d. Existing TNS_ADMIN env still wins for tnsnames (unchanged).
-
 [ ] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
    Steps:
      a. DAY query → vertical header like 03/15/24 (no time).
@@ -47,58 +40,6 @@ Need retest (longer tests — Seifer tomorrow)
      d. HOUR / INSTANT unchanged (mm/dd/yy HH:MM:00).
      e. Sort by timestamp and cell details still work on coarser headers.
    Notes: Query.formatTimestamp / buildTimestamps / gapCheck interval-aware.
-
-
-Need retest (fixes after RESPONSE)
---------------------------------------------------------------------------------
-
-[ ] Retro mode restart on Windows
-   Steps:
-     a. Options → toggle Retro Mode → OK to restart.
-     b. App should relaunch with the new mode (Windows).
-     c. Cancel on the prompt reverts the checkbox and config.
-   Notes: Uses temp .cmd delay + absolute paths (prior QProcess/execl failed on Win).
-   Prior RESPONSE: Still only worked on Linux.
-
-[ ] Details window resizes down when switching tabs
-   Steps:
-     a. Overlay cell → Show details.
-     b. Open Aquarius Details first (wide 4-col), then USBR-*-Details (2-col).
-     c. Window should shrink to fit the narrower tab on first switch (not stay stuck wide).
-     d. Reverse order also fine.
-   Notes: Measure with stretchLastSection off; setFixedSize then unlock; deferred initial size.
-   Prior RESPONSE: Stayed super wide after wide tab first; only first couple clicks.
-
-[ ] winMain tooltips (simplified labels)
-   Steps:
-     a. Public Query tip: "Public Queries"
-     b. Internal Query tip: "Internal Queries"
-     c. Options tip: "Options" (no parenthetical list)
-     d. Upload still mentions HDB MODIFY/DELETE; other tips unchanged and good.
-
-
-Need retest (new features this pass)
---------------------------------------------------------------------------------
-
-[ ] Double-click Query List item → edit dataID
-   Steps:
-     a. Add several queries to the list.
-     b. Double-click one → only dataID appears in the text box; interval/DB stay as that row.
-     c. Change dataID, hit Add Query → that list row updates in place (not a new row).
-     d. Add Query with empty edit-index still appends a new row as before.
-
-[ ] SQL snippets reorder (up/down) persists
-   Steps:
-     a. SQL Query Builder: select a snippet, move up/down.
-     b. Order remains after close/reopen app.
-   Notes: order stored in user.config sqlSnippetOrder.
-
-[ ] Aquarius certs: .cer / .pfx accepted
-   Steps:
-     a. Place aquarius.cer or aquarius.pfx (or any .cer/.pfx) under certs/.
-     b. On next Aquarius query, code converts to certs/aquarius.pem and uses it.
-     c. Optional: leftover conversion temp cleaned; pem remains for requests.
-   Notes: Logic.ensureAquariusPem / Aquarius.apiRead.
 
 [ ] HDB database-link failure → direct connect fallback
    Steps:
@@ -114,8 +55,60 @@ Need retest (new features this pass)
         user fields except dataType/siteName/valuePrecision/database when dataID+siteID match.
 
 
+Need retest (fixes after RESPONSE — 2026-07-28)
+--------------------------------------------------------------------------------
+
+[ ] Retro mode restart on Windows
+   Steps:
+     a. Options → toggle Retro Mode → OK to restart.
+     b. App should relaunch with the new mode (Windows).
+     c. Cancel on the prompt reverts the checkbox and config.
+   Notes: Prefer re-launch "Data Doctor.exe" when present; temp .cmd via os.startfile
+     (no CREATE_NO_WINDOW); 2s delay; closeAllWindows on quit.
+   Prior RESPONSE: Still only worked on Linux / still doesn't work.
+
+[ ] Details window resizes down when switching tabs
+   Steps:
+     a. Overlay cell → Show details.
+     b. Open Aquarius Details first (wide 4-col), then USBR-*-Details (2-col).
+     c. Window should shrink to fit the narrower tab on first switch (not stay stuck wide).
+     d. Reverse order also fine.
+   Notes: Non-current tab pages use Ignored size policy (QTabWidget sizeHint = max of pages);
+     keep setFixedSize (do not unlock); deferred second resize pass.
+   Prior RESPONSE: Stayed super wide after wide tab first.
+
+[ ] Double-click Query List item → edit dataID
+   Steps:
+     a. Add several queries to the list.
+     b. Double-click one → only dataID appears in the text box; interval/DB stay as that row.
+     c. Change dataID, hit Add Query → that list row updates in place (not a new row).
+     d. Add Query with empty edit-index still appends a new row as before.
+   Notes: Root cause — empty QListWidget is falsy in PyQt6 so itemDoubleClicked was never
+     connected. Fixed with `is not None`.
+   Prior RESPONSE: This doesn't work.
+
+[ ] SQL snippets reorder (up/down) persists
+   Steps:
+     a. SQL Query Builder: select a snippet, move up/down (drag or right-click menu).
+     b. Order remains after close/reopen app.
+   Notes: Same falsy-QListWidget bug skipped drag/context setup. Fixed `is not None`;
+     order saved to user.config sqlSnippetOrder (deferred after drag).
+   Prior RESPONSE: This doesn't work.
+
+[ ] Aquarius certs: .cer / .pfx accepted
+   Steps:
+     a. Place aquarius.cer or aquarius.pfx (or any .cer/.pfx) under certs/ (project, launcher
+        zip root, or user config certs/).
+     b. On next Aquarius query, code converts to aquarius.pem and uses it (check app.log INFO).
+     c. Optional: leftover conversion temp cleaned; pem remains for requests.
+   Notes: Multi-path search; .cer DER/PEM convert; .pfx via openssl (-legacy) or cryptography.
+   Prior RESPONSE: This doesn't work.
+
+
 Confirmed
 --------------------------------------------------------------------------------
+[x] Packaged Oracle preferred; system fallback
+[x] winMain tooltips (simplified labels)
 [x] Header size no longer changes when clicking a cell
 [x] Overlay secondary-only → auto edit for upload
 [x] USGS public query: Show details on right-click
@@ -140,4 +133,3 @@ Deferred / known
 [!] USGS monthly/yearly (OGC has no products)
 [!] Aquarius daily 2300 TZ
 [!] Features still backlog: plots, goat, git/readme, dataDictionary non-destructive bulk update
-)

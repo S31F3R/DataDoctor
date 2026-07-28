@@ -141,7 +141,8 @@ class uiQuery(QMainWindow):
         self.btnDown1.clicked.connect(self.btnDown1Pressed)
         self.btnQueryOptionsInfo.clicked.connect(self.btnQueryOptionsInfoPressed)
         self.cbDatabase.currentTextChanged.connect(self.onDatabaseChanged)
-        if self.listQueryList:
+        # NOTE: empty QListWidget is falsy in PyQt6 (len==0) — always test is not None
+        if self.listQueryList is not None:
             self.listQueryList.itemDoubleClicked.connect(self.onQueryListDoubleClicked)
 
         # Install event filters
@@ -439,23 +440,25 @@ class uiQuery(QMainWindow):
         if item is None or self.listQueryList is None:
             return
         text = item.text().strip()
-        parts = text.split('|')
+        # maxsplit=2 so dataIDs / DB labels that contain '|' still parse
+        parts = text.split('|', 2)
         if len(parts) != 3:
             if Config.debug:
                 Logic.logMessage("DEBUG", f"onQueryListDoubleClicked: invalid row {text!r}")
             return
         dataId, interval, database = parts
         self.editingQueryIndex = self.listQueryList.row(item)
-        if self.qleDataID:
+        if self.qleDataID is not None:
             self.qleDataID.setText(dataId)
             self.qleDataID.setFocus()
             self.qleDataID.selectAll()
         # Keep combos aligned with the row so the user sees context (dataID is what they edit)
-        if self.cbInterval and interval:
+        # Do not use truthiness on combos — empty QComboBox is falsy
+        if self.cbInterval is not None and interval:
             idx = self.cbInterval.findText(interval)
             if idx >= 0:
                 self.cbInterval.setCurrentIndex(idx)
-        if self.cbDatabase and database is not None:
+        if self.cbDatabase is not None and database is not None:
             idx = self.cbDatabase.findText(database)
             if idx >= 0:
                 self.cbDatabase.setCurrentIndex(idx)
@@ -482,7 +485,7 @@ class uiQuery(QMainWindow):
             and self.listQueryList is not None
             and 0 <= editIdx < self.listQueryList.count()
         ):
-            oldParts = self.listQueryList.item(editIdx).text().strip().split('|')
+            oldParts = self.listQueryList.item(editIdx).text().strip().split('|', 2)
             if len(oldParts) == 3:
                 interval = oldParts[1]
                 database = oldParts[2]
