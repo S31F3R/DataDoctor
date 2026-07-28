@@ -59,7 +59,7 @@ Need retest (longer tests — Seifer tomorrow)
 Need retest (fixes after RESPONSE — 2026-07-28 pass 2)
 --------------------------------------------------------------------------------
 
-[ ] Details window resizes down when switching tabs  **PRIORITY**
+[x] Details window resizes down when switching tabs  **PRIORITY**
    Steps:
      a. Overlay cell → Show details.
      b. Open Aquarius Details first (wide 4-col), then USBR-*-Details (2-col).
