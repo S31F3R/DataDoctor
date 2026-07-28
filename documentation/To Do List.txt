@@ -1,22 +1,31 @@
 ####### TASKS #######
--(done → test.txt) Double-click query list edit dataID; SQL snippet reorder; Aquarius cer/pfx; HDB link fallback; packageWindows + updateBunker
--(done → test.txt) Timestamps centered in column; smarter DAY+ start/end truncation
 -Expand update flow later: zip drops into an Update/ folder and platform-specific unpackers (Linux/Mac scripts TBD)
 -Linux/Mac package scripts (Windows: scripts/packageWindows.py exists)
+-Remove .pfx as a cert option. only accept .cer and .pem. Update documents accordingly. No need to add this to testing
+-Make header sort a double click instead of single. Single click make it highlight the column
+-Clip board copy and paste need to work "normal" in this program. I should be able to highlight any area, hit ctrl+c to copy it then paste it
+    -If I copy 5 rows in a single column, I'd expect to be able to paste that data into another column, just like excel
+    -Need to catch pasted data as edits to the destination cells
+    -Add context menu for copy/paste in internal, copy ONLY in public queries
+    -Copy needs to work from context menu items also, so ctrl+c or riight click to select copy or highlight range and do one of the 2 copy methods. All that needs to be added
 
 ####### CURRENT BUGS #######
+-Deltas checkbox shouldn't run under normal QAQC checks. This has its own formatting based on + or - delta
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
--Retro restart on Windows — re-fixed with temp .cmd delay (see test.txt)
--(done → test.txt) Random certs folder on AQ queries — ensureAquariusPem no longer makedirs; only uses existing cert dirs
+    -This has nothing to do with the .exe. Launching the .py or .pyw file on windows using python ./DataDoctor.py still shows a default python icon, but shows correct icon on Linux
 
 ####### NEW FEATURES #######
--Need to build a query that updates dataDictionary without replacing user updated fields
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
-    -Add a plot that graphs delta pair and overlays delta as a seperate line
--Need to expand options for USBR and add the following options:
-    -Apply Overwrite Flag
+    -Add a plot that graphs delta pair and overlays delta as a seperate line    
+-SQL Query Builder needs to be a button and not an option in Options
+-Expand options to add more config options to the entire program
+    -Maybe switch options to tree view or add vertical tabs
+    -Aquarius will need an opiton to use credential account or entra account
+        -Maybe default to entra, then if that doesn't exist then use credential if there? Need to research this
+    -USBR will need:
+        -Apply Overwrite Flag
 
 ####### MAIN INTERFACE MODIFICATIONS #######
 -Stress relief button that makes screaming goat sounds
@@ -28,6 +37,14 @@
 
 ####### WIKI IDEAS #######
 -QAQC and how it works with Data Dictionary
+-Aquarius link, what is required
+-Explanation of BOP and EOP for USBR
+-Overlay and delta explanation
+-Overlay auto marked for edits/upload
+-CSV dumps based on Data Query tab or SQL Build tab
+-Diffrent quicklooks, how to save/use them
+-AppData, what is stored and where
+-dataDictionary valuePrecision and precisionOverride explanation
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme

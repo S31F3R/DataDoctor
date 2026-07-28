@@ -16,7 +16,7 @@ Current Tests
      c. Missing users and TNS/network noise stay out of the popup (still in app.log).
    Notes: status 'locked' shown; 'error'/'missing' silent in UI.
 
-[ ] UCHDB2 schema UCHDBA via config
+[x] UCHDB2 schema UCHDBA via config
    Steps:
      a. Internal query against USBR-UCHDB2 (data + metadata maps).
      b. Comboboxes/labels show USBR-UCHDB2 only (no |UCHDBA).
@@ -52,8 +52,9 @@ Current Tests
    RESPONSE: [error 2147942632 (0x800700e8) when launching `ping  -n 3 127.0.0.1 ']
             If this doesn't get fixed next round, change Windows popup to say they need
             to restart the program for changes to take effect.
+            RESPONSE: This still not fixed nor is it dumping a log. Go with my new route, say a restart will be needed before changes take effect
 
-[ ] Aquarius certs: no random certs/ folders + convert cleanup  **PRIORITY**
+[x] Aquarius certs: no random certs/ folders + convert cleanup  **PRIORITY**
    Steps:
      a. Ensure project has an existing certs/ folder (create manually if needed — app will not).
      b. Place cert.cer (or any .cer/.pfx) under project certs/.
@@ -70,14 +71,14 @@ Current Tests
      .pfx path; stale pem should not crash.
    RESPONSE (code): fixed makedirs bug; remove source; no stale-pem fallback when reconvert fails.
 
-[ ] Timestamps centered in vertical header column
+[x] Timestamps centered in vertical header column
    Steps:
      a. Run any internal query so the main table has a timestamp rail.
      b. Timestamp text should be horizontally centered in the left header column.
      c. Still centered after overlay/delta rewrite and after sorting by a value column.
    Notes: buildTable + QueryUtils overlay path + updateTableAfterSort set AlignCenter.
 
-[ ] Smarter query dates for DAY+ intervals
+[x] Smarter query dates for DAY+ intervals
    Steps:
      a. Query with DAY interval; pick start/end that include non-zero times (e.g. 14:37).
      b. DEBUG log shows normalized range with 00:00 on both ends (time truncated).
