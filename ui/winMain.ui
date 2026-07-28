@@ -360,7 +360,7 @@
        <item>
         <widget class="QPushButton" name="btnPublicQuery">
          <property name="toolTip">
-          <string>Public data query (USGS / public sources)</string>
+          <string>Public Queries</string>
          </property>
          <property name="text">
           <string/>
@@ -380,7 +380,7 @@
        <item>
         <widget class="QPushButton" name="btnInternalQuery">
          <property name="toolTip">
-          <string>Internal data query (HDB / Aquarius / USGS)</string>
+          <string>Internal Queries</string>
          </property>
          <property name="text">
           <string/>
@@ -449,7 +449,7 @@
        <item>
         <widget class="QPushButton" name="btnOptions">
          <property name="toolTip">
-          <string>Options (credentials, retro mode, SQL, QAQC)</string>
+          <string>Options</string>
          </property>
          <property name="text">
           <string/>

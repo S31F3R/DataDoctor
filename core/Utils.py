@@ -4,10 +4,14 @@ import os
 import sys
 import json
 import configparser
+import subprocess
+import tempfile
+import time
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
     QListWidget, QTreeView, QPushButton, QCheckBox, QRadioButton, QComboBox,
+    QApplication,
 )
 from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
@@ -132,6 +136,117 @@ platformLayoutYNudge = {
 # Query-style lists that need tight item rows on Windows non-retro
 # (SQL snippet list + Query dataID list only — not every QListWidget)
 compactListObjectNames = frozenset({'listSnippets', 'listQueryList'})
+
+
+def restartApplication():
+    """
+    Relaunch this process then quit the current app.
+
+    Windows cannot reliably use os.execl (pythonw, spaces, VB launcher).
+    Strategy:
+      1. Absolute paths for python + script
+      2. On Windows: write a temp .cmd that waits briefly, starts the app,
+         then deletes itself — so the parent can exit without killing the child
+      3. On Unix: QProcess.startDetached / subprocess, then quit
+      4. Unix last resort: os.execl
+
+    Returns True if a restart was scheduled, False on hard failure.
+    Retro mode (and other config) must already be saved before calling.
+    """
+    try:
+        program = os.path.abspath(sys.executable)
+        # sys.argv[0] may be relative; resolve against cwd
+        argv0 = sys.argv[0] if sys.argv else ''
+        script = os.path.abspath(argv0) if argv0 else ''
+        extra = list(sys.argv[1:]) if len(sys.argv) > 1 else []
+        cwd = os.getcwd()
+
+        # Prefer project root when script path is known
+        if script and os.path.isfile(script):
+            cwd = os.path.dirname(script) or cwd
+
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"restartApplication: program={program!r} script={script!r} "
+                f"extra={extra!r} cwd={cwd!r} platform={sys.platform}",
+            )
+
+        if sys.platform == 'win32':
+            # Build quoted command line for the child
+            if script and os.path.isfile(script):
+                childParts = [f'"{program}"', f'"{script}"'] + [f'"{a}"' for a in extra]
+            else:
+                # Frozen / launcher: re-exec executable only
+                childParts = [f'"{program}"'] + [f'"{a}"' for a in extra]
+            childCmd = ' '.join(childParts)
+            # .cmd: wait ~1s so parent can exit, then start, then self-delete
+            batLines = [
+                '@echo off',
+                'ping -n 2 127.0.0.1 >nul',
+                f'cd /d "{cwd}"',
+                f'start "" {childCmd}',
+                'del "%~f0"',
+                '',
+            ]
+            fd, batPath = tempfile.mkstemp(suffix='.cmd', prefix='DataDoctorRestart_')
+            os.close(fd)
+            with open(batPath, 'w', encoding='utf-8', newline='\r\n') as f:
+                f.write('\r\n'.join(batLines))
+            # Launch cmd detached; do not wait
+            CREATE_NO_WINDOW = 0x08000000
+            DETACHED_PROCESS = 0x00000008
+            CREATE_NEW_PROCESS_GROUP = 0x00000200
+            flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+            subprocess.Popen(
+                ['cmd.exe', '/c', batPath],
+                cwd=cwd,
+                close_fds=True,
+                creationflags=flags,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            Logic.logMessage(
+                "INFO",
+                f"restartApplication: scheduled Windows restart via {batPath}",
+            )
+        else:
+            # Linux / macOS
+            args = [program]
+            if script and os.path.isfile(script):
+                args.append(script)
+            args.extend(extra)
+            try:
+                from PyQt6.QtCore import QProcess
+                ok = QProcess.startDetached(program, args[1:] if len(args) > 1 else [], cwd)
+                if not ok:
+                    raise RuntimeError('QProcess.startDetached returned False')
+                Logic.logMessage("INFO", f"restartApplication: QProcess.startDetached {args}")
+            except Exception as e:
+                Logic.logMessage("WARN", f"restartApplication: QProcess failed ({e}); subprocess")
+                subprocess.Popen(args, cwd=cwd, start_new_session=True)
+                Logic.logMessage("INFO", f"restartApplication: subprocess.Popen {args}")
+
+        # Quit after a short delay so the restart spawn is fully underway
+        app = QApplication.instance()
+
+        def quitApp():
+            if app is not None:
+                app.quit()
+            else:
+                os._exit(0)  # library API
+
+        if app is not None:
+            QTimer.singleShot(250, quitApp)
+        else:
+            time.sleep(0.25)
+            os._exit(0)  # library API
+        return True
+    except Exception as e:
+        Logic.logException("restartApplication failed", e)
+        return False
+
 
 class customPasswordEdit(QLineEdit):
     """Password field using Qt's native echo modes (no dual realText/display bookkeeping).

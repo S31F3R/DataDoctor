@@ -595,73 +595,16 @@ class uiOptions(QDialog):
             )
 
             if reply == QMessageBox.StandardButton.Ok:
-                # Windows: os.execl often fails (pythonw, paths, launcher). Prefer
-                # QProcess.startDetached + clean quit on all platforms.
-                restarted = False
-                try:
-                    from PyQt6.QtCore import QProcess
-                    from PyQt6.QtWidgets import QApplication
-                    program = sys.executable
-                    # sys.argv[0] is the script/module; remaining are extra args
-                    arguments = list(sys.argv)
-                    cwd = os.getcwd()
-                    # startDetached(program, arguments) — arguments include script path
-                    ok = QProcess.startDetached(program, arguments, cwd)
-                    if ok:
-                        restarted = True
-                        Logic.logMessage(
-                            "INFO",
-                            f"Restarting DataDoctor via QProcess.startDetached: {program} {arguments}",
-                        )
-                        app = QApplication.instance()
-                        if app is not None:
-                            app.quit()
-                        else:
-                            sys.exit(0)
-                    else:
-                        Logic.logMessage(
-                            "WARN",
-                            "QProcess.startDetached returned False; trying subprocess",
-                        )
-                except Exception as e:
-                    Logic.logException("Retro restart via QProcess failed", e)
-
-                if not restarted:
-                    try:
-                        import subprocess
-                        # close_fds=False is more reliable on Windows
-                        kwargs = {}
-                        if sys.platform == 'win32':
-                            kwargs['close_fds'] = False
-                            # DETACHED_PROCESS so child survives parent exit
-                            CREATE_NEW_PROCESS_GROUP = 0x00000200
-                            DETACHED_PROCESS = 0x00000008
-                            kwargs['creationflags'] = CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
-                        subprocess.Popen([sys.executable] + list(sys.argv), cwd=os.getcwd(), **kwargs)
-                        restarted = True
-                        Logic.logMessage("INFO", "Restarting DataDoctor via subprocess.Popen")
-                        from PyQt6.QtWidgets import QApplication
-                        app = QApplication.instance()
-                        if app is not None:
-                            app.quit()
-                        else:
-                            sys.exit(0)
-                    except Exception as e:
-                        Logic.logException("Retro restart via subprocess failed", e)
-
-                if not restarted and sys.platform != 'win32':
-                    # Last resort on Unix only (historically reliable there)
-                    try:
-                        os.execl(sys.executable, sys.executable, *sys.argv)
-                    except Exception as e:
-                        Logic.logException("Retro restart via os.execl failed", e)
-
+                # Restart must fully detach before this process exits (Windows
+                # especially fails with os.execl / immediate Popen+quit).
+                restarted = Utils.restartApplication()
                 if not restarted:
                     QMessageBox.warning(
                         self,
                         "Restart Failed",
                         "Could not restart DataDoctor automatically.\n\n"
-                        "Please close and reopen the program for retro mode to apply.",
+                        "Please close and reopen the program for retro mode to apply.\n"
+                        "Your retro mode setting was saved.",
                     )
             else:
                 self.chkbRetroMode.setChecked(previousRetro)

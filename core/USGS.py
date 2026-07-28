@@ -54,9 +54,9 @@ def classifyUid(uid):
     Parse USGS DataID forms.
 
     Returns:
-      ('ogc', site, tsid, param5_or_empty)
+      ('ogc', site, tsid, param5OrEmpty)
       ('legacy', site, method, param5)
-      ('ogc_lookup', site, None, param5)  — Site-Parameter; needs tsid resolution
+      ('ogcLookup', site, None, param5)  — Site-Parameter; needs tsid resolution
       None if invalid
 
     OGC notes:
@@ -87,7 +87,7 @@ def classifyUid(uid):
             return ("ogc", site, second.lower(), '')
         # Site-Parameter (5-digit style param code) → look up time_series_id(s)
         if second.isdigit() and len(second) <= 5:
-            return ("ogc_lookup", site, None, second.zfill(5))
+            return ("ogcLookup", site, None, second.zfill(5))
         return None
 
     return None
@@ -592,7 +592,7 @@ def resolveUsgsDataId(uid, parent=None):
     Resolve a USGS DataID to a concrete queryable form on the UI thread.
 
     - Full Site-tsid[-param] → returned unchanged (param optional for OGC).
-    - Site-Parameter (ogc_lookup) → fetch matching time_series_ids;
+    - Site-Parameter (ogcLookup) → fetch matching time_series_ids;
         1 match: rewrite to Site-tsid-param
         N matches: QInputDialog for user pick (if parent provided)
         0 matches: return None
@@ -607,7 +607,7 @@ def resolveUsgsDataId(uid, parent=None):
         # Already concrete. For OGC without param, keep as Site-tsid (valid).
         return str(uid).strip()
 
-    if kind != "ogc_lookup":
+    if kind != "ogcLookup":
         return None
 
     _, site, _, param5 = classified
@@ -975,7 +975,7 @@ def apiRead(dataID, interval, startDate, endDate):
             ogcIds.append(uid)
         elif kind == "legacy":
             legacyIds.append(uid)
-        elif kind == "ogc_lookup":
+        elif kind == "ogcLookup":
             # Resolve Site-Parameter → Site-tsid-param (no UI parent in worker;
             # single match only; multi-match should have been resolved in uiQuery).
             resolved = resolveUsgsDataId(uid, parent=None)
