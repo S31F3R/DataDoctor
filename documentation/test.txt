@@ -6,7 +6,7 @@ Workflow:
   - PASS → mark [x] here (stay off To Do); Grok may clean confirmed [x] items
   - FAIL → note here; Grok re-fixes
 
-Need retest (longer tests — Seifer tomorrow)
+Current Tests
 --------------------------------------------------------------------------------
 
 [ ] HDB password change UI only shows useful outcomes
@@ -23,13 +23,13 @@ Need retest (longer tests — Seifer tomorrow)
      c. Logs/DEBUG schema should use UCHDBA for UCHDB2.
    Notes: Config.hdbOracleDatabases 'USBR-UCHDB2|UCHDBA'; Utils.hdbSchemaForDatabase.
 
-[ ] USGS DataID: optional parameter + Site-Parameter lookup
+[x] USGS DataID: optional parameter + Site-Parameter lookup
    Steps:
      a. Site-00065 (param only): if one series, auto-resolves; if many, picker dialog.
      b. Cancel picker → not added to list.
    Notes: USGS.classifyUid / resolveUsgsDataId; OGC filter is time_series_id only.
 
-[ ] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
+[x] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
    Steps:
      a. DAY query → vertical header like 03/15/24 (no time).
      b. MONTH query → header like 03/24 (mm/yy).
@@ -48,12 +48,14 @@ Need retest (longer tests — Seifer tomorrow)
 [ ] Windows package + bunker merge scripts
    Steps:
      a. scripts/packageWindows.py builds zip with launcher as root, Project Files layout.
+        RESPONSE: This works perfectly. Need to create a readme file that explains requirements, like having pythong 3.13 installed. Maybe even instructions on how to run python --version. if not installed, run
+                the provided python installer. this means the readme will need to be created each packageWindows.py run. This will allow me to include new python installers in the future
      b. launcher/updateBunker.py merges packaged bunker.db into user bunker without wiping
-        user fields except dataType/siteName/valuePrecision/database when dataID+siteID match.
-
-
-Need retest (fixes after RESPONSE — 2026-07-28 pass 2)
---------------------------------------------------------------------------------
+        user fields except dataType/siteName/valuePrecision/database when dataID+siteID match. 
+        RESPONSE: When we package this up using packageWindows, updateBunker.cmd location is good but lets move updateBunker.py into Project Files/scripts. That way the 2 files same name doesn't confuse the user.
+                Need to add a readme on how to update. Also need to place bunker.db in a temp location. make a temp folder in Project Files/temp and place the packaged bunker.db in there. When the user copies
+                the new files over from the zip, they can run the updateBunker.cmd. This will take the temp bunker.db (updated) and merge it with theirs. Their bunker.db will in proper location. after
+                script is ran, remove the temp folder and that bunker.db file. I already placed updateBunker.py in approperate spot     
 
 [x] Details window resizes down when switching tabs  **PRIORITY**
    Steps:
@@ -77,6 +79,7 @@ Need retest (fixes after RESPONSE — 2026-07-28 pass 2)
      hidden detached cmd. If fail, open that log file for the real error.
    Prior RESPONSE: terminal popup with nonsensical error.
    RESPONSE: [error 2147942632 (0x800700e8) when launching `ping  -n 3 127.0.0.1 ']
+            If this doesn't get fixed next round, lets change the pop up on windows, saying they need to restart the program for changes to take effect
 
 [ ] Aquarius certs: .cer / .pfx accepted
    Steps:
@@ -87,6 +90,8 @@ Need retest (fixes after RESPONSE — 2026-07-28 pass 2)
    Notes: Any name (.cer/.crt) works, not only aquarius.cer. Re-converts if source
      is newer than aquarius.pem. INFO logs list search dirs + files found.
    Prior RESPONSE: certs/cert.cer not converting.
+   RESPONSE: need to remove .cer/.pfx after conversion. this way we can write the code to take any new .cer/.pfx and overwrite the current pem. .pem creation worked on .cer but not .pfx
+            Need to make sure if .pem is old, we go back to non cert method. don't want the program crashing due to old cert
 
 Confirmed
 --------------------------------------------------------------------------------
