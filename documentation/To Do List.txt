@@ -1,18 +1,14 @@
 ####### TASKS #######
 -(done → test.txt) Double-click query list edit dataID; SQL snippet reorder; Aquarius cer/pfx; HDB link fallback; packageWindows + updateBunker
+-(done → test.txt) Timestamps centered in column; smarter DAY+ start/end truncation
 -Expand update flow later: zip drops into an Update/ folder and platform-specific unpackers (Linux/Mac scripts TBD)
 -Linux/Mac package scripts (Windows: scripts/packageWindows.py exists)
--Timestamps need to be centered in their column
--Make queries smarter. If the interval of the data is going to be daily, truncate time off of start/end  
-    -Same with month, year, etc
-    -Code currently knows how to handle picking the correct time interval. Don't mess that up, use that same code. If the interval ends up going to day or higher, run this new logic
 
 ####### CURRENT BUGS #######
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
 -Retro restart on Windows — re-fixed with temp .cmd delay (see test.txt)
--Random certs folder getting created when using AQ queries. It's getting created outside of the project
-    -There is no reason for the program to ever create a certs folder. It should only be working in the cert folder it finds the .cer/.pfx/.pem in
+-(done → test.txt) Random certs folder on AQ queries — ensureAquariusPem no longer makedirs; only uses existing cert dirs
 
 ####### NEW FEATURES #######
 -Need to build a query that updates dataDictionary without replacing user updated fields

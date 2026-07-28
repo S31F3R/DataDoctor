@@ -64,7 +64,7 @@ def resourcePath(relativePath):
 
 def _aquariusCertSearchDirs():
     """
-    Candidate certs/ folders (first existing wins for sources; first writable for output).
+    Candidate certs/ folder paths (never created here — only listed if they already exist).
 
     Users often drop certs next to the launcher zip root, under Project Files/,
     or in the app config dir — not only resourcePath('certs').
@@ -102,11 +102,18 @@ def _aquariusCertSearchDirs():
 
 
 def _writeAquariusPem(pemPath, data, binary=False):
-    """Write PEM bytes/text; return True on success."""
+    """
+    Write PEM bytes/text into an existing directory only.
+    Never creates parent folders (avoids random empty certs/ dirs).
+    """
     try:
         parent = os.path.dirname(pemPath)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
+        if parent and not os.path.isdir(parent):
+            logMessage(
+                "WARN",
+                f"ensureAquariusPem: refuse to create parent for {pemPath}",
+            )
+            return False
         if binary:
             with open(pemPath, 'wb') as out:
                 out.write(data)
@@ -117,6 +124,16 @@ def _writeAquariusPem(pemPath, data, binary=False):
     except Exception as e:
         logException(f"ensureAquariusPem: write {pemPath} failed", e)
         return False
+
+
+def _removeConvertedCertSource(src):
+    """Delete .cer/.crt/.pfx/.p12 after successful conversion so a new drop overwrites cleanly."""
+    try:
+        if src and os.path.isfile(src):
+            os.remove(src)
+            logMessage("INFO", f"ensureAquariusPem: removed converted source {src}")
+    except Exception as e:
+        logException(f"ensureAquariusPem: could not remove source {src}", e)
 
 
 def _cerToPemText(raw):
@@ -196,36 +213,38 @@ def ensureAquariusPem():
     """
     Ensure aquarius.pem exists for requests SSL verify.
 
-    Search order for sources (any certs/ folder that exists):
-      resourcePath, appRoot, parent of appRoot (launcher zip root), cwd,
-      user config certs/
+    Never creates a certs/ folder. Only works inside folders that already exist
+    and already contain cert material (.pem / .cer / .crt / .pfx / .p12).
+
+    Search order (existing dirs only):
+      resourcePath('certs'), appRoot/certs, parent-of-appRoot/certs (launcher),
+      cwd/certs, parent-of-cwd/certs, user config certs/
 
     Accepts any name:
       - aquarius.pem / any .pem
-      - any .cer / .crt  (e.g. cert.cer) → converted to aquarius.pem
-      - any .pfx / .p12 → openssl or cryptography
+      - any .cer / .crt  (e.g. cert.cer) → converted to aquarius.pem next to source
+      - any .pfx / .p12 → openssl or cryptography → aquarius.pem next to source
 
-    Re-converts when a source .cer/.pfx is newer than an existing aquarius.pem.
-    Leaves source files in place. Returns pem path or None.
+    After a successful .cer/.crt/.pfx/.p12 conversion the source file is removed
+    so a later drop cleanly replaces the pem. If conversion is required but fails
+    (stale pem older than a new source), returns None so Aquarius can fall back
+    to system trust / unverified rather than risk a bad cert.
     """
     import shutil
 
     searchDirs = _aquariusCertSearchDirs()
+    existingDirs = [d for d in searchDirs if os.path.isdir(d)]
     logMessage(
         "INFO",
-        "ensureAquariusPem: searching " + ", ".join(searchDirs),
+        "ensureAquariusPem: candidates="
+        + ", ".join(searchDirs)
+        + " | existing="
+        + (", ".join(existingDirs) if existingDirs else "(none)"),
     )
-    for d in searchDirs:
-        try:
-            os.makedirs(d, exist_ok=True)
-        except Exception:
-            pass
 
-    # Collect all source files across dirs
+    # Collect files only from dirs that already exist — never mkdir
     entries = []
-    for d in searchDirs:
-        if not os.path.isdir(d):
-            continue
+    for d in existingDirs:
         try:
             for f in os.listdir(d):
                 path = os.path.join(d, f)
@@ -237,8 +256,9 @@ def ensureAquariusPem():
     if not entries:
         logMessage(
             "WARN",
-            "ensureAquariusPem: no files in certs/ folders. "
-            "Place cert.cer / aquarius.pem / .pfx under project certs/",
+            "ensureAquariusPem: no cert files found. "
+            "Place cert.cer / aquarius.pem / .pfx in an existing project certs/ folder "
+            "(the app will not create certs/ for you).",
         )
         return None
 
@@ -246,28 +266,15 @@ def ensureAquariusPem():
     logMessage("INFO", f"ensureAquariusPem: found files: {basenames}")
 
     def pemOutPath(src):
-        """Prefer writing next to source; fall back to first writable search dir."""
-        local = os.path.join(os.path.dirname(src), 'aquarius.pem')
-        try:
-            os.makedirs(os.path.dirname(local), exist_ok=True)
-            return local
-        except Exception:
-            pass
-        for d in searchDirs:
-            try:
-                os.makedirs(d, exist_ok=True)
-                return os.path.join(d, 'aquarius.pem')
-            except Exception:
-                continue
-        return local
+        """Always write aquarius.pem next to the source file (same existing folder)."""
+        return os.path.join(os.path.dirname(src), 'aquarius.pem')
 
     def existingPemPaths():
         found = []
-        for d in searchDirs:
+        for d in existingDirs:
             candidate = os.path.join(d, 'aquarius.pem')
             if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
                 found.append(candidate)
-        # Also any .pem already named aquarius*
         for p in entries:
             if p.lower().endswith('.pem') and 'aquarius' in os.path.basename(p).lower():
                 if os.path.getsize(p) > 0 and p not in found:
@@ -296,15 +303,19 @@ def ensureAquariusPem():
         key=lambda p: (0 if 'aquarius' in os.path.basename(p).lower() else 1, p.lower())
     )
 
+    convertible = cerFiles + pfxFiles + otherPems
     existing = existingPemPaths()
     newestSourceMtime = 0.0
-    for src in cerFiles + pfxFiles + otherPems:
+    for src in convertible:
         try:
             newestSourceMtime = max(newestSourceMtime, os.path.getmtime(src))
         except Exception:
             pass
 
     # Use existing aquarius.pem only if it is at least as new as any source cert
+    if existing and newestSourceMtime <= 0:
+        logMessage("INFO", f"ensureAquariusPem: using existing {existing[0]}")
+        return existing[0]
     if existing:
         try:
             pemMtime = max(os.path.getmtime(p) for p in existing)
@@ -318,7 +329,7 @@ def ensureAquariusPem():
             "ensureAquariusPem: source cert newer than aquarius.pem — reconverting",
         )
 
-    # Copy other .pem → aquarius.pem
+    # Copy other .pem → aquarius.pem (keep original .pem; user may want it)
     for src in otherPems:
         pemPath = pemOutPath(src)
         try:
@@ -328,7 +339,7 @@ def ensureAquariusPem():
         except Exception as e:
             logException(f"ensureAquariusPem: copy {src} failed", e)
 
-    # .cer / .crt (any name, e.g. cert.cer) → aquarius.pem
+    # .cer / .crt (any name, e.g. cert.cer) → aquarius.pem; remove source on success
     for src in cerFiles:
         try:
             with open(src, 'rb') as f:
@@ -340,6 +351,7 @@ def ensureAquariusPem():
             pemPath = pemOutPath(src)
             if _writeAquariusPem(pemPath, pemText, binary=False):
                 logMessage("INFO", f"ensureAquariusPem: converted {src} → {pemPath}")
+                _removeConvertedCertSource(src)
                 return pemPath
         except Exception as e:
             logException(f"ensureAquariusPem: convert cer {src} failed", e)
@@ -369,17 +381,26 @@ def ensureAquariusPem():
                     "INFO",
                     f"ensureAquariusPem: converted {src} → {pemPath} via openssl",
                 )
+                _removeConvertedCertSource(src)
                 return pemPath
             if _pfxToPemViaCryptography(src, pemPath, passwords):
                 logMessage(
                     "INFO",
                     f"ensureAquariusPem: converted {src} → {pemPath} via cryptography",
                 )
+                _removeConvertedCertSource(src)
                 return pemPath
 
-    # Fall back to any existing pem even if older
+    # Stale pem + failed reconvert: do not use the old cert (fall back to system / unverified)
+    if convertible:
+        logMessage(
+            "WARN",
+            "ensureAquariusPem: conversion failed; not using stale aquarius.pem "
+            "(Aquarius will try system trust, then unverified)",
+        )
+        return None
     if existing:
-        logMessage("WARN", f"ensureAquariusPem: conversion failed; using older {existing[0]}")
+        logMessage("INFO", f"ensureAquariusPem: using existing {existing[0]}")
         return existing[0]
     logMessage("WARN", "ensureAquariusPem: could not build aquarius.pem from certs/")
     return None

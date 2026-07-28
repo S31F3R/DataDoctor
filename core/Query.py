@@ -706,6 +706,13 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         timestamps = [row.split(',', 1)[0].strip() for row in data]
         table.setVerticalHeaderLabels(timestamps)
         vHeader.setVisible(True)
+        # Center timestamps in the vertical header column
+        tsAlign = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        vHeader.setDefaultAlignment(tsAlign)
+        for r in range(len(timestamps)):
+            tsItem = table.verticalHeaderItem(r)
+            if tsItem is not None:
+                tsItem.setTextAlignment(tsAlign)
         # Fixed min width from sample only (not ResizeToContents)
         font = table.font()
         metrics = QFontMetrics(font)
@@ -948,8 +955,12 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
         table.blockSignals(True)
         table.setUpdatesEnabled(False)
 
+        tsAlign = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        table.verticalHeader().setDefaultAlignment(tsAlign)
         for rowIdx, row in enumerate(sortedRows):
-            table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row['ts']))
+            tsHeader = QTableWidgetItem(row['ts'])
+            tsHeader.setTextAlignment(tsAlign)
+            table.setVerticalHeaderItem(rowIdx, tsHeader)
             cells = row.get('cells', [])
 
             for c in range(table.columnCount()):
@@ -1068,12 +1079,21 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             elif firstDb == 'AQUARIUS':
                 firstInterval = 'INSTANT:1'
 
-        # Round down startDate to nearest firstInterval
+        # Align start/end to the first series interval (HOUR/INSTANT round;
+        # DAY+ truncate time / period boundaries). Same firstInterval used for
+        # table timestamps — do not change interval selection logic.
         startDate = roundDownToInterval(startDate, firstInterval)
+        endDate = roundDownToInterval(endDate, firstInterval)
 
-        # Convert back to str for buildTimestamps
+        # Convert back to str for buildTimestamps / API workers
         startDateStr = startDate.strftime('%Y-%m-%d %H:%M')
         endDateStr = endDate.strftime('%Y-%m-%d %H:%M')
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"executeQuery: interval={firstInterval} normalized range "
+                f"{startDateStr} → {endDateStr}",
+            )
         timestamps = buildTimestamps(startDateStr, endDateStr, firstInterval)
 
         if not timestamps:
@@ -1521,29 +1541,54 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
 
 def roundDownToInterval(dt, interval):
-    """Round down datetime to the nearest specified interval."""
-    if interval == 'HOUR' or interval == 'INSTANT:60':
-        # Round down to nearest hour
+    """
+    Snap datetime down to the start of its interval bucket.
+
+    HOUR / INSTANT: round minutes/seconds.
+    DAY+: truncate time (and day/month for coarser periods) so API start/end
+    match display buckets. Applied to both start and end in executeQuery.
+    """
+    if dt is None:
+        return dt
+    iv = (interval or '').strip().upper()
+    if iv == 'HOUR' or iv == 'INSTANT:60':
         dt = dt.replace(minute=0, second=0, microsecond=0)
-    elif interval == 'INSTANT:1':
-        # Round down to nearest minute
+    elif iv == 'INSTANT:1':
         dt = dt.replace(second=0, microsecond=0)
-    elif interval == 'INSTANT:15':
-        # Round down to nearest 15-minute interval
+    elif iv == 'INSTANT:15':
         try:
             n = 15
             minutesDown = (dt.minute // n) * n
             dt = dt.replace(minute=minutesDown, second=0, microsecond=0)
         except ValueError:
             if Config.debug:
-                Logic.logMessage("WARN", f"Error rounding INSTANT:15, no rounding applied")
+                Logic.logMessage("WARN", "Error rounding INSTANT:15, no rounding applied")
             return dt
+    elif iv == 'DAY':
+        # Drop time — daily series are date-only
+        dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif iv == 'MONTH':
+        # Drop day + time — monthly series keyed by mm/yy
+        dt = dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif iv == 'YEAR':
+        dt = datetime(dt.year, 1, 1)
+    elif iv == 'WATER YEAR':
+        # Start of water year containing dt (Oct 1 → Sep 30, label = end year)
+        if dt.month >= 10:
+            dt = datetime(dt.year, 10, 1)
+        else:
+            dt = datetime(dt.year - 1, 10, 1)
+    elif iv.startswith('INSTANT:'):
+        # Unknown instant step: zero seconds only
+        dt = dt.replace(second=0, microsecond=0)
     else:
-        # For other intervals, no manipulation needed
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Interval {interval} does not require rounding, returning unchanged")
+            Logic.logMessage(
+                "DEBUG",
+                f"Interval {interval} does not require rounding, returning unchanged",
+            )
         return dt
-    
+
     if Config.debug:
-        Logic.logMessage("DEBUG", f"Rounded down {dt} to {interval}")
+        Logic.logMessage("DEBUG", f"Rounded down to {interval}: {dt}")
     return dt

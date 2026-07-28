@@ -256,6 +256,12 @@ def modifyTable(
     )
     if timestamps and any(timestamps):
         table.setVerticalHeaderLabels(timestamps)
+        tsAlign = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        table.verticalHeader().setDefaultAlignment(tsAlign)
+        for r in range(len(timestamps)):
+            tsItem = table.verticalHeaderItem(r)
+            if tsItem is not None:
+                tsItem.setTextAlignment(tsAlign)
 
     align = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
     yieldEvery = 200 if numRows * outCols > 200000 else 500

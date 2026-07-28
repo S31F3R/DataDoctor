@@ -10,13 +10,13 @@ To build on Windows: pyinstaller --noconsole --noupx --onedir --add-data "ui;ui"
 
 ## Aquarius TLS certificates
 
-Place the server cert in a `certs/` folder as one of:
+Create a `certs/` folder yourself (the app never creates one) and place the server cert as one of:
 
 - `aquarius.pem` (preferred)
-- `.cer` / `.crt` (auto-converted to `aquarius.pem` on first use)
-- `.pfx` / `.p12` (converted via OpenSSL if on PATH, or the `cryptography` package; optional password in keyring key `DataDoctor` / `aqCertPassword`)
+- `.cer` / `.crt` (auto-converted to `aquarius.pem` on first use; source file removed after success)
+- `.pfx` / `.p12` (converted via OpenSSL if on PATH, or the `cryptography` package; optional password in keyring key `DataDoctor` / `aqCertPassword`; source removed after success)
 
-Search locations (first hit wins): project `certs/`, app root, parent of app root (Windows zip / launcher folder), current working directory, and the user config `certs/` folder. Converted `aquarius.pem` is written next to the source file when possible.
+Search locations (existing folders only): project `certs/`, app root, parent of app root (Windows zip / launcher folder), current working directory, and the user config `certs/` folder. Converted `aquarius.pem` is written next to the source file. If conversion fails, the app falls back to system trust (then unverified) rather than using a stale pem.
 
 Or add the cert to your system trust store.
 

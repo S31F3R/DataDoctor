@@ -23,21 +23,6 @@ Current Tests
      c. Logs/DEBUG schema should use UCHDBA for UCHDB2.
    Notes: Config.hdbOracleDatabases 'USBR-UCHDB2|UCHDBA'; Utils.hdbSchemaForDatabase.
 
-[x] USGS DataID: optional parameter + Site-Parameter lookup
-   Steps:
-     a. Site-00065 (param only): if one series, auto-resolves; if many, picker dialog.
-     b. Cancel picker → not added to list.
-   Notes: USGS.classifyUid / resolveUsgsDataId; OGC filter is time_series_id only.
-
-[x] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
-   Steps:
-     a. DAY query → vertical header like 03/15/24 (no time).
-     b. MONTH query → header like 03/24 (mm/yy).
-     c. YEAR and WATER YEAR → header like 2024 (yyyy only).
-     d. HOUR / INSTANT unchanged (mm/dd/yy HH:MM:00).
-     e. Sort by timestamp and cell details still work on coarser headers.
-   Notes: Query.formatTimestamp / buildTimestamps / gapCheck interval-aware.
-
 [ ] HDB database-link failure → direct connect fallback
    Steps:
      a. Internal multi-DB query where primary uses @link to another HDB.
@@ -48,27 +33,13 @@ Current Tests
 [ ] Windows package + bunker merge scripts
    Steps:
      a. scripts/packageWindows.py builds zip with launcher as root, Project Files layout.
-        RESPONSE: This works perfectly. Need to create a readme file that explains requirements, like having pythong 3.13 installed. Maybe even instructions on how to run python --version. if not installed, run
-                the provided python installer. this means the readme will need to be created each packageWindows.py run. This will allow me to include new python installers in the future
+        RESPONSE: Works. Need a readme each package run (Python 3.13, python --version,
+                run provided installer if missing).
      b. launcher/updateBunker.py merges packaged bunker.db into user bunker without wiping
-        user fields except dataType/siteName/valuePrecision/database when dataID+siteID match. 
-        RESPONSE: When we package this up using packageWindows, updateBunker.cmd location is good but lets move updateBunker.py into Project Files/scripts. That way the 2 files same name doesn't confuse the user.
-                Need to add a readme on how to update. Also need to place bunker.db in a temp location. make a temp folder in Project Files/temp and place the packaged bunker.db in there. When the user copies
-                the new files over from the zip, they can run the updateBunker.cmd. This will take the temp bunker.db (updated) and merge it with theirs. Their bunker.db will in proper location. after
-                script is ran, remove the temp folder and that bunker.db file. I already placed updateBunker.py in approperate spot     
-
-[x] Details window resizes down when switching tabs  **PRIORITY**
-   Steps:
-     a. Overlay cell → Show details.
-     b. Open Aquarius Details first (wide 4-col), then USBR-*-Details (2-col).
-     c. Window should shrink to fit the narrower tab on first switch (not stay stuck wide).
-     d. Reverse order also fine.
-     e. Title is a single compact line (no huge empty band above tabs).
-     f. No large empty pad on the right of the table.
-   Notes: Rewrote sizing — CurrentPageTabWidget (sizeHint = current page only),
-     stretchLastSection on, title Fixed policy, no setFixedSize. Prior pass caused
-     huge title pad + right padding; that approach was removed.
-   Prior RESPONSE: huge header/title pad + ~1.2" right pad after last fix.
+        user fields except dataType/siteName/valuePrecision/database when dataID+siteID match.
+        RESPONSE: Move updateBunker.py into Project Files/scripts (done). Add update readme.
+                Put packaged bunker.db in Project Files/temp; updateBunker.cmd merges then
+                removes temp folder. updateBunker.py already in the right place.
 
 [ ] Retro mode restart on Windows
    Steps:
@@ -79,22 +50,48 @@ Current Tests
      hidden detached cmd. If fail, open that log file for the real error.
    Prior RESPONSE: terminal popup with nonsensical error.
    RESPONSE: [error 2147942632 (0x800700e8) when launching `ping  -n 3 127.0.0.1 ']
-            If this doesn't get fixed next round, lets change the pop up on windows, saying they need to restart the program for changes to take effect
+            If this doesn't get fixed next round, change Windows popup to say they need
+            to restart the program for changes to take effect.
 
-[ ] Aquarius certs: .cer / .pfx accepted
+[ ] Aquarius certs: no random certs/ folders + convert cleanup  **PRIORITY**
    Steps:
-     a. Place cert.cer (or any .cer/.pfx) under project certs/ (root of repo).
-     b. Run an Aquarius query (DEBUG ON).
-     c. app.log should show: found files: ['cert.cer'] then converted … → aquarius.pem
-     d. certs/aquarius.pem should appear next to cert.cer (source left in place).
-   Notes: Any name (.cer/.crt) works, not only aquarius.cer. Re-converts if source
-     is newer than aquarius.pem. INFO logs list search dirs + files found.
-   Prior RESPONSE: certs/cert.cer not converting.
-   RESPONSE: need to remove .cer/.pfx after conversion. this way we can write the code to take any new .cer/.pfx and overwrite the current pem. .pem creation worked on .cer but not .pfx
-            Need to make sure if .pem is old, we go back to non cert method. don't want the program crashing due to old cert
+     a. Ensure project has an existing certs/ folder (create manually if needed — app will not).
+     b. Place cert.cer (or any .cer/.pfx) under project certs/.
+     c. Run an Aquarius query (DEBUG ON).
+     d. app.log: found files includes the source; converted … → aquarius.pem; source removed.
+     e. certs/aquarius.pem exists; cert.cer / .pfx is gone after success.
+     f. No new empty certs/ folders outside the project (parent dir, cwd, ~/.config, etc.).
+     g. If only a stale aquarius.pem remains and a new .cer fails to convert, app falls back
+        to system trust then unverified (does not crash on old pem).
+   Notes: Logic.ensureAquariusPem never makedirs certs/; writes pem next to source only;
+     removes .cer/.crt/.pfx/.p12 after successful convert. Empty stray certs dirs cleaned
+     on this pass (parent Projects/certs, ~/.config/certs, ~/.config/-c/certs).
+   Prior RESPONSE: certs/cert.cer not converting; need remove source after convert;
+     .pfx path; stale pem should not crash.
+   RESPONSE (code): fixed makedirs bug; remove source; no stale-pem fallback when reconvert fails.
+
+[ ] Timestamps centered in vertical header column
+   Steps:
+     a. Run any internal query so the main table has a timestamp rail.
+     b. Timestamp text should be horizontally centered in the left header column.
+     c. Still centered after overlay/delta rewrite and after sorting by a value column.
+   Notes: buildTable + QueryUtils overlay path + updateTableAfterSort set AlignCenter.
+
+[ ] Smarter query dates for DAY+ intervals
+   Steps:
+     a. Query with DAY interval; pick start/end that include non-zero times (e.g. 14:37).
+     b. DEBUG log shows normalized range with 00:00 on both ends (time truncated).
+     c. MONTH → start/end snapped to 1st of month 00:00; YEAR → Jan 1; WATER YEAR → Oct 1 of WY.
+     d. HOUR / INSTANT unchanged (existing round-down only on minutes as before).
+     e. Interval selection still from first list item / combo — do not change that logic.
+   Notes: Query.roundDownToInterval + executeQuery applies to both start and end.
+
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] USGS DataID: optional parameter + Site-Parameter lookup (resolveUsgsDataId / picker)
+[x] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
+[x] Details window resizes down when switching tabs
 [x] Packaged Oracle preferred; system fallback
 [x] winMain tooltips (simplified labels)
 [x] Header size no longer changes when clicking a cell

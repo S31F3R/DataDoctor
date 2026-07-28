@@ -76,7 +76,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
                 if Config.debug:
                     Logic.logMessage(
                         "DEBUG",
-                        "No Aquarius certificate found under certs/ "
+                        "No Aquarius certificate found in any existing certs/ folder "
                         "(.pem / .cer / .pfx); skipping customCert.",
                     )
                 continue
@@ -90,8 +90,8 @@ def apiRead(dataIDs, startDate, endDate, interval):
                 Logic.logMessage(
                     "WARN",
                     "SSL verification disabled due to cert issues. "
-                    "Add aquarius.pem (or .cer / .pfx) to the certs/ folder "
-                    "or system trust store for secure connection.",
+                    "Place aquarius.pem (or .cer / .pfx) in an existing certs/ folder "
+                    "(app will not create one) or system trust store for secure connection.",
                 )
             break
         except requests.exceptions.SSLError as e:
