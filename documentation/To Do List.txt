@@ -1,27 +1,13 @@
 ####### TASKS #######
 -Go through all the bugs and fix them, unless there are questions. Move forward if in bug-smashing branch. if not, switch to bug-smashing, pull from testing, then run through tasks
--Add ability to double click a query in the Query List and have it show back up in the text box for edit, but just the dataID part. allow this to be changed and when add query is hit, update the query in the exact spot it was double clicked in
--Create an update script that merges user bunker.db files with one packaged from the program. This will help avoid wiping out user specific edits/additions
-    -Could make all new upgrades place zip in a pre created folder called Update. From there, the script can unzip and update the files
-    -Script would need to be taylored to different release versions, like windows launcher version script would act differently than linux raw python version
-    -Only fields that can be changed are dataType, siteName, valuePrecision, and database. only change if dataID and siteID match up with what was in there previously
-    -Create script in launcher area. I'll create other areas for Linux, Mac, etc later .Launcher is windows specific so script can be a .cmd or .py
--Add a feature to detect if HDB linking fails. If it fails, try the query with the approperate database
-    -This may require having the queries already seperated prior to this, just in case it happens
--Make it so the sql quickLooks can be re-ordered by moving up and down. This order needs to load this way on next open
--Need scripts that package up the project into zip files. Each zip will need to package it differently, depending on the platform it's for. Scripts can be placed into a folder called "scripts" in the root of the project
-    -Windows:
-        -zip would need to take everything under launcher as the root of the zip
-        -Copy .venv, core, quickLook, ui over to the Project Files folder. LICENSE file should be copied over to root
-        -Copy oracle over to Project Files
-        -When DataDoctor.py is copied over, change it to DataDoctor.pyw
--.cer or .pfx certs are what we have for Aquarius. our code is asking for a .pem file. is there a way to change this to accept the other certs? if not, can the code create the .pem if a .cer or .pfx is placed? if so, look for thoes files and convert to .pem if in that folder then clean out the old file
+-(done → test.txt) Double-click query list edit dataID; SQL snippet reorder; Aquarius cer/pfx; HDB link fallback; packageWindows + updateBunker
+-Expand update flow later: zip drops into an Update/ folder and platform-specific unpackers (Linux/Mac scripts TBD)
+-Linux/Mac package scripts (Windows: scripts/packageWindows.py exists)
 
 ####### CURRENT BUGS #######
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
--Turning on or off retro mode and program restarting doesn't work on Windows, works on Linux
-    -Code updated to QProcess.startDetached + subprocess fallback — needs Windows retest (see test.txt)
+-Retro restart on Windows — re-fixed with temp .cmd delay (see test.txt)
 
 ####### NEW FEATURES #######
 -Need to build a query that updates dataDictionary without replacing user updated fields

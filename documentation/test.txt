@@ -7,34 +7,8 @@ Workflow:
   - FAIL → note here; Grok re-fixes
 
 
-Need retest (bug-smash pass 2026-07-27)
+Need retest (longer tests — Seifer tomorrow)
 --------------------------------------------------------------------------------
-
-[ ] Header size no longer changes when clicking a cell
-   Steps:
-     a. Run any multi-column internal query.
-     b. Click several cells across columns.
-     c. Headers may not "light up" (highlightSections off); column widths must stay fixed.
-     d. Multi-line headers still fully visible (no clip).
-   Notes: QHeaderView.setHighlightSections(False) in Query.buildTable + Utils.
-
-[ ] Overlay secondary-only → auto edit for upload
-   Steps:
-     a. Internal query with Overlay ON; pair where primary is blank at some timestamps
-        and secondary has values (purple cells).
-     b. Those cells should be magenta (dirty) without manual edit.
-     c. Upload → secondary value written to primary (HDB MODIFY / Aquarius stub).
-     d. Without uploading, run a new query or Refresh — should NOT prompt about
-        unsaved edits for those auto-fills alone.
-     e. If you also hand-edit another cell, discard prompt should still appear.
-   Notes: Upload.snapshotBaseline autoOverlayFill; countPendingEdits skips auto fills.
-
-[ ] Retro mode restart (especially Windows)
-   Steps:
-     a. Options → toggle Retro Mode → OK to restart.
-     b. App should relaunch with the new mode (Windows + Linux).
-     c. Cancel on the prompt reverts the checkbox and config.
-   Notes: QProcess.startDetached + subprocess fallback (os.execl Windows-unreliable).
 
 [ ] HDB password change UI only shows useful outcomes
    Steps:
@@ -50,28 +24,6 @@ Need retest (bug-smash pass 2026-07-27)
      c. Logs/DEBUG schema should use UCHDBA for UCHDB2.
    Notes: Config.hdbOracleDatabases 'USBR-UCHDB2|UCHDBA'; Utils.hdbSchemaForDatabase.
 
-[ ] Details window resizes down when switching tabs
-   Steps:
-     a. Overlay cell → Show details.
-     b. Open Aquarius Details first (wide 4-col), then USBR-*-Details (2-col).
-     c. Window should shrink to fit the narrower tab (not stay stuck wide).
-     d. Reverse order also fine.
-   Notes: sizeWindowToTable clears min size; resizeToCurrentTab remeasures columns.
-
-[ ] winMain tooltips
-   Steps:
-     a. Hover every main toolbar button and data-tab Refresh/Undo/Upload.
-     b. Upload tip mentions HDB MODIFY/DELETE (not dry-run CSV).
-     c. Public/Internal/Options previously missing tips are present.
-     d. SQL tab: Run / Save snippet / Delete snippet tips make sense.
-
-[ ] USGS public query: Show details on right-click
-   Steps:
-     a. Public query a USGS-NWIS OGC series (hex time_series_id).
-     b. Right-click a data cell → "Show details" available.
-     c. Series/point metadata populates (same as internal when OGC meta present).
-     d. Non-USGS public series still have no metadata menu.
-
 [ ] USGS DataID: optional parameter + Site-Parameter lookup
    Steps:
      a. Add Query with Site-time_series_id only (no -00065) → query succeeds.
@@ -79,11 +31,6 @@ Need retest (bug-smash pass 2026-07-27)
      c. Site-00065 (param only): if one series, auto-resolves; if many, picker dialog.
      d. Cancel picker → not added to list.
    Notes: USGS.classifyUid / resolveUsgsDataId; OGC filter is time_series_id only.
-
-[ ] valuePrecision.json lives under core/
-   Steps:
-     a. Data Dictionary valuePrecision combobox still lists Aquarius identifiers.
-     b. File path: core/valuePrecision.json (not documentation/).
 
 [ ] Packaged Oracle preferred; system fallback
    Steps:
@@ -102,8 +49,77 @@ Need retest (bug-smash pass 2026-07-27)
    Notes: Query.formatTimestamp / buildTimestamps / gapCheck interval-aware.
 
 
-Confirmed (cleaned from prior passes — leave off To Do)
+Need retest (fixes after RESPONSE)
 --------------------------------------------------------------------------------
+
+[ ] Retro mode restart on Windows
+   Steps:
+     a. Options → toggle Retro Mode → OK to restart.
+     b. App should relaunch with the new mode (Windows).
+     c. Cancel on the prompt reverts the checkbox and config.
+   Notes: Uses temp .cmd delay + absolute paths (prior QProcess/execl failed on Win).
+   Prior RESPONSE: Still only worked on Linux.
+
+[ ] Details window resizes down when switching tabs
+   Steps:
+     a. Overlay cell → Show details.
+     b. Open Aquarius Details first (wide 4-col), then USBR-*-Details (2-col).
+     c. Window should shrink to fit the narrower tab on first switch (not stay stuck wide).
+     d. Reverse order also fine.
+   Notes: Measure with stretchLastSection off; setFixedSize then unlock; deferred initial size.
+   Prior RESPONSE: Stayed super wide after wide tab first; only first couple clicks.
+
+[ ] winMain tooltips (simplified labels)
+   Steps:
+     a. Public Query tip: "Public Queries"
+     b. Internal Query tip: "Internal Queries"
+     c. Options tip: "Options" (no parenthetical list)
+     d. Upload still mentions HDB MODIFY/DELETE; other tips unchanged and good.
+
+
+Need retest (new features this pass)
+--------------------------------------------------------------------------------
+
+[ ] Double-click Query List item → edit dataID
+   Steps:
+     a. Add several queries to the list.
+     b. Double-click one → only dataID appears in the text box; interval/DB stay as that row.
+     c. Change dataID, hit Add Query → that list row updates in place (not a new row).
+     d. Add Query with empty edit-index still appends a new row as before.
+
+[ ] SQL snippets reorder (up/down) persists
+   Steps:
+     a. SQL Query Builder: select a snippet, move up/down.
+     b. Order remains after close/reopen app.
+   Notes: order stored in user.config sqlSnippetOrder.
+
+[ ] Aquarius certs: .cer / .pfx accepted
+   Steps:
+     a. Place aquarius.cer or aquarius.pfx (or any .cer/.pfx) under certs/.
+     b. On next Aquarius query, code converts to certs/aquarius.pem and uses it.
+     c. Optional: leftover conversion temp cleaned; pem remains for requests.
+   Notes: Logic.ensureAquariusPem / Aquarius.apiRead.
+
+[ ] HDB database-link failure → direct connect fallback
+   Steps:
+     a. Internal multi-DB query where primary uses @link to another HDB.
+     b. If link fails (ORA-02019 etc.), retry by connecting to the target DSN directly.
+     c. Query still returns data when direct path works.
+   Notes: USBR.sqlRead detects link errors and re-runs without link.
+
+[ ] Windows package + bunker merge scripts
+   Steps:
+     a. scripts/packageWindows.py builds zip with launcher as root, Project Files layout.
+     b. launcher/updateBunker.py merges packaged bunker.db into user bunker without wiping
+        user fields except dataType/siteName/valuePrecision/database when dataID+siteID match.
+
+
+Confirmed
+--------------------------------------------------------------------------------
+[x] Header size no longer changes when clicking a cell
+[x] Overlay secondary-only → auto edit for upload
+[x] USGS public query: Show details on right-click
+[x] valuePrecision.json lives under core/
 [x] valuePrecision + precisionOverride (bunker.db + formatting)
 [x] Logging: full Python tracebacks + Qt in app.log / Log Viewer
 [x] USGS interval combo: no intervals past DAY when USGS-NWIS selected
@@ -123,9 +139,5 @@ Deferred / known
 [!] Windows taskbar via VB launcher (not fixable in Python alone)
 [!] USGS monthly/yearly (OGC has no products)
 [!] Aquarius daily 2300 TZ
-[!] Features: plots, goat, packaging scripts, git/readme, update/merge bunker.db
-[!] Double-click query list → edit dataID in place (feature, not bug)
-[!] SQL quickLook reorder (feature)
-[!] Aquarius .cer/.pfx → .pem (feature)
-[!] HDB link fail → fallback database (feature)
+[!] Features still backlog: plots, goat, git/readme, dataDictionary non-destructive bulk update
 )
