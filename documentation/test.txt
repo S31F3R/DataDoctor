@@ -6,7 +6,6 @@ Workflow:
   - PASS → mark [x] here (stay off To Do); Grok may clean confirmed [x] items
   - FAIL → note here; Grok re-fixes
 
-
 Need retest (longer tests — Seifer tomorrow)
 --------------------------------------------------------------------------------
 
@@ -24,14 +23,11 @@ Need retest (longer tests — Seifer tomorrow)
      c. Logs/DEBUG schema should use UCHDBA for UCHDB2.
    Notes: Config.hdbOracleDatabases 'USBR-UCHDB2|UCHDBA'; Utils.hdbSchemaForDatabase.
 
-[x] USGS DataID: optional parameter + Site-Parameter lookup
+[ ] USGS DataID: optional parameter + Site-Parameter lookup
    Steps:
-     a. Add Query with Site-time_series_id only (no -00065) → query succeeds.
-     b. Site-time_series_id-00065 still works.
-     c. Site-00065 (param only): if one series, auto-resolves; if many, picker dialog.
-     d. Cancel picker → not added to list.
+     a. Site-00065 (param only): if one series, auto-resolves; if many, picker dialog.
+     b. Cancel picker → not added to list.
    Notes: USGS.classifyUid / resolveUsgsDataId; OGC filter is time_series_id only.
-   RESPONSE: This works but modify the test to show I need to run this test when there are multiple, so option c
 
 [ ] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
    Steps:
@@ -59,7 +55,7 @@ Need retest (longer tests — Seifer tomorrow)
 Need retest (fixes after RESPONSE — 2026-07-28 pass 2)
 --------------------------------------------------------------------------------
 
-[ ] Details window resizes down when switching tabs  **PRIORITY**
+[x] Details window resizes down when switching tabs  **PRIORITY**
    Steps:
      a. Overlay cell → Show details.
      b. Open Aquarius Details first (wide 4-col), then USBR-*-Details (2-col).
@@ -80,9 +76,7 @@ Need retest (fixes after RESPONSE — 2026-07-28 pass 2)
    Notes: Prefer same python+script; bat logs to %TEMP%\\DataDoctorRestart.log;
      hidden detached cmd. If fail, open that log file for the real error.
    Prior RESPONSE: terminal popup with nonsensical error.
-
-[x] Double-click Query List item → edit dataID
-[x] SQL snippets reorder (up/down) persists
+   RESPONSE: [error 2147942632 (0x800700e8) when launching `ping  -n 3 127.0.0.1 ']
 
 [ ] Aquarius certs: .cer / .pfx accepted
    Steps:
@@ -93,7 +87,6 @@ Need retest (fixes after RESPONSE — 2026-07-28 pass 2)
    Notes: Any name (.cer/.crt) works, not only aquarius.cer. Re-converts if source
      is newer than aquarius.pem. INFO logs list search dirs + files found.
    Prior RESPONSE: certs/cert.cer not converting.
-
 
 Confirmed
 --------------------------------------------------------------------------------
