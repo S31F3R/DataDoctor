@@ -24,13 +24,14 @@ Need retest (longer tests — Seifer tomorrow)
      c. Logs/DEBUG schema should use UCHDBA for UCHDB2.
    Notes: Config.hdbOracleDatabases 'USBR-UCHDB2|UCHDBA'; Utils.hdbSchemaForDatabase.
 
-[ ] USGS DataID: optional parameter + Site-Parameter lookup
+[x] USGS DataID: optional parameter + Site-Parameter lookup
    Steps:
      a. Add Query with Site-time_series_id only (no -00065) → query succeeds.
      b. Site-time_series_id-00065 still works.
      c. Site-00065 (param only): if one series, auto-resolves; if many, picker dialog.
      d. Cancel picker → not added to list.
    Notes: USGS.classifyUid / resolveUsgsDataId; OGC filter is time_series_id only.
+   RESPONSE: This works but modify the test to show I need to run this test when there are multiple, so option c
 
 [ ] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
    Steps:
@@ -55,54 +56,43 @@ Need retest (longer tests — Seifer tomorrow)
         user fields except dataType/siteName/valuePrecision/database when dataID+siteID match.
 
 
-Need retest (fixes after RESPONSE — 2026-07-28)
+Need retest (fixes after RESPONSE — 2026-07-28 pass 2)
 --------------------------------------------------------------------------------
+
+[ ] Details window resizes down when switching tabs  **PRIORITY**
+   Steps:
+     a. Overlay cell → Show details.
+     b. Open Aquarius Details first (wide 4-col), then USBR-*-Details (2-col).
+     c. Window should shrink to fit the narrower tab on first switch (not stay stuck wide).
+     d. Reverse order also fine.
+     e. Title is a single compact line (no huge empty band above tabs).
+     f. No large empty pad on the right of the table.
+   Notes: Rewrote sizing — CurrentPageTabWidget (sizeHint = current page only),
+     stretchLastSection on, title Fixed policy, no setFixedSize. Prior pass caused
+     huge title pad + right padding; that approach was removed.
+   Prior RESPONSE: huge header/title pad + ~1.2" right pad after last fix.
 
 [ ] Retro mode restart on Windows
    Steps:
      a. Options → toggle Retro Mode → OK to restart.
      b. App should relaunch with the new mode (Windows).
      c. Cancel on the prompt reverts the checkbox and config.
-   Notes: Prefer re-launch "Data Doctor.exe" when present; temp .cmd via os.startfile
-     (no CREATE_NO_WINDOW); 2s delay; closeAllWindows on quit.
-   Prior RESPONSE: Still only worked on Linux / still doesn't work.
+   Notes: Prefer same python+script; bat logs to %TEMP%\\DataDoctorRestart.log;
+     hidden detached cmd. If fail, open that log file for the real error.
+   Prior RESPONSE: terminal popup with nonsensical error.
 
-[ ] Details window resizes down when switching tabs
-   Steps:
-     a. Overlay cell → Show details.
-     b. Open Aquarius Details first (wide 4-col), then USBR-*-Details (2-col).
-     c. Window should shrink to fit the narrower tab on first switch (not stay stuck wide).
-     d. Reverse order also fine.
-   Notes: Non-current tab pages use Ignored size policy (QTabWidget sizeHint = max of pages);
-     keep setFixedSize (do not unlock); deferred second resize pass.
-   Prior RESPONSE: Stayed super wide after wide tab first.
-
-[ ] Double-click Query List item → edit dataID
-   Steps:
-     a. Add several queries to the list.
-     b. Double-click one → only dataID appears in the text box; interval/DB stay as that row.
-     c. Change dataID, hit Add Query → that list row updates in place (not a new row).
-     d. Add Query with empty edit-index still appends a new row as before.
-   Notes: Root cause — empty QListWidget is falsy in PyQt6 so itemDoubleClicked was never
-     connected. Fixed with `is not None`.
-   Prior RESPONSE: This doesn't work.
-
-[ ] SQL snippets reorder (up/down) persists
-   Steps:
-     a. SQL Query Builder: select a snippet, move up/down (drag or right-click menu).
-     b. Order remains after close/reopen app.
-   Notes: Same falsy-QListWidget bug skipped drag/context setup. Fixed `is not None`;
-     order saved to user.config sqlSnippetOrder (deferred after drag).
-   Prior RESPONSE: This doesn't work.
+[x] Double-click Query List item → edit dataID
+[x] SQL snippets reorder (up/down) persists
 
 [ ] Aquarius certs: .cer / .pfx accepted
    Steps:
-     a. Place aquarius.cer or aquarius.pfx (or any .cer/.pfx) under certs/ (project, launcher
-        zip root, or user config certs/).
-     b. On next Aquarius query, code converts to aquarius.pem and uses it (check app.log INFO).
-     c. Optional: leftover conversion temp cleaned; pem remains for requests.
-   Notes: Multi-path search; .cer DER/PEM convert; .pfx via openssl (-legacy) or cryptography.
-   Prior RESPONSE: This doesn't work.
+     a. Place cert.cer (or any .cer/.pfx) under project certs/ (root of repo).
+     b. Run an Aquarius query (DEBUG ON).
+     c. app.log should show: found files: ['cert.cer'] then converted … → aquarius.pem
+     d. certs/aquarius.pem should appear next to cert.cer (source left in place).
+   Notes: Any name (.cer/.crt) works, not only aquarius.cer. Re-converts if source
+     is newer than aquarius.pem. INFO logs list search dirs + files found.
+   Prior RESPONSE: certs/cert.cer not converting.
 
 
 Confirmed

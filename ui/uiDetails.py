@@ -1,8 +1,11 @@
 # uiDetails.py - Details window for displaying cell metadata or overlay info
 
-from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QAbstractItemView, QTabWidget, QVBoxLayout, QTableWidget, QSizePolicy, QApplication
+from PyQt6.QtWidgets import (
+    QWidget, QTableWidgetItem, QAbstractItemView, QTabWidget, QVBoxLayout,
+    QTableWidget, QSizePolicy, QApplication,
+)
 from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6 import uic
 from datetime import datetime
 from core import Logic, Config
@@ -11,6 +14,62 @@ from core import Logic, Config
 maxVisibleMetaRows = 16
 # Qt QWIDGETSIZE_MAX
 maxWidgetSize = 16777215
+
+
+class CurrentPageTabWidget(QTabWidget):
+    """
+    Default QTabWidget sizeHint is the MAX of every page — that is why switching
+    from a wide Aquarius tab to a narrow USBR tab left the window stuck wide.
+
+    sizeHint / minimumSizeHint follow the *current* page (and its table) only.
+    """
+
+    def sizeHint(self):
+        return self._currentContentHint()
+
+    def minimumSizeHint(self):
+        return self._currentContentHint()
+
+    def _currentContentHint(self):
+        bar = self.tabBar()
+        barH = bar.sizeHint().height() if bar else 24
+        barW = bar.sizeHint().width() if bar else 0
+        page = self.currentWidget()
+        if page is None:
+            return QSize(max(280, barW + 16), barH + 80)
+
+        table = page.findChild(QTableWidget)
+        if table is not None:
+            # Measure without permanently leaving stretch off
+            header = table.horizontalHeader()
+            prevStretch = header.stretchLastSection()
+            header.setStretchLastSection(False)
+            header.setMinimumSectionSize(0)
+            table.resizeColumnsToContents()
+            table.resizeRowsToContents()
+            header.setStretchLastSection(prevStretch)
+
+            rowCount = table.rowCount()
+            visible = min(rowCount, maxVisibleMetaRows) if rowCount else 0
+            needsScroll = rowCount > maxVisibleMetaRows
+            colsW = sum(table.columnWidth(i) for i in range(table.columnCount()))
+            rowsH = sum(table.rowHeight(i) for i in range(visible)) if visible else 0
+            tw = (
+                colsW
+                + table.frameWidth() * 2
+                + 24
+                + (table.verticalScrollBar().sizeHint().width() + 4 if needsScroll else 0)
+            )
+            th = (
+                rowsH
+                + header.height()
+                + table.frameWidth() * 2
+                + 8
+            )
+            return QSize(max(tw, barW + 16, 200), th + barH + 8)
+
+        ph = page.sizeHint()
+        return QSize(max(ph.width(), barW + 16, 200), ph.height() + barH + 8)
 
 
 class uiDetails(QWidget):
@@ -28,6 +87,15 @@ class uiDetails(QWidget):
         # Set icon
         self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/Info.png')))
         
+        # Title must stay a single compact line — never expand into huge empty band
+        if hasattr(self, 'lblTitle') and self.lblTitle is not None:
+            self.lblTitle.setSizePolicy(
+                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed
+            )
+            self.lblTitle.setWordWrap(False)
+            self.lblTitle.setMaximumHeight(36)
+            self.lblTitle.setMinimumHeight(0)
+
         # Initialize table with no rows yet (column count set dynamically in populate)
         self.configureMetaTable(self.detailsTable, twoColumn=True)
         
@@ -35,11 +103,17 @@ class uiDetails(QWidget):
         layout = self.layout()
 
         if layout:
-            layout.setContentsMargins(4, 0, 4, 0)
+            layout.setContentsMargins(4, 2, 4, 4)
+            layout.setSpacing(2)
             layout.setSizeConstraint(layout.SizeConstraint.SetNoConstraint)
+            # Stretch only the content row (table / tabs), not the title
+            if layout.count() >= 2:
+                layout.setStretch(0, 0)
+                layout.setStretch(1, 1)
         
         # Connect tab change for resize if tabWidget created later
-        if hasattr(self, 'tabWidget') and self.tabWidget:
+        # NOTE: empty QTabWidget is falsy in PyQt6 — use is not None
+        if getattr(self, 'tabWidget', None) is not None:
             self.tabWidget.currentChanged.connect(self.resizeToCurrentTab)
         
         if Config.debug:
@@ -51,12 +125,11 @@ class uiDetails(QWidget):
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         table.verticalHeader().setVisible(False)
-        # Preferred (not Expanding) so a wide prior tab does not force min size forever
-        table.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        # Expanding + stretch last section fills the client area (no dead right pad)
+        table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.clampTableColumns(table, twoColumn=twoColumn)
-        # Stretch off while measuring; re-enabled after size is applied if desired
-        table.horizontalHeader().setStretchLastSection(False)
+        table.horizontalHeader().setStretchLastSection(True)
 
     def clampTableColumns(self, table, twoColumn=True):
         """Force 2- or 4-column layout so ghost columns cannot bleed across tabs."""
@@ -69,83 +142,20 @@ class uiDetails(QWidget):
                 table.setColumnCount(4)
             table.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
 
-    def _relaxTabPageSizes(self, currentIndex=None):
+    def _measureTable(self, table):
         """
-        QTabWidget sizeHint is the MAX of all pages. Mark non-current pages as
-        Ignored so the layout does not keep the window stuck at the widest tab.
+        Content size of a details table (stretch off while measuring).
+        Returns (contentWidth, contentHeight, needsScroll).
         """
-        if not hasattr(self, 'tabWidget') or not self.tabWidget:
-            return
-        if currentIndex is None:
-            currentIndex = self.tabWidget.currentIndex()
-        self.tabWidget.setMinimumSize(0, 0)
-        self.tabWidget.setMaximumSize(maxWidgetSize, maxWidgetSize)
-        self.tabWidget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-        for i in range(self.tabWidget.count()):
-            page = self.tabWidget.widget(i)
-            if page is None:
-                continue
-            page.setMinimumSize(0, 0)
-            page.setMaximumSize(maxWidgetSize, maxWidgetSize)
-            if i == currentIndex:
-                page.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-            else:
-                # Prevent wide hidden Aquarius tables from driving min size
-                page.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-            for child in page.findChildren(QTableWidget):
-                child.setMinimumSize(0, 0)
-                child.setMaximumSize(maxWidgetSize, maxWidgetSize)
-                if i == currentIndex:
-                    child.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
-                else:
-                    child.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
-
-    def forceWindowSize(self, targetW, targetH):
-        """
-        Apply an exact window size that can shrink as well as grow.
-
-        resize() alone is ignored when layout minimumSizeHint is still large
-        from a previous (wider) tab. Keep setFixedSize — unlocking immediately
-        lets QTabWidget re-expand to the widest page sizeHint.
-        """
-        targetW = max(int(targetW), 280)
-        targetH = max(int(targetH), 120)
-        self.setMinimumSize(0, 0)
-        self.setMaximumSize(maxWidgetSize, maxWidgetSize)
-        self._relaxTabPageSizes()
-        # Pin fixed size so layout cannot re-inflate after we shrink
-        self.setFixedSize(targetW, targetH)
-        if Config.debug:
-            Logic.logMessage(
-                "DEBUG",
-                f"forceWindowSize: applied {targetW}x{targetH}, "
-                f"actual={self.width()}x{self.height()}",
-            )
-
-    def sizeWindowToTable(self, table, extraHeight=0, minWidthExtra=0):
-        """
-        Size the window to content, capped at maxVisibleMetaRows.
-        Extra rows get a vertical scrollbar (app stylesheet themes it).
-
-        Always allows shrink as well as grow (tab switches Aquarius ↔ USBR
-        must resize down when the second tab is narrower).
-        """
-        if table is None:
-            return
-
-        # Critical: stretchLastSection + Expanding policy make a wide window
-        # re-measure as still wide. Measure with stretch off and zero mins.
         header = table.horizontalHeader()
+        prevStretch = header.stretchLastSection()
         header.setStretchLastSection(False)
-        table.setMinimumSize(0, 0)
-        table.setMaximumSize(maxWidgetSize, maxWidgetSize)
-        table.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         header.setMinimumSectionSize(0)
         for c in range(table.columnCount()):
+            # Reset so resizeColumnsToContents is not stuck on a prior wide measure
             table.setColumnWidth(c, 10)
         table.resizeColumnsToContents()
         table.resizeRowsToContents()
-        QApplication.processEvents()
 
         rowCount = table.rowCount()
         visibleRows = min(rowCount, maxVisibleMetaRows) if rowCount else 0
@@ -156,71 +166,99 @@ class uiDetails(QWidget):
         else:
             table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # Lock column count so Qt setItem never leaves a ghost extra column
-        expectedCols = table.columnCount()
-        if expectedCols not in (2, 4):
-            expectedCols = 2
-            table.setColumnCount(2)
-
         contentWidth = (
             sum(table.columnWidth(i) for i in range(table.columnCount()))
-            + table.verticalHeader().width()
             + table.frameWidth() * 2
-            + 30
-            + minWidthExtra
+            + 28
         )
         if needsScroll:
-            contentWidth += table.verticalScrollBar().sizeHint().width() + 8
-
-        if hasattr(self, 'tabWidget') and self.tabWidget and self.tabWidget.isVisible():
-            # Tab bar width for labels only — do not use whole tab widget sizeHint
-            # (that inherits prior oversized geometry).
-            tabBar = self.tabWidget.tabBar()
-            tabBarWidth = tabBar.sizeHint().width() + 24 if tabBar else 0
-            contentWidth = max(contentWidth, tabBarWidth)
+            contentWidth += table.verticalScrollBar().sizeHint().width() + 6
 
         rowsHeight = sum(table.rowHeight(i) for i in range(visibleRows)) if visibleRows else 0
-        titleH = self.lblTitle.height() if hasattr(self, 'lblTitle') and self.lblTitle else 24
-        height = (
+        contentHeight = (
             rowsHeight
-            + table.horizontalHeader().height()
-            + titleH
+            + header.height()
             + table.frameWidth() * 2
-            + 30
-            + extraHeight
+            + 8
         )
-        targetW = max(int(contentWidth), 280)
-        targetH = max(int(height), 120)
-        self.forceWindowSize(targetW, targetH)
+        # Restore stretch so columns fill the window (no empty strip on the right)
+        header.setStretchLastSection(prevStretch if prevStretch else True)
+        return contentWidth, contentHeight, needsScroll
+
+    def sizeWindowToTable(self, table, extraHeight=0, minWidthExtra=0):
+        """
+        Size the window to content, capped at maxVisibleMetaRows.
+        Extra rows get a vertical scrollbar (app stylesheet themes it).
+
+        Shrinks when switching from a wide tab (Aquarius 4-col) to a narrow one
+        (USBR 2-col). Does not use setFixedSize (that left a huge empty title band).
+        """
+        if table is None:
+            return
+
+        # Unlock any prior fixed/max constraints from older sizing code
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(maxWidgetSize, maxWidgetSize)
+
+        contentWidth, contentHeight, needsScroll = self._measureTable(table)
+        contentWidth += minWidthExtra
+
+        if (
+            getattr(self, 'tabWidget', None) is not None
+            and self.tabWidget.isVisible()
+        ):
+            tabBar = self.tabWidget.tabBar()
+            # Only need enough width for tab *labels* of the bar, not max page size
+            tabBarWidth = (tabBar.sizeHint().width() + 16) if tabBar else 0
+            contentWidth = max(contentWidth, tabBarWidth)
+
+        titleH = 22
+        if hasattr(self, 'lblTitle') and self.lblTitle is not None:
+            # Use sizeHint, not current height (current height can be inflated)
+            titleH = max(self.lblTitle.sizeHint().height(), 18)
+            self.lblTitle.setMaximumHeight(titleH + 8)
+            self.lblTitle.setMinimumHeight(0)
+
+        # Frame / margins / spacing
+        chrome = 16
+        targetW = max(int(contentWidth) + 8, 280)
+        targetH = max(int(contentHeight + titleH + extraHeight + chrome), 120)
+
+        # Cap max to target so layout min-size from other tabs cannot block shrink,
+        # then clear max after the geometry is applied.
+        self.setMaximumSize(targetW, targetH)
+        self.resize(targetW, targetH)
+        QApplication.processEvents()
+        # Keep user free to grow; size stays until next tab switch
+        self.setMaximumSize(maxWidgetSize, maxWidgetSize)
+        # Re-apply size once more after max unlock (some styles re-expand once)
+        if self.width() > targetW + 4 or self.height() > targetH + 4:
+            self.resize(targetW, targetH)
 
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
-                f"sizeWindowToTable: rows={rowCount}, visible={visibleRows}, "
-                f"scroll={needsScroll}, size={self.width()}x{self.height()} "
-                f"(target {targetW}x{targetH})"
+                f"sizeWindowToTable: rows={table.rowCount()}, scroll={needsScroll}, "
+                f"size={self.width()}x{self.height()} (target {targetW}x{targetH})"
             )
 
     def resizeToCurrentTab(self, index):
         """Resize window to fit current tab's content (max 16 rows + scrollbar)."""
-        if not hasattr(self, 'tabWidget') or not self.tabWidget:
+        if getattr(self, 'tabWidget', None) is None:
             return
         
         currentTab = self.tabWidget.widget(index)
-        if not currentTab:
+        if currentTab is None:
             return
         
         tabTable = currentTab.findChild(QTableWidget)
-        if not tabTable:
+        if tabTable is None:
             return
-
-        # Non-current pages must not drive sizeHint (Aquarius 4-col stays wide otherwise)
-        self._relaxTabPageSizes(currentIndex=index)
 
         # Re-assert column layout for this tab (prevents bleed across tab switches)
         colCount = tabTable.columnCount()
-        if colCount > 2 and tabTable.horizontalHeaderItem(0) and tabTable.horizontalHeaderItem(0).text() == "Type":
-            # 2-col table that grew a ghost column — shrink back
+        header0 = tabTable.horizontalHeaderItem(0)
+        if colCount > 2 and header0 is not None and header0.text() == "Type":
             tabTable.setColumnCount(2)
             tabTable.setHorizontalHeaderLabels(["Type", "Value"])
         elif colCount == 2:
@@ -230,29 +268,35 @@ class uiDetails(QWidget):
                 ["Metadata Type", "Details", "Start Time", "End Time"]
             )
 
-        extra = self.tabWidget.tabBar().height() + 20
+        extra = 0
+        if self.tabWidget.tabBar() is not None:
+            extra = self.tabWidget.tabBar().sizeHint().height() + 12
         self.sizeWindowToTable(tabTable, extraHeight=extra)
 
-        # Deferred re-apply: layout pass after tab switch often re-expands once
+        # One deferred pass after Qt finishes showing the new page
         QTimer.singleShot(0, lambda idx=index: self._deferredResizeTab(idx))
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Resized to current tab {index}: {self.width()}x{self.height()}")
+            Logic.logMessage(
+                "DEBUG",
+                f"Resized to current tab {index}: {self.width()}x{self.height()}",
+            )
 
     def _deferredResizeTab(self, index):
-        """Second pass after Qt finishes tab layout (keeps shrink sticky)."""
-        if not hasattr(self, 'tabWidget') or not self.tabWidget:
+        """Second measure after the tab page is fully shown."""
+        if getattr(self, 'tabWidget', None) is None:
             return
         if self.tabWidget.currentIndex() != index:
             return
         currentTab = self.tabWidget.widget(index)
-        if not currentTab:
+        if currentTab is None:
             return
         tabTable = currentTab.findChild(QTableWidget)
-        if not tabTable:
+        if tabTable is None:
             return
-        self._relaxTabPageSizes(currentIndex=index)
-        extra = self.tabWidget.tabBar().height() + 20
+        extra = 0
+        if self.tabWidget.tabBar() is not None:
+            extra = self.tabWidget.tabBar().sizeHint().height() + 12
         self.sizeWindowToTable(tabTable, extraHeight=extra)
 
     def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None, multiTypes=None, responsesList=None, intervalsList=None):
@@ -292,24 +336,41 @@ class uiDetails(QWidget):
 
             # If multiTypes provided (e.g., for overlay cell), use tabs
             if multiTypes and len(multiTypes) > 1:
-                # Create QTabWidget if not exists
-                if not hasattr(self, 'tabWidget') or not self.tabWidget:
-                    self.tabWidget = QTabWidget(self)
-                    layout = self.layout() # Assuming QVBoxLayout or similar from .ui
-
+                # Create current-page-sized tab widget if not exists (or replace plain QTabWidget)
+                # Empty QTabWidget is falsy — never use bare `if self.tabWidget`
+                existingTabs = getattr(self, 'tabWidget', None)
+                needNewTabs = (
+                    existingTabs is None
+                    or not isinstance(existingTabs, CurrentPageTabWidget)
+                )
+                if needNewTabs:
+                    layout = self.layout()
+                    if existingTabs is not None and layout is not None:
+                        layout.removeWidget(existingTabs)
+                        existingTabs.deleteLater()
+                    self.tabWidget = CurrentPageTabWidget(self)
+                    self.tabWidget.setSizePolicy(
+                        QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+                    )
                     if layout:
                         layout.addWidget(self.tabWidget)
-                    self.tabWidget.currentChanged.connect(self.resizeToCurrentTab) # Connect here if created
+                        # Title stretch 0, tabs stretch 1
+                        if layout.count() >= 2:
+                            layout.setStretch(0, 0)
+                            layout.setStretch(layout.count() - 1, 1)
+                    self.tabWidget.currentChanged.connect(self.resizeToCurrentTab)
 
-                self.detailsTable.hide() # Hide original table, use per-tab tables
+                self.detailsTable.hide()  # Hide original table, use per-tab tables
+                self.detailsTable.setMaximumHeight(0)  # prevent hidden table from eating layout space
                 self.tabWidget.show()
+                self.tabWidget.setMaximumHeight(maxWidgetSize)
 
                 # Clear existing tabs (delete old page widgets so tables don't leak)
                 while self.tabWidget.count() > 0:
-                    old = self.tabWidget.widget(0)
+                    oldPage = self.tabWidget.widget(0)
                     self.tabWidget.removeTab(0)
-                    if old is not None:
-                        old.deleteLater()
+                    if oldPage is not None:
+                        oldPage.deleteLater()
 
                 # Add tabs in order (Overlay first, then DBs)
                 for i, t in enumerate(multiTypes):
@@ -317,21 +378,27 @@ class uiDetails(QWidget):
                     normT = t.split('-')[0] if '-' in t else t
                     tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
                     tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'
-                    tabWidget = QWidget()
-                    tabLayout = QVBoxLayout(tabWidget)
-                    tabLayout.setContentsMargins(0, 0, 0, 0) # Zero margins to remove gaps
-                    tabTable = QTableWidget(tabWidget) # New table per tab
+                    page = QWidget()
+                    tabLayout = QVBoxLayout(page)
+                    tabLayout.setContentsMargins(0, 0, 0, 0)
+                    tabLayout.setSpacing(0)
+                    tabTable = QTableWidget(page)
                     # USBR/USGS/overlay = 2 cols; Aquarius (and unknown) = 4 cols
                     twoCol = normT in ("overlay", "USBR", "USGS")
                     self.configureMetaTable(tabTable, twoColumn=twoCol)
 
                     # Populate per type
                     if normT == 'overlay':
-                        self.populateOverlay(timestampStr, tabResp, table=tabTable) # Pass custom table
+                        self.populateOverlay(timestampStr, tabResp, table=tabTable)
                     elif normT in metadataHandlers:
-                        metadataHandlers[normT](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
+                        metadataHandlers[normT](
+                            timestampStr, tabResp, interval=tabIntvl, table=tabTable
+                        )
                     else:
-                        Logic.logMessage("WARN", f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab")
+                        Logic.logMessage(
+                            "WARN",
+                            f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab",
+                        )
                         continue
 
                     # Clamp ghost columns after populate (Qt setItem can grow columnCount)
@@ -343,28 +410,34 @@ class uiDetails(QWidget):
                         tabName = t.upper() + " Details"
                     else:
                         tabName = t.capitalize() + " Details"
-                    if i > 0: # For DB tabs
+                    if i > 0:  # For DB tabs
                         if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                            tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"
-                    self.tabWidget.addTab(tabWidget, tabName)
+                            tabName = (
+                                t.upper()
+                                + (" (Primary)" if i == 1 else " (Secondary)")
+                                + " Details"
+                            )
+                    self.tabWidget.addTab(page, tabName)
 
                 if self.tabWidget.count() == 0:
                     if Config.debug:
                         Logic.logMessage("DEBUG", "populateDetails: No tabs created for multiTypes")
 
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes")
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes",
+                    )
 
-                # Initial resize: immediate + deferred after show/layout so the first
-                # tab gets a real measure (avoids "stuck wide" until a second click).
                 self.tabWidget.setCurrentIndex(0)
                 self.resizeToCurrentTab(0)
-                QTimer.singleShot(0, lambda: self.resizeToCurrentTab(self.tabWidget.currentIndex()))
             else:
                 # Single-type: Use original table (no tabs)
-                if hasattr(self, 'tabWidget') and self.tabWidget:
+                if getattr(self, 'tabWidget', None) is not None:
                     self.tabWidget.hide()
-                    self.detailsTable.show()
+                    self.tabWidget.setMaximumHeight(0)
+                self.detailsTable.setMaximumHeight(maxWidgetSize)
+                self.detailsTable.show()
 
                 if queryType == "overlay":
                     self.populateOverlay(timestampStr, response)

@@ -200,32 +200,26 @@ def ensureAquariusPem():
       resourcePath, appRoot, parent of appRoot (launcher zip root), cwd,
       user config certs/
 
-    Prefer:
-      1. aquarius.pem already present → use it
-      2. any .pem → copy to aquarius.pem (prefer name aquarius*)
-      3. .cer / .crt → convert to PEM (text copy or DER→base64)
-      4. .pfx / .p12 → openssl if available, else cryptography if installed
-         (empty password, then keyring DataDoctor/aqCertPassword)
+    Accepts any name:
+      - aquarius.pem / any .pem
+      - any .cer / .crt  (e.g. cert.cer) → converted to aquarius.pem
+      - any .pfx / .p12 → openssl or cryptography
 
-    Writes aquarius.pem next to the source when possible, else under the user
-    config certs/ folder. Leaves source files in place. Returns pem path or None.
+    Re-converts when a source .cer/.pfx is newer than an existing aquarius.pem.
+    Leaves source files in place. Returns pem path or None.
     """
     import shutil
 
     searchDirs = _aquariusCertSearchDirs()
+    logMessage(
+        "INFO",
+        "ensureAquariusPem: searching " + ", ".join(searchDirs),
+    )
     for d in searchDirs:
         try:
             os.makedirs(d, exist_ok=True)
         except Exception:
             pass
-
-    # Already-built PEM anywhere
-    for d in searchDirs:
-        candidate = os.path.join(d, 'aquarius.pem')
-        if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
-            if Config.debug:
-                logMessage("DEBUG", f"ensureAquariusPem: using existing {candidate}")
-            return candidate
 
     # Collect all source files across dirs
     entries = []
@@ -241,18 +235,20 @@ def ensureAquariusPem():
             logException(f"ensureAquariusPem: list {d} failed", e)
 
     if not entries:
-        if Config.debug:
-            logMessage(
-                "DEBUG",
-                "ensureAquariusPem: no cert files found in " + ", ".join(searchDirs),
-            )
+        logMessage(
+            "WARN",
+            "ensureAquariusPem: no files in certs/ folders. "
+            "Place cert.cer / aquarius.pem / .pfx under project certs/",
+        )
         return None
+
+    basenames = [os.path.basename(p) for p in entries]
+    logMessage("INFO", f"ensureAquariusPem: found files: {basenames}")
 
     def pemOutPath(src):
         """Prefer writing next to source; fall back to first writable search dir."""
         local = os.path.join(os.path.dirname(src), 'aquarius.pem')
         try:
-            # Touch-test parent
             os.makedirs(os.path.dirname(local), exist_ok=True)
             return local
         except Exception:
@@ -265,31 +261,81 @@ def ensureAquariusPem():
                 continue
         return local
 
-    # Prefer any existing PEM named aquarius*, then any .pem (not aquarius.pem handled above)
-    pems = [p for p in entries if p.lower().endswith('.pem')]
-    aquariusPems = [p for p in pems if 'aquarius' in os.path.basename(p).lower()]
-    for src in aquariusPems + pems:
+    def existingPemPaths():
+        found = []
+        for d in searchDirs:
+            candidate = os.path.join(d, 'aquarius.pem')
+            if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
+                found.append(candidate)
+        # Also any .pem already named aquarius*
+        for p in entries:
+            if p.lower().endswith('.pem') and 'aquarius' in os.path.basename(p).lower():
+                if os.path.getsize(p) > 0 and p not in found:
+                    found.append(p)
+        return found
+
+    cerFiles = [p for p in entries if p.lower().endswith(('.cer', '.crt'))]
+    # Prefer names containing aquarius, then cert, then alphabetical
+    def cerSortKey(p):
+        name = os.path.basename(p).lower()
+        if 'aquarius' in name:
+            return (0, name)
+        if name.startswith('cert'):
+            return (1, name)
+        return (2, name)
+    cerFiles.sort(key=cerSortKey)
+
+    pfxFiles = [p for p in entries if p.lower().endswith(('.pfx', '.p12'))]
+    pfxFiles.sort(key=lambda p: (0 if 'aquarius' in os.path.basename(p).lower() else 1, p.lower()))
+
+    otherPems = [
+        p for p in entries
+        if p.lower().endswith('.pem') and os.path.basename(p).lower() != 'aquarius.pem'
+    ]
+    otherPems.sort(
+        key=lambda p: (0 if 'aquarius' in os.path.basename(p).lower() else 1, p.lower())
+    )
+
+    existing = existingPemPaths()
+    newestSourceMtime = 0.0
+    for src in cerFiles + pfxFiles + otherPems:
+        try:
+            newestSourceMtime = max(newestSourceMtime, os.path.getmtime(src))
+        except Exception:
+            pass
+
+    # Use existing aquarius.pem only if it is at least as new as any source cert
+    if existing:
+        try:
+            pemMtime = max(os.path.getmtime(p) for p in existing)
+        except Exception:
+            pemMtime = 0.0
+        if newestSourceMtime <= pemMtime + 1.0:  # 1s tolerance
+            logMessage("INFO", f"ensureAquariusPem: using existing {existing[0]}")
+            return existing[0]
+        logMessage(
+            "INFO",
+            "ensureAquariusPem: source cert newer than aquarius.pem — reconverting",
+        )
+
+    # Copy other .pem → aquarius.pem
+    for src in otherPems:
         pemPath = pemOutPath(src)
-        if os.path.normcase(os.path.abspath(src)) == os.path.normcase(os.path.abspath(pemPath)):
-            if os.path.getsize(src) > 0:
-                return src
-            continue
         try:
             shutil.copy2(src, pemPath)
-            logMessage("INFO", f"ensureAquariusPem: using {src} → {pemPath}")
+            logMessage("INFO", f"ensureAquariusPem: copied {src} → {pemPath}")
             return pemPath
         except Exception as e:
             logException(f"ensureAquariusPem: copy {src} failed", e)
 
-    # .cer / .crt → PEM
-    cerFiles = [p for p in entries if p.lower().endswith(('.cer', '.crt'))]
-    cerFiles.sort(key=lambda p: (0 if 'aquarius' in os.path.basename(p).lower() else 1, p.lower()))
+    # .cer / .crt (any name, e.g. cert.cer) → aquarius.pem
     for src in cerFiles:
         try:
             with open(src, 'rb') as f:
                 raw = f.read()
             pemText = _cerToPemText(raw)
             if not pemText:
+                logMessage("WARN", f"ensureAquariusPem: empty or unreadable {src}")
                 continue
             pemPath = pemOutPath(src)
             if _writeAquariusPem(pemPath, pemText, binary=False):
@@ -299,8 +345,6 @@ def ensureAquariusPem():
             logException(f"ensureAquariusPem: convert cer {src} failed", e)
 
     # .pfx / .p12
-    pfxFiles = [p for p in entries if p.lower().endswith(('.pfx', '.p12'))]
-    pfxFiles.sort(key=lambda p: (0 if 'aquarius' in os.path.basename(p).lower() else 1, p.lower()))
     if pfxFiles:
         passwords = ['']
         try:
@@ -333,11 +377,11 @@ def ensureAquariusPem():
                 )
                 return pemPath
 
-    # Final scan for any aquarius.pem that may have been written
-    for d in searchDirs:
-        candidate = os.path.join(d, 'aquarius.pem')
-        if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
-            return candidate
+    # Fall back to any existing pem even if older
+    if existing:
+        logMessage("WARN", f"ensureAquariusPem: conversion failed; using older {existing[0]}")
+        return existing[0]
+    logMessage("WARN", "ensureAquariusPem: could not build aquarius.pem from certs/")
     return None
 
 def initLogging():
