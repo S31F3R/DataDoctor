@@ -23,15 +23,18 @@ enableSQL = False
 oraclePasswordMinLength = 12
 oraclePasswordMaxLength = 30
 
-# All Oracle HDB databases used for multi-DB password change (display name → TNS alias)
+# Oracle HDB databases: 'UI_LABEL|SCHEMA'
+# Schema is query-only (not shown in comboboxes/labels). Display name is the part
+# before '|'. TNS alias is still derived from the label (USBR-LCHDB → lchdb).
+# Current rstrip logic is used only when a DB is not listed here.
 # PNHYD / GPHYD are not included (not standard HDB Oracle write targets).
 hdbOracleDatabases = (
-    'USBR-LCHDB',
-    'USBR-YAOHDB',
-    'USBR-UCHDB2',
-    'USBR-ECOHDB',
-    'USBR-LBOHDB',
-    'USBR-KBOHDB',
+    'USBR-LCHDB|LCHDBA',
+    'USBR-YAOHDB|YAOHDBA',
+    'USBR-UCHDB2|UCHDBA',
+    'USBR-ECOHDB|ECOHDBA',
+    'USBR-LBOHDB|LBOHDBA',
+    'USBR-KBOHDB|KBOHDBA',
 )
 
 # ---------------------------------------------------------------------------
