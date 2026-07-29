@@ -20,16 +20,33 @@ from ui.uiDetails import uiDetails
 from core.Oracle import oracleConnection
 
 class mainTableKeyFilter(QObject):
-    """Delete key clears selected editable cells (single or range) without double-click."""
+    """
+    Keyboard shortcuts on the main data table:
+      Delete  — clear selected editable cells
+      Ctrl+C  — copy selection (TSV)
+      Ctrl+V  — paste into selection as edits (internal only)
+    """
 
     def __init__(self, mainWindow):
         super().__init__(mainWindow)
         self.mainWindow = mainWindow
 
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Delete:
-            if Upload.clearSelectedCells(self.mainWindow):
-                return True
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            mods = event.modifiers()
+            ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier) or bool(
+                mods & Qt.KeyboardModifier.MetaModifier
+            )
+            if key == Qt.Key.Key_Delete and not ctrl:
+                if Upload.clearSelectedCells(self.mainWindow):
+                    return True
+            if ctrl and key == Qt.Key.Key_C:
+                if Upload.copySelectionToClipboard(self.mainWindow):
+                    return True
+            if ctrl and key == Qt.Key.Key_V:
+                if Upload.pasteClipboardToSelection(self.mainWindow):
+                    return True
         return super().eventFilter(obj, event)
 
 class sqlQuerySignals(QObject):
@@ -170,14 +187,19 @@ class uiMain(QMainWindow):
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
         if self.btnUpload:self.btnUpload.clicked.connect(self.btnUploadPressed)
-        self.mainTable.horizontalHeader().sectionClicked.connect(lambda col: Query.customSortTable(self.mainTable, col, self.winDataDictionary.mainTable))
+        # Single-click header → highlight column; double-click → sort
+        self.mainTable.horizontalHeader().sectionClicked.connect(self.onMainHeaderClicked)
+        self.mainTable.horizontalHeader().sectionDoubleClicked.connect(self.onMainHeaderDoubleClicked)
         self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)
         self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
         self.mainTable.itemChanged.connect(self.onMainTableItemChanged)
+        # Multi-cell ranges for Excel-like copy/paste
+        self.mainTable.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.mainTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
 
-        # Delete key → clear selected cell(s) as blank edits (range supported)
+        # Delete / Ctrl+C / Ctrl+V on the data table
         self.mainTableKeyFilter = mainTableKeyFilter(self)
         self.mainTable.installEventFilter(self.mainTableKeyFilter)
         self.mainTable.viewport().installEventFilter(self.mainTableKeyFilter)
@@ -853,6 +875,14 @@ class uiMain(QMainWindow):
         """Flag user edits for upload (magenta); restore baseline when text matches original."""
         Upload.onItemChanged(self, item)
 
+    def onMainHeaderClicked(self, col):
+        """Single-click column header: highlight the whole column (no sort)."""
+        Upload.selectEntireColumn(self, col)
+
+    def onMainHeaderDoubleClicked(self, col):
+        """Double-click column header: sort by that column."""
+        Query.customSortTable(self.mainTable, col, self.winDataDictionary.mainTable)
+
     def btnUploadPressed(self):
         """Upload pending user edits: HDB via MODIFY_R_BASE; Aquarius stubbed for now."""
         Upload.runUpload(self)
@@ -990,8 +1020,26 @@ class uiMain(QMainWindow):
                 # Add single action
                 detailsAction = menu.addAction("Show details")
                 detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'overlay', multiTypes=types))
-            
-            if menu.actions(): # Only show if actions added
+
+            # Clipboard: always Copy; Paste only on internal (public is read-only)
+            if menu.actions():
+                menu.addSeparator()
+            copyAction = menu.addAction("Copy")
+            copyAction.setShortcut("Ctrl+C")
+            copyAction.triggered.connect(lambda: Upload.copySelectionToClipboard(self))
+            if isInternal:
+                pasteAction = menu.addAction("Paste")
+                pasteAction.setShortcut("Ctrl+V")
+                pasteAction.triggered.connect(lambda: Upload.pasteClipboardToSelection(self))
+
+            if menu.actions():
+                # If the right-clicked cell is outside the current multi-selection,
+                # select only that cell so Copy/Paste target the intended cell.
+                sel = self.mainTable.selectionModel()
+                if sel is not None and not sel.isSelected(index):
+                    self.mainTable.clearSelection()
+                    self.mainTable.setCurrentIndex(index)
+                    sel.select(index, sel.SelectionFlag.ClearAndSelect)
                 menu.exec(self.mainTable.viewport().mapToGlobal(pos))
                 
                 if Config.debug:
