@@ -26,117 +26,16 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[x] User config + quickLooks load from profile again
+[ ] MRID internal query (retest after M-table column fix)
    Steps:
-     a. Restart DataDoctor after this fix.
-     b. Log / startup INFO shows config dir without a USBR/ parent
-        (e.g. %LocalAppData%\Data Doctor or ~/.config/Data Doctor).
-     c. Options shows prior settings (UTC, SQL tab, TNS, debug, last paths).
-     d. Quick Look combo lists user-saved looks (not empty / defaults-only).
-   Notes: Last update set OrganizationName("USBR"), which redirected
-     QStandardPaths AppConfigLocation to .../USBR/Data Doctor and hid the
-     real profile. Removed org name; AppUserModelID for taskbar kept.
-
-[x] Options first open after startup is snappy
-   Steps:
-     a. Fresh launch; wait a second for main window.
-     b. Open Options — should not hang several seconds on first open.
-     c. Close and reopen Options — still fast.
-   Notes: keyring cold-start was the bottleneck; warmKeyringCache after show
-     + in-memory credential cache on subsequent loads.
-
-[ ] MRID internal query (HOLD — need DEBUG log)
-   Steps:
-     a. Internal query with SDID-MRID (e.g. Below Parker Dam MRID quick look /
+     a. Internal query with SDID-MRID (e.g. Below Parker Dam MRID /
         2119-108283 HOUR USBR-YAOHDB).
-     b. Expect data rows (or clear error in log if DB rejects).
-   Notes: SQL path looks structurally OK (table M → schema.m_<interval>,
-     AND model_run_id = :4). No obvious code bug without error text.
-     Waiting on DEBUG app.log + exact query for next pass.
-     RESPONSE:
-     2026-07-29 13:51:01,206 [DEBUG] queryWorker: No data for SDID 2119 in USBR
-2026-07-29 13:51:01,206 [DEBUG] queryWorker: Completed group ('USBR', None, None) with 1 items
-2026-07-29 13:51:01,204 [ERROR] queryWorker: USBR read failed for SDIDs ['2119']: ORA-00904: "DERIVATION_FLAGS": invalid identifier
-Help: https://docs.oracle.com/error-help/db/ora-00904/
-Traceback (most recent call last):
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\Query.py", line 210, in run
-    result = USBR.sqlRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\USBR.py", line 653, in sqlRead
-    raise workerErrors[0]
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\USBR.py", line 588, in worker
-    queryTask(SDID, subStartStr, subEndStr, threadId, oracleConn)
-    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\USBR.py", line 452, in queryTask
-    dataResults = oracleConn.executeCustomQueryWithRetry(dataQuery, params=dataParams)
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\Oracle.py", line 959, in executeCustomQueryWithRetry
-    return self.executeCustomQuery(query, params=params, fetchAll=fetchAll)
-           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\Oracle.py", line 881, in executeCustomQuery
-    return self.runQueryOnCursor(cursor, query, params, fetchAll, startTime)
-           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\Oracle.py", line 898, in runQueryOnCursor
-    cursor.execute(exactQuery, params)
-    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
-  File "c:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\.venv\Lib\site-packages\oracledb\cursor.py", line 844, in execute
-    impl.execute(self)
-    ~~~~~~~~~~~~^^^^^^
-  File "src/oracledb/impl/thick/cursor.pyx", line 320, in oracledb.thick_impl.ThickCursorImpl.execute
-  File "src/oracledb/impl/thick/utils.pyx", line 484, in oracledb.thick_impl._raise_from_odpi
-  File "src/oracledb/impl/thick/utils.pyx", line 474, in oracledb.thick_impl._raise_from_info
-oracledb.exceptions.DatabaseError: ORA-00904: "DERIVATION_FLAGS": invalid identifier
-Help: https://docs.oracle.com/error-help/db/ora-00904/
-2026-07-29 13:51:01,196 [DEBUG] sqlRead worker 0: closed connection after 0 task(s)
-2026-07-29 13:51:01,195 [DEBUG] oracleConnection.close: Connection closed.
-2026-07-29 13:51:00,991 [ERROR] sqlRead worker 0 failed for SDID 2119 range 2026-07-29 13:00:00-2026-08-10 13:00:00: ORA-00904: "DERIVATION_FLAGS": invalid identifier
-Help: https://docs.oracle.com/error-help/db/ora-00904/
-Traceback (most recent call last):
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\USBR.py", line 588, in worker
-    queryTask(SDID, subStartStr, subEndStr, threadId, oracleConn)
-    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\USBR.py", line 452, in queryTask
-    dataResults = oracleConn.executeCustomQueryWithRetry(dataQuery, params=dataParams)
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\Oracle.py", line 959, in executeCustomQueryWithRetry
-    return self.executeCustomQuery(query, params=params, fetchAll=fetchAll)
-           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\Oracle.py", line 881, in executeCustomQuery
-    return self.runQueryOnCursor(cursor, query, params, fetchAll, startTime)
-           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\Oracle.py", line 898, in runQueryOnCursor
-    cursor.execute(exactQuery, params)
-    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
-  File "c:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\.venv\Lib\site-packages\oracledb\cursor.py", line 844, in execute
-    impl.execute(self)
-    ~~~~~~~~~~~~^^^^^^
-  File "src/oracledb/impl/thick/cursor.pyx", line 320, in oracledb.thick_impl.ThickCursorImpl.execute
-  File "src/oracledb/impl/thick/utils.pyx", line 484, in oracledb.thick_impl._raise_from_odpi
-  File "src/oracledb/impl/thick/utils.pyx", line 474, in oracledb.thick_impl._raise_from_info
-oracledb.exceptions.DatabaseError: ORA-00904: "DERIVATION_FLAGS": invalid identifier
-Help: https://docs.oracle.com/error-help/db/ora-00904/
-2026-07-29 13:51:00,960 [DEBUG] OracleConnection.executeCustomQuery: Cursor closed
-2026-07-29 13:51:00,959 [DEBUG] OracleConnection.executeCustomQuery: Oracle error: ORA-00904: "DERIVATION_FLAGS": invalid identifier
-Help: https://docs.oracle.com/error-help/db/ora-00904/
-2026-07-29 13:51:00,656 [DEBUG] Thread 0 processing task for SDID 2119, range 2026-07-29 13:00:00 to 2026-08-10 13:00:00
-2026-07-29 13:51:00,656 [DEBUG] sqlRead thread 0: Executing interval query with params ['2119', '2026-07-29 13:00:00', '2026-08-10 13:00:00', '108283']
-2026-07-29 13:51:00,656 [DEBUG] OracleConnection.executeCustomQuery: Query 'SELECT 
-          site_datatype_id AS SDID, 
-          TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS' has bind vars: True
-2026-07-29 13:51:00,656 [DEBUG] OracleConnection.executeCustomQuery: Validating query: SELECT 
-          site_datatype_id AS SDID, 
-          TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
-          TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
-          TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
-          value,
-          validation,
-          overwrite_flag,
-          method_id,
-          derivation_flags
-        FROM YAOHDBA.m_hour
-        WHERE site_datatype_id = :1
-          AND end_date_time BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
-          AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS')
-        AND model_run_id = :4
-ORDER BY end_date_time ASC
-2026-07-29 13:51:00,655 [DEBUG] sqlRead worker 0: opened reusable connection to yaohdb
+     b. Table fills with model values (no ORA-00904).
+     c. Real (non-MRID) internal USBR query still works (R path unchanged).
+     d. Optional: Show details may list Model Run ID; validation/flags empty for M.
+   Notes: ORA-00904 DERIVATION_FLAGS — R_* SELECT was used on YAOHDBA.m_hour.
+     M_* path now selects only core model columns + model_run_id filter.
+   Prior fail log: params ['2119', ..., '108283'] against m_hour.
 
 
 Confirmed
@@ -175,6 +74,8 @@ Confirmed
 [x] Retro mode: session frozen until full restart
 [x] Header: single-click highlight; double-click sort
 [x] Windows taskbar icon (AppUserModelID + window icon)
+[x] User config + quickLooks load from profile again
+[x] Options first open after startup is snappy
 
 
 Deferred / known

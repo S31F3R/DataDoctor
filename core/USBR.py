@@ -370,8 +370,28 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
         timeCol = 'start_date_time'
         timeAlias = 'START_DATE_TIME'
 
-    # Interval query template (for single SDID)
-    dataQuery = f"""
+    # Interval query template (for single SDID).
+    # R_* (real) tables carry validation / overwrite / method / derivation_flags.
+    # M_* (model) tables do not — selecting those yields ORA-00904 (e.g. DERIVATION_FLAGS
+    # on YAOHDBA.m_hour). Use a lean SELECT + model_run_id filter for MRID queries.
+    if table == 'M' and mrid != '0':
+        dataQuery = f"""
+        SELECT 
+          site_datatype_id AS SDID, 
+          TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
+          TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
+          TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
+          value,
+          model_run_id
+        FROM {dataTable}
+        WHERE site_datatype_id = :1
+          AND {timeCol} BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
+          AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS')
+          AND model_run_id = :4
+        ORDER BY {timeCol} ASC
+        """
+    else:
+        dataQuery = f"""
         SELECT 
           site_datatype_id AS SDID, 
           TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
@@ -387,10 +407,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
           AND {timeCol} BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
           AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS')
         ORDER BY {timeCol} ASC
-    """
-
-    if table == 'M' and mrid != '0':
-        dataQuery = dataQuery.replace('ORDER BY', f"AND model_run_id = :4\nORDER BY")
+        """
 
     # Base query template (metadata, only for 'R', single SDID)
     metaQuery = None
@@ -539,6 +556,10 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
             displayMeta['Data Flags'] = (
                 mergedRow.get('DATA_FLAGS', '') or mergedRow.get('DERIVATION_FLAGS', '') or ''
             )
+            # Model runs: surface MRID when present (M_* tables only)
+            mridVal = mergedRow.get('MODEL_RUN_ID')
+            if mridVal is not None and str(mridVal) not in ('', '0'):
+                displayMeta['Model Run ID'] = str(mridVal)
 
             mergedMeta.append(displayMeta)
 
