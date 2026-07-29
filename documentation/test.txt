@@ -26,7 +26,7 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[ ] User config + quickLooks load from profile again
+[x] User config + quickLooks load from profile again
    Steps:
      a. Restart DataDoctor after this fix.
      b. Log / startup INFO shows config dir without a USBR/ parent
@@ -37,7 +37,7 @@ Current Tests
      QStandardPaths AppConfigLocation to .../USBR/Data Doctor and hid the
      real profile. Removed org name; AppUserModelID for taskbar kept.
 
-[ ] Options first open after startup is snappy
+[x] Options first open after startup is snappy
    Steps:
      a. Fresh launch; wait a second for main window.
      b. Open Options — should not hang several seconds on first open.
