@@ -1,13 +1,11 @@
 ####### TASKS #######
 -Expand update flow later: zip drops into an Update/ folder and platform-specific unpackers (Linux/Mac scripts TBD)
--Linux/Mac package scripts (Windows: scripts/packageWindows.py exists — README/temp bunker/updateBunker done)
+-Linux/Mac package scripts (Windows: scripts/packageWindows.py exists)
 
 ####### CURRENT BUGS #######
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
     -This has nothing to do with the .exe. Launching the .py or .pyw file on windows using python ./DataDoctor.py still shows a default python icon, but shows correct icon on Linux
--(done → test.txt) Deltas checkbox shouldn't run under normal QAQC checks
--(done → test.txt) Retro restart on Windows — manual restart message only (no auto-restart)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
