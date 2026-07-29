@@ -3,7 +3,7 @@
 -Linux/Mac package scripts (Windows: scripts/packageWindows.py exists)
 
 ####### CURRENT BUGS #######
--First time loading options takes a while. Every time after that is fast
+(none — active items moved to test.txt)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look

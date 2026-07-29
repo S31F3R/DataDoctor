@@ -26,38 +26,33 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[ ] Retro mode: session frozen until full restart
+[ ] User config + quickLooks load from profile again
    Steps:
-     a. Note current mode (retro ON or OFF). Options → toggle Retro Mode → OK/save.
-     b. Dialog: setting saved; UI must NOT change at all (fonts, layouts, Query buttons).
-     c. Open Query, run a query, close Query, open Options again — still old session mode.
-     d. Fully close and reopen DataDoctor — new mode applies only after restart.
-   Notes: Config.retroMode only set at startup (applyStylesAndFonts). reloadGlobals
-     never overwrites session retro. Options pins session after save.
-   Prior fail: mid-session flip after Query open/run; button ABS moved to retro.
+     a. Restart DataDoctor after this fix.
+     b. Log / startup INFO shows config dir without a USBR/ parent
+        (e.g. %LocalAppData%\Data Doctor or ~/.config/Data Doctor).
+     c. Options shows prior settings (UTC, SQL tab, TNS, debug, last paths).
+     d. Quick Look combo lists user-saved looks (not empty / defaults-only).
+   Notes: Last update set OrganizationName("USBR"), which redirected
+     QStandardPaths AppConfigLocation to .../USBR/Data Doctor and hid the
+     real profile. Removed org name; AppUserModelID for taskbar kept.
 
-[ ] Header: single-click highlight column; double-click sort
+[ ] Options first open after startup is snappy
    Steps:
-     a. Internal query with several columns.
-     b. Single-click a column header → entire column stays highlighted (no sort).
-     c. Double-click same header → table sorts by that column.
-     d. Double-click again → sort toggles asc/desc.
-     e. btnUndo still restores timestamp order.
-   Notes: mainTable sortingEnabled permanently false (UI + buildTable); highlight via
-     selectEntireColumn; sort only sectionDoubleClicked → customSortTable.
-   Prior fail: highlight worked but single-click also sorted (Qt built-in re-enabled).
+     a. Fresh launch; wait a second for main window.
+     b. Open Options — should not hang several seconds on first open.
+     c. Close and reopen Options — still fast.
+   Notes: keyring cold-start was the bottleneck; warmKeyringCache after show
+     + in-memory credential cache on subsequent loads.
 
-[ ] Windows taskbar icon (python / .pyw / VB launcher)
+[ ] MRID internal query (HOLD — need DEBUG log)
    Steps:
-     a. On Windows, launch via `python DataDoctor.py` (or .pyw) — taskbar shows
-        DataDoctor icon, not the default Python icon.
-     b. Window title-bar icon also DataDoctor.
-     c. Launch via VB "Data Doctor.exe" if available — same correct taskbar icon.
-     d. Linux still shows correct icon (no regression).
-   Notes: SetCurrentProcessExplicitAppUserModelID('USBR.DataDoctor.1') before
-     QApplication so Windows does not group under python.exe; setWindowIcon on
-     app + main window from ui/icons/DataDoctor.ico.
-   User: not an .exe-launcher issue — plain python/.pyw also showed Python icon.
+     a. Internal query with SDID-MRID (e.g. Below Parker Dam MRID quick look /
+        2119-108283 HOUR USBR-YAOHDB).
+     b. Expect data rows (or clear error in log if DB rejects).
+   Notes: SQL path looks structurally OK (table M → schema.m_<interval>,
+     AND model_run_id = :4). No obvious code bug without error text.
+     Waiting on DEBUG app.log + exact query for next pass.
 
 
 Confirmed
@@ -93,6 +88,9 @@ Confirmed
 [x] Delta never shows signed zero (-0.00)
 [x] Aquarius-only query: Show details on right-click
 [x] Details window title not clipped
+[x] Retro mode: session frozen until full restart
+[x] Header: single-click highlight; double-click sort
+[x] Windows taskbar icon (AppUserModelID + window icon)
 
 
 Deferred / known

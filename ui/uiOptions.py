@@ -13,6 +13,50 @@ from PyQt6.QtGui import QIcon
 from PyQt6 import uic
 from core import Logic, Utils, Config
 
+# Keyring cold-start is slow (Secret Service / Windows Credential Manager).
+# Cache after first read so Options opens fast after warm-up.
+_CRED_KEYS = (
+    "aqServer", "aqUser", "aqPassword",
+    "usgsApiKey", "oracleUser", "oraclePassword",
+)
+_credCache = None  # dict[str, str] | None
+
+
+def loadKeyringCredentials(force=False):
+    """Return credential dict; first call (or force=True) hits keyring."""
+    global _credCache
+    if _credCache is not None and not force:
+        return dict(_credCache)
+    out = {}
+    for key in _CRED_KEYS:
+        try:
+            out[key] = keyring.get_password("DataDoctor", key) or ""
+        except Exception as e:
+            Logic.logMessage("ERROR", f"keyring get_password({key}) failed: {e}")
+            out[key] = ""
+    _credCache = dict(out)
+    return out
+
+
+def updateKeyringCache(key, value):
+    """Keep cache in sync after a successful keyring set_password."""
+    global _credCache
+    if _credCache is None:
+        _credCache = {k: "" for k in _CRED_KEYS}
+    _credCache[key] = value if value is not None else ""
+
+
+def warmKeyringCache():
+    """Background-friendly warm so first Options open is not cold."""
+    try:
+        loadKeyringCredentials(force=True)
+        if Config.debug:
+            Logic.logMessage("DEBUG", "warmKeyringCache: credential cache ready")
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"warmKeyringCache failed: {e}")
+
+
 class hdbPasswordChangeSignals(QObject):
     """Signals for background multi-DB HDB password change."""
     finished = pyqtSignal(object)  # first-pass result dict
@@ -485,15 +529,18 @@ class uiOptions(QDialog):
         if Config.debug:
             Logic.logMessage("DEBUG", "Set hourTimestampMethod to: {}".format(hourMethod))
         try:
-            self.qleAQServer.setText(keyring.get_password("DataDoctor", "aqServer") or "")
-            self.qleAQUser.setText(keyring.get_password("DataDoctor", "aqUser") or "")
-            self.qleAQPassword.setText(keyring.get_password("DataDoctor", "aqPassword") or "")
-            self.qleUSGSAPIKey.setText(keyring.get_password("DataDoctor", "usgsApiKey") or "")
-            self.qleOracleUser.setText(keyring.get_password("DataDoctor", "oracleUser") or "")
-            self.qleOraclePassword.setText(keyring.get_password("DataDoctor", "oraclePassword") or "")
+            creds = loadKeyringCredentials(force=False)
+            self.qleAQServer.setText(creds.get("aqServer") or "")
+            self.qleAQUser.setText(creds.get("aqUser") or "")
+            self.qleAQPassword.setText(creds.get("aqPassword") or "")
+            self.qleUSGSAPIKey.setText(creds.get("usgsApiKey") or "")
+            self.qleOracleUser.setText(creds.get("oracleUser") or "")
+            self.qleOraclePassword.setText(creds.get("oraclePassword") or "")
 
             if Config.debug:
-                Logic.logMessage("DEBUG", "Successfully loaded keyring credentials")
+                Logic.logMessage("DEBUG", "Successfully loaded keyring credentials (cached={})".format(
+                    _credCache is not None
+                ))
         except Exception as e:
             Logic.logMessage("ERROR", "Failed to load keyring credentials: {}. Using empty strings".format(e))
 
@@ -668,6 +715,7 @@ class uiOptions(QDialog):
             if value and isinstance(value, str) and value.strip():
                 try:
                     keyring.set_password("DataDoctor", key, value)
+                    updateKeyringCache(key, value)
                     if key in ("oracleUser", "oraclePassword"):
                         oracleCredsUpdated = True
 
@@ -994,6 +1042,7 @@ class uiOptions(QDialog):
         try:
             if oldPassword is not None and str(oldPassword) != '':
                 keyring.set_password("DataDoctor", "oraclePassword", oldPassword)
+                updateKeyringCache("oraclePassword", oldPassword)
                 restored = True
                 Logic.logMessage(
                     "INFO",

@@ -14,7 +14,7 @@ from PyQt6 import uic
 from core import Logic, Query, Utils, Config, Upload
 from ui.uiAbout import uiAbout
 from ui.uiDataDictionary import uiDataDictionary
-from ui.uiOptions import uiOptions
+from ui.uiOptions import uiOptions, warmKeyringCache
 from ui.uiQuery import uiQuery
 from ui.uiDetails import uiDetails
 from core.Oracle import oracleConnection
@@ -1441,8 +1441,11 @@ if __name__ == '__main__':
                 pass
 
         app = QApplication(sys.argv)
+        # Application name only — do NOT set OrganizationName. QStandardPaths
+        # AppConfigLocation becomes ~/.config/<App> (or %LocalAppData%\<App>).
+        # Adding an org (e.g. "USBR") would redirect to .../USBR/Data Doctor and
+        # hide existing user.config + quickLooks (regression from taskbar work).
         app.setApplicationName("Data Doctor")
-        app.setOrganizationName("USBR")
         # Taskbar / window icon (Windows + Linux desktop shells that honor it)
         appIcon = QIcon()
         icoPath = Logic.resourcePath('ui/icons/DataDoctor.ico')
@@ -1508,6 +1511,12 @@ if __name__ == '__main__':
 
         # Show main window
         winMain.show()
+        try:
+            Logic.logMessage("INFO", f"Config directory: {Utils.getConfigDir()}")
+        except Exception:
+            pass
+        # Warm keyring off the critical path so first Options open is not cold
+        QTimer.singleShot(0, warmKeyringCache)
 
         # Convert legacy quickLooks
         try:
