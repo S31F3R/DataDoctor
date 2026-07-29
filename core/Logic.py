@@ -154,81 +154,25 @@ def _cerToPemText(raw):
     return '\n'.join(lines)
 
 
-def _pfxToPemViaOpenssl(src, pemPath, passwords):
-    import shutil
-    import subprocess
-    openssl = shutil.which('openssl')
-    if not openssl:
-        return False
-    for pwd in passwords:
-        try:
-            # OpenSSL 3 often needs -legacy for older PFX; try both
-            for extra in ([], ['-legacy']):
-                cmd = [
-                    openssl, 'pkcs12', '-in', src, '-nokeys', '-clcerts',
-                    '-out', pemPath, '-passin', f'pass:{pwd}',
-                ] + extra
-                result = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=30,
-                )
-                if result.returncode == 0 and os.path.isfile(pemPath) and os.path.getsize(pemPath) > 0:
-                    return True
-        except Exception as e:
-            logException(f"ensureAquariusPem: openssl pfx {src} failed", e)
-    return False
-
-
-def _pfxToPemViaCryptography(src, pemPath, passwords):
-    """Optional pure-Python PFX extract when openssl is missing."""
-    try:
-        from cryptography.hazmat.primitives.serialization import Encoding, pkcs12
-    except Exception:
-        return False
-    try:
-        with open(src, 'rb') as f:
-            raw = f.read()
-    except Exception as e:
-        logException(f"ensureAquariusPem: read pfx {src} failed", e)
-        return False
-    for pwd in passwords:
-        try:
-            pwdBytes = pwd.encode('utf-8') if pwd else None
-            key, cert, additional = pkcs12.load_key_and_certificates(raw, pwdBytes)
-            chunks = []
-            if cert is not None:
-                chunks.append(cert.public_bytes(Encoding.PEM).decode('ascii'))
-            for extra in additional or []:
-                if extra is not None:
-                    chunks.append(extra.public_bytes(Encoding.PEM).decode('ascii'))
-            if not chunks:
-                continue
-            if _writeAquariusPem(pemPath, ''.join(chunks), binary=False):
-                return True
-        except Exception:
-            continue
-    return False
-
-
 def ensureAquariusPem():
     """
     Ensure aquarius.pem exists for requests SSL verify.
 
     Never creates a certs/ folder. Only works inside folders that already exist
-    and already contain cert material (.pem / .cer / .crt / .pfx / .p12).
+    and already contain cert material (.pem / .cer / .crt only — not .pfx).
 
     Search order (existing dirs only):
       resourcePath('certs'), appRoot/certs, parent-of-appRoot/certs (launcher),
       cwd/certs, parent-of-cwd/certs, user config certs/
 
-    Accepts any name:
+    Accepts:
       - aquarius.pem / any .pem
       - any .cer / .crt  (e.g. cert.cer) → converted to aquarius.pem next to source
-      - any .pfx / .p12 → openssl or cryptography → aquarius.pem next to source
 
-    After a successful .cer/.crt/.pfx/.p12 conversion the source file is removed
-    so a later drop cleanly replaces the pem. If conversion is required but fails
-    (stale pem older than a new source), returns None so Aquarius can fall back
-    to system trust / unverified rather than risk a bad cert.
+    After a successful .cer/.crt conversion the source file is removed so a later
+    drop cleanly replaces the pem. If conversion is required but fails (stale pem
+    older than a new source), returns None so Aquarius can fall back to system
+    trust / unverified rather than risk a bad cert.
     """
     import shutil
 
@@ -257,13 +201,24 @@ def ensureAquariusPem():
         logMessage(
             "WARN",
             "ensureAquariusPem: no cert files found. "
-            "Place cert.cer / aquarius.pem / .pfx in an existing project certs/ folder "
+            "Place cert.cer or aquarius.pem in an existing project certs/ folder "
             "(the app will not create certs/ for you).",
         )
         return None
 
     basenames = [os.path.basename(p) for p in entries]
     logMessage("INFO", f"ensureAquariusPem: found files: {basenames}")
+
+    ignoredPfx = [
+        os.path.basename(p) for p in entries
+        if p.lower().endswith(('.pfx', '.p12'))
+    ]
+    if ignoredPfx:
+        logMessage(
+            "WARN",
+            f"ensureAquariusPem: ignoring .pfx/.p12 (not supported): {ignoredPfx}. "
+            "Export as .cer or .pem instead.",
+        )
 
     def pemOutPath(src):
         """Always write aquarius.pem next to the source file (same existing folder)."""
@@ -292,9 +247,6 @@ def ensureAquariusPem():
         return (2, name)
     cerFiles.sort(key=cerSortKey)
 
-    pfxFiles = [p for p in entries if p.lower().endswith(('.pfx', '.p12'))]
-    pfxFiles.sort(key=lambda p: (0 if 'aquarius' in os.path.basename(p).lower() else 1, p.lower()))
-
     otherPems = [
         p for p in entries
         if p.lower().endswith('.pem') and os.path.basename(p).lower() != 'aquarius.pem'
@@ -303,7 +255,7 @@ def ensureAquariusPem():
         key=lambda p: (0 if 'aquarius' in os.path.basename(p).lower() else 1, p.lower())
     )
 
-    convertible = cerFiles + pfxFiles + otherPems
+    convertible = cerFiles + otherPems
     existing = existingPemPaths()
     newestSourceMtime = 0.0
     for src in convertible:
@@ -355,41 +307,6 @@ def ensureAquariusPem():
                 return pemPath
         except Exception as e:
             logException(f"ensureAquariusPem: convert cer {src} failed", e)
-
-    # .pfx / .p12
-    if pfxFiles:
-        passwords = ['']
-        try:
-            import keyring
-            stored = keyring.get_password("DataDoctor", "aqCertPassword") or ''
-            if stored:
-                passwords.append(stored)
-        except Exception:
-            pass
-
-        openssl = shutil.which('openssl')
-        if not openssl:
-            logMessage(
-                "WARN",
-                "ensureAquariusPem: .pfx found but openssl not on PATH; "
-                "trying cryptography if installed, else export as .cer/.pem",
-            )
-        for src in pfxFiles:
-            pemPath = pemOutPath(src)
-            if openssl and _pfxToPemViaOpenssl(src, pemPath, passwords):
-                logMessage(
-                    "INFO",
-                    f"ensureAquariusPem: converted {src} → {pemPath} via openssl",
-                )
-                _removeConvertedCertSource(src)
-                return pemPath
-            if _pfxToPemViaCryptography(src, pemPath, passwords):
-                logMessage(
-                    "INFO",
-                    f"ensureAquariusPem: converted {src} → {pemPath} via cryptography",
-                )
-                _removeConvertedCertSource(src)
-                return pemPath
 
     # Stale pem + failed reconvert: do not use the old cert (fall back to system / unverified)
     if convertible:

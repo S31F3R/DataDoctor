@@ -350,6 +350,10 @@ def applyEditability(table, mainWindow=None):
     if table is None:
         return
 
+    # Multi-cell ranges for copy/paste and column highlight (public + internal)
+    table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+    table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+
     isPublic = isPublicQuery(mainWindow) if mainWindow is not None else False
     if isPublic:
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -623,6 +627,175 @@ def clearSelectedCells(mainWindow):
             f"Upload.clearSelectedCells: cleared selection ({len(cells)} cell index(es))",
         )
     return handled
+
+
+def _selectionBounds(table):
+    """Return (minRow, maxRow, minCol, maxCol) for selected indexes, or None."""
+    if table is None:
+        return None
+    indexes = table.selectedIndexes()
+    if not indexes:
+        current = table.currentIndex()
+        if current is not None and current.isValid():
+            r, c = current.row(), current.column()
+            return r, r, c, c
+        return None
+    rows = [i.row() for i in indexes]
+    cols = [i.column() for i in indexes]
+    return min(rows), max(rows), min(cols), max(cols)
+
+
+def copySelectionToClipboard(mainWindow):
+    """
+    Copy the selected rectangular range to the clipboard as tab-separated values
+    (Excel/Sheets-friendly). Works for public and internal queries.
+    Returns True if something was copied.
+    """
+    if mainWindow is None:
+        return False
+    table = mainWindow.mainTable
+    if table is None or table.rowCount() == 0:
+        return False
+    if table.state() == QAbstractItemView.State.EditingState:
+        return False
+
+    bounds = _selectionBounds(table)
+    if bounds is None:
+        return False
+    minR, maxR, minC, maxC = bounds
+
+    lines = []
+    for r in range(minR, maxR + 1):
+        cells = []
+        for c in range(minC, maxC + 1):
+            item = table.item(r, c)
+            text = item.text() if item is not None else ''
+            # Escape tabs/newlines so paste stays rectangular
+            text = text.replace('\t', ' ').replace('\r', ' ').replace('\n', ' ')
+            cells.append(text)
+        lines.append('\t'.join(cells))
+    tsv = '\n'.join(lines)
+
+    from PyQt6.QtWidgets import QApplication
+    clip = QApplication.clipboard()
+    if clip is None:
+        return False
+    clip.setText(tsv)
+
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"Upload.copySelectionToClipboard: "
+            f"{maxR - minR + 1}x{maxC - minC + 1} → clipboard ({len(tsv)} chars)",
+        )
+    return True
+
+
+def pasteClipboardToSelection(mainWindow):
+    """
+    Paste TSV/CSV clipboard into the table starting at the top-left of the
+    selection (or current cell). Each changed cell goes through setText so
+    itemChanged / upload tracking marks them as edits.
+    Public queries and locked (delta) columns are skipped.
+    Returns True if paste was attempted with clipboard data.
+    """
+    if mainWindow is None:
+        return False
+    if isPublicQuery(mainWindow):
+        return False
+    table = mainWindow.mainTable
+    if table is None or table.rowCount() == 0:
+        return False
+    if table.state() == QAbstractItemView.State.EditingState:
+        return False
+
+    from PyQt6.QtWidgets import QApplication, QTableWidgetItem
+
+    clip = QApplication.clipboard()
+    if clip is None:
+        return False
+    raw = clip.text()
+    if raw is None or raw == '':
+        return False
+
+    # Normalize line endings; keep trailing empty only if intentional single blank
+    text = raw.replace('\r\n', '\n').replace('\r', '\n')
+    if text.endswith('\n'):
+        text = text[:-1]
+    if text == '':
+        return False
+
+    pasteRows = []
+    for line in text.split('\n'):
+        if '\t' in line:
+            pasteRows.append(line.split('\t'))
+        elif ',' in line and '\t' not in line:
+            # Simple CSV fallback (no quoted-comma support — rare for number tables)
+            pasteRows.append(line.split(','))
+        else:
+            pasteRows.append([line])
+
+    bounds = _selectionBounds(table)
+    if bounds is None:
+        return False
+    startR, _, startC, _ = bounds
+
+    numRows = table.rowCount()
+    numCols = table.columnCount()
+    changed = 0
+
+    for dr, rowCells in enumerate(pasteRows):
+        r = startR + dr
+        if r < 0 or r >= numRows:
+            break
+        for dc, cellText in enumerate(rowCells):
+            c = startC + dc
+            if c < 0 or c >= numCols:
+                break
+            if columnIsLocked(mainWindow, c):
+                continue
+            item = table.item(r, c)
+            if item is None:
+                item = QTableWidgetItem('')
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+                )
+                table.setItem(r, c, item)
+            if not (item.flags() & Qt.ItemFlag.ItemIsEditable):
+                continue
+            newText = cellText.strip() if cellText is not None else ''
+            if item.text() != newText:
+                item.setText(newText)
+                changed += 1
+
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"Upload.pasteClipboardToSelection: "
+            f"{len(pasteRows)} clipboard row(s) from ({startR},{startC}), "
+            f"{changed} cell(s) changed",
+        )
+    return True
+
+
+def selectEntireColumn(mainWindow, col):
+    """Highlight all cells in a column (header single-click)."""
+    if mainWindow is None:
+        return
+    table = mainWindow.mainTable
+    if table is None or col < 0 or col >= table.columnCount():
+        return
+    from PyQt6.QtWidgets import QTableWidgetSelectionRange
+
+    table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+    table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+    table.clearSelection()
+    if table.rowCount() > 0:
+        table.setRangeSelected(
+            QTableWidgetSelectionRange(0, col, table.rowCount() - 1, col),
+            True,
+        )
+        table.setCurrentCell(0, col)
 
 
 def collectUploadRows(mainWindow):

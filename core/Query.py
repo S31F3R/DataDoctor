@@ -811,7 +811,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: complete (QAQC deferred to executeQuery)")
 
-def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=None):
+def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=None, mainWindow=None):
     if not Config.qaqcEnabled:
         if Config.debug:
             Logic.logMessage("DEBUG", "qaqc: Skipped, QAQC disabled in config")
@@ -829,6 +829,13 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
     cutoffMaxCol = getColByName(dataDictionaryTable, 'cutoffMax') if dataDictionaryTable else -1
     rateOfChangeCol = getColByName(dataDictionaryTable, 'rateOfChange') if dataDictionaryTable else -1
 
+    if mainWindow is None and table is not None:
+        try:
+            mainWindow = table.window()
+        except Exception:
+            mainWindow = None
+    columnMetadata = getattr(mainWindow, 'columnMetadata', None) or [] if mainWindow is not None else []
+
     now = datetime.now()
     numCols = min(table.columnCount(), len(lookupIds) if lookupIds is not None else table.columnCount())
     numRows = table.rowCount()
@@ -839,6 +846,12 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
     table.blockSignals(True)
 
     for col in range(numCols):
+        meta = columnMetadata[col] if col < len(columnMetadata) else {}
+        # Delta columns use their own +/− foreground colors — never run QAQC on them
+        if isinstance(meta, dict) and meta.get('type') == 'delta':
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"qaqc: Skipping delta column {col}")
+            continue
         lookupId = lookupIds[col] if lookupIds is not None and col < len(lookupIds) else None
         if Config.debug:
             Logic.logMessage("DEBUG", "qaqc: Processing column {} for lookupId {}".format(col, lookupId))
@@ -922,6 +935,7 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
     table.setUpdatesEnabled(True)
 
 def customSortTable(table, col, dataDictionaryTable):
+    """Sort by column (intended for header double-click, not single-click)."""
     try:
         pool = QThreadPool.globalInstance()
 
@@ -944,7 +958,8 @@ def customSortTable(table, col, dataDictionaryTable):
     except Exception as e:
         Logic.logException(f"customSortTable failed for col {col}", e)
         try:
-            table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            # ExtendedSelection for multi-cell copy/paste ranges
+            table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         except Exception:
             pass
 
@@ -1007,7 +1022,9 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
         except Exception:
             pass
         try:
-            table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            # ExtendedSelection so multi-cell copy/paste and column highlight work
+            table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+            table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         except Exception:
             pass
 
@@ -1395,6 +1412,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         finalLookupIds,
                         dictIndex=dictIndex,
                         progressDialog=progressDialog,
+                        mainWindow=mainWindow,
                     )
                 if overlayChecked:
                     if progressDialog is not None:
@@ -1443,6 +1461,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         lookupIds,
                         dictIndex=dictIndex,
                         progressDialog=progressDialog,
+                        mainWindow=mainWindow,
                     )
 
             # After QAQC/overlay: blue box + black text for HDB r_base fills (no interval)

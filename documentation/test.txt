@@ -16,13 +16,6 @@ Current Tests
      c. Missing users and TNS/network noise stay out of the popup (still in app.log).
    Notes: status 'locked' shown; 'error'/'missing' silent in UI.
 
-[x] UCHDB2 schema UCHDBA via config
-   Steps:
-     a. Internal query against USBR-UCHDB2 (data + metadata maps).
-     b. Comboboxes/labels show USBR-UCHDB2 only (no |UCHDBA).
-     c. Logs/DEBUG schema should use UCHDBA for UCHDB2.
-   Notes: Config.hdbOracleDatabases 'USBR-UCHDB2|UCHDBA'; Utils.hdbSchemaForDatabase.
-
 [ ] HDB database-link failure → direct connect fallback
    Steps:
      a. Internal multi-DB query where primary uses @link to another HDB.
@@ -32,64 +25,64 @@ Current Tests
 
 [ ] Windows package + bunker merge scripts
    Steps:
-     a. scripts/packageWindows.py builds zip with launcher as root, Project Files layout.
-        RESPONSE: Works. Need a readme each package run (Python 3.13, python --version,
-                run provided installer if missing).
-     b. launcher/updateBunker.py merges packaged bunker.db into user bunker without wiping
-        user fields except dataType/siteName/valuePrecision/database when dataID+siteID match.
-        RESPONSE: Move updateBunker.py into Project Files/scripts (done). Add update readme.
-                Put packaged bunker.db in Project Files/temp; updateBunker.cmd merges then
-                removes temp folder. updateBunker.py already in the right place.
+     a. python scripts/packageWindows.py
+        - Zip has README.txt + UPDATE.txt (generated each run).
+        - Project Files/temp/bunker.db present (merge source).
+        - Project Files/core/bunker.db present (live / fresh install).
+        - Project Files/scripts/updateBunker.py present.
+        - updateBunker.cmd at zip root calls that script.
+     b. Fresh unzip: app runs (Python 3.13 / provided installer notes in README).
+     c. Simulate update: keep a user core/bunker.db with local edits; drop new
+        package files; run updateBunker.cmd.
+        - Merge updates only dataType/siteName/valuePrecision/database on match.
+        - temp/ folder removed after successful merge.
+   Notes: RESPONSE handled — readme per package; bunker in temp; script under
+     Project Files/scripts; cmd fixed.
 
 [ ] Retro mode restart on Windows
    Steps:
-     a. Options → toggle Retro Mode → OK to restart.
-     b. App should relaunch with the new mode (Windows).
-     c. Cancel on the prompt reverts the checkbox and config.
-   Notes: Prefer same python+script; bat logs to %TEMP%\\DataDoctorRestart.log;
-     hidden detached cmd. If fail, open that log file for the real error.
-   Prior RESPONSE: terminal popup with nonsensical error.
-   RESPONSE: [error 2147942632 (0x800700e8) when launching `ping  -n 3 127.0.0.1 ']
-            If this doesn't get fixed next round, change Windows popup to say they need
-            to restart the program for changes to take effect.
-            RESPONSE: This still not fixed nor is it dumping a log. Go with my new route, say a restart will be needed before changes take effect
+     a. Options → toggle Retro Mode → OK/save.
+     b. Windows: dialog says setting was saved; close and reopen for it to apply
+        (no auto-restart attempt, no cmd/ping error).
+     c. After manual restart, retro mode matches the saved setting.
+     d. Linux may still offer auto-restart (optional path).
+   Notes: RESPONSE — auto-restart abandoned on Windows; manual restart message only.
 
-[x] Aquarius certs: no random certs/ folders + convert cleanup  **PRIORITY**
+[ ] Header: single-click highlight column; double-click sort
    Steps:
-     a. Ensure project has an existing certs/ folder (create manually if needed — app will not).
-     b. Place cert.cer (or any .cer/.pfx) under project certs/.
-     c. Run an Aquarius query (DEBUG ON).
-     d. app.log: found files includes the source; converted … → aquarius.pem; source removed.
-     e. certs/aquarius.pem exists; cert.cer / .pfx is gone after success.
-     f. No new empty certs/ folders outside the project (parent dir, cwd, ~/.config, etc.).
-     g. If only a stale aquarius.pem remains and a new .cer fails to convert, app falls back
-        to system trust then unverified (does not crash on old pem).
-   Notes: Logic.ensureAquariusPem never makedirs certs/; writes pem next to source only;
-     removes .cer/.crt/.pfx/.p12 after successful convert. Empty stray certs dirs cleaned
-     on this pass (parent Projects/certs, ~/.config/certs, ~/.config/-c/certs).
-   Prior RESPONSE: certs/cert.cer not converting; need remove source after convert;
-     .pfx path; stale pem should not crash.
-   RESPONSE (code): fixed makedirs bug; remove source; no stale-pem fallback when reconvert fails.
+     a. Internal query with several columns.
+     b. Single-click a column header → entire column highlighted (no sort).
+     c. Double-click same header → table sorts by that column.
+     d. Double-click again → sort toggles asc/desc.
+     e. btnUndo still restores timestamp order.
+   Notes: sectionClicked → selectEntireColumn; sectionDoubleClicked → customSortTable.
 
-[x] Timestamps centered in vertical header column
+[ ] Clipboard copy/paste (Excel-like)
    Steps:
-     a. Run any internal query so the main table has a timestamp rail.
-     b. Timestamp text should be horizontally centered in the left header column.
-     c. Still centered after overlay/delta rewrite and after sorting by a value column.
-   Notes: buildTable + QueryUtils overlay path + updateTableAfterSort set AlignCenter.
+     a. Internal query. Select a multi-cell range (e.g. 5 rows × 1 column).
+     b. Ctrl+C or right-click → Copy. Paste into a spreadsheet → grid intact.
+     c. Select destination top-left cell (or range) in another column; Ctrl+V or
+        right-click → Paste. Values fill down/across; cells turn magenta (edits).
+     d. Public query: Copy works; Paste is not offered in the context menu and
+        Ctrl+V does not write cells.
+     e. Delta columns stay locked (paste skips them).
+   Notes: Upload.copySelectionToClipboard / pasteClipboardToSelection; ExtendedSelection.
 
-[x] Smarter query dates for DAY+ intervals
+[ ] Delta columns skip normal QAQC coloring
    Steps:
-     a. Query with DAY interval; pick start/end that include non-zero times (e.g. 14:37).
-     b. DEBUG log shows normalized range with 00:00 on both ends (time truncated).
-     c. MONTH → start/end snapped to 1st of month 00:00; YEAR → Jan 1; WATER YEAR → Oct 1 of WY.
-     d. HOUR / INSTANT unchanged (existing round-down only on minutes as before).
-     e. Interval selection still from first list item / combo — do not change that logic.
-   Notes: Query.roundDownToInterval + executeQuery applies to both start and end.
+     a. Internal query with Delta checked and QAQC on.
+     b. Delta column keeps +/− orange/blue text colors only — no yellow/green/red
+        QAQC backgrounds on delta cells.
+     c. Normal series columns still get QAQC as before.
+   Notes: Query.qaqc skips meta type == 'delta'.
 
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] UCHDB2 schema UCHDBA via config
+[x] Aquarius certs: no random certs/ folders + convert cleanup (.cer/.pem only; no .pfx)
+[x] Timestamps centered in vertical header column
+[x] Smarter query dates for DAY+ intervals
 [x] USGS DataID: optional parameter + Site-Parameter lookup (resolveUsgsDataId / picker)
 [x] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
 [x] Details window resizes down when switching tabs
@@ -115,7 +108,8 @@ Confirmed
 
 Deferred / known
 --------------------------------------------------------------------------------
-[!] Windows taskbar via VB launcher (not fixable in Python alone)
+[!] Windows taskbar icon (python/.pyw and VB launcher) — platform/AppUserModelID
 [!] USGS monthly/yearly (OGC has no products)
 [!] Aquarius daily 2300 TZ
-[!] Features still backlog: plots, goat, git/readme, dataDictionary non-destructive bulk update
+[!] Features still backlog: plots, goat, git/readme, dataDictionary non-destructive bulk update,
+    SQL builder as button, expanded Options tree, Update/ folder unpackers, Linux/Mac package scripts

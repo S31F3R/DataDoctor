@@ -1,19 +1,13 @@
 ####### TASKS #######
 -Expand update flow later: zip drops into an Update/ folder and platform-specific unpackers (Linux/Mac scripts TBD)
--Linux/Mac package scripts (Windows: scripts/packageWindows.py exists)
--Remove .pfx as a cert option. only accept .cer and .pem. Update documents accordingly. No need to add this to testing
--Make header sort a double click instead of single. Single click make it highlight the column
--Clip board copy and paste need to work "normal" in this program. I should be able to highlight any area, hit ctrl+c to copy it then paste it
-    -If I copy 5 rows in a single column, I'd expect to be able to paste that data into another column, just like excel
-    -Need to catch pasted data as edits to the destination cells
-    -Add context menu for copy/paste in internal, copy ONLY in public queries
-    -Copy needs to work from context menu items also, so ctrl+c or riight click to select copy or highlight range and do one of the 2 copy methods. All that needs to be added
+-Linux/Mac package scripts (Windows: scripts/packageWindows.py exists — README/temp bunker/updateBunker done)
 
 ####### CURRENT BUGS #######
--Deltas checkbox shouldn't run under normal QAQC checks. This has its own formatting based on + or - delta
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
     -This has nothing to do with the .exe. Launching the .py or .pyw file on windows using python ./DataDoctor.py still shows a default python icon, but shows correct icon on Linux
+-(done → test.txt) Deltas checkbox shouldn't run under normal QAQC checks
+-(done → test.txt) Retro restart on Windows — manual restart message only (no auto-restart)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
