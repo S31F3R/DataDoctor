@@ -1632,17 +1632,30 @@ def convertConfigToJson():
         Logic.logMessage("DEBUG", "No config.ini found or user.config exists, skipping conversion")
 
 def reloadGlobals():
+    """
+    Refresh runtime flags from user.config.
+
+    Config.retroMode is intentionally NOT updated here. Retro fonts/layouts must
+    only apply at process start (applyStylesAndFonts). Mid-session reloads of
+    retroMode caused Query / tables to partially flip after Options save.
+    """
     settings = loadConfig()
     Config.debug = settings['debugMode']
     Config.utcOffset = settings['utcOffset']
     Config.periodOffset = resolvePeriodOffset(settings)
-    Config.retroMode = settings['retroMode']
     Config.qaqcEnabled = settings['qaqc']
     Config.rawData = settings['rawData']
     Config.enableSQL = settings['enableSQL']
 
     if Config.debug:
-        Logic.logMessage("DEBUG", f"Globals reloaded from user.config, enableSQL={Config.enableSQL}, periodOffset={Config.periodOffset}, hourTimestampMethod={settings.get('hourTimestampMethod')}")
+        Logic.logMessage(
+            "DEBUG",
+            f"Globals reloaded from user.config, enableSQL={Config.enableSQL}, "
+            f"periodOffset={Config.periodOffset}, "
+            f"hourTimestampMethod={settings.get('hourTimestampMethod')}, "
+            f"sessionRetroMode={Config.retroMode} "
+            f"(file retroMode={settings.get('retroMode')} applies on next start)",
+        )
 
 def getConfigDir():
     configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)

@@ -585,36 +585,36 @@ class uiOptions(QDialog):
             json.dump(config, configFile, indent=2)
         if Config.debug:
             Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}, qaqc: {}, rawData: {}, enableSQL: {}".format(newRetro, self.chkbQAQC.isChecked(), self.chkbRawData.isChecked(), newEnableSQL))
-        # Session visual mode before reload (Windows keeps this until full restart)
+        # Reload non-visual globals only. Config.retroMode stays at the session
+        # value for the whole process — fonts/layouts apply only at next start.
         sessionRetro = bool(Config.retroMode)
         Utils.reloadGlobals()
+        Config.retroMode = sessionRetro
 
         if newRetro != previousRetro:
-            # Windows auto-restart has been unreliable (cmd/ping errors, no log).
-            # Save the setting and ask the user to restart manually.
-            # Keep Config.retroMode at the session value so fonts/layouts/button
-            # chrome do not partially flip until a full close/reopen.
+            # Never partially apply retro mid-session (Query showEvent, table
+            # metrics, button ABS layouts all read Config.retroMode live).
+            # Windows auto-restart has been unreliable — always ask for manual
+            # restart. Linux may still offer auto-restart.
             import sys
             if sys.platform == 'win32':
-                Config.retroMode = sessionRetro
                 QMessageBox.information(
                     self,
                     "Restart Required",
                     "Retro mode setting was saved.\n\n"
-                    "Please close and reopen DataDoctor for the full change to take effect.\n"
+                    "Please close and reopen DataDoctor for the change to take effect.\n"
                     "Nothing will look different until you restart.",
                 )
             else:
                 reply = QMessageBox.question(
                     self, "Retro Mode Change",
                     "Restart DataDoctor for the retro mode change to take effect?\n"
-                    "OK to restart now, Cancel to revert to previous setting.",
+                    "OK to restart now, Cancel to keep the previous setting on disk.",
                     QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
                 )
                 if reply == QMessageBox.StandardButton.Ok:
                     restarted = Utils.restartApplication()
                     if not restarted:
-                        # Keep session visuals until user restarts manually
                         Config.retroMode = sessionRetro
                         QMessageBox.warning(
                             self,
@@ -624,11 +624,13 @@ class uiOptions(QDialog):
                             "Your retro mode setting was saved.",
                         )
                 else:
+                    # Revert file only; session visuals never left sessionRetro
                     self.chkbRetroMode.setChecked(previousRetro)
                     config['retroMode'] = previousRetro
                     with open(configPath, 'w', encoding='utf-8') as configFile:
                         json.dump(config, configFile, indent=2)
                     Utils.reloadGlobals()
+                    Config.retroMode = sessionRetro
                     if Config.debug:
                         Logic.logMessage("DEBUG", "Reverted retro mode to {}".format(previousRetro))
 

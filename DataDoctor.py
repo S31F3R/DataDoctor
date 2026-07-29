@@ -93,6 +93,9 @@ class uiMain(QMainWindow):
         # Define controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
         self.mainTable = self.findChild(QTableWidget, 'mainTable')
+        # Built-in header sort OFF: single-click highlights; double-click customSort
+        if self.mainTable is not None:
+            self.mainTable.setSortingEnabled(False)
         self.btnDataDictionary = self.findChild(QPushButton, 'btnDataDictionary')
         self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')
         self.btnOptions = self.findChild(QPushButton, 'btnOptions')
@@ -1423,12 +1426,36 @@ class uiMain(QMainWindow):
 if __name__ == '__main__':
     app = None
     try:
+        # Windows taskbar: python.exe / pythonw.exe group under the Python
+        # AppUserModelID, so the shell shows the Python icon even when
+        # setWindowIcon is correct. Give this process its own ID *before*
+        # QApplication so the taskbar uses DataDoctor's window icon instead.
+        # Same path for .py, .pyw, and the VB launcher → python child.
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                    'USBR.DataDoctor.1'
+                )
+            except Exception:
+                pass
+
         app = QApplication(sys.argv)
         app.setApplicationName("Data Doctor")
-        # Taskbar / window icon (Windows + Linux desktop shells that honor QApplication icon)
-        appIcon = QIcon(Logic.resourcePath('ui/icons/DataDoctor.ico'))
-        if appIcon.isNull():
-            appIcon = QIcon(Logic.resourcePath('ui/icons/Data Doctor.png'))
+        app.setOrganizationName("USBR")
+        # Taskbar / window icon (Windows + Linux desktop shells that honor it)
+        appIcon = QIcon()
+        icoPath = Logic.resourcePath('ui/icons/DataDoctor.ico')
+        iconCandidates = (
+            icoPath,
+            Logic.resourcePath('ui/icons/Data Doctor.png'),
+            Logic.resourcePath('ui/DataDoctor.png'),
+        )
+        for iconPath in iconCandidates:
+            if os.path.isfile(iconPath):
+                appIcon = QIcon(iconPath)
+                if not appIcon.isNull():
+                    break
         if not appIcon.isNull():
             app.setWindowIcon(appIcon)
 
@@ -1438,6 +1465,14 @@ if __name__ == '__main__':
 
         if Config.debug:
             Logic.logMessage("DEBUG", "Applied global app stylesheet with default button effects and tab close styles")
+            try:
+                sizes = [(s.width(), s.height()) for s in appIcon.availableSizes()] if not appIcon.isNull() else []
+                Logic.logMessage(
+                    "DEBUG",
+                    f"App icon loaded null={appIcon.isNull()} sizes={sizes} ico={icoPath}",
+                )
+            except Exception:
+                pass
 
         # Grab system font color and save as global
         Config.systemTextColor = app.palette().color(QPalette.ColorRole.Text)

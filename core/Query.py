@@ -667,7 +667,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         Logic.logMessage("DEBUG", f"buildTable: Setting table to {numRows} rows, {numCols} columns ({totalCells} cells)")
 
     # Freeze UI work before allocating — Windows marks Not Responding if this blocks too long
-    wasSorting = table.isSortingEnabled()
+    # Built-in sorting stays OFF always: single-click header must only highlight
+    # (double-click uses customSortTable). Do not re-enable from .ui defaults.
     table.setSortingEnabled(False)
     table.blockSignals(True)
     table.setUpdatesEnabled(False)
@@ -788,11 +789,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     table.blockSignals(False)
     table.setUpdatesEnabled(True)
-    # Leave sorting off for very large tables (click-to-sort still works via customSort)
-    if totalCells < 100000:
-        table.setSortingEnabled(wasSorting)
-    else:
-        table.setSortingEnabled(False)
+    # Always leave built-in sorting OFF. Qt sorts on single header click when
+    # enabled; we sort only on double-click via customSortTable.
+    table.setSortingEnabled(False)
 
     table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
     table.setMinimumSize(0, 0)
