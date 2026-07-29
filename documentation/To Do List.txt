@@ -3,9 +3,6 @@
 -Linux/Mac package scripts (Windows: scripts/packageWindows.py exists)
 
 ####### CURRENT BUGS #######
--Deltas will show 0.00 with a - sometimes. It should just show a 0. Assuming the - was due to a delta check with raw data? if so, delta checks should happen after the data is formatted
--Aquarius only query isn't showing meta data. The option doesn't even show up when I right click
--Some context menus for details are cutting off the label. Make sure the context menu width is taking into consideration the header above the table for the width so it doesn't get cut off
 -Taskbar icon wrong when Windows host is VB.NET launcher → Python (not fixable in Python alone)
     -Linux OK; set icon on the .exe / shortcut / AppUserModelID in the launcher
     -This has nothing to do with the .exe. Launching the .py or .pyw file on windows using python ./DataDoctor.py still shows a default python icon, but shows correct icon on Linux

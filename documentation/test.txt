@@ -14,8 +14,10 @@ Current Tests
      a. Change Oracle password in Options → USBR (user that exists on some HDBs).
      b. Popup lists successes; wrong-password DBs get per-DB prompt; locked accounts listed.
      c. Missing users and TNS/network noise stay out of the popup (still in app.log).
+     d. On per-DB wrong-password prompt: Cancel is labeled Skip — skips that DB and
+        continues remaining HDBs (listed under "Skipped" in summary, not as errors).
    Notes: status 'locked' shown; 'error'/'missing' silent in UI.
-   RESPONSE: Almost perfect. When the pop up comes up for wrong password on databases and asks for one, let the user now hit cancel to skip
+   Fix: Cancel → Skip continues queue; skipped DBs separate from errors.
 
 [ ] HDB database-link failure → direct connect fallback
    Steps:
@@ -24,65 +26,58 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[x] Windows package + bunker merge scripts
-   Steps:
-     a. python scripts/packageWindows.py
-        - Zip has README.txt + UPDATE.txt (generated each run).
-        - Project Files/temp/bunker.db present (merge source).
-        - Project Files/core/bunker.db present (live / fresh install).
-        - Project Files/scripts/updateBunker.py present.
-        - updateBunker.cmd at zip root calls that script.
-     b. Fresh unzip: app runs (Python 3.13 / provided installer notes in README).
-     c. Simulate update: keep a user core/bunker.db with local edits; drop new
-        package files; run updateBunker.cmd.
-        - Merge updates only dataType/siteName/valuePrecision/database on match.
-        - temp/ folder removed after successful merge.
-   Notes: RESPONSE handled — readme per package; bunker in temp; script under
-     Project Files/scripts; cmd fixed.
-
 [ ] Retro mode restart on Windows
    Steps:
      a. Options → toggle Retro Mode → OK/save.
-     b. Windows: dialog says setting was saved; close and reopen for it to apply
-        (no auto-restart attempt, no cmd/ping error).
+     b. Windows: dialog says setting was saved; UI must NOT partially change
+        (no layout move, no font/button text flip) until full close/reopen.
      c. After manual restart, retro mode matches the saved setting.
      d. Linux may still offer auto-restart (optional path).
-   Notes: RESPONSE — auto-restart abandoned on Windows; manual restart message only.
-   RESPONSE: This partially changes without a restart. UI moves, some buttons text changes. On windows have the full retro apply ONLY after restart, not partial
+   Notes: Config.retroMode kept at session value on Windows until restart;
+     user.config still stores the new choice.
 
 [ ] Header: single-click highlight column; double-click sort
    Steps:
      a. Internal query with several columns.
-     b. Single-click a column header → entire column highlighted (no sort).
+     b. Single-click a column header → entire column stays highlighted (no sort).
+        Must NOT snap to first cell only.
      c. Double-click same header → table sorts by that column.
      d. Double-click again → sort toggles asc/desc.
      e. btnUndo still restores timestamp order.
-   Notes: sectionClicked → selectEntireColumn; sectionDoubleClicked → customSortTable.
-   RESPONSE: Single click hightlights the first column then undoes it right away, highlighting first cell instead. If I click and dragn across columns, it works. 
-   If I single click 1 column and drag past the header, it stays highlighted. The bug seems to be single clicking the header and staying on it, highlight goes away and selects first cell
+   Notes: selectEntireColumn uses selectionModel ClearAndSelect + deferred re-apply;
+     no setCurrentCell (that collapsed the range).
 
-[x] Clipboard copy/paste (Excel-like)
+[ ] Delta never shows signed zero (-0.00)
    Steps:
-     a. Internal query. Select a multi-cell range (e.g. 5 rows × 1 column).
-     b. Ctrl+C or right-click → Copy. Paste into a spreadsheet → grid intact.
-     c. Select destination top-left cell (or range) in another column; Ctrl+V or
-        right-click → Paste. Values fill down/across; cells turn magenta (edits).
-     d. Public query: Copy works; Paste is not offered in the context menu and
-        Ctrl+V does not write cells.
-     e. Delta columns stay locked (paste skips them).
-   Notes: Upload.copySelectionToClipboard / pasteClipboardToSelection; ExtendedSelection.
+     a. Internal query with Delta checked; series that match after formatting
+        (or tiny residual that rounds to 0 under DEC(n)).
+     b. Delta cells show 0 / 0.00 — never -0.00 or -0.
+     c. Real non-zero deltas still show correct sign (+/− colors if enabled).
+   Notes: delta from formatted display strings; formatDeltaValue + DEC path
+     strip signed zero after rounding.
 
-[x] Delta columns skip normal QAQC coloring
+[ ] Aquarius-only query: Show details on right-click
    Steps:
-     a. Internal query with Delta checked and QAQC on.
-     b. Delta column keeps +/− orange/blue text colors only — no yellow/green/red
-        QAQC backgrounds on delta cells.
-     c. Normal series columns still get QAQC as before.
-   Notes: Query.qaqc skips meta type == 'delta'.
+     a. Internal query with only Aquarius series (one or more columns).
+     b. Right-click any data cell → "Show details" is present.
+     c. Details window opens with Aquarius metadata (or empty fields if meta missing).
+     d. Also works when series is in data dictionary (header uses site + UID).
+   Notes: dual-key seriesResponses (UID + API label); key whitespace normalized;
+     Show details always offered for Aquarius internal normal columns.
+
+[ ] Details window title not clipped
+   Steps:
+     a. Right-click Show details on a series with a long header/title.
+     b. Window width fits the title above the table (no cut-off text).
+     c. Short titles still size to table content as before.
+   Notes: sizeWindowToTable includes lblTitle font metrics width.
 
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Windows package + bunker merge scripts
+[x] Clipboard copy/paste (Excel-like)
+[x] Delta columns skip normal QAQC coloring
 [x] UCHDB2 schema UCHDBA via config
 [x] Aquarius certs: no random certs/ folders + convert cleanup (.cer/.pem only; no .pfx)
 [x] Timestamps centered in vertical header column
