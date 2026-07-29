@@ -750,12 +750,19 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
         except Exception as e:
             Logic.logException("sqlRead: direct fallback for missing SDIDs failed", e)
 
-    # Sort per SDID
+    # Sort per SDID (R meta is a list of row dicts; MRID rawResponse is a kind=mrid sentinel dict)
     for SDIDStr in resultDict:
         resultDict[SDIDStr]['data'].sort(
             key=lambda x: Query.parseDisplayTimestamp(x.split(',')[0]) or datetime.min
         )
-        resultDict[SDIDStr]['rawResponse'].sort(key=lambda m: datetime.strptime(m['Start Date/Time'], '%Y-%m-%d %H:%M:%S'))
+        raw = resultDict[SDIDStr].get('rawResponse')
+        if isinstance(raw, list):
+            resultDict[SDIDStr]['rawResponse'].sort(
+                key=lambda m: datetime.strptime(
+                    m.get('Start Date/Time') or '1900-01-01 00:00:00',
+                    '%Y-%m-%d %H:%M:%S',
+                )
+            )
 
     # Apply gapCheck
     timestamps = Query.buildTimestamps(startDate, endDate, interval)
