@@ -1132,6 +1132,9 @@ def formatRawNumber(value):
         return ''
     if v == float('inf') or v == float('-inf'):
         return str(v)
+    # True zero (including -0.0) → plain 0
+    if v == 0.0:
+        return '0'
     # Shortest round-trip first (avoids 123.450000000000003 noise)
     s = format(v, '.15g')
     if 'e' in s.lower():
@@ -1139,7 +1142,7 @@ def formatRawNumber(value):
         s = format(v, '.15f')
         if '.' in s:
             s = s.rstrip('0').rstrip('.')
-    if s in ('', '-0'):
+    if s in ('', '-0', '-0.0'):
         s = '0'
     return s
 
@@ -1399,6 +1402,9 @@ def applyRoundingSpec(value, spec=None):
         n = max(0, a)
         quant = Decimal('1') if n == 0 else Decimal('1').scaleb(-n)
         rounded = d.quantize(quant, rounding=ROUND_HALF_EVEN)
+        # Avoid Decimal signed-zero display ("-0.00") after rounding tiny negatives
+        if rounded == 0:
+            return f'{0:.{n}f}'
         return f'{rounded:.{n}f}'
 
     # SIG(n) / SIG(n,m)

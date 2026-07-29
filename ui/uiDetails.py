@@ -215,7 +215,18 @@ class uiDetails(QWidget):
         titleH = 22
         if hasattr(self, 'lblTitle') and self.lblTitle is not None:
             # Use sizeHint, not current height (current height can be inflated)
-            titleH = max(self.lblTitle.sizeHint().height(), 18)
+            # Width must include the title so long series labels are not clipped
+            self.lblTitle.setWordWrap(False)
+            titleHint = self.lblTitle.sizeHint()
+            titleH = max(titleHint.height(), 18)
+            # Font metrics are more reliable than sizeHint width for QLabel
+            try:
+                from PyQt6.QtGui import QFontMetrics
+                fm = QFontMetrics(self.lblTitle.font())
+                titleW = fm.horizontalAdvance(self.lblTitle.text() or '') + 24
+            except Exception:
+                titleW = max(titleHint.width(), 0) + 24
+            contentWidth = max(contentWidth, titleW)
             self.lblTitle.setMaximumHeight(titleH + 8)
             self.lblTitle.setMinimumHeight(0)
 

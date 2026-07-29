@@ -686,17 +686,20 @@ class uiMain(QMainWindow):
     def storeQueryData(self, responses, queryType):
         """Store API responses and query type after successful query."""
         try:
+            def _normKey(k):
+                # Same normalization as resolveSeriesResponse candidates
+                key = str(k).replace('\n', ' ').replace('\u00a0', ' ').strip()
+                return ' '.join(key.split())
+
             normalizedResponses = {}
 
             for k, v in responses.items():
-                key = str(k).strip()
+                key = _normKey(k)
+                if not key:
+                    continue
                 if isinstance(v, dict) and 'label' in v:
-                    v['label'] = v['label'].replace('\n', ' ').replace('\u00a0', ' ')
-                    v['label'] = ' '.join(v['label'].split()).strip()
+                    v['label'] = _normKey(v['label'])
                 normalizedResponses[key] = v
-
-            # Normalize keys to remove \n for consistency
-            normalizedResponses = {k.replace('\n', ' ').strip(): v for k, v in normalizedResponses.items()}
 
             self.seriesResponses = normalizedResponses
             self.currentQueryType = queryType
@@ -981,12 +984,22 @@ class uiMain(QMainWindow):
                 queryInfo = self.columnMetadata[col].get('queryInfos', ['|'])[0]
                 interval = queryInfo.split('|')[1] if '|' in queryInfo else 'HOUR' # Default to HOUR if missing
                 
-                if isInternal and db == 'AQUARIUS' and isinstance(response, dict):
+                if isInternal and db == 'AQUARIUS':
+                    # Always offer details for Aquarius (even if response lookup missed);
+                    # populateAquarius handles empty dict gracefully.
+                    aqResponse = response if isinstance(response, dict) else {}
                     detailsAction = menu.addAction("Show details")
-                    detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'AQUARIUS', interval))
+                    detailsAction.triggered.connect(
+                        lambda r=row, c=col, ts=timestampStr, sl=seriesLabel, resp=aqResponse, iv=interval:
+                        self.showMetadataDetails(r, c, ts, sl, resp, 'AQUARIUS', iv)
+                    )
 
                     if Config.debug:
-                        Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for AQUARIUS")
+                        Logic.logMessage(
+                            "DEBUG",
+                            f"showCellContextMenu: Added 'Show details' for AQUARIUS "
+                            f"(response keys={list(aqResponse.keys())[:8] if aqResponse else []})",
+                        )
                 elif isInternal and db and str(db).startswith('USBR') and isinstance(response, list):
                     detailsAction = menu.addAction("Show details")
                     detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USBR', interval))

@@ -585,18 +585,24 @@ class uiOptions(QDialog):
             json.dump(config, configFile, indent=2)
         if Config.debug:
             Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}, qaqc: {}, rawData: {}, enableSQL: {}".format(newRetro, self.chkbQAQC.isChecked(), self.chkbRawData.isChecked(), newEnableSQL))
+        # Session visual mode before reload (Windows keeps this until full restart)
+        sessionRetro = bool(Config.retroMode)
         Utils.reloadGlobals()
 
         if newRetro != previousRetro:
             # Windows auto-restart has been unreliable (cmd/ping errors, no log).
             # Save the setting and ask the user to restart manually.
+            # Keep Config.retroMode at the session value so fonts/layouts/button
+            # chrome do not partially flip until a full close/reopen.
             import sys
             if sys.platform == 'win32':
+                Config.retroMode = sessionRetro
                 QMessageBox.information(
                     self,
                     "Restart Required",
                     "Retro mode setting was saved.\n\n"
-                    "Please close and reopen DataDoctor for the change to take effect.",
+                    "Please close and reopen DataDoctor for the full change to take effect.\n"
+                    "Nothing will look different until you restart.",
                 )
             else:
                 reply = QMessageBox.question(
@@ -608,6 +614,8 @@ class uiOptions(QDialog):
                 if reply == QMessageBox.StandardButton.Ok:
                     restarted = Utils.restartApplication()
                     if not restarted:
+                        # Keep session visuals until user restarts manually
+                        Config.retroMode = sessionRetro
                         QMessageBox.warning(
                             self,
                             "Restart Failed",
@@ -733,6 +741,7 @@ class uiOptions(QDialog):
             'storedOldPassword': oldPassword,
             'success': [],
             'errors': [],
+            'skipped': [],  # user Cancel/Skip on per-DB password prompt
             'authQueue': [],
         }
 
@@ -797,11 +806,14 @@ class uiOptions(QDialog):
 
         dbOldPassword = uiOptions._promptDbOldPassword(parent, dbName, username)
         if not dbOldPassword:
+            # Cancel / Skip / empty: leave this DB alone and continue the queue
             Logic.logMessage(
                 "INFO",
-                f"HDB password prompt cancelled/skipped for {dbName}",
+                f"HDB password prompt skipped for {dbName} (user cancel or empty)",
             )
-            state['errors'].append((dbName, 'Skipped (no password entered)'))
+            skipped = state.setdefault('skipped', [])
+            if dbName not in skipped:
+                skipped.append(dbName)
             uiOptions._processHdbAuthQueue(state)
             return
 
@@ -867,7 +879,8 @@ class uiOptions(QDialog):
     def _promptDbOldPassword(parent, dbName, username):
         """
         Modal masked password prompt for one HDB database.
-        Returns the password string, or None if cancelled / empty.
+        Returns the password string, or None if cancelled / Skip / empty.
+        Cancel skips this database and continues with any remaining HDBs.
         Never logs the password.
         """
         maxLen = int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30)
@@ -881,7 +894,8 @@ class uiOptions(QDialog):
             f"The password currently saved in Options does not work on this database "
             f"(passwords often differ across HDBs).<br><br>"
             f"Enter the <b>current</b> password for user <b>{username}</b> on "
-            f"<b>{dbName}</b>:",
+            f"<b>{dbName}</b>.<br><br>"
+            f"Click <b>Skip</b> to leave this database unchanged and continue.",
             dialog,
         )
         label.setWordWrap(True)
@@ -898,6 +912,11 @@ class uiOptions(QDialog):
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
             parent=dialog,
         )
+        # Cancel = Skip this DB (do not abort remaining prompts)
+        cancelBtn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancelBtn is not None:
+            cancelBtn.setText("Skip")
+            cancelBtn.setToolTip("Skip this database and continue with the rest")
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
@@ -920,6 +939,7 @@ class uiOptions(QDialog):
         storedOld = state.get('storedOldPassword')
         success = list(state.get('success') or [])
         errors = list(state.get('errors') or [])
+        skipped = list(state.get('skipped') or [])
 
         # Stable order for display (strip |SCHEMA from config keys)
         order = {}
@@ -929,8 +949,9 @@ class uiOptions(QDialog):
                 order[name] = i
         success.sort(key=lambda n: order.get(n, 999))
         errors.sort(key=lambda pair: order.get(pair[0] if isinstance(pair, (list, tuple)) else str(pair), 999))
+        skipped.sort(key=lambda n: order.get(n, 999))
 
-        result = {'success': success, 'errors': errors}
+        result = {'success': success, 'errors': errors, 'skipped': skipped}
         reverted = False
         try:
             if not success and storedOld is not None:
@@ -1020,11 +1041,12 @@ class uiOptions(QDialog):
 
     @staticmethod
     def _showHdbPasswordChangeResults(parent, result, passwordReverted=False):
-        """Popup summarizing which DBs changed and which errored (not missing users)."""
+        """Popup summarizing which DBs changed, skipped, or errored (not missing users)."""
         success = list((result or {}).get('success') or [])
         errors = list((result or {}).get('errors') or [])
+        skipped = list((result or {}).get('skipped') or [])
 
-        if not success and not errors:
+        if not success and not errors and not skipped:
             # Nothing changed and nothing reported (all silent missing, or no targets)
             Logic.logMessage(
                 "INFO",
@@ -1052,6 +1074,11 @@ class uiOptions(QDialog):
             for db in success:
                 lines.append(f"  • {db}")
             lines.append("")
+        if skipped:
+            lines.append("Skipped (left unchanged):")
+            for db in skipped:
+                lines.append(f"  • {db}")
+            lines.append("")
         if errors:
             lines.append("Not updated:")
             for item in errors:
@@ -1073,8 +1100,9 @@ class uiOptions(QDialog):
         # INFO summary without secrets
         Logic.logMessage(
             "INFO",
-            "HDB password change results: changed on [{}]; errors on [{}]{}".format(
+            "HDB password change results: changed on [{}]; skipped [{}]; errors on [{}]{}".format(
                 ', '.join(success) if success else 'none',
+                ', '.join(skipped) if skipped else 'none',
                 ', '.join(
                     (e[0] if isinstance(e, (list, tuple)) and e else str(e))
                     for e in errors
