@@ -1003,12 +1003,29 @@ class uiMain(QMainWindow):
                             f"showCellContextMenu: Added 'Show details' for AQUARIUS "
                             f"(response keys={list(aqResponse.keys())[:8] if aqResponse else []})",
                         )
-                elif isInternal and db and str(db).startswith('USBR') and isinstance(response, list):
+                elif isInternal and db and str(db).startswith('USBR'):
+                    # List = full R_* meta; dict kind=mrid = values-only (no meta), like USGS legacy
+                    usbrResponse = response
+                    if isinstance(response, dict) and (response.get('kind') or '').lower() == 'mrid':
+                        usbrResponse = response
+                    elif not isinstance(response, list):
+                        usbrResponse = []
                     detailsAction = menu.addAction("Show details")
-                    detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'USBR', interval))
-                    
+                    detailsAction.triggered.connect(
+                        lambda r=row, c=col, ts=timestampStr, sl=seriesLabel, resp=usbrResponse, iv=interval:
+                        self.showMetadataDetails(r, c, ts, sl, resp, 'USBR', iv)
+                    )
+
                     if Config.debug:
-                        Logic.logMessage("DEBUG", "showCellContextMenu: Added 'Show details' for USBR")
+                        kind = (
+                            response.get('kind')
+                            if isinstance(response, dict)
+                            else f'list[{len(response)}]' if isinstance(response, list) else type(response).__name__
+                        )
+                        Logic.logMessage(
+                            "DEBUG",
+                            f"showCellContextMenu: Added 'Show details' for USBR ({kind})",
+                        )
                 elif db == 'USGS-NWIS':
                     # Internal or public USGS — OGC full meta when available; legacy blanks
                     usgsResponse = response if isinstance(response, dict) else {"kind": "legacy", "seriesMeta": {}, "points": []}

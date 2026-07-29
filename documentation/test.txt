@@ -26,16 +26,17 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[ ] MRID internal query (retest after M-table column fix)
+[ ] MRID internal query (values only; no metadata)
    Steps:
      a. Internal query with SDID-MRID (e.g. Below Parker Dam MRID /
         2119-108283 HOUR USBR-YAOHDB).
-     b. Table fills with model values (no ORA-00904).
-     c. Real (non-MRID) internal USBR query still works (R path unchanged).
-     d. Optional: Show details may list Model Run ID; validation/flags empty for M.
-   Notes: ORA-00904 DERIVATION_FLAGS — R_* SELECT was used on YAOHDBA.m_hour.
-     M_* path now selects only core model columns + model_run_id filter.
-   Prior fail log: params ['2119', ..., '108283'] against m_hour.
+     b. Table fills with model values (no ORA-00904 / crash).
+     c. Right-click cell → Show details opens with note:
+        "Metadata not available for MRID (model) queries"
+        (SDID + Model Run ID listed; other tags blank — like USGS legacy).
+     d. Real (non-MRID) internal USBR still has full Show details metadata.
+   Notes: M_* path is values-only (no r_base, no flag columns, no name maps).
+     rawResponse kind=mrid sentinel drives details UI.
 
 
 Confirmed

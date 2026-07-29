@@ -352,15 +352,24 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
     if Config.debug:
         Logic.logMessage("DEBUG", f"Generated {len(subRanges)} sub-ranges")
 
-    # Fetch maps outside threads using a single connection
-    mapConn = Oracle.oracleConnection(dsn)
-    mapConn.connect()
-    agenMap = fetchAgenMap(mapConn, schema)
-    collectionMap = fetchCollectionMap(mapConn, schema)
-    loadingMap = fetchLoadingMap(mapConn, schema)
-    methodMap = fetchMethodMap(mapConn, schema)
-    computationMap = fetchComputationMap(mapConn, targetSchema, link)
-    mapConn.close()
+    # R path needs agency/method/etc. name maps for Show details.
+    # M / MRID path is values-only — no r_base join, no flag columns, no maps
+    # (same idea as USGS legacy methodIDs: details menu works, metadata blocked).
+    isMrid = table == 'M' and str(mrid) not in ('', '0', 'None')
+    agenMap = {}
+    collectionMap = {}
+    loadingMap = {}
+    methodMap = {}
+    computationMap = {}
+    if not isMrid:
+        mapConn = Oracle.oracleConnection(dsn)
+        mapConn.connect()
+        agenMap = fetchAgenMap(mapConn, schema)
+        collectionMap = fetchCollectionMap(mapConn, schema)
+        loadingMap = fetchLoadingMap(mapConn, schema)
+        methodMap = fetchMethodMap(mapConn, schema)
+        computationMap = fetchComputationMap(mapConn, targetSchema, link)
+        mapConn.close()
 
     # Determine timeCol for BETWEEN and matching
     if interval == 'HOUR' and Config.periodOffset:
@@ -371,18 +380,15 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
         timeAlias = 'START_DATE_TIME'
 
     # Interval query template (for single SDID).
-    # R_* (real) tables carry validation / overwrite / method / derivation_flags.
-    # M_* (model) tables do not — selecting those yields ORA-00904 (e.g. DERIVATION_FLAGS
-    # on YAOHDBA.m_hour). Use a lean SELECT + model_run_id filter for MRID queries.
-    if table == 'M' and mrid != '0':
+    # M_* tables lack R_* metadata columns (ORA-00904 DERIVATION_FLAGS etc.).
+    # Values only + model_run_id filter; rawResponse is a no-meta sentinel.
+    if isMrid:
         dataQuery = f"""
         SELECT 
           site_datatype_id AS SDID, 
           TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
           TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
-          TO_CHAR(date_time_loaded, 'YYYY-MM-DD HH24:MI:SS') AS DATE_TIME_LOADED,
-          value,
-          model_run_id
+          value
         FROM {dataTable}
         WHERE site_datatype_id = :1
           AND {timeCol} BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
@@ -457,7 +463,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
 
         # Data params
         dataParams = [SDID, subStartStr, subEndStr]
-        if table == 'M' and mrid != '0':
+        if isMrid:
             dataParams.append(mrid)
 
         if Config.debug:
@@ -467,6 +473,44 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
             )
         # Reuse session across tasks; retry once if the network dropped the connection
         dataResults = oracleConn.executeCustomQueryWithRetry(dataQuery, params=dataParams)
+
+        # --- MRID / model: values only, no metadata list ---
+        if isMrid:
+            outputData = []
+            for row in dataResults or []:
+                timeKey = row.get(timeAlias)
+                value = row.get('VALUE')
+                if value is None or not timeKey:
+                    continue
+                try:
+                    dateTime = datetime.strptime(str(timeKey), '%Y-%m-%d %H:%M:%S')
+                    formattedTs = Query.formatTimestamp(dateTime, interval)
+                    outputData.append(f'{formattedTs},{value}')
+                except ValueError as e:
+                    Logic.logMessage(
+                        "WARN",
+                        f"sqlRead thread {threadId}: Invalid timeKey skipped for "
+                        f"SDID {SDID}: {timeKey} ({e})",
+                    )
+            # Sentinel for Show details (mirrors USGS legacy "no metadata" UX)
+            resultQueue.put((
+                SDID,
+                {
+                    'data': outputData,
+                    'rawResponse': {
+                        'kind': 'mrid',
+                        'mrid': str(mrid),
+                        'sdid': str(SDID),
+                    },
+                },
+            ))
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"sqlRead thread {threadId}: MRID values-only "
+                    f"{len(outputData)} points for SDID {SDID} mrid={mrid}",
+                )
+            return
 
         # Group interval data by timeKey
         dataByTime = {row[timeAlias]: row for row in dataResults}
@@ -556,10 +600,6 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
             displayMeta['Data Flags'] = (
                 mergedRow.get('DATA_FLAGS', '') or mergedRow.get('DERIVATION_FLAGS', '') or ''
             )
-            # Model runs: surface MRID when present (M_* tables only)
-            mridVal = mergedRow.get('MODEL_RUN_ID')
-            if mridVal is not None and str(mridVal) not in ('', '0'):
-                displayMeta['Model Run ID'] = str(mridVal)
 
             mergedMeta.append(displayMeta)
 
@@ -649,14 +689,23 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
     for t in threads:
         t.join()
 
-    # Collect results
-    resultDict = defaultdict(lambda: {'data': [], 'rawResponse': []})
+    # Collect results. R path: rawResponse is a list of meta rows (extend).
+    # MRID path: rawResponse is a single dict sentinel (kind=mrid) — assign, never extend.
+    resultDict = defaultdict(lambda: {'data': [], 'rawResponse': [] if not isMrid else None})
 
     while not resultQueue.empty():
         SDID, partial = resultQueue.get()
         SDIDStr = str(SDID)
-        resultDict[SDIDStr]['data'].extend(partial['data'])
-        resultDict[SDIDStr]['rawResponse'].extend(partial['rawResponse'])
+        resultDict[SDIDStr]['data'].extend(partial.get('data') or [])
+        raw = partial.get('rawResponse')
+        if isinstance(raw, dict):
+            resultDict[SDIDStr]['rawResponse'] = raw
+        elif isinstance(raw, list):
+            existing = resultDict[SDIDStr]['rawResponse']
+            if not isinstance(existing, list):
+                resultDict[SDIDStr]['rawResponse'] = list(raw)
+            else:
+                existing.extend(raw)
 
     if workerErrors and not resultDict:
         # Link failed entirely → retry with direct connection to target DSN

@@ -642,9 +642,43 @@ class uiDetails(QWidget):
                         lambda item: f"Text: {item.get('NoteText', 'N/A')}", table=table)
         
     def populateUSBR(self, timestampStr, response, interval, table=None):
-        """Internal method to populate for USBR metadata (list of merged dicts)."""
+        """
+        USBR metadata (list of merged R_* dicts), or MRID no-meta sentinel.
+
+        MRID / model queries return response = {'kind': 'mrid', 'mrid': ..., 'sdid': ...}
+        — same UX as USGS legacy methodIDs: menu works, note + empty tags.
+        """
         if table is None:
             table = self.detailsTable
+
+        # MRID (model) path: values exist in the table; HDB model tables have no R-style meta
+        if isinstance(response, dict) and (response.get('kind') or '').lower() == 'mrid':
+            self.addRow(
+                "Note",
+                "Metadata not available for MRID (model) queries",
+                table=table,
+            )
+            mrid = response.get('mrid') or ''
+            sdid = response.get('sdid') or ''
+            if sdid:
+                self.addRow("SDID", str(sdid), table=table)
+            if mrid:
+                self.addRow("Model Run ID", str(mrid), table=table)
+            tags = [
+                'Interval', 'Start Date/Time', 'End Date/Time', 'Date/Time Loaded',
+                'Interval Value', 'Base Value', 'Validation', 'Overwrite Flag', 'Method',
+                'Agency Name', 'Collection System', 'Loading Application', 'Computation',
+                'Computation ID', 'Data Flags',
+            ]
+            for tag in tags:
+                self.addRow(tag, "", table=table)
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"populateUSBR: MRID no-metadata shown (sdid={sdid!r} mrid={mrid!r})",
+                )
+            return
+
         if not isinstance(response, list):
             Logic.logMessage("WARN", f"Invalid response for USBR: expected list, got {type(response).__name__}")
             return
