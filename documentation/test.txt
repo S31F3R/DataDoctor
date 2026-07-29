@@ -15,6 +15,7 @@ Current Tests
      b. Popup lists successes; wrong-password DBs get per-DB prompt; locked accounts listed.
      c. Missing users and TNS/network noise stay out of the popup (still in app.log).
    Notes: status 'locked' shown; 'error'/'missing' silent in UI.
+   RESPONSE: Almost perfect. When the pop up comes up for wrong password on databases and asks for one, let the user now hit cancel to skip
 
 [ ] HDB database-link failure → direct connect fallback
    Steps:
@@ -23,7 +24,7 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[ ] Windows package + bunker merge scripts
+[x] Windows package + bunker merge scripts
    Steps:
      a. python scripts/packageWindows.py
         - Zip has README.txt + UPDATE.txt (generated each run).
@@ -47,6 +48,7 @@ Current Tests
      c. After manual restart, retro mode matches the saved setting.
      d. Linux may still offer auto-restart (optional path).
    Notes: RESPONSE — auto-restart abandoned on Windows; manual restart message only.
+   RESPONSE: This partially changes without a restart. UI moves, some buttons text changes. On windows have the full retro apply ONLY after restart, not partial
 
 [ ] Header: single-click highlight column; double-click sort
    Steps:
@@ -56,8 +58,10 @@ Current Tests
      d. Double-click again → sort toggles asc/desc.
      e. btnUndo still restores timestamp order.
    Notes: sectionClicked → selectEntireColumn; sectionDoubleClicked → customSortTable.
+   RESPONSE: Single click hightlights the first column then undoes it right away, highlighting first cell instead. If I click and dragn across columns, it works. 
+   If I single click 1 column and drag past the header, it stays highlighted. The bug seems to be single clicking the header and staying on it, highlight goes away and selects first cell
 
-[ ] Clipboard copy/paste (Excel-like)
+[x] Clipboard copy/paste (Excel-like)
    Steps:
      a. Internal query. Select a multi-cell range (e.g. 5 rows × 1 column).
      b. Ctrl+C or right-click → Copy. Paste into a spreadsheet → grid intact.
@@ -68,7 +72,7 @@ Current Tests
      e. Delta columns stay locked (paste skips them).
    Notes: Upload.copySelectionToClipboard / pasteClipboardToSelection; ExtendedSelection.
 
-[ ] Delta columns skip normal QAQC coloring
+[x] Delta columns skip normal QAQC coloring
    Steps:
      a. Internal query with Delta checked and QAQC on.
      b. Delta column keeps +/− orange/blue text colors only — no yellow/green/red
