@@ -10,8 +10,12 @@ Rules (per To Do List):
   - Never delete user-only rows
 
 Typical Windows layout after packageWindows.py:
-  <install>/Project Files/core/bunker.db   ← packaged (source of truth for new IDs)
-  User bunker may live in Project Files/core/ or next to the app.
+  <install>/Project Files/temp/bunker.db   ← packaged merge source
+  <install>/Project Files/core/bunker.db   ← live user dictionary (destination)
+  <install>/updateBunker.cmd               ← runs this script
+  <install>/Project Files/scripts/updateBunker.py
+
+After a successful merge (not dry-run), Project Files/temp/ is removed.
 
 Usage:
   python updateBunker.py
@@ -58,23 +62,69 @@ def openDb(path: Path) -> sqlite3.Connection:
 
 def findDefaultPaths():
     """
-    Heuristic paths relative to this script (launcher/) and common install layouts.
+    Heuristic paths relative to this script.
+
+    Script location (packaged): <install>/Project Files/scripts/updateBunker.py
+      packaged → ../temp/bunker.db
+      user     → ../core/bunker.db
     """
-    here = Path(__file__).resolve().parent
+    here = Path(__file__).resolve().parent  # .../Project Files/scripts
+    projectFiles = here.parent              # .../Project Files
+    installRoot = projectFiles.parent       # zip / install root
+
     candidatesPackaged = [
-        here / "Project Files" / "core" / "bunker.db",
-        here.parent / "core" / "bunker.db",
-        here / "core" / "bunker.db",
+        projectFiles / "temp" / "bunker.db",
+        installRoot / "Project Files" / "temp" / "bunker.db",
+        # Legacy fallbacks if someone still drops packaged DB in core/
+        projectFiles / "core" / "bunker.db.packaged",
+        here / "bunker.db",
     ]
     candidatesUser = [
-        here / "Project Files" / "core" / "bunker.db",
-        here.parent / "core" / "bunker.db",
+        projectFiles / "core" / "bunker.db",
+        installRoot / "Project Files" / "core" / "bunker.db",
         Path(os.environ.get("APPDATA", "")) / "Data Doctor" / "bunker.db",
         Path(os.environ.get("LOCALAPPDATA", "")) / "Data Doctor" / "bunker.db",
     ]
     packaged = next((p for p in candidatesPackaged if p.is_file()), None)
     user = next((p for p in candidatesUser if p.is_file()), None)
     return packaged, user
+
+
+def cleanupTempFolder(packagedPath: Path):
+    """
+    After a successful merge, remove Project Files/temp/ when the packaged
+    bunker lived there (so users are not left with a stale merge source).
+    """
+    try:
+        if packagedPath is None or not packagedPath.name.lower().startswith("bunker"):
+            return
+        tempDir = packagedPath.parent
+        if tempDir.name.lower() != "temp":
+            return
+        # Only remove temp if it sits under Project Files
+        if tempDir.parent.name.lower() not in ("project files", "projectfiles"):
+            # Still allow plain "temp" under Project Files even if name casing differs
+            if "project" not in tempDir.parent.name.lower():
+                return
+        if packagedPath.is_file():
+            packagedPath.unlink()
+            print(f"Removed packaged file: {packagedPath}")
+        # Remove empty temp dir (and any leftover files we created)
+        if tempDir.is_dir():
+            for child in tempDir.iterdir():
+                try:
+                    if child.is_file():
+                        child.unlink()
+                except Exception:
+                    pass
+            try:
+                tempDir.rmdir()
+                print(f"Removed temp folder: {tempDir}")
+            except OSError:
+                # Non-empty or busy — leave it
+                print(f"Note: could not remove temp folder (not empty?): {tempDir}")
+    except Exception as e:
+        print(f"WARN: temp cleanup failed: {e}", file=sys.stderr)
 
 
 def merge(packagedPath: Path, userPath: Path, dryRun: bool = False) -> int:
@@ -223,7 +273,10 @@ def main():
 
     print(f"Packaged: {packaged}")
     print(f"User:     {user}")
-    return merge(packaged, user, dryRun=args.dryRun)
+    code = merge(packaged, user, dryRun=args.dryRun)
+    if code == 0 and not args.dryRun:
+        cleanupTempFolder(Path(packaged))
+    return code
 
 
 if __name__ == "__main__":
