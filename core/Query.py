@@ -1352,6 +1352,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
             # Remap Aquarius rawResponses keys to API labels. USGS stays keyed by DataID
             # so context-menu lookup by lookupId still works after Site Name headers.
+            # Keep original dataID keys too (Aquarius headers may use UID or label).
             if Config.debug:
                 Logic.logMessage("DEBUG", f"executeQuery: Remapping rawResponses keys, labelsDict type={type(labelsDict)}, keys={list(labelsDict.keys()) if labelsDict else []}")
             if labelsDict:
@@ -1361,7 +1362,10 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     if isUsgsMeta:
                         remapped[k] = v
                     else:
-                        remapped[labelsDict.get(k, k)] = v
+                        remapped[k] = v  # original DataID / UID
+                        labelKey = labelsDict.get(k, k)
+                        if labelKey is not None and str(labelKey).strip() != '':
+                            remapped[labelKey] = v
                 rawResponses = remapped
 
             # Store rawResponses for details / context menu

@@ -116,8 +116,13 @@ def modifyTable(
                 primaryVals[r] = float(pDec)
             if sDec is not None:
                 secondaryVals[r] = float(sDec)
+            # Delta from already-formatted display strings (buildTable applied
+            # valuePrecision). Matching display text → exact 0 (never -0.00).
             if pDec is not None and sDec is not None:
-                deltaDecimals[r] = pDec - sDec
+                if str(pText).strip() == str(sText).strip():
+                    deltaDecimals[r] = Decimal(0)
+                else:
+                    deltaDecimals[r] = pDec - sDec
 
         if overlayChecked:
             # Merge secondary into primary column offline
@@ -563,6 +568,9 @@ def formatDeltaValue(deltaDec, rule=None):
 
     Uses Decimal math + valuePrecision so raw mode never shows scientific
     notation (e.g. 1e-12) for tiny residual differences.
+
+    Signed zeros from rounding (-0.00, -0) are normalized to unsigned 0 /
+    0.00 so tiny negative residuals never display a minus on a zero.
     """
     if deltaDec is None:
         return ''
@@ -573,12 +581,29 @@ def formatDeltaValue(deltaDec, rule=None):
         return ''
     if deltaDec.is_nan() or deltaDec.is_infinite():
         return ''
-    # Exact zero
+    # Exact zero (including Decimal('-0'))
     if deltaDec == 0:
         return Logic.valuePrecision(0, rule=rule)
     # Pass through valuePrecision (raw → formatRawNumber fixed-point; else DEC/SIG)
     # Use string form so _toDecimal / float path does not reintroduce binary noise.
-    return Logic.valuePrecision(format(deltaDec, 'f'), rule=rule)
+    formatted = Logic.valuePrecision(format(deltaDec, 'f'), rule=rule)
+    return normalizeSignedZeroText(formatted)
+
+
+def normalizeSignedZeroText(text):
+    """Turn '-0', '-0.0', '-0.00' into unsigned zero with the same decimals."""
+    if text is None:
+        return ''
+    s = str(text).strip()
+    if not s.startswith('-'):
+        return s
+    body = s[1:]
+    if not body:
+        return s
+    # Only digits and at most one dot
+    if body.replace('.', '', 1).isdigit() and body.replace('.', '').strip('0') == '':
+        return body
+    return s
 
 
 def computeDeltas(primaryVals, secondaryVals):
