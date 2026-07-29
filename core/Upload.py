@@ -779,23 +779,60 @@ def pasteClipboardToSelection(mainWindow):
 
 
 def selectEntireColumn(mainWindow, col):
-    """Highlight all cells in a column (header single-click)."""
+    """
+    Highlight all cells in a column (header single-click).
+
+    Avoid setCurrentCell — in SelectItems mode it collapses the range to the
+    current cell (looks like highlight then snap to first cell). Also re-apply
+    after the event loop so Qt's default header click handling cannot undo us.
+    """
     if mainWindow is None:
         return
     table = mainWindow.mainTable
     if table is None or col < 0 or col >= table.columnCount():
         return
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtCore import QItemSelection, QItemSelectionModel
     from PyQt6.QtWidgets import QTableWidgetSelectionRange
 
     table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
-    table.clearSelection()
-    if table.rowCount() > 0:
-        table.setRangeSelected(
-            QTableWidgetSelectionRange(0, col, table.rowCount() - 1, col),
-            True,
+
+    def _applyColumnSelection(c=col):
+        if table is None or c < 0 or c >= table.columnCount():
+            return
+        rows = table.rowCount()
+        if rows <= 0:
+            return
+        model = table.model()
+        selModel = table.selectionModel()
+        if model is None or selModel is None:
+            # Fallback for unusual setups
+            table.clearSelection()
+            table.setRangeSelected(
+                QTableWidgetSelectionRange(0, c, rows - 1, c),
+                True,
+            )
+            return
+        topLeft = model.index(0, c)
+        bottomRight = model.index(rows - 1, c)
+        if not topLeft.isValid() or not bottomRight.isValid():
+            return
+        selection = QItemSelection(topLeft, bottomRight)
+        # ClearAndSelect keeps the full column; do NOT call setCurrentCell
+        selModel.select(
+            selection,
+            QItemSelectionModel.SelectionFlag.ClearAndSelect,
         )
-        table.setCurrentCell(0, col)
+        # Anchor current index at top of column without collapsing selection
+        selModel.setCurrentIndex(
+            topLeft,
+            QItemSelectionModel.SelectionFlag.NoUpdate,
+        )
+
+    _applyColumnSelection(col)
+    # Defer once so any post-sectionClicked selection reset is overwritten
+    QTimer.singleShot(0, lambda c=col: _applyColumnSelection(c))
 
 
 def collectUploadRows(mainWindow):
