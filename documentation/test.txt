@@ -9,24 +9,28 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] USGS Data Dictionary precision / QAQC lookup (tsid only) + Show details
+[ ] USGS dataDictionary lookup (bunker PVLC — precision is the proof)
+   Concrete bunker row:
+     dataID            = f02e05bac5ca472dbce494a3f54ef451  (bare hex only)
+     siteID            = 09429100
+     database          = USGS-NWIS
+     commonName        = PVLC (USGS)
+     valuePrecision    = Discharge   → Aquarius default DEC(3) if override ignored
+     precisionOverride = DEC(2)      → MUST win
+   Query forms (multi-part — Aquarius is bare UID and already works):
+     09429100-f02e05bac5ca472dbce494a3f54ef451-60
+     09429100-f02e05bac5ca472dbce494a3f54ef451
    Steps:
-     a. In Data Dictionary: siteID = site number, dataID = time_series_id only
-        (not Site-tsid), database = USGS-NWIS, precisionOverride = SIG(4).
-     b. Public or internal USGS query with Site-time_series_id[-param]
-        (or bare time_series_id — also accepted as OGC now).
-     c. Values should format with SIG(4) (not default ~3 decimals / DEC(2)).
-     d. QAQC coloring still applies when expectedMin/Max are set on that row.
-     e. Right-click a value cell → Show details:
-        - Must NOT say "legacy USGS method IDs" for a hex time_series_id query.
-        - Should show OGC series tags (Site Name, Parameter, Time Series ID, …)
-          when the OGC fetch returned meta.
-   Notes: dictionaryLookupKey uses 2nd '-' segment (bare tsid) for dict lookup.
-     Prior FAIL (RESPONSE): Show details claimed "legacy" on tsid queries.
-     Fix: dual-key seriesResponses by full DataID + bare tsid; resolveSeriesResponse
-     matches tsid; bare 32-char hex classifies as OGC; missing meta no longer
-     mislabeled as legacy; modifyTable keeps full DataIDs for columnMetadata
-     (lookupIds only for rounding/QAQC).
+     a. Confirm dict row as above (override DEC(2), not blank).
+     b. Query public/internal with site-tsid or site-tsid-param.
+     c. VALUES must show 2 decimal places (DEC(2)), NOT 3 (Discharge/DEC(3)).
+        That is the definitive proof the dict row + override applied.
+     d. Header shows "PVLC (USGS)" (commonName), like Aquarius shows its label.
+     e. Show details: OGC tags, not "legacy method IDs".
+   Notes: Grok verified offline — buildTable seriesRules → DEC(2), cells e.g.
+     1234.567 → 1234.57. Discharge alone would be 1234.567; total miss → DEC(2)
+     default (also 2dp) so override was the real differentiator vs Discharge.
+     Fix: seriesRules always resolve full query DataID→bare tsid + override.
 
 [x] Data Dictionary Ctrl+S / Save button (reevaluated)
    Steps:

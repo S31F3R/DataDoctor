@@ -1296,7 +1296,15 @@ def _dictTableColIndex(table, name):
 
 
 def roundingSpecFromDictionaryRow(dataDictionaryTable, rowIndex):
-    """Read valuePrecision + precisionOverride from a data-dictionary table row."""
+    """
+    Read valuePrecision + precisionOverride from a data-dictionary table row.
+
+    Precedence is enforced in resolveRoundingSpec:
+      precisionOverride → valuePrecision Identifier (e.g. Discharge→DEC(3)) → DEC(2)
+
+    So a miss that never finds this row falls back to DEC(2), while a hit on
+    Discharge *without* reading override would incorrectly show DEC(3).
+    """
     if dataDictionaryTable is None or rowIndex is None or rowIndex < 0:
         return DEFAULT_ROUNDING_SPEC
 
@@ -1308,26 +1316,78 @@ def roundingSpecFromDictionaryRow(dataDictionaryTable, rowIndex):
     if vpCol >= 0:
         it = dataDictionaryTable.item(rowIndex, vpCol)
         identifier = it.text().strip() if it and it.text() else ''
+        # Combobox may leave "Identifier  [DEC(n)]" display text — strip for lookup
+        if '  [' in identifier:
+            identifier = identifier.split('  [', 1)[0].strip()
     if poCol >= 0:
         it = dataDictionaryTable.item(rowIndex, poCol)
         override = it.text().strip() if it and it.text() else ''
-    return resolveRoundingSpec(identifier=identifier, override=override)
+    spec = resolveRoundingSpec(identifier=identifier, override=override)
+    if Config.debug and (identifier or override):
+        logMessage(
+            "DEBUG",
+            f"roundingSpecFromDictionaryRow: row={rowIndex} "
+            f"identifier={identifier!r} override={override!r} → {spec}",
+        )
+    return spec
 
 
-def roundingSpecForDataId(dataDictionaryTable, dataId, dictIndex=None):
-    """Resolve RoundingSpec for a series dataID via the in-memory data dictionary table."""
+def roundingSpecForDataId(dataDictionaryTable, dataId, dictIndex=None, database=None):
+    """
+    Resolve RoundingSpec for a query series via the in-memory data dictionary.
+
+    dataId may be a full query DataID (e.g. USGS site-tsid-param). We try multiple
+    keys so multi-part USGS IDs still hit bare time_series_id dictionary rows and
+    pick up precisionOverride (without this, Discharge alone → DEC(3) while override
+    DEC(2) is ignored because the row was never found / wrong key).
+    """
     if dataDictionaryTable is None or not dataId:
         return DEFAULT_ROUNDING_SPEC
 
-    # Prefer shared Query helpers (case-insensitive + bare USGS tsid aliases)
+    raw = str(dataId).strip()
+    candidates = []
+
+    def addCand(k):
+        if k is None:
+            return
+        s = str(k).strip()
+        if s and s not in candidates:
+            candidates.append(s)
+
+    addCand(raw)
     try:
-        from core.Query import getDataDictionaryItem, buildDataDictionaryIndex
+        from core.Query import (
+            getDataDictionaryItem,
+            buildDataDictionaryIndex,
+            dictionaryLookupKey,
+            usgsDictionaryDataId,
+        )
         if dictIndex is None:
             dictIndex = buildDataDictionaryIndex(dataDictionaryTable)
-        row = getDataDictionaryItem(dataDictionaryTable, dataId, idIndex=dictIndex)
+        addCand(dictionaryLookupKey(raw, database))
+        addCand(usgsDictionaryDataId(raw))
+        # Also try preferred bare key lowercased
+        for c in list(candidates):
+            addCand(c.lower())
+
+        row = -1
+        matchedKey = None
+        for key in candidates:
+            row = getDataDictionaryItem(dataDictionaryTable, key, idIndex=dictIndex)
+            if row >= 0:
+                matchedKey = key
+                break
+
+        if Config.debug:
+            logMessage(
+                "DEBUG",
+                f"roundingSpecForDataId: queryDataId={raw!r} db={database!r} "
+                f"candidates={candidates!r} matchedKey={matchedKey!r} row={row}",
+            )
         return roundingSpecFromDictionaryRow(dataDictionaryTable, row)
-    except Exception:
-        pass
+    except Exception as e:
+        if Config.debug:
+            logMessage("DEBUG", f"roundingSpecForDataId: Query helpers failed: {e}")
 
     # Fallback if Query import fails (should not happen in-app)
     if dictIndex is None:
@@ -1341,7 +1401,7 @@ def roundingSpecForDataId(dataDictionaryTable, dataId, dictIndex=None):
                     if key and key not in dictIndex:
                         dictIndex[key] = r
 
-    target = dataId.strip() if dataId else ''
+    target = raw
     row = dictIndex.get(target, -1)
     if row < 0 and target:
         row = dictIndex.get(target.lower(), -1)

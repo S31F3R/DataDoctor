@@ -672,8 +672,21 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if intervalStr.startswith('INSTANT:'):
             intervalStr = 'INSTANT'
         database = databases[i] if databases and i < len(databases) else None
-        dictKey = lookupIds[i] if lookupIds else dataId
+        # Prefer precomputed lookupIds (USGS → bare tsid; USBR → SDID); else derive
+        if lookupIds and i < len(lookupIds) and lookupIds[i]:
+            dictKey = lookupIds[i]
+        else:
+            dictKey = dictionaryLookupKey(dataId, database)
         dictRow = getDataDictionaryItem(dataDictionaryTable, dictKey, idIndex=dictIndex)
+        # USGS Site-tsid[-param]: always retry bare time_series_id if first key missed
+        if dictRow < 0 and database and str(database).upper().startswith('USGS'):
+            bareTsid = usgsDictionaryDataId(dataId)
+            if bareTsid and bareTsid != dictKey:
+                dictRow = getDataDictionaryItem(
+                    dataDictionaryTable, bareTsid, idIndex=dictIndex
+                )
+                if dictRow >= 0:
+                    dictKey = bareTsid
         mrid = None
 
         if database and database.startswith('USBR-') and '-' in dataId:
@@ -686,28 +699,49 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             baseLabel = commonItem.text().strip() if commonItem else dataId
 
             if database == 'USGS-NWIS':
-                # Prefer live Site Name from API meta (public + internal OGC)
-                siteName = labelsDict.get(dataId) if labelsDict else None
-                # Also try original header key (buildHeader entry) if dataId was rewritten
-                if not siteName and labelsDict and h.strip() in labelsDict:
-                    siteName = labelsDict.get(h.strip())
-                fullLabel = usgsHeaderFromSiteName(siteName, intervalStr)
-                if fullLabel:
+                # Same idea as Aquarius: dictionary commonName is the operator label.
+                # (Previously Site Name from OGC always won, so hits looked like misses —
+                #  e.g. bunker "PVLC (USGS)" never appeared; Aquarius UID labels did.)
+                if baseLabel and baseLabel != dataId and baseLabel != dictKey:
+                    fullLabel = f"{baseLabel} \n{intervalStr}"
                     if Config.debug:
-                        Logic.logMessage("DEBUG", f"buildTable: USGS in dict via Site Name, header {i}: {fullLabel}")
+                        Logic.logMessage(
+                            "DEBUG",
+                            f"buildTable: USGS dict HIT key={dictKey!r} row={dictRow} "
+                            f"commonName header {i}: {fullLabel}",
+                        )
                 else:
-                    parts = dataId.split('-')
-
-                    if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
-                        fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
-
+                    siteName = labelsDict.get(h.strip()) if labelsDict else None
+                    if not siteName and labelsDict:
+                        siteName = labelsDict.get(dataId)
+                    fullLabel = usgsHeaderFromSiteName(siteName, intervalStr)
+                    if fullLabel:
                         if Config.debug:
-                            Logic.logMessage("DEBUG", f"buildTable: USGS in dict, header {i}: {fullLabel}")
+                            Logic.logMessage(
+                                "DEBUG",
+                                f"buildTable: USGS dict HIT key={dictKey!r} row={dictRow} "
+                                f"via Site Name, header {i}: {fullLabel}",
+                            )
                     else:
-                        fullLabel = f"{baseLabel} \n{intervalStr}"
-                        
+                        parts = dataId.split('-')
+                        if (
+                            len(parts) == 3
+                            and parts[0].isdigit()
+                            and (
+                                parts[1].isdigit()
+                                or (len(parts[1]) == 32 and parts[1].isalnum())
+                            )
+                            and parts[2].isdigit()
+                        ):
+                            fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+                        else:
+                            fullLabel = f"{baseLabel} \n{intervalStr}"
                         if Config.debug:
-                            Logic.logMessage("DEBUG", f"buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
+                            Logic.logMessage(
+                                "DEBUG",
+                                f"buildTable: USGS dict HIT key={dictKey!r} row={dictRow} "
+                                f"fallback header {i}: {fullLabel}",
+                            )
             elif database == 'AQUARIUS':
                 fullLabel = f"{baseLabel} \n{dataId}"
 
@@ -732,9 +766,15 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                         Logic.logMessage("DEBUG", f"buildTable: USBR in dict, header {i}: {fullLabel}")
         else:
             if database == 'USGS-NWIS':
-                siteName = labelsDict.get(dataId) if labelsDict else None
-                if not siteName and labelsDict and h.strip() in labelsDict:
-                    siteName = labelsDict.get(h.strip())
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"buildTable: USGS dict MISS key={dictKey!r} "
+                        f"queryDataId={h.strip()!r} (expected bare time_series_id in dataID col)",
+                    )
+                siteName = labelsDict.get(h.strip()) if labelsDict else None
+                if not siteName and labelsDict:
+                    siteName = labelsDict.get(dataId)
                 fullLabel = usgsHeaderFromSiteName(siteName, intervalStr)
                 if fullLabel:
                     if Config.debug:
@@ -848,19 +888,29 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     align = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
     rawData = Config.rawData
-    # Per-series RoundingSpec from data dictionary (valuePrecision + precisionOverride)
+    # Per-series RoundingSpec from data dictionary (valuePrecision + precisionOverride).
+    # Always pass the *full query DataID* + database so USGS site-tsid[-param] is
+    # parsed down to bare time_series_id and precisionOverride is applied.
+    # Discharge alone → DEC(3); with precisionOverride DEC(2) → must be DEC(2).
     seriesRules = []
     for i in range(numCols):
-        lid = None
-        if lookupIds and i < len(lookupIds):
-            lid = lookupIds[i]
-        elif buildHeader and i < len(buildHeader):
-            lid = buildHeader[i]
-        seriesRules.append(
-            Logic.roundingSpecForDataId(dataDictionaryTable, lid, dictIndex=dictIndex)
-            if dataDictionaryTable is not None
-            else Logic.DEFAULT_ROUNDING_SPEC
-        )
+        qDataId = None
+        if buildHeader and i < len(buildHeader):
+            qDataId = buildHeader[i].strip() if buildHeader[i] else None
+        dbName = databases[i] if databases and i < len(databases) else None
+        if dataDictionaryTable is not None and qDataId:
+            rule = Logic.roundingSpecForDataId(
+                dataDictionaryTable, qDataId, dictIndex=dictIndex, database=dbName
+            )
+            seriesRules.append(rule)
+            if Config.debug and dbName and str(dbName).upper().startswith('USGS'):
+                Logic.logMessage(
+                    "DEBUG",
+                    f"buildTable seriesRules[{i}]: qDataId={qDataId!r} "
+                    f"db={dbName!r} → {rule}",
+                )
+        else:
+            seriesRules.append(Logic.DEFAULT_ROUNDING_SPEC)
     table.columnRoundingRules = list(seriesRules)
 
     # Yield often enough that Windows does not show "Not Responding"
@@ -1415,10 +1465,18 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         originalDataIds = [item[0] for item in queryItems]
         originalIntervals = [item[1] for item in queryItems]
         databases = [item[2] for item in queryItems]
-        # Dict keys: USBR → SDID; USGS → tsid/method (2nd segment); else full dataID
+        # Dict keys: USBR → SDID; USGS → bare time_series_id (or legacy methodID);
+        # else full dataID. USGS query form is site-tsid[-param] — never use site/param as key.
         lookupIds = [
             dictionaryLookupKey(item[0], item[2]) for item in queryItems
         ]
+        if Config.debug:
+            for (qid, _iv, db, *_rest), lk in zip(queryItems, lookupIds):
+                if db and str(db).upper().startswith('USGS'):
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"executeQuery: USGS dict key {qid!r} → {lk!r}",
+                    )
         data = []
         numTs = len(timestamps)
         # Progress/UI yield cadence — every 10 rows + per-row debug made huge tables look hung

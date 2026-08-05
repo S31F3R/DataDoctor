@@ -56,25 +56,29 @@ def modifyTable(
         dictIndex = getattr(table, 'dataDictIndex', None)
 
     def ruleForId(idx_or_id):
-        """Resolve RoundingSpec via dictionary key (tsid/SDID), not full Site-tsid DataID."""
+        """
+        Resolve RoundingSpec for overlay/delta columns.
+
+        Full query DataID + database so USGS site-tsid[-param] hits bare
+        time_series_id and applies precisionOverride (DEC(2) over Discharge DEC(3)).
+        """
         if dictTable is None:
             return Logic.DEFAULT_ROUNDING_SPEC
-        # Prefer parallel dictKeys entry when given a column index
         if isinstance(idx_or_id, int):
-            key = dictKeys[idx_or_id] if idx_or_id < len(dictKeys) else None
+            i = idx_or_id
+            qid = dataIds[i] if i < len(dataIds) else None
+            db = databases[i] if i < len(databases) else None
         else:
-            key = idx_or_id
-            # If caller passed a full DataID, map through dictionaryLookupKey when possible
-            try:
-                from core.Query import dictionaryLookupKey
-                # Find matching index in dataIds for the database
-                if key in dataIds:
-                    i = dataIds.index(key)
-                    db = databases[i] if i < len(databases) else ''
-                    key = dictionaryLookupKey(key, db)
-            except Exception:
-                pass
-        return Logic.roundingSpecForDataId(dictTable, key, dictIndex=dictIndex)
+            qid = idx_or_id
+            db = None
+            if qid in dataIds:
+                i = dataIds.index(qid)
+                db = databases[i] if i < len(databases) else None
+        if not qid:
+            return Logic.DEFAULT_ROUNDING_SPEC
+        return Logic.roundingSpecForDataId(
+            dictTable, qid, dictIndex=dictIndex, database=db
+        )
 
     # --- Extract all cell text once (one grid walk) ---
     def yieldProgress(msg, pct=None):
