@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QStyledItemDelegate, QMessageBox,
 )
 from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6 import uic
 from core import Logic, Utils, Config
 
@@ -70,6 +71,42 @@ class ValuePrecisionDelegate(QStyledItemDelegate):
         editor.setGeometry(option.rect)
 
 
+class DatabaseDelegate(QStyledItemDelegate):
+    """
+    Combobox editor for the database column.
+    Choices match the query database list (internal + public sources).
+    Blank allowed for unfinished rows.
+    """
+
+    def __init__(self, databases, parent=None):
+        super().__init__(parent)
+        self.databases = list(databases) if databases else []
+
+    def createEditor(self, parent, option, index):
+        combo = QComboBox(parent)
+        combo.setEditable(False)
+        combo.addItem('')  # blank allowed
+        for name in self.databases:
+            combo.addItem(name)
+        combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        return combo
+
+    def setEditorData(self, editor, index):
+        current = (index.data(Qt.ItemDataRole.DisplayRole) or '').strip()
+        idx = editor.findText(current)
+        if idx < 0 and current:
+            # Unknown value from DB — keep visible so save does not wipe it
+            editor.addItem(current)
+            idx = editor.findText(current)
+        editor.setCurrentIndex(max(0, idx))
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.currentText().strip(), Qt.ItemDataRole.EditRole)
+
+    def updateEditorGeometry(self, editor, option, index):
+        editor.setGeometry(option.rect)
+
+
 class uiDataDictionary(QMainWindow):
     """Data dictionary editor: Manages labels for time-series IDs."""
     def __init__(self, winMain=None):
@@ -84,6 +121,7 @@ class uiDataDictionary(QMainWindow):
         self.btnDeleteRow = self.findChild(QPushButton, 'btnDeleteRow')
         self.qleSearch = self.findChild(QLineEdit, 'qleSearch') # Find the search QLineEdit
         self._valuePrecisionDelegate = None
+        self._databaseDelegate = None
 
         # Set up debounce timer for search
         self.searchTimer = QTimer(self)
@@ -95,6 +133,11 @@ class uiDataDictionary(QMainWindow):
         self.btnAddRow.clicked.connect(self.btnAddRowPressed)
         self.btnDeleteRow.clicked.connect(self.btnDeleteRowPressed)
         self.qleSearch.textChanged.connect(self.debounceFilter) # Connect textChanged for debounced filtering
+
+        # Ctrl+S → save (same as toolbar Save)
+        self._saveShortcut = QShortcut(QKeySequence.StandardKey.Save, self)
+        self._saveShortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        self._saveShortcut.activated.connect(self.btnSavePressed)
 
         # Set button style
         Utils.buttonStyle(self.btnSave, "Save", 36)
@@ -124,16 +167,22 @@ class uiDataDictionary(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", f"DataDictionary scrollbar style applied (retro={retro})")
 
+    def _columnIndexByName(self, name):
+        """Return column index for header name (case-insensitive), or -1."""
+        if self.mainTable is None:
+            return -1
+        target = (name or '').strip().lower()
+        for c in range(self.mainTable.columnCount()):
+            h = self.mainTable.horizontalHeaderItem(c)
+            if h and h.text().strip().lower() == target:
+                return c
+        return -1
+
     def applyValuePrecisionDelegate(self):
         """Attach combobox editor to the valuePrecision column (by header name)."""
         if self.mainTable is None:
             return
-        col = -1
-        for c in range(self.mainTable.columnCount()):
-            h = self.mainTable.horizontalHeaderItem(c)
-            if h and h.text().strip().lower() == 'valueprecision':
-                col = c
-                break
+        col = self._columnIndexByName('valuePrecision')
         if col < 0:
             if Config.debug:
                 Logic.logMessage("DEBUG", "applyValuePrecisionDelegate: valuePrecision column not found")
@@ -146,6 +195,25 @@ class uiDataDictionary(QMainWindow):
                 "DEBUG",
                 f"applyValuePrecisionDelegate: combo on col {col} with {len(identifiers)} identifiers",
             )
+
+    def applyDatabaseDelegate(self):
+        """Attach combobox editor to the database column (same list as query combos)."""
+        if self.mainTable is None:
+            return
+        col = self._columnIndexByName('database')
+        if col < 0:
+            if Config.debug:
+                Logic.logMessage("DEBUG", "applyDatabaseDelegate: database column not found")
+            return
+        # Full program list (internal-style) so AQUARIUS + HDB + USGS are all available
+        databases = Utils.programDatabases(queryType='internal')
+        self._databaseDelegate = DatabaseDelegate(databases, self.mainTable)
+        self.mainTable.setItemDelegateForColumn(col, self._databaseDelegate)
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"applyDatabaseDelegate: combo on col {col} with {len(databases)} databases",
+            )
     
     def showEvent(self, event):
         if Config.debug:
@@ -153,6 +221,7 @@ class uiDataDictionary(QMainWindow):
         # Re-apply in case retro mode changed while window was closed
         self.applyDictionaryScrollStyle()
         self.applyValuePrecisionDelegate()
+        self.applyDatabaseDelegate()
         Utils.centerWindowToParent(self)
         super().showEvent(event)
     
