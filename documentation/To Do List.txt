@@ -4,7 +4,8 @@
 -Mac package script (TBD)
 
 ####### CURRENT BUGS #######
-(none — active work lives in documentation/test.txt)
+-Double click on query to edit doesn't allow changing of Data Interval. Need to fix this
+-USBR data dictionary items use "commonName - datatype" for their label, but non USBR do not. Make "commonName - datatype" standard for all items that show up in data dictionary
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
@@ -36,6 +37,7 @@
 -Diffrent quicklooks, how to save/use them
 -AppData, what is stored and where
 -dataDictionary valuePrecision and precisionOverride explanation
+-Expladin how header labels from data dictionary are created 
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme
