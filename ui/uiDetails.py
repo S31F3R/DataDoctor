@@ -2,10 +2,10 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QTableWidgetItem, QAbstractItemView, QTabWidget, QVBoxLayout,
-    QTableWidget, QSizePolicy, QApplication,
+    QTableWidget, QSizePolicy, QApplication, QMenu,
 )
-from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, QTimer, QSize, QObject, QEvent
 from PyQt6 import uic
 from datetime import datetime
 from core import Logic, Config
@@ -14,6 +14,26 @@ from core import Logic, Config
 maxVisibleMetaRows = 16
 # Qt QWIDGETSIZE_MAX
 maxWidgetSize = 16777215
+
+
+class detailsTableKeyFilter(QObject):
+    """Ctrl+C copies selected metadata cells (TSV). Paste not supported (read-only)."""
+
+    def __init__(self, detailsWindow):
+        super().__init__(detailsWindow)
+        self.detailsWindow = detailsWindow
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            mods = event.modifiers()
+            ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier) or bool(
+                mods & Qt.KeyboardModifier.MetaModifier
+            )
+            if ctrl and key == Qt.Key.Key_C:
+                if self.detailsWindow.copyActiveTableSelection():
+                    return True
+        return super().eventFilter(obj, event)
 
 
 class CurrentPageTabWidget(QTabWidget):
@@ -98,6 +118,11 @@ class uiDetails(QWidget):
 
         # Initialize table with no rows yet (column count set dynamically in populate)
         self.configureMetaTable(self.detailsTable, twoColumn=True)
+        self._detailsKeyFilter = detailsTableKeyFilter(self)
+        # Window-level Ctrl+C (works even when focus is on title/tabs)
+        self._copyShortcut = QShortcut(QKeySequence.StandardKey.Copy, self)
+        self._copyShortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        self._copyShortcut.activated.connect(self.copyActiveTableSelection)
         
         # Zero main layout margins for single-panel view
         layout = self.layout()
@@ -124,12 +149,100 @@ class uiDetails(QWidget):
         table.setSortingEnabled(True)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         table.verticalHeader().setVisible(False)
         # Expanding + stretch last section fills the client area (no dead right pad)
         table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.clampTableColumns(table, twoColumn=twoColumn)
         table.horizontalHeader().setStretchLastSection(True)
+        # Copy: Ctrl+C + right-click menu (read-only tables)
+        if not getattr(table, '_detailsCopyWired', False):
+            table._detailsCopyWired = True
+            table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            table.customContextMenuRequested.connect(
+                lambda pos, t=table: self.showMetaTableContextMenu(t, pos)
+            )
+            if getattr(self, '_detailsKeyFilter', None) is not None:
+                table.installEventFilter(self._detailsKeyFilter)
+
+    def activeMetaTable(self):
+        """Table currently showing metadata (tab page table or main detailsTable)."""
+        if (
+            getattr(self, 'tabWidget', None) is not None
+            and self.tabWidget.isVisible()
+        ):
+            page = self.tabWidget.currentWidget()
+            if page is not None:
+                tabTable = page.findChild(QTableWidget)
+                if tabTable is not None:
+                    return tabTable
+        return getattr(self, 'detailsTable', None)
+
+    def copyActiveTableSelection(self):
+        """Copy selected rows/cells from the active metadata table as TSV."""
+        table = self.activeMetaTable()
+        if table is None:
+            return False
+        return self.copyMetaTableSelection(table)
+
+    def copyMetaTableSelection(self, table):
+        """Copy selected items from a details table to the clipboard (TSV)."""
+        if table is None:
+            return False
+        selected = table.selectedRanges()
+        if not selected:
+            # No range — copy current row if any
+            row = table.currentRow()
+            if row < 0:
+                return False
+            cells = []
+            for c in range(table.columnCount()):
+                item = table.item(row, c)
+                cells.append(item.text() if item and item.text() else '')
+            text = '\t'.join(cells)
+        else:
+            # Union of selected ranges → contiguous block of unique rows/cols
+            rows = set()
+            cols = set()
+            for r in selected:
+                for row in range(r.topRow(), r.bottomRow() + 1):
+                    rows.add(row)
+                for col in range(r.leftColumn(), r.rightColumn() + 1):
+                    cols.add(col)
+            rowList = sorted(rows)
+            colList = sorted(cols)
+            lines = []
+            for row in rowList:
+                cells = []
+                for col in colList:
+                    item = table.item(row, col)
+                    cells.append(item.text() if item and item.text() else '')
+                lines.append('\t'.join(cells))
+            text = '\n'.join(lines)
+        if not text.strip():
+            return False
+        QApplication.clipboard().setText(text)
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"uiDetails.copyMetaTableSelection: copied {len(text)} chars",
+            )
+        return True
+
+    def showMetaTableContextMenu(self, table, pos):
+        """Right-click → Copy (no paste; tables are read-only)."""
+        if table is None:
+            return
+        menu = QMenu(table)
+        copyAction = menu.addAction("Copy")
+        copyAction.setShortcut(QKeySequence.StandardKey.Copy)
+        # Enable even if nothing selected (will copy current row)
+        hasContent = table.rowCount() > 0
+        copyAction.setEnabled(hasContent)
+        action = menu.exec(table.viewport().mapToGlobal(pos))
+        if action == copyAction:
+            self.copyMetaTableSelection(table)
 
     def clampTableColumns(self, table, twoColumn=True):
         """Force 2- or 4-column layout so ghost columns cannot bleed across tabs."""
