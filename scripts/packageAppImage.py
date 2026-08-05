@@ -1,24 +1,35 @@
 #!/usr/bin/env python3
 """
-Build a Linux AppImage for DataDoctor (and optionally a portable tar.gz).
+Build a true Linux AppImage for DataDoctor.
 
-Prerequisites (on a Linux host matching the target glibc):
+The AppImage is always host-native: PyInstaller freezes against the glibc and
+CPU of the machine that runs this script. Ship separate builds per target
+architecture (x86_64, aarch64, …).
+
+Prerequisites:
+  - Linux host (or WSL)
   - Python 3.13 + project venv with requirements.txt installed
   - PyInstaller:  pip install pyinstaller
-  - appimagetool (optional but needed for a real .AppImage):
-      https://github.com/AppImage/appimagetool/releases
-      Place on PATH as `appimagetool`, or pass --appimagetool /path/to/appimagetool
+  - appimagetool for this arch under dist/appimagetool/ (preferred):
+        dist/appimagetool/appimagetool-x86_64.appimage
+        dist/appimagetool/appimagetool-aarch64.appimage
+        dist/appimagetool/appimagetool-armhf.appimage
+        dist/appimagetool/appimagetool-i686.appimage
+    Download from: https://github.com/AppImage/appimagetool/releases
+    Or pass --appimagetool /path/to/tool, or put appimagetool on PATH.
 
 What this does:
-  1) PyInstaller --onedir into dist/linux/AppDir/usr
-  2) Wires AppRun + DataDoctor.desktop + icon
-  3) Runs appimagetool → dist/DataDoctor-x86_64.AppImage (or aarch64)
-  4) Always also writes a portable tar.gz of the AppDir (works without appimagetool)
+  1) PyInstaller --onedir (host arch)
+  2) Assemble AppDir (AppRun + .desktop + icon)
+  3) Run the matching appimagetool → dist/DataDoctor-<arch>-YYYYMMDD.AppImage
+
+No zip/tar.gz is produced — only the .AppImage. Intermediate build trees are
+removed after a successful pack unless --keep-build is set.
 
 Run from project root:
   python scripts/packageAppImage.py
-  python scripts/packageAppImage.py --skip-appimage   # tar.gz only
-  python scripts/packageAppImage.py --out dist/My.AppImage
+  python scripts/packageAppImage.py --out dist/DataDoctor.AppImage
+  python scripts/packageAppImage.py --appimagetool dist/appimagetool/appimagetool-x86_64.appimage
 """
 
 from __future__ import annotations
@@ -29,7 +40,6 @@ import platform
 import shutil
 import subprocess
 import sys
-import tarfile
 from datetime import datetime
 from pathlib import Path
 
@@ -39,11 +49,20 @@ def projectRoot() -> Path:
 
 
 def archLabel() -> str:
+    """
+    Canonical AppImage / appimagetool arch name for this host.
+
+    Matches filenames: appimagetool-x86_64.appimage, appimagetool-aarch64.appimage, …
+    """
     m = platform.machine().lower()
     if m in ("x86_64", "amd64"):
         return "x86_64"
     if m in ("aarch64", "arm64"):
         return "aarch64"
+    if m in ("armv7l", "armv7", "armhf", "armv6l"):
+        return "armhf"
+    if m in ("i386", "i686", "x86"):
+        return "i686"
     return m or "unknown"
 
 
@@ -54,6 +73,72 @@ def which(cmd: str) -> str | None:
 def run(cmd, cwd=None, env=None):
     print("+", " ".join(str(c) for c in cmd))
     subprocess.check_call(cmd, cwd=cwd, env=env)
+
+
+def findAppImageTool(root: Path, arch: str, explicit: str | None = None) -> Path:
+    """
+    Resolve appimagetool for this host arch.
+
+    Preference order:
+      1) --appimagetool path
+      2) dist/appimagetool/appimagetool-<arch>.appimage  (and common name variants)
+      3) dist/appimagetool/appimagetool  (unversioned)
+      4) PATH: appimagetool, appimagetool-<arch>
+    """
+    if explicit:
+        p = Path(explicit).expanduser()
+        if not p.is_file():
+            raise FileNotFoundError(f"--appimagetool not found: {p}")
+        return p.resolve()
+
+    toolDir = root / "dist" / "appimagetool"
+    # Filenames as shipped from AppImage/appimagetool releases
+    candidates = [
+        toolDir / f"appimagetool-{arch}.appimage",
+        toolDir / f"appimagetool-{arch}.AppImage",
+        toolDir / f"appimagetool-{arch}",
+        toolDir / "appimagetool.appimage",
+        toolDir / "appimagetool.AppImage",
+        toolDir / "appimagetool",
+    ]
+    for cand in candidates:
+        if cand.is_file():
+            return cand.resolve()
+
+    # Any file in dist/appimagetool that mentions this arch
+    if toolDir.is_dir():
+        for p in sorted(toolDir.iterdir()):
+            if not p.is_file():
+                continue
+            name = p.name.lower()
+            if "appimagetool" in name and arch.lower() in name:
+                return p.resolve()
+
+    for name in (f"appimagetool-{arch}", "appimagetool"):
+        hit = which(name)
+        if hit:
+            return Path(hit).resolve()
+
+    available = []
+    if toolDir.is_dir():
+        available = sorted(p.name for p in toolDir.iterdir() if p.is_file())
+    hint = (
+        f"\n  Found under dist/appimagetool/: {', '.join(available)}"
+        if available
+        else "\n  dist/appimagetool/ is empty or missing."
+    )
+    raise FileNotFoundError(
+        f"No appimagetool for arch {arch!r}.{hint}\n"
+        "  Expected e.g. dist/appimagetool/appimagetool-x86_64.appimage\n"
+        "  https://github.com/AppImage/appimagetool/releases\n"
+        "  Or: --appimagetool /path/to/appimagetool-<arch>.appimage"
+    )
+
+
+def ensureExecutable(path: Path) -> None:
+    mode = path.stat().st_mode
+    # u+x at minimum; keep other bits
+    path.chmod(mode | 0o111)
 
 
 def writeDesktop(appDir: Path, iconName: str = "DataDoctor"):
@@ -67,26 +152,21 @@ Categories=Science;Utility;
 Terminal=false
 """
     (appDir / "DataDoctor.desktop").write_text(desktop, encoding="utf-8")
-    # Also under usr/share/applications for tools that look there
     apps = appDir / "usr" / "share" / "applications"
     apps.mkdir(parents=True, exist_ok=True)
     (apps / "DataDoctor.desktop").write_text(desktop, encoding="utf-8")
 
 
 def writeAppRun(appDir: Path):
-    # Prefer the PyInstaller binary under usr/bin when present; else usr/DataDoctor/
     script = """#!/bin/bash
 HERE="$(dirname "$(readlink -f "$0")")"
 export APPDIR="$HERE"
-# Bundled libs first
 if [ -d "$HERE/usr/lib" ]; then
   export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
-# PyInstaller onedir layout used by this script: usr/bin/DataDoctor
 if [ -x "$HERE/usr/bin/DataDoctor" ]; then
   exec "$HERE/usr/bin/DataDoctor" "$@"
 fi
-# Fallback: nested folder
 if [ -x "$HERE/usr/DataDoctor/DataDoctor" ]; then
   exec "$HERE/usr/DataDoctor/DataDoctor" "$@"
 fi
@@ -114,16 +194,12 @@ def stageIcon(appDir: Path, iconSrc: Path | None):
     if iconSrc is None:
         print("WARN: no DataDoctor icon found for AppDir")
         return
-    # AppImage convention: icon next to desktop file, basename matches Icon=
     dest = appDir / "DataDoctor.png"
     if iconSrc.suffix.lower() == ".png":
         shutil.copy2(iconSrc, dest)
     else:
-        # .ico — still copy; some desktops accept it; prefer png when available
         shutil.copy2(iconSrc, appDir / f"DataDoctor{iconSrc.suffix.lower()}")
-        if iconSrc.suffix.lower() != ".png":
-            # Also try as .png name so Icon=DataDoctor resolves on some loaders
-            shutil.copy2(iconSrc, dest)
+        shutil.copy2(iconSrc, dest)
     iconsDir = appDir / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps"
     iconsDir.mkdir(parents=True, exist_ok=True)
     if dest.is_file():
@@ -139,9 +215,6 @@ def pyinstallerSpecArgs(root: Path, distPath: Path, workPath: Path) -> list:
         ("oracle", "oracle"),
         ("documentation", "documentation"),
     ]
-    if (root / "certs").is_dir():
-        # Optional: only if user has certs in tree (app also searches user config)
-        pass
 
     args = [
         sys.executable, "-m", "PyInstaller",
@@ -165,14 +238,45 @@ def pyinstallerSpecArgs(root: Path, distPath: Path, workPath: Path) -> list:
         if srcPath.exists():
             args.extend(["--add-data", f"{srcPath}{sep}{dest}"])
 
-    # Hidden imports that PyInstaller often misses for this stack
+    # oracledb (Cython base_impl) imports stdlib modules that PyInstaller does not
+    # always trace: getpass, secrets, ssl, … Missing getpass → AppImage crash on
+    # first Oracle import. Same class of issue as oracle/python-oracledb#31.
+    # --collect-all pulls package data + binaries; hidden-imports cover stdlib.
+    for package in ("oracledb", "cryptography", "keyring"):
+        args.extend(["--collect-all", package])
+
     for mod in (
+        # App stack
         "PyQt6",
         "keyring",
         "keyring.backends",
+        "keyring.backends.SecretService",
+        "keyring.backends.chainer",
+        "keyring.backends.fail",
+        "keyring.backends.libsecret",
+        "keyring.backends.kwallet",
         "oracledb",
         "numpy",
         "secretstorage",
+        "jeepney",
+        # oracledb / thin mode stdlib + crypto (not always auto-detected)
+        "getpass",
+        "secrets",
+        "ssl",
+        "socket",
+        "decimal",
+        "json",
+        "platform",
+        "cryptography",
+        "cryptography.hazmat",
+        "cryptography.hazmat.backends",
+        "cryptography.hazmat.backends.openssl",
+        "cryptography.hazmat.primitives",
+        "cryptography.hazmat.primitives.hashes",
+        "cryptography.hazmat.primitives.kdf",
+        "cryptography.hazmat.primitives.asymmetric",
+        "cryptography.hazmat.primitives.ciphers",
+        "cryptography.hazmat.primitives.serialization",
     ):
         args.extend(["--hidden-import", mod])
 
@@ -182,22 +286,18 @@ def pyinstallerSpecArgs(root: Path, distPath: Path, workPath: Path) -> list:
 
 def main() -> int:
     root = projectRoot()
-    parser = argparse.ArgumentParser(description="Package DataDoctor as a Linux AppImage")
+    parser = argparse.ArgumentParser(
+        description="Package DataDoctor as a true Linux AppImage (host arch only)"
+    )
     parser.add_argument(
         "--out",
         default=None,
         help="Output AppImage path (default: dist/DataDoctor-<arch>-YYYYMMDD.AppImage)",
     )
     parser.add_argument(
-        "--skip-appimage",
-        dest="skipAppImage",
-        action="store_true",
-        help="Only build AppDir + tar.gz (do not run appimagetool)",
-    )
-    parser.add_argument(
         "--appimagetool",
         default=None,
-        help="Path to appimagetool binary (default: search PATH)",
+        help="Path to appimagetool binary (default: dist/appimagetool/appimagetool-<arch>.appimage)",
     )
     parser.add_argument(
         "--keep-build",
@@ -215,7 +315,17 @@ def main() -> int:
         print("ERROR: DataDoctor.py not found — run from project root", file=sys.stderr)
         return 1
 
-    # PyInstaller available?
+    arch = archLabel()
+    print(f"Host arch: {platform.machine()} → AppImage arch: {arch}")
+
+    try:
+        tool = findAppImageTool(root, arch, args.appimagetool)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    ensureExecutable(tool)
+    print(f"Using appimagetool: {tool}")
+
     try:
         import PyInstaller  # noqa: F401
     except ImportError:
@@ -228,13 +338,11 @@ def main() -> int:
         return 1
 
     stamp = datetime.now().strftime("%Y%m%d")
-    arch = archLabel()
     distRoot = root / "dist" / "linux"
     workPath = distRoot / "build"
     pyDist = distRoot / "pyinstaller"
     appDir = distRoot / "AppDir"
 
-    # Clean prior stage
     for p in (pyDist, appDir):
         if p.exists():
             shutil.rmtree(p)
@@ -244,7 +352,6 @@ def main() -> int:
     print("=== PyInstaller onedir ===")
     run(pyinstallerSpecArgs(root, pyDist, workPath), cwd=root)
 
-    # Expected: dist/linux/pyinstaller/DataDoctor/DataDoctor
     built = pyDist / "DataDoctor"
     binary = built / "DataDoctor"
     if not binary.is_file():
@@ -253,14 +360,10 @@ def main() -> int:
 
     print("=== Assemble AppDir ===")
     appDir.mkdir(parents=True)
-    # Layout: AppDir/usr/bin/DataDoctor + sibling _internal / libs from onedir
     usrBin = appDir / "usr" / "bin"
     usrBin.mkdir(parents=True)
-    # Copy entire onedir next to bin... PyInstaller 6 uses DataDoctor/ + _internal/
-    # Put the whole tree under usr/ and symlink/exec via AppRun
     usrTree = appDir / "usr" / "DataDoctor"
     shutil.copytree(built, usrTree, symlinks=True)
-    # Convenience: usr/bin/DataDoctor → ../DataDoctor/DataDoctor
     link = usrBin / "DataDoctor"
     try:
         link.symlink_to(os.path.relpath(usrTree / "DataDoctor", usrBin))
@@ -272,79 +375,56 @@ def main() -> int:
     writeDesktop(appDir)
     stageIcon(appDir, findIcon(root))
 
-    # Portable tar.gz always
-    tarPath = root / "dist" / f"DataDoctor-Linux-{arch}-{stamp}.tar.gz"
-    tarPath.parent.mkdir(parents=True, exist_ok=True)
-    print(f"=== Writing {tarPath} ===")
-    with tarfile.open(tarPath, "w:gz") as tar:
-        tar.add(appDir, arcname="DataDoctor.AppDir")
-    print(f"Portable AppDir archive: {tarPath} ({tarPath.stat().st_size / 1024 / 1024:.1f} MB)")
-
     outAppImage = (
         Path(args.out)
         if args.out
         else (root / "dist" / f"DataDoctor-{arch}-{stamp}.AppImage")
     )
+    if outAppImage.suffix.lower() != ".appimage":
+        outAppImage = outAppImage.with_suffix(outAppImage.suffix + ".AppImage") \
+            if outAppImage.suffix else Path(str(outAppImage) + ".AppImage")
 
-    if args.skipAppImage:
-        print("Skipping AppImage (--skip-appimage). Use the tar.gz or run AppDir/AppRun.")
-        if not args.keepBuild:
-            shutil.rmtree(workPath, ignore_errors=True)
-            shutil.rmtree(pyDist, ignore_errors=True)
-        print("Done.")
-        return 0
-
-    tool = args.appimagetool or which("appimagetool")
-    if not tool:
-        # Common local drop locations
-        for cand in (
-            root / "scripts" / "appimagetool",
-            root / "dist" / "appimagetool",
-            Path.home() / "bin" / "appimagetool",
-        ):
-            if cand.is_file() and os.access(cand, os.X_OK):
-                tool = str(cand)
-                break
-
-    if not tool:
-        print(
-            "\nWARN: appimagetool not found — AppImage not built.\n"
-            "  Install from https://github.com/AppImage/appimagetool/releases\n"
-            "  then re-run, or:\n"
-            f"    appimagetool {appDir} {outAppImage}\n"
-            f"Portable archive is ready: {tarPath}\n"
-            f"Or run: {appDir / 'AppRun'}",
-            file=sys.stderr,
-        )
-        if not args.keepBuild:
-            shutil.rmtree(workPath, ignore_errors=True)
-            shutil.rmtree(pyDist, ignore_errors=True)
-        return 0  # tar.gz success; AppImage optional
+    outAppImage = outAppImage.resolve()
+    outAppImage.parent.mkdir(parents=True, exist_ok=True)
+    if outAppImage.exists():
+        outAppImage.unlink()
 
     print(f"=== appimagetool → {outAppImage} ===")
-    outAppImage.parent.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
-    # ARCH required by some appimagetool builds
-    env.setdefault("ARCH", arch)
+    env["ARCH"] = arch
+    # Some distros mount AppImages with FUSE; allow extract-and-run fallback
+    env.setdefault("APPIMAGE_EXTRACT_AND_RUN", "1")
+
     try:
-        run([tool, str(appDir), str(outAppImage)], env=env)
+        run([str(tool), str(appDir), str(outAppImage)], env=env)
     except subprocess.CalledProcessError as e:
         print(f"ERROR: appimagetool failed: {e}", file=sys.stderr)
-        print(f"AppDir left at {appDir}; tar.gz at {tarPath}", file=sys.stderr)
+        print(f"AppDir left at {appDir} for inspection (--keep-build not required on failure)", file=sys.stderr)
         return 1
 
-    if outAppImage.is_file():
-        outAppImage.chmod(0o755)
-        print(f"Done: {outAppImage} ({outAppImage.stat().st_size / 1024 / 1024:.1f} MB)")
-    else:
-        print("ERROR: appimagetool reported success but output missing", file=sys.stderr)
-        return 1
+    if not outAppImage.is_file():
+        # appimagetool sometimes writes relative to cwd with a different casing
+        alt = outAppImage.parent / outAppImage.name
+        if not alt.is_file():
+            print("ERROR: appimagetool finished but .AppImage was not created", file=sys.stderr)
+            print(f"AppDir left at {appDir}", file=sys.stderr)
+            return 1
+        outAppImage = alt
+
+    outAppImage.chmod(0o755)
+    sizeMb = outAppImage.stat().st_size / (1024 * 1024)
+    print(f"Done: {outAppImage} ({sizeMb:.1f} MB)  arch={arch}")
 
     if not args.keepBuild:
         shutil.rmtree(workPath, ignore_errors=True)
         shutil.rmtree(pyDist, ignore_errors=True)
-        # Keep AppDir only if user wants --keep-build; default remove after successful image
         shutil.rmtree(appDir, ignore_errors=True)
+        # Drop empty linux/ stage if nothing left
+        try:
+            if distRoot.is_dir() and not any(distRoot.iterdir()):
+                distRoot.rmdir()
+        except OSError:
+            pass
 
     return 0
 

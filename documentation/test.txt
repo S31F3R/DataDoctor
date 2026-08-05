@@ -50,13 +50,17 @@ Current Tests
      b. ui/DataDoctor.png remains About splash only.
      c. Windows package copies DataDoctor.ico next to DataDoctor.pyw.
 
-[ ] Linux AppImage packager script
+[ ] Linux AppImage packager script (+ oracledb getpass fix)
    Steps:
-     a. On Linux with PyInstaller: python scripts/packageAppImage.py
-        (--skip-appimage if no appimagetool).
-     b. Produces dist/DataDoctor-Linux-*.tar.gz; with appimagetool also
-        dist/DataDoctor-*.AppImage.
-   Notes: needs matching glibc host; optional appimagetool on PATH.
+     a. Place arch tools in dist/appimagetool/ (e.g. appimagetool-x86_64.appimage).
+     b. Rebuild: python scripts/packageAppImage.py
+     c. Only output is dist/DataDoctor-<arch>-YYYYMMDD.AppImage (no zip/tar).
+     d. Script picks dist/appimagetool/appimagetool-<host-arch>.appimage automatically.
+     e. Run the .AppImage — must open main window (no ModuleNotFoundError getpass).
+   Notes: host-native build (arch + glibc of the machine that runs the script).
+     Prior fail: oracledb.base_impl needs stdlib getpass; PyInstaller missed it.
+     Fix: --hidden-import getpass/secrets/ssl + --collect-all oracledb/cryptography/keyring.
+
 
 [ ] HDB password change UI only shows useful outcomes
    Steps:

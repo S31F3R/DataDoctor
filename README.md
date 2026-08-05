@@ -29,10 +29,14 @@ Or add the cert to your system trust store.
   - Live user dictionary: `Project Files/core/bunker.db`
   - Copies `DataDoctor.ico` next to `DataDoctor.pyw` for the Windows taskbar icon
 - Merge: `updateBunker.cmd` → `Project Files/scripts/updateBunker.py` (then removes `temp/`)
-- Linux AppImage: `python scripts/packageAppImage.py`
+- Linux AppImage (true `.AppImage` only — no zip/tar from this script):
+  `python scripts/packageAppImage.py`
+  - Host-native: build on the same arch/glibc you intend to ship (x86_64, aarch64, …)
   - Needs PyInstaller (`pip install pyinstaller`) in the project venv
-  - Optional `appimagetool` on PATH for a real `.AppImage` (otherwise builds a portable `.tar.gz` of the AppDir)
-  - Flags: `--skip-appimage`, `--appimagetool /path/to/appimagetool`, `--keep-build`
+  - Needs matching tool under `dist/appimagetool/`, e.g. `appimagetool-x86_64.appimage`
+    (from [appimagetool releases](https://github.com/AppImage/appimagetool/releases))
+  - Output: `dist/DataDoctor-<arch>-YYYYMMDD.AppImage`
+  - Flags: `--out path`, `--appimagetool path`, `--keep-build`
 
 ## App icons
 
