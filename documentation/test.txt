@@ -19,48 +19,45 @@ Current Tests
    Notes: Query.dictionaryLookupKey uses 2nd '-' segment for USGS-NWIS.
      Aquarius path unchanged (full UID).
 
-[ ] Data Dictionary database column is a dropdown
+[ ] Data Dictionary Ctrl+S / Save button (reevaluated)
    Steps:
-     a. Open Data Dictionary → double-click a database cell.
-     b. Combobox lists same DBs as query (AQUARIUS, USBR-* HDBs, USGS-NWIS,
-        PNHYD, GPHYD). Unknown existing values still show and save.
-     c. Pick USGS-NWIS → Save → re-open; value persists.
+     a. Open Data Dictionary (large table OK — ~30k rows).
+     b. Edit a normal cell → Ctrl+S → "Saved" dialog promptly (not hung).
+     c. Double-click database or valuePrecision combobox, pick a value → Ctrl+S
+        while editor still open (or after pick) → saves and dialog appears.
+     d. Click Save toolbar button after a small edit → same "Saved" dialog.
+     e. Re-open Data Dictionary → edits persisted.
+   Notes: Commit open combobox before read; executemany insert; no full-table
+     resizeColumnToContents after save; re-entrancy guard + wait cursor.
+     Prior fail: save "never finished" after Ctrl+S + database combobox.
 
-[ ] Data Dictionary Ctrl+S save
+[ ] Data Dictionary combo column widths
    Steps:
-     a. Edit any cell → Ctrl+S → Saved dialog (same as Save button).
+     a. Open Data Dictionary.
+     b. database column wide enough for longest DB name (e.g. USBR-YAOHDB)
+        and header — not clipped.
+     c. valuePrecision column wide enough for longest combo label
+        (e.g. "Attenuation turbidity  [SIG(3,1)]") when you open the dropdown.
+     d. After Save, those two columns stay sized (not collapsed).
 
-[ ] Options tab focus + tab order
-   Steps:
-     a. Open Options → cursor/focus on UTC Offset combo (General).
-     b. Click Aquarius tab → focus on Server Link field.
-     c. USGS tab → API Key field; USBR tab → BOP radio (first control).
-     d. Tab key walks top→bottom on each page (not random z-order).
-
-[ ] Details metadata Copy (Ctrl+C + context menu)
+[ ] Cell-level Copy (Details + Data Dictionary)
    Steps:
      a. Query with metadata → right-click cell → Show details.
-     b. Select rows → Ctrl+C → paste into notepad (TSV: Type/Value…).
-     c. Right-click table → Copy does the same. No paste action expected.
+     b. Click a single cell (only that cell highlights, not whole row).
+     c. Ctrl+C or right-click → Copy → paste is just that cell's text.
+     d. Drag/Ctrl multi-select several cells → Copy → TSV grid in notepad.
+     e. Right-click a cell outside the multi-selection → that cell alone is
+        selected for Copy.
+     f. Data Dictionary: same cell / multi-cell Copy via Ctrl+C and context menu.
+   Notes: SelectItems (was SelectRows). Main data table already SelectItems.
 
-[ ] App icons layout
+[ ] AppImage tool path under scripts/
    Steps:
-     a. ui/icons/DataDoctor.ico (Windows) and ui/icons/DataDoctor.png (Linux)
-        exist; no "Data Doctor.png" spaced name.
-     b. ui/DataDoctor.png remains About splash only.
-     c. Windows package copies DataDoctor.ico next to DataDoctor.pyw.
-
-[ ] Linux AppImage packager script (+ oracledb getpass fix)
-   Steps:
-     a. Place arch tools in dist/appimagetool/ (e.g. appimagetool-x86_64.appimage).
-     b. Rebuild: python scripts/packageAppImage.py
-     c. Only output is dist/DataDoctor-<arch>-YYYYMMDD.AppImage (no zip/tar).
-     d. Script picks dist/appimagetool/appimagetool-<host-arch>.appimage automatically.
-     e. Run the .AppImage — must open main window (no ModuleNotFoundError getpass).
-   Notes: host-native build (arch + glibc of the machine that runs the script).
-     Prior fail: oracledb.base_impl needs stdlib getpass; PyInstaller missed it.
-     Fix: --hidden-import getpass/secrets/ssl + --collect-all oracledb/cryptography/keyring.
-
+     a. tools live in scripts/appimagetool/appimagetool-<arch>.appimage
+        (not only dist/appimagetool/).
+     b. python scripts/packageAppImage.py finds scripts/… tool automatically.
+     c. Optional: --appimagetool still overrides; dist/appimagetool/ still works
+        as fallback if scripts/ is empty.
 
 [ ] HDB password change UI only shows useful outcomes
    Steps:
@@ -79,23 +76,16 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[x] MRID internal query (values only; no metadata)
-   Steps:
-     a. Internal query with SDID-MRID (e.g. Below Parker Dam MRID /
-        2119-108283 HOUR USBR-YAOHDB).
-     b. Table fills with model values (no crash / empty columns).
-     c. Right-click cell → Show details opens with note:
-        "Metadata not available for MRID (model) queries"
-        (SDID + Model Run ID listed; other tags blank — like USGS legacy).
-     d. Real (non-MRID) internal USBR still has full Show details metadata.
-   Notes: M_* values-only + kind=mrid sentinel. Prior fail: post-fetch
-     rawResponse.sort() assumed a meta list; mrid dict → AttributeError
-     and entire sqlRead raised so all SDIDs looked empty despite 241 rows each.
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Data Dictionary database column is a dropdown
+[x] Options tab focus + tab order
+[x] App icons layout
+[x] Linux AppImage packager script (+ oracledb getpass fix)
+[x] MRID internal query (values only; no metadata)
 [x] Windows package + bunker merge scripts
-[x] Clipboard copy/paste (Excel-like)
+[x] Clipboard copy/paste (Excel-like) — main data table
 [x] Delta columns skip normal QAQC coloring
 [x] UCHDB2 schema UCHDBA via config
 [x] Aquarius certs: no random certs/ folders + convert cleanup (.cer/.pem only; no .pfx)
@@ -130,7 +120,6 @@ Confirmed
 [x] Windows taskbar icon (AppUserModelID + window icon)
 [x] User config + quickLooks load from profile again
 [x] Options first open after startup is snappy
-
 
 Deferred / known
 --------------------------------------------------------------------------------

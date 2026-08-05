@@ -4,7 +4,7 @@
 -Mac package script (TBD)
 
 ####### CURRENT BUGS #######
-(none — see documentation/test.txt for items needing Seifer retest)
+(none — active work lives in documentation/test.txt)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
