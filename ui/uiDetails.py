@@ -928,13 +928,34 @@ class uiDetails(QWidget):
             seriesMeta = response.get("seriesMeta") or {}
             points = response.get("points") or []
 
-            # Legacy numeric methodID path: keep menu usable, show blanks
-            if kind == "legacy" or (not seriesMeta and not points and kind != "ogc"):
+            # True legacy = numeric methodID waterservices path only.
+            # kind "missing" / empty = lookup failed (do not call that "legacy").
+            if kind == "legacy":
                 self.addRow("Note", "Metadata not available for legacy USGS method IDs", table=table)
                 for tag in seriesTags + pointTags:
                     self.addRow(tag, "", table=table)
                 if Config.debug:
-                    Logic.logMessage("DEBUG", "populateUSGS: legacy/blank metadata shown")
+                    Logic.logMessage("DEBUG", "populateUSGS: legacy numeric methodID note shown")
+                return
+
+            if kind in ("missing", "") and not seriesMeta and not points:
+                self.addRow(
+                    "Note",
+                    "No USGS metadata stored for this series (query used time_series_id? "
+                    "re-run query if details were empty after a code change)",
+                    table=table,
+                )
+                for tag in seriesTags + pointTags:
+                    self.addRow(tag, "", table=table)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "populateUSGS: missing/blank series response")
+                return
+
+            # OGC with empty meta/points still show tags (may fill blanks)
+            if kind not in ("ogc", "legacy", "missing", "") and not seriesMeta and not points:
+                self.addRow("Note", "No USGS metadata available", table=table)
+                for tag in seriesTags + pointTags:
+                    self.addRow(tag, "", table=table)
                 return
 
             # Match point by table vertical-header timestamp

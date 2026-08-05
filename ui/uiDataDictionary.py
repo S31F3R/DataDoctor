@@ -261,14 +261,18 @@ class uiDataDictionary(QMainWindow):
 
     def sizeComboColumns(self):
         """
-        Width for database + valuePrecision from longest combobox label (and header),
-        not just stored cell text (cells hold bare Identifier / DB name).
+        Width for database + valuePrecision from longest combobox label (and header).
+
+        Uses a real QComboBox sizeHint (arrow + frame) plus scrollbar extent so
+        the dropdown list does not clip the longest item when a vertical bar shows.
         """
         if self.mainTable is None:
             return
-        metrics = QFontMetrics(self.mainTable.font())
-        # Dropdown arrow + cell padding so the full combo label isn't clipped
-        pad = 36
+        from PyQt6.QtWidgets import QStyle, QStyleOptionComboBox
+        from PyQt6.QtCore import QSize
+
+        tableFont = self.mainTable.font()
+        metrics = QFontMetrics(tableFont)
 
         pairs = (
             ('database', self._databaseDelegate),
@@ -280,28 +284,54 @@ class uiDataDictionary(QMainWindow):
                 continue
             headerItem = self.mainTable.horizontalHeaderItem(col)
             headerText = headerItem.text() if headerItem else colName
-            maxW = metrics.horizontalAdvance(headerText)
+            headerW = metrics.horizontalAdvance(headerText)
 
             labels = []
             if delegate is not None and hasattr(delegate, 'displayLabels'):
-                labels = delegate.displayLabels() or []
-            for label in labels:
-                if label:
-                    maxW = max(maxW, metrics.horizontalAdvance(str(label)))
+                labels = [str(x) for x in (delegate.displayLabels() or []) if x]
 
-            # Also consider a sample of stored cell values (unknown DBs, bare ids)
+            # Sample stored cell values (unknown DBs / bare identifiers)
             sampleN = min(100, self.mainTable.rowCount())
             for r in range(sampleN):
                 it = self.mainTable.item(r, col)
                 if it and it.text():
-                    maxW = max(maxW, metrics.horizontalAdvance(it.text()))
+                    labels.append(it.text())
 
-            self.mainTable.setColumnWidth(col, maxW + pad)
+            # Measure with a live combo so style includes frame + drop arrow
+            combo = QComboBox()
+            combo.setFont(tableFont)
+            if labels:
+                combo.addItems(labels)
+            else:
+                combo.addItem(headerText or 'M')
+            opt = QStyleOptionComboBox()
+            combo.initStyleOption(opt)
+            textW = max(
+                (metrics.horizontalAdvance(t) for t in labels),
+                default=headerW,
+            )
+            textW = max(textW, headerW)
+            style = combo.style()
+            content = style.sizeFromContents(
+                QStyle.ContentsType.CT_ComboBox,
+                opt,
+                QSize(textW, metrics.height()),
+                combo,
+            )
+            # Popup list always gets a vertical scrollbar with many valuePrecision items
+            sb = style.pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent, opt, combo)
+            # Thick themed bars in this app are wider than the style default (~14)
+            sb = max(sb, 20)
+            # Extra fudge: list view margins + selection highlight padding
+            fudge = 12
+            finalW = max(content.width(), textW) + sb + fudge
+            self.mainTable.setColumnWidth(col, finalW)
             if Config.debug:
                 Logic.logMessage(
                     "DEBUG",
-                    f"sizeComboColumns: {colName} col={col} width={maxW + pad} "
-                    f"({len(labels)} combo labels)",
+                    f"sizeComboColumns: {colName} col={col} width={finalW} "
+                    f"(text={textW}, content={content.width()}, sb={sb}, "
+                    f"{len(labels)} labels)",
                 )
 
     def _commitOpenEditor(self):

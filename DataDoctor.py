@@ -1027,8 +1027,12 @@ class uiMain(QMainWindow):
                             f"showCellContextMenu: Added 'Show details' for USBR ({kind})",
                         )
                 elif db == 'USGS-NWIS':
-                    # Internal or public USGS — OGC full meta when available; legacy blanks
-                    usgsResponse = response if isinstance(response, dict) else {"kind": "legacy", "seriesMeta": {}, "points": []}
+                    # Internal or public USGS — OGC full meta when available; legacy blanks.
+                    # Do NOT invent kind=legacy when lookup misses (that lied after tsid-only dict keys).
+                    if isinstance(response, dict):
+                        usgsResponse = response
+                    else:
+                        usgsResponse = {"kind": "missing", "seriesMeta": {}, "points": []}
                     detailsAction = menu.addAction("Show details")
                     detailsAction.triggered.connect(lambda r=row, c=col, ts=timestampStr, sl=seriesLabel, resp=usgsResponse, iv=interval: self.showMetadataDetails(r, c, ts, sl, resp, 'USGS', iv))
                     
@@ -1125,6 +1129,13 @@ class uiMain(QMainWindow):
                 parts = [p.strip() for p in seriesLabel.split('\n') if p.strip()]
                 for p in parts:
                     addCandidate(p)
+            # Also try bare time_series_id (dictionary / lookupId may be tsid only)
+            for key in list(candidates):
+                try:
+                    tsid = Query.dictionaryLookupKey(key, 'USGS-NWIS')
+                    addCandidate(tsid)
+                except Exception:
+                    pass
         else:
             # USBR: second header line is usually SDID or SDID-MRID
             if seriesLabel and '\n' in seriesLabel:
@@ -1142,6 +1153,21 @@ class uiMain(QMainWindow):
             hit = lowerMap.get(key.lower())
             if hit:
                 return hit[1], hit[0]
+
+        # USGS: match any stored key whose 2nd segment (or whole key) is this tsid
+        if db == 'USGS-NWIS' and self.seriesResponses:
+            for key in candidates:
+                kl = key.lower()
+                for sk, sv in self.seriesResponses.items():
+                    sks = str(sk)
+                    if sks.lower() == kl:
+                        return sv, sk
+                    # Site-tsid[-param] contains this tsid as 2nd segment
+                    parts = [p for p in sks.split('-') if p]
+                    if len(parts) >= 2 and parts[1].lower() == kl:
+                        return sv, sk
+                    if len(parts) == 1 and parts[0].lower() == kl:
+                        return sv, sk
 
         return None, (candidates[0] if candidates else None)
 
@@ -1207,7 +1233,7 @@ class uiMain(QMainWindow):
 
                         # USGS-NWIS: ensure details never receive a non-dict (overlay crash guard)
                         if isinstance(t, str) and t.upper().startswith('USGS') and not isinstance(dbResponse, dict):
-                            dbResponse = {"kind": "legacy", "seriesMeta": {}, "points": []}
+                            dbResponse = {"kind": "missing", "seriesMeta": {}, "points": []}
                         responsesList.append(dbResponse)
 
                         # Extract interval from queryInfos
