@@ -374,8 +374,101 @@ class uiOptions(QDialog):
         self.cbUTCOffset.addItem("UTC+14:00 | Kiritimati")
         self.cbUTCOffset.setCurrentIndex(14)
 
+        # Tab order + focus first control when switching tabs
+        self.setupOptionsTabOrder()
+        if self.tabWidget is not None:
+            self.tabWidget.currentChanged.connect(self.onOptionsTabChanged)
+
         if Config.debug:
             Logic.logMessage("DEBUG", "uiOptions initialized")
+
+    def setupOptionsTabOrder(self):
+        """
+        Explicit Tab key order per page (top → bottom).
+        Geometry-based UI files often leave z-order wrong for keyboard navigation.
+        """
+        # General
+        chain = [
+            self.cbUTCOffset,
+            self.chkbRawData,
+            self.chkbQAQC,
+            self.chkbRetroMode,
+            self.chkbDebug,
+            self.chkbEnableSQL,
+        ]
+        for a, b in zip(chain, chain[1:]):
+            if a is not None and b is not None:
+                self.setTabOrder(a, b)
+
+        # Aquarius
+        aq = [
+            self.qleAQServer,
+            self.qleAQUser,
+            getattr(self, 'qleAQPassword', None),
+            self.btnShowPassword,
+        ]
+        for a, b in zip(aq, aq[1:]):
+            if a is not None and b is not None:
+                self.setTabOrder(a, b)
+
+        # USGS
+        usgs = [
+            getattr(self, 'qleUSGSAPIKey', None),
+            self.btnShowUSGSKey,
+        ]
+        for a, b in zip(usgs, usgs[1:]):
+            if a is not None and b is not None:
+                self.setTabOrder(a, b)
+
+        # USBR
+        usbr = [
+            self.rbBOP,
+            self.rbEOP,
+            self.qleTNSNames,
+            self.qleOracleUser,
+            getattr(self, 'qleOraclePassword', None),
+            self.btnShowOraclePassword,
+        ]
+        for a, b in zip(usbr, usbr[1:]):
+            if a is not None and b is not None:
+                self.setTabOrder(a, b)
+
+    def firstFocusWidgetForTab(self, index):
+        """First interactive control on the given Options tab."""
+        # Prefer named first field per tab; fall back to tab page children
+        byIndex = {
+            0: self.cbUTCOffset,
+            1: self.qleAQServer,
+            2: getattr(self, 'qleUSGSAPIKey', None),
+            3: self.rbBOP,
+        }
+        w = byIndex.get(index)
+        if w is not None and w.isEnabled() and w.isVisible():
+            return w
+        if self.tabWidget is None:
+            return None
+        page = self.tabWidget.widget(index)
+        if page is None:
+            return None
+        from PyQt6.QtWidgets import QAbstractButton, QComboBox, QLineEdit, QAbstractSpinBox
+        for child in page.findChildren(QWidget):
+            if not child.isEnabled() or not child.isVisible():
+                continue
+            if isinstance(child, (QLineEdit, QComboBox, QAbstractSpinBox, QAbstractButton)):
+                # Skip pure labels masquerading as empty checkboxes if any
+                if child.focusPolicy() == Qt.FocusPolicy.NoFocus:
+                    continue
+                return child
+        return None
+
+    def onOptionsTabChanged(self, index):
+        """When user clicks a tab, put the cursor on the first field."""
+        def focusFirst():
+            w = self.firstFocusWidgetForTab(index)
+            if w is not None:
+                w.setFocus(Qt.FocusReason.TabFocusReason)
+        # Defer until the page is shown (layout ready)
+        QTimer.singleShot(0, focusFirst)
 
     def showEvent(self, event):
         if Config.debug:
@@ -389,6 +482,8 @@ class uiOptions(QDialog):
         self.tabWidget.setCurrentIndex(0)
         # Always start with secrets masked when the dialog opens
         self.maskSensitiveFields()
+        # Cursor on first General control
+        self.onOptionsTabChanged(0)
 
         if Config.debug:
             Logic.logMessage("DEBUG", "uiOptions showEvent")
