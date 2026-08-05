@@ -1065,13 +1065,15 @@ def loadDataDictionary(table):
     """Load the data dictionary into the provided table (migrates schema if needed)."""
     Logic.ensureDataDictionarySchema()
     Logic.buildDataDictionary(table)
-    # Combobox delegates (editor window only — safe no-op if no parent UI)
+    # Combobox delegates + combo column widths (editor window only — safe no-op otherwise)
     try:
         parent = table.window() if table is not None else None
         if parent is not None and hasattr(parent, 'applyValuePrecisionDelegate'):
             parent.applyValuePrecisionDelegate()
         if parent is not None and hasattr(parent, 'applyDatabaseDelegate'):
             parent.applyDatabaseDelegate()
+        if parent is not None and hasattr(parent, 'sizeComboColumns'):
+            parent.sizeComboColumns()
     except Exception:
         pass
 

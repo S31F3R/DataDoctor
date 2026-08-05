@@ -148,7 +148,9 @@ class uiDetails(QWidget):
         """Apply shared details-table settings and a fixed column layout."""
         table.setSortingEnabled(True)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        # Cell-level selection so Copy can take one cell or a multi-cell range
+        # (SelectRows made every click highlight the whole line and copy both columns).
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         table.verticalHeader().setVisible(False)
         # Expanding + stretch last section fills the client area (no dead right pad)
@@ -165,6 +167,7 @@ class uiDetails(QWidget):
             )
             if getattr(self, '_detailsKeyFilter', None) is not None:
                 table.installEventFilter(self._detailsKeyFilter)
+                table.viewport().installEventFilter(self._detailsKeyFilter)
 
     def activeMetaTable(self):
         """Table currently showing metadata (tab page table or main detailsTable)."""
@@ -187,46 +190,45 @@ class uiDetails(QWidget):
         return self.copyMetaTableSelection(table)
 
     def copyMetaTableSelection(self, table):
-        """Copy selected items from a details table to the clipboard (TSV)."""
+        """
+        Copy selected cells from a details table to the clipboard (TSV).
+
+        Uses the rectangular bounds of the selection (Excel-like). A single
+        clicked cell copies only that cell; multi-cell ranges copy as a grid.
+        """
         if table is None:
             return False
-        selected = table.selectedRanges()
-        if not selected:
-            # No range — copy current row if any
-            row = table.currentRow()
-            if row < 0:
+
+        indexes = table.selectedIndexes()
+        if not indexes:
+            current = table.currentIndex()
+            if current is None or not current.isValid():
                 return False
+            indexes = [current]
+
+        rows = [i.row() for i in indexes]
+        cols = [i.column() for i in indexes]
+        minR, maxR = min(rows), max(rows)
+        minC, maxC = min(cols), max(cols)
+
+        lines = []
+        for row in range(minR, maxR + 1):
             cells = []
-            for c in range(table.columnCount()):
-                item = table.item(row, c)
-                cells.append(item.text() if item and item.text() else '')
-            text = '\t'.join(cells)
-        else:
-            # Union of selected ranges → contiguous block of unique rows/cols
-            rows = set()
-            cols = set()
-            for r in selected:
-                for row in range(r.topRow(), r.bottomRow() + 1):
-                    rows.add(row)
-                for col in range(r.leftColumn(), r.rightColumn() + 1):
-                    cols.add(col)
-            rowList = sorted(rows)
-            colList = sorted(cols)
-            lines = []
-            for row in rowList:
-                cells = []
-                for col in colList:
-                    item = table.item(row, col)
-                    cells.append(item.text() if item and item.text() else '')
-                lines.append('\t'.join(cells))
-            text = '\n'.join(lines)
+            for col in range(minC, maxC + 1):
+                item = table.item(row, col)
+                text = item.text() if item is not None and item.text() else ''
+                text = text.replace('\t', ' ').replace('\r', ' ').replace('\n', ' ')
+                cells.append(text)
+            lines.append('\t'.join(cells))
+        text = '\n'.join(lines)
         if not text.strip():
             return False
         QApplication.clipboard().setText(text)
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
-                f"uiDetails.copyMetaTableSelection: copied {len(text)} chars",
+                f"uiDetails.copyMetaTableSelection: "
+                f"{maxR - minR + 1}x{maxC - minC + 1} → clipboard ({len(text)} chars)",
             )
         return True
 
@@ -234,10 +236,19 @@ class uiDetails(QWidget):
         """Right-click → Copy (no paste; tables are read-only)."""
         if table is None:
             return
+        index = table.indexAt(pos)
+        if index.isValid():
+            # If the right-clicked cell is outside the current multi-selection,
+            # select only that cell so Copy targets the intended cell.
+            sel = table.selectionModel()
+            if sel is not None and not sel.isSelected(index):
+                table.clearSelection()
+                table.setCurrentIndex(index)
+                sel.select(index, sel.SelectionFlag.ClearAndSelect)
+
         menu = QMenu(table)
         copyAction = menu.addAction("Copy")
         copyAction.setShortcut(QKeySequence.StandardKey.Copy)
-        # Enable even if nothing selected (will copy current row)
         hasContent = table.rowCount() > 0
         copyAction.setEnabled(hasContent)
         action = menu.exec(table.viewport().mapToGlobal(pos))
