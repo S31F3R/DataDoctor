@@ -1065,11 +1065,13 @@ def loadDataDictionary(table):
     """Load the data dictionary into the provided table (migrates schema if needed)."""
     Logic.ensureDataDictionarySchema()
     Logic.buildDataDictionary(table)
-    # Combobox delegate for valuePrecision (editor window only — safe no-op if no parent UI)
+    # Combobox delegates (editor window only — safe no-op if no parent UI)
     try:
         parent = table.window() if table is not None else None
         if parent is not None and hasattr(parent, 'applyValuePrecisionDelegate'):
             parent.applyValuePrecisionDelegate()
+        if parent is not None and hasattr(parent, 'applyDatabaseDelegate'):
+            parent.applyDatabaseDelegate()
     except Exception:
         pass
 
@@ -1128,36 +1130,54 @@ def hdbSchemaForDatabase(dbName):
     return dsn.upper() + 'A'
 
 
+def programDatabases(queryType=None):
+    """
+    Ordered list of database labels used by query combos / data dictionary.
+
+    queryType:
+      'internal' — include AQUARIUS + HDBs + public sources
+      'sql'      — HDBs only (Oracle targets)
+      None / other — public-style: HDBs + USGS + PNHYD + GPHYD (no AQUARIUS)
+    """
+    names = []
+    seen = set()
+
+    def add(name):
+        n = (name or '').strip()
+        if n and n not in seen:
+            names.append(n)
+            seen.add(n)
+
+    if queryType == 'internal':
+        add('AQUARIUS')
+
+    for entry in getattr(Config, 'hdbOracleDatabases', ()) or ():
+        add(hdbDatabaseLabel(entry))
+
+    # Fallback if config empty
+    if not any(n.startswith('USBR-') and n not in ('USBR-PNHYD', 'USBR-GPHYD') for n in names):
+        for name in (
+            'USBR-LCHDB', 'USBR-YAOHDB', 'USBR-UCHDB2',
+            'USBR-ECOHDB', 'USBR-LBOHDB', 'USBR-KBOHDB',
+        ):
+            add(name)
+
+    if queryType != 'sql':
+        add('USGS-NWIS')
+        add('USBR-PNHYD')
+        add('USBR-GPHYD')
+
+    return names
+
+
 def loadDatabase(comboBox, queryType=None):
     """Populate the database combo box with static databases (no |SCHEMA in labels)."""
     if comboBox:
         if Config.debug:
             Logic.logMessage("DEBUG", "Populating cbDatabase")
         comboBox.clear()
-
-        if queryType == 'internal' and queryType != 'sql': 
-            comboBox.addItem('AQUARIUS')
-
-        # HDB databases from config — display name only (strip |SCHEMA)
-        seen = set()
-        for entry in getattr(Config, 'hdbOracleDatabases', ()) or ():
-            name = hdbDatabaseLabel(entry)
-            if name and name not in seen:
-                comboBox.addItem(name)
-                seen.add(name)
-
-        # Fallback if config empty
-        if not seen:
-            for name in (
-                'USBR-LCHDB', 'USBR-YAOHDB', 'USBR-UCHDB2',
-                'USBR-ECOHDB', 'USBR-LBOHDB', 'USBR-KBOHDB',
-            ):
-                comboBox.addItem(name)
-
-        if queryType != 'sql':
-            comboBox.addItem('USGS-NWIS')
-            comboBox.addItem('USBR-PNHYD')
-            comboBox.addItem('USBR-GPHYD')
+        for name in programDatabases(queryType=queryType):
+            comboBox.addItem(name)
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"Populated cbDatabase with {comboBox.count()} items")

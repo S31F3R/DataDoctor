@@ -465,6 +465,28 @@ def combineParameters(data, newData):
         data[d] = f'{data[d]},{parseLine[1]}'
     return data
 
+def dictionaryLookupKey(dataId, database):
+    """
+    Map a query dataID to the dataDictionary dataID key.
+
+    - USBR-*: SDID is the part before the first '-' (SDID-MRID → SDID)
+    - USGS-NWIS: dictionary stores time_series_id (or legacy methodID) alone;
+      query dataIDs are Site-tsid[-param] / Site-method-param → use second segment
+    - AQUARIUS / others: full dataID
+    """
+    if not dataId:
+        return dataId
+    db = str(database or '').strip()
+    raw = str(dataId).strip()
+    if db.startswith('USBR-') and '-' in raw:
+        return raw.split('-', 1)[0]
+    if db == 'USGS-NWIS' and '-' in raw:
+        parts = [p for p in raw.split('-') if p != '']
+        if len(parts) >= 2:
+            return parts[1]
+    return raw
+
+
 def getDataDictionaryItem(table, dataId, idIndex=None):
     """Find dictionary row for dataId. Prefer idIndex from buildDataDictionaryIndex()."""
     if idIndex is not None:
@@ -1298,7 +1320,10 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         originalDataIds = [item[0] for item in queryItems]
         originalIntervals = [item[1] for item in queryItems]
         databases = [item[2] for item in queryItems]
-        lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
+        # Dict keys: USBR → SDID; USGS → tsid/method (2nd segment); else full dataID
+        lookupIds = [
+            dictionaryLookupKey(item[0], item[2]) for item in queryItems
+        ]
         data = []
         numTs = len(timestamps)
         # Progress/UI yield cadence — every 10 rows + per-row debug made huge tables look hung
