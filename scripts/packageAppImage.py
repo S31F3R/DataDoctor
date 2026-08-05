@@ -10,13 +10,14 @@ Prerequisites:
   - Linux host (or WSL)
   - Python 3.13 + project venv with requirements.txt installed
   - PyInstaller:  pip install pyinstaller
-  - appimagetool for this arch under dist/appimagetool/ (preferred):
-        dist/appimagetool/appimagetool-x86_64.appimage
-        dist/appimagetool/appimagetool-aarch64.appimage
-        dist/appimagetool/appimagetool-armhf.appimage
-        dist/appimagetool/appimagetool-i686.appimage
+  - appimagetool for this arch under scripts/appimagetool/ (preferred):
+        scripts/appimagetool/appimagetool-x86_64.appimage
+        scripts/appimagetool/appimagetool-aarch64.appimage
+        scripts/appimagetool/appimagetool-armhf.appimage
+        scripts/appimagetool/appimagetool-i686.appimage
     Download from: https://github.com/AppImage/appimagetool/releases
-    Or pass --appimagetool /path/to/tool, or put appimagetool on PATH.
+    Or pass --appimagetool /path/to/tool, put tools in dist/appimagetool/,
+    or put appimagetool on PATH.
 
 What this does:
   1) PyInstaller --onedir (host arch)
@@ -29,7 +30,7 @@ removed after a successful pack unless --keep-build is set.
 Run from project root:
   python scripts/packageAppImage.py
   python scripts/packageAppImage.py --out dist/DataDoctor.AppImage
-  python scripts/packageAppImage.py --appimagetool dist/appimagetool/appimagetool-x86_64.appimage
+  python scripts/packageAppImage.py --appimagetool scripts/appimagetool/appimagetool-x86_64.appimage
 """
 
 from __future__ import annotations
@@ -81,9 +82,10 @@ def findAppImageTool(root: Path, arch: str, explicit: str | None = None) -> Path
 
     Preference order:
       1) --appimagetool path
-      2) dist/appimagetool/appimagetool-<arch>.appimage  (and common name variants)
-      3) dist/appimagetool/appimagetool  (unversioned)
-      4) PATH: appimagetool, appimagetool-<arch>
+      2) scripts/appimagetool/appimagetool-<arch>.appimage  (project-bundled)
+      3) dist/appimagetool/appimagetool-<arch>.appimage  (legacy location)
+      4) unversioned names under either tool dir
+      5) PATH: appimagetool, appimagetool-<arch>
     """
     if explicit:
         p = Path(explicit).expanduser()
@@ -91,22 +93,29 @@ def findAppImageTool(root: Path, arch: str, explicit: str | None = None) -> Path
             raise FileNotFoundError(f"--appimagetool not found: {p}")
         return p.resolve()
 
-    toolDir = root / "dist" / "appimagetool"
-    # Filenames as shipped from AppImage/appimagetool releases
-    candidates = [
-        toolDir / f"appimagetool-{arch}.appimage",
-        toolDir / f"appimagetool-{arch}.AppImage",
-        toolDir / f"appimagetool-{arch}",
-        toolDir / "appimagetool.appimage",
-        toolDir / "appimagetool.AppImage",
-        toolDir / "appimagetool",
+    toolDirs = [
+        root / "scripts" / "appimagetool",
+        root / "dist" / "appimagetool",
     ]
-    for cand in candidates:
-        if cand.is_file():
-            return cand.resolve()
+    # Filenames as shipped from AppImage/appimagetool releases
+    nameVariants = [
+        f"appimagetool-{arch}.appimage",
+        f"appimagetool-{arch}.AppImage",
+        f"appimagetool-{arch}",
+        "appimagetool.appimage",
+        "appimagetool.AppImage",
+        "appimagetool",
+    ]
+    for toolDir in toolDirs:
+        for name in nameVariants:
+            cand = toolDir / name
+            if cand.is_file():
+                return cand.resolve()
 
-    # Any file in dist/appimagetool that mentions this arch
-    if toolDir.is_dir():
+    # Any file in a tool dir that mentions this arch
+    for toolDir in toolDirs:
+        if not toolDir.is_dir():
+            continue
         for p in sorted(toolDir.iterdir()):
             if not p.is_file():
                 continue
@@ -119,17 +128,22 @@ def findAppImageTool(root: Path, arch: str, explicit: str | None = None) -> Path
         if hit:
             return Path(hit).resolve()
 
-    available = []
-    if toolDir.is_dir():
-        available = sorted(p.name for p in toolDir.iterdir() if p.is_file())
-    hint = (
-        f"\n  Found under dist/appimagetool/: {', '.join(available)}"
-        if available
-        else "\n  dist/appimagetool/ is empty or missing."
-    )
+    foundNotes = []
+    for toolDir in toolDirs:
+        rel = toolDir.relative_to(root)
+        if toolDir.is_dir():
+            available = sorted(p.name for p in toolDir.iterdir() if p.is_file())
+            foundNotes.append(
+                f"  Found under {rel}/: {', '.join(available)}"
+                if available
+                else f"  {rel}/ is empty or missing."
+            )
+        else:
+            foundNotes.append(f"  {rel}/ is empty or missing.")
+    hint = "\n" + "\n".join(foundNotes)
     raise FileNotFoundError(
         f"No appimagetool for arch {arch!r}.{hint}\n"
-        "  Expected e.g. dist/appimagetool/appimagetool-x86_64.appimage\n"
+        "  Expected e.g. scripts/appimagetool/appimagetool-x86_64.appimage\n"
         "  https://github.com/AppImage/appimagetool/releases\n"
         "  Or: --appimagetool /path/to/appimagetool-<arch>.appimage"
     )
@@ -297,7 +311,7 @@ def main() -> int:
     parser.add_argument(
         "--appimagetool",
         default=None,
-        help="Path to appimagetool binary (default: dist/appimagetool/appimagetool-<arch>.appimage)",
+        help="Path to appimagetool binary (default: scripts/appimagetool/appimagetool-<arch>.appimage)",
     )
     parser.add_argument(
         "--keep-build",
