@@ -38,9 +38,13 @@ def modifyTable(
     if numRows == 0 or numCols == 0:
         return
 
-    dataIds = lookupIds
+    # Full query DataIDs (for seriesResponses / columnMetadata) — NOT dictionary keys.
+    # lookupIds are dict keys (USGS → bare tsid, USBR → SDID); use those only for rounding.
+    dataIds = [item[0] for item in queryItems] if queryItems else list(lookupIds or [])
+    dictKeys = list(lookupIds) if lookupIds is not None else list(dataIds)
     labelsDict = labelsDict or {}
     queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
+    databases = list(databases) if databases else []
 
     # Per-series rounding rules (same as buildTable) so re-format does not drop DEC(3) etc.
     dictTable = None
@@ -51,10 +55,26 @@ def modifyTable(
             dictTable = getattr(winDd, 'mainTable', None)
         dictIndex = getattr(table, 'dataDictIndex', None)
 
-    def ruleForId(dataId):
+    def ruleForId(idx_or_id):
+        """Resolve RoundingSpec via dictionary key (tsid/SDID), not full Site-tsid DataID."""
         if dictTable is None:
             return Logic.DEFAULT_ROUNDING_SPEC
-        return Logic.roundingSpecForDataId(dictTable, dataId, dictIndex=dictIndex)
+        # Prefer parallel dictKeys entry when given a column index
+        if isinstance(idx_or_id, int):
+            key = dictKeys[idx_or_id] if idx_or_id < len(dictKeys) else None
+        else:
+            key = idx_or_id
+            # If caller passed a full DataID, map through dictionaryLookupKey when possible
+            try:
+                from core.Query import dictionaryLookupKey
+                # Find matching index in dataIds for the database
+                if key in dataIds:
+                    i = dataIds.index(key)
+                    db = databases[i] if i < len(databases) else ''
+                    key = dictionaryLookupKey(key, db)
+            except Exception:
+                pass
+        return Logic.roundingSpecForDataId(dictTable, key, dictIndex=dictIndex)
 
     # --- Extract all cell text once (one grid walk) ---
     def yieldProgress(msg, pct=None):
@@ -102,8 +122,8 @@ def modifyTable(
         secondaryVals = np.full(numRows, np.nan)
         # Exact string→Decimal deltas (avoids float binary noise / scientific notation)
         deltaDecimals = [None] * numRows
-        pRule = ruleForId(dataIds[pIdx] if pIdx < len(dataIds) else None)
-        sRule = ruleForId(dataIds[sIdx] if sIdx < len(dataIds) else None)
+        pRule = ruleForId(pIdx)
+        sRule = ruleForId(sIdx)
         # Deltas: use primary series rule (same units as primary)
         dRule = pRule
 
@@ -229,7 +249,7 @@ def modifyTable(
         finalCols.append(list(grid[last]))
         finalRoles.append([None] * numRows)
         finalHeaders.append(headers[last])
-        finalRules.append(ruleForId(dataIds[-1] if dataIds else None))
+        finalRules.append(ruleForId(last))
         lastDb = databases[-1]
         lastId = dataIds[-1]
         lookupIdLast = labelsDict.get(lastId, lastId) if lastDb == 'AQUARIUS' else lastId

@@ -90,6 +90,10 @@ def classifyUid(uid):
             return ("ogcLookup", site, None, second.zfill(5))
         return None
 
+    # Bare 32-char hex time_series_id (dictionary stores tsid alone; site resolved from meta)
+    if len(parts) == 1 and isTimeSeriesId(parts[0]):
+        return ("ogc", '', parts[0].lower(), '')
+
     return None
 
 
@@ -863,8 +867,21 @@ def apiReadNewMethod(dataID, interval, startDate, endDate):
 
     def packResult(uid, site, tsid, param, outputData, pointList):
         seriesProps = fetchTimeSeriesMetadata(tsid, headers, seriesCache)
-        locationProps = fetchMonitoringLocation(site, headers, locationCache)
-        seriesMeta = buildSeriesMeta(site, tsid, param, seriesProps, locationProps)
+        # Bare-tsid queries have no site in the DataID — take it from series meta when possible
+        siteForMeta = site
+        if not siteForMeta and isinstance(seriesProps, dict):
+            mid = (
+                seriesProps.get("monitoring_location_id")
+                or seriesProps.get("monitoringLocationId")
+                or ""
+            )
+            mid = str(mid).strip()
+            if mid.upper().startswith("USGS-"):
+                siteForMeta = mid.split("-", 1)[-1]
+            elif mid:
+                siteForMeta = mid
+        locationProps = fetchMonitoringLocation(siteForMeta, headers, locationCache) if siteForMeta else {}
+        seriesMeta = buildSeriesMeta(siteForMeta, tsid, param, seriesProps, locationProps)
         rawResponse = {
             "kind": "ogc",
             "seriesMeta": seriesMeta,

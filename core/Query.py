@@ -264,6 +264,12 @@ class queryWorker(QRunnable):
 
                             if Config.debug:
                                 Logic.logMessage("DEBUG", f"queryWorker: USGS Site Name for {dataID}: {groupLabels[dataID]!r}")
+                            # Dual-key OGC meta by bare time_series_id so Show details
+                            # still resolves when dictionary / column lookup uses tsid only.
+                            if isinstance(raw, dict) and (raw.get('kind') or '').lower() == 'ogc':
+                                tsidKey = dictionaryLookupKey(dataID, 'USGS-NWIS')
+                                if tsidKey and tsidKey != dataID and tsidKey not in groupRawResponses:
+                                    groupRawResponses[tsidKey] = raw
                         alignedData = gapCheck(
                             self.timestamps, outputData, dataID, interval=interval
                         )
@@ -1375,22 +1381,26 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 return
 
             # Remap Aquarius rawResponses keys to API labels. USGS stays keyed by DataID
-            # so context-menu lookup by lookupId still works after Site Name headers.
+            # and is dual-keyed by bare time_series_id (dict stores tsid alone).
             # Keep original dataID keys too (Aquarius headers may use UID or label).
             if Config.debug:
                 Logic.logMessage("DEBUG", f"executeQuery: Remapping rawResponses keys, labelsDict type={type(labelsDict)}, keys={list(labelsDict.keys()) if labelsDict else []}")
-            if labelsDict:
-                remapped = {}
-                for k, v in rawResponses.items():
-                    isUsgsMeta = isinstance(v, dict) and (v.get('kind') in ('ogc', 'legacy') or 'seriesMeta' in v)
-                    if isUsgsMeta:
-                        remapped[k] = v
-                    else:
-                        remapped[k] = v  # original DataID / UID
-                        labelKey = labelsDict.get(k, k)
-                        if labelKey is not None and str(labelKey).strip() != '':
-                            remapped[labelKey] = v
-                rawResponses = remapped
+            remapped = {}
+            for k, v in rawResponses.items():
+                remapped[k] = v
+                isUsgsMeta = isinstance(v, dict) and (
+                    (v.get('kind') in ('ogc', 'legacy') or 'seriesMeta' in v)
+                )
+                if isUsgsMeta:
+                    # Dual-key by bare tsid so Show details works after dictionaryLookupKey
+                    tsidKey = dictionaryLookupKey(k, 'USGS-NWIS')
+                    if tsidKey and tsidKey != k and tsidKey not in remapped:
+                        remapped[tsidKey] = v
+                elif labelsDict:
+                    labelKey = labelsDict.get(k, k)
+                    if labelKey is not None and str(labelKey).strip() != '':
+                        remapped[labelKey] = v
+            rawResponses = remapped
 
             # Store rawResponses for details / context menu
             mainWindow.storeQueryData(rawResponses, 'internal' if isInternal else 'public')
