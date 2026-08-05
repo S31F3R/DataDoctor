@@ -224,6 +224,14 @@ def main():
     else:
         print("WARN: DataDoctor.py missing", file=sys.stderr)
 
+    # Windows taskbar/window icon: .ico must sit next to the .pyw for some shells
+    icoSrc = root / "ui" / "icons" / "DataDoctor.ico"
+    if icoSrc.is_file():
+        shutil.copy2(icoSrc, projectFiles / "DataDoctor.ico")
+        print("Copied DataDoctor.ico next to DataDoctor.pyw")
+    else:
+        print("WARN: ui/icons/DataDoctor.ico missing", file=sys.stderr)
+
     # requirements for reference
     req = root / "requirements.txt"
     if req.is_file():
