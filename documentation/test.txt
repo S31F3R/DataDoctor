@@ -9,7 +9,7 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] USGS dataDictionary lookup (bunker PVLC — precision is the proof)
+[x] USGS dataDictionary lookup (bunker PVLC — precision is the proof)
    Concrete bunker row:
      dataID            = f02e05bac5ca472dbce494a3f54ef451  (bare hex only)
      siteID            = 09429100
