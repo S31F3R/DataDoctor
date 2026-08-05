@@ -1,20 +1,10 @@
 ####### TASKS #######
 -Expand update flow later: zip drops into an Update/ folder and platform-specific unpackers (Linux/Mac scripts TBD)
--Linux/Mac package scripts (Windows: scripts/packageWindows.py exists)
--Make database in Data Dictionary a drop down of the databases allowed/used by the program. Same as the query combo box uses
--Create a .appimage compiler for Linux
+-Linux/Mac package scripts (Windows: scripts/packageWindows.py exists; Linux AppImage: scripts/packageAppImage.py)
+-Mac package script (TBD)
 
 ####### CURRENT BUGS #######
--Data Dictonary with USGS data doesn't seem to be working for QAQC/formatting. Used site # for siteID and the time_series_id for dataID, and USGS-NWIS for database
-    -I validated by precisionOverride of SIG(4) and it still showed 3 decmimals
-    -AQUARIUS method is similar and it works. I think USGS is a bug taking the SITE-time_series_ID as the lookup instead of the just hte time_series_id
-        -If the above is true, USGS will always have a siteID-time_series_ID in the query. Parse out - and use item 1 (the second) for the data dic lookup
--Windows icon wasn't working but I found the fix. The .ico needs to be copied to the same place as the .pyw, then it works
-    -Clean up any DataDoctor.png/.ico files that are NOT being used
-        -I would expect to see 1 .ico in ui/icons for the windows copy over, same time as .pyw, and a .png for Linux. Both named DataDoctor with their respective extension
--tab order, or tab index, isn't correct in options. To make it easier, set cursor to first item when clicking on teach tab. from there, increase tabindex by 1 so it goes in order
--Not able to copy from context menu with the meta data. Need to add ctrl+c and a right click copy option. No need for paste, since no edits can be made, just copy
--Make ctrl+s (save) work on data dictionary
+(none — see documentation/test.txt for items needing Seifer retest)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look

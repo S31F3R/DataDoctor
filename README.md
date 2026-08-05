@@ -27,4 +27,15 @@ Or add the cert to your system trust store.
   - Generates `README.txt` and `UPDATE.txt` each run
   - Packaged dictionary for merge: `Project Files/temp/bunker.db`
   - Live user dictionary: `Project Files/core/bunker.db`
+  - Copies `DataDoctor.ico` next to `DataDoctor.pyw` for the Windows taskbar icon
 - Merge: `updateBunker.cmd` → `Project Files/scripts/updateBunker.py` (then removes `temp/`)
+- Linux AppImage: `python scripts/packageAppImage.py`
+  - Needs PyInstaller (`pip install pyinstaller`) in the project venv
+  - Optional `appimagetool` on PATH for a real `.AppImage` (otherwise builds a portable `.tar.gz` of the AppDir)
+  - Flags: `--skip-appimage`, `--appimagetool /path/to/appimagetool`, `--keep-build`
+
+## App icons
+
+- `ui/icons/DataDoctor.ico` — Windows window/taskbar
+- `ui/icons/DataDoctor.png` — Linux desktop / AppImage
+- `ui/DataDoctor.png` — About dialog splash art (not the app icon)

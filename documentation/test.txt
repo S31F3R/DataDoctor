@@ -9,6 +9,55 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
+[ ] USGS Data Dictionary precision / QAQC lookup (tsid only)
+   Steps:
+     a. In Data Dictionary: siteID = site number, dataID = time_series_id only
+        (not Site-tsid), database = USGS-NWIS, precisionOverride = SIG(4).
+     b. Public or internal USGS query with Site-time_series_id[-param].
+     c. Values should format with SIG(4) (not default ~3 decimals / DEC(2)).
+     d. QAQC coloring still applies when expectedMin/Max are set on that row.
+   Notes: Query.dictionaryLookupKey uses 2nd '-' segment for USGS-NWIS.
+     Aquarius path unchanged (full UID).
+
+[ ] Data Dictionary database column is a dropdown
+   Steps:
+     a. Open Data Dictionary → double-click a database cell.
+     b. Combobox lists same DBs as query (AQUARIUS, USBR-* HDBs, USGS-NWIS,
+        PNHYD, GPHYD). Unknown existing values still show and save.
+     c. Pick USGS-NWIS → Save → re-open; value persists.
+
+[ ] Data Dictionary Ctrl+S save
+   Steps:
+     a. Edit any cell → Ctrl+S → Saved dialog (same as Save button).
+
+[ ] Options tab focus + tab order
+   Steps:
+     a. Open Options → cursor/focus on UTC Offset combo (General).
+     b. Click Aquarius tab → focus on Server Link field.
+     c. USGS tab → API Key field; USBR tab → BOP radio (first control).
+     d. Tab key walks top→bottom on each page (not random z-order).
+
+[ ] Details metadata Copy (Ctrl+C + context menu)
+   Steps:
+     a. Query with metadata → right-click cell → Show details.
+     b. Select rows → Ctrl+C → paste into notepad (TSV: Type/Value…).
+     c. Right-click table → Copy does the same. No paste action expected.
+
+[ ] App icons layout
+   Steps:
+     a. ui/icons/DataDoctor.ico (Windows) and ui/icons/DataDoctor.png (Linux)
+        exist; no "Data Doctor.png" spaced name.
+     b. ui/DataDoctor.png remains About splash only.
+     c. Windows package copies DataDoctor.ico next to DataDoctor.pyw.
+
+[ ] Linux AppImage packager script
+   Steps:
+     a. On Linux with PyInstaller: python scripts/packageAppImage.py
+        (--skip-appimage if no appimagetool).
+     b. Produces dist/DataDoctor-Linux-*.tar.gz; with appimagetool also
+        dist/DataDoctor-*.AppImage.
+   Notes: needs matching glibc host; optional appimagetool on PATH.
+
 [ ] HDB password change UI only shows useful outcomes
    Steps:
      a. Change Oracle password in Options → USBR (user that exists on some HDBs).
@@ -84,4 +133,4 @@ Deferred / known
 [!] USGS monthly/yearly (OGC has no products)
 [!] Aquarius daily 2300 TZ
 [!] Features still backlog: plots, goat, git/readme, dataDictionary non-destructive bulk update,
-    SQL builder as button, expanded Options tree, Update/ folder unpackers, Linux/Mac package scripts
+    SQL builder as button, expanded Options tree, Update/ folder unpackers, Mac package script
