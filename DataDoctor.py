@@ -1465,11 +1465,14 @@ if __name__ == '__main__':
         app.setApplicationName("Data Doctor")
         # Taskbar / window icon (Windows + Linux desktop shells that honor it)
         appIcon = QIcon()
+        # Windows: .ico next to app (and under ui/icons). Linux: DataDoctor.png.
+        # About splash art (ui/DataDoctor.png large) is NOT used as the app icon.
         icoPath = Logic.resourcePath('ui/icons/DataDoctor.ico')
         iconCandidates = (
             icoPath,
-            Logic.resourcePath('ui/icons/Data Doctor.png'),
-            Logic.resourcePath('ui/DataDoctor.png'),
+            # Same folder as DataDoctor.pyw when packaged on Windows
+            Logic.resourcePath('DataDoctor.ico'),
+            Logic.resourcePath('ui/icons/DataDoctor.png'),
         )
         for iconPath in iconCandidates:
             if os.path.isfile(iconPath):
