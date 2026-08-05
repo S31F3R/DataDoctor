@@ -471,13 +471,51 @@ def combineParameters(data, newData):
         data[d] = f'{data[d]},{parseLine[1]}'
     return data
 
+def usgsDictionaryDataId(dataId):
+    """
+    Extract the dataDictionary dataID key from a USGS query DataID.
+
+    Dictionary stores bare time_series_id (32-char hex) or legacy numeric methodID.
+    Query forms:
+      site-time_series_id
+      site-time_series_id-parameter   ← must NOT treat parameter as part of the key
+      time_series_id                  ← bare tsid also accepted
+      site-methodID-parameter         ← legacy; key is methodID (2nd segment)
+
+    Prefer the 32-char hex segment wherever it sits so an optional parameter
+    after another '-' never becomes the lookup key.
+    """
+    raw = str(dataId or '').strip()
+    if not raw:
+        return raw
+    try:
+        from core.USGS import isTimeSeriesId
+    except Exception:
+        isTimeSeriesId = lambda s: bool(
+            s and len(s) == 32 and all(c in '0123456789abcdefABCDEF' for c in s)
+        )
+
+    if isTimeSeriesId(raw):
+        return raw.lower()
+
+    parts = [p for p in raw.split('-') if p != '']
+    # OGC: any segment that is a 32-char hex time_series_id
+    for p in parts:
+        if isTimeSeriesId(p):
+            return p.lower()
+    # Legacy Site-methodID-parameter (or Site-methodID): 2nd segment
+    if len(parts) >= 2:
+        return parts[1]
+    return raw
+
+
 def dictionaryLookupKey(dataId, database):
     """
     Map a query dataID to the dataDictionary dataID key.
 
     - USBR-*: SDID is the part before the first '-' (SDID-MRID → SDID)
-    - USGS-NWIS: dictionary stores time_series_id (or legacy methodID) alone;
-      query dataIDs are Site-tsid[-param] / Site-method-param → use second segment
+    - USGS-NWIS: bare time_series_id (hex, lowercased) or legacy methodID —
+      never site number, never optional parameter after tsid
     - AQUARIUS / others: full dataID
     """
     if not dataId:
@@ -486,33 +524,68 @@ def dictionaryLookupKey(dataId, database):
     raw = str(dataId).strip()
     if db.startswith('USBR-') and '-' in raw:
         return raw.split('-', 1)[0]
-    if db == 'USGS-NWIS' and '-' in raw:
-        parts = [p for p in raw.split('-') if p != '']
-        if len(parts) >= 2:
-            return parts[1]
+    if db == 'USGS-NWIS' or db.upper() == 'USGS-NWIS':
+        return usgsDictionaryDataId(raw)
     return raw
 
 
 def getDataDictionaryItem(table, dataId, idIndex=None):
     """Find dictionary row for dataId. Prefer idIndex from buildDataDictionaryIndex()."""
-    if idIndex is not None:
-        return idIndex.get(dataId.strip() if dataId else '', -1)
-    idCol = getColByName(table, 'dataID')
+    target = (dataId or '').strip() if dataId else ''
+    if not target:
+        return -1
 
+    if idIndex is not None:
+        row = idIndex.get(target, -1)
+        if row >= 0:
+            return row
+        # Case-insensitive / dual-key aliases (hex tsid lowercased at index build)
+        row = idIndex.get(target.lower(), -1)
+        if row >= 0:
+            return row
+        # Index may also map full Site-tsid → row; try extracted USGS key
+        uk = usgsDictionaryDataId(target)
+        if uk and uk != target:
+            row = idIndex.get(uk, -1)
+            if row >= 0:
+                return row
+            row = idIndex.get(uk.lower(), -1)
+            if row >= 0:
+                return row
+        return -1
+
+    idCol = getColByName(table, 'dataID')
     if idCol == -1:
         return -1
-    target = dataId.strip() if dataId else ''
+    targetLower = target.lower()
+    uk = usgsDictionaryDataId(target)
+    ukLower = uk.lower() if uk else ''
     for r in range(table.rowCount()):
         item = table.item(r, idCol)
-
-        if item and item.text().strip() == target:
+        if not item:
+            continue
+        cell = item.text().strip()
+        if not cell:
+            continue
+        if cell == target or cell.lower() == targetLower:
+            return r
+        if uk and (cell == uk or cell.lower() == ukLower):
+            return r
+        # Dict row stored full Site-tsid[-param] form
+        cellKey = usgsDictionaryDataId(cell)
+        if cellKey and (cellKey == targetLower or cellKey == ukLower or cellKey == target or cellKey == uk):
             return r
     return -1
+
 
 def buildDataDictionaryIndex(table):
     """
     One-pass map dataID -> row index for O(1) lookups.
     Scanning 40k rows per series column was a major cost on wide queries.
+
+    Also indexes:
+      - lowercase of each key (hex tsid case variants)
+      - bare USGS time_series_id extracted from full Site-tsid[-param] cells
     """
     index = {}
     if table is None:
@@ -520,12 +593,28 @@ def buildDataDictionaryIndex(table):
     idCol = getColByName(table, 'dataID')
     if idCol == -1:
         return index
+
+    def addKey(key, row):
+        if not key:
+            return
+        if key not in index:
+            index[key] = row
+        low = key.lower()
+        if low not in index:
+            index[low] = row
+
     for r in range(table.rowCount()):
         item = table.item(r, idCol)
-        if item:
-            key = item.text().strip()
-            if key and key not in index:
-                index[key] = r
+        if not item:
+            continue
+        key = item.text().strip()
+        if not key:
+            continue
+        addKey(key, r)
+        # If cell is Site-tsid[-param] (or bare tsid), also map bare hex key
+        bare = usgsDictionaryDataId(key)
+        if bare and bare != key:
+            addKey(bare, r)
     return index
 
 def getColByName(table, name):

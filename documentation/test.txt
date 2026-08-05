@@ -9,89 +9,62 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] USGS Data Dictionary precision / QAQC lookup (tsid only) + Show details
+[ ] USGS dataDictionary lookup by bare time_series_id (precision / QAQC / Show details)
    Steps:
-     a. In Data Dictionary: siteID = site number, dataID = time_series_id only
-        (not Site-tsid), database = USGS-NWIS, precisionOverride = SIG(4).
-     b. Public or internal USGS query with Site-time_series_id[-param]
-        (or bare time_series_id — also accepted as OGC now).
-     c. Values should format with SIG(4) (not default ~3 decimals / DEC(2)).
-     d. QAQC coloring still applies when expectedMin/Max are set on that row.
-     e. Right-click a value cell → Show details:
-        - Must NOT say "legacy USGS method IDs" for a hex time_series_id query.
-        - Should show OGC series tags (Site Name, Parameter, Time Series ID, …)
-          when the OGC fetch returned meta.
-   Notes: dictionaryLookupKey uses 2nd '-' segment (bare tsid) for dict lookup.
-     Prior FAIL (RESPONSE): Show details claimed "legacy" on tsid queries.
-     Fix: dual-key seriesResponses by full DataID + bare tsid; resolveSeriesResponse
-     matches tsid; bare 32-char hex classifies as OGC; missing meta no longer
-     mislabeled as legacy; modifyTable keeps full DataIDs for columnMetadata
-     (lookupIds only for rounding/QAQC).
-
-[x] Data Dictionary Ctrl+S / Save button (reevaluated)
-   Steps:
-     a. Open Data Dictionary (large table OK — ~30k rows).
-     b. Edit a normal cell → Ctrl+S → "Saved" dialog promptly (not hung).
-     c. Double-click database or valuePrecision combobox, pick a value → Ctrl+S
-        while editor still open (or after pick) → saves and dialog appears.
-     d. Click Save toolbar button after a small edit → same "Saved" dialog.
-     e. Re-open Data Dictionary → edits persisted.
-   Notes: Commit open combobox before read; executemany insert; no full-table
-     resizeColumnToContents after save; re-entrancy guard + wait cursor.
-     Prior fail: save "never finished" after Ctrl+S + database combobox.
+     a. Data Dictionary row:
+          dataID   = time_series_id only (32-char hex, not Site-tsid)
+          siteID   = USGS site number (e.g. 09428500)
+          database = USGS-NWIS
+          precisionOverride = SIG(4)
+          expectedMin/Max set if testing QAQC colors
+     b. Query (public or internal) with either form:
+          site#-time_series_id
+          site#-time_series_id-parameter
+        (bare time_series_id alone also OK for OGC fetch)
+     c. Values format with SIG(4) (not default DEC(2) / ~3 decimals).
+     d. QAQC colors apply when min/max set on that dict row.
+     e. Right-click cell → Show details:
+          - NOT "legacy USGS method IDs" for hex tsid queries
+          - OGC tags present (Site Name, Time Series ID, Parameter, …)
+   Notes: Lookup key is the 32-char hex segment only (never site, never param).
+     Hex match is case-insensitive. Dual-key seriesResponses for Show details.
+     Prior fails: mislabeled legacy; dict miss when Site-tsid-param / case differ.
 
 [ ] Data Dictionary combo column widths
    Steps:
      a. Open Data Dictionary.
-     b. database column wide enough for longest DB name (e.g. USBR-YAOHDB)
-        and header — not clipped in the closed cell or dropdown.
-     c. valuePrecision: open the dropdown; longest labels (e.g.
-        "Attenuation turbidity  [SIG(3,1)]" / "Turbidity, FormBksctr  [SIG(3,1)]")
-        fully visible including the vertical scrollbar on the popup list.
-     d. After Save, those two columns stay sized (not collapsed).
-   Notes: Prior RESPONSE — still clipped; scrollbar not in width math.
-     Fix: size from QComboBox sizeFromContents + PM_ScrollBarExtent (≥20)
-     + fudge so popup list does not clip.
+     b. database column fits longest DB name + dropdown chrome.
+     c. valuePrecision dropdown: longest labels fully visible with scrollbar
+        (e.g. Attenuation turbidity / Turbidity, FormBksctr  [SIG(3,1)]).
+     d. After Save, those columns stay sized.
+   Notes: Sized via QComboBox sizeFromContents + scrollbar extent.
 
 [ ] Cell-level Copy (Details + Data Dictionary)
    Steps:
      a. Query with metadata → right-click cell → Show details.
-     b. Click a single cell (only that cell highlights, not whole row).
-     c. Ctrl+C or right-click → Copy → paste is just that cell's text.
-     d. Drag/Ctrl multi-select several cells → Copy → TSV grid in notepad.
-     e. Right-click a cell outside the multi-selection → that cell alone is
-        selected for Copy.
-     f. Data Dictionary: same cell / multi-cell Copy via Ctrl+C and context menu.
-   Notes: SelectItems (was SelectRows). Main data table already SelectItems.
-
-[x] AppImage tool path under scripts/
-   Steps:
-     a. tools live in scripts/appimagetool/appimagetool-<arch>.appimage
-        (not only dist/appimagetool/).
-     b. python scripts/packageAppImage.py finds scripts/… tool automatically.
-     c. Optional: --appimagetool still overrides; dist/appimagetool/ still works
-        as fallback if scripts/ is empty.
+     b. Single cell highlights (not whole row) → Ctrl+C / Copy = that cell only.
+     c. Multi-select cells → Copy = TSV grid.
+     d. Right-click outside multi-selection retargets that cell.
+     e. Data Dictionary: same cell / multi-cell Copy (Ctrl+C + context menu).
 
 [ ] HDB password change UI only shows useful outcomes
    Steps:
      a. Change Oracle password in Options → USBR (user that exists on some HDBs).
-     b. Popup lists successes; wrong-password DBs get per-DB prompt; locked accounts listed.
-     c. Missing users and TNS/network noise stay out of the popup (still in app.log).
-     d. On per-DB wrong-password prompt: Cancel is labeled Skip — skips that DB and
-        continues remaining HDBs (listed under "Skipped" in summary, not as errors).
-   Notes: status 'locked' shown; 'error'/'missing' silent in UI.
-   Fix: Cancel → Skip continues queue; skipped DBs separate from errors.
+     b. Popup: successes; wrong-password → per-DB prompt; locked listed.
+     c. Missing users / TNS noise only in app.log.
+     d. Wrong-password Cancel labeled Skip → continues; summary "Skipped".
 
 [ ] HDB database-link failure → direct connect fallback
    Steps:
      a. Internal multi-DB query where primary uses @link to another HDB.
-     b. If link fails (ORA-02019 etc.), retry by connecting to the target DSN directly.
-     c. Query still returns data when direct path works.
-   Notes: USBR.sqlRead detects link errors and re-runs without link.
+     b. Link fail (ORA-02019 etc.) → retry direct DSN to target.
+     c. Query returns data when direct path works.
 
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Data Dictionary Ctrl+S / Save button (reevaluated)
+[x] AppImage tool path under scripts/
 [x] Data Dictionary database column is a dropdown
 [x] Options tab focus + tab order
 [x] App icons layout

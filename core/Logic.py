@@ -1319,7 +1319,17 @@ def roundingSpecForDataId(dataDictionaryTable, dataId, dictIndex=None):
     if dataDictionaryTable is None or not dataId:
         return DEFAULT_ROUNDING_SPEC
 
-    # Local O(1) index if not provided
+    # Prefer shared Query helpers (case-insensitive + bare USGS tsid aliases)
+    try:
+        from core.Query import getDataDictionaryItem, buildDataDictionaryIndex
+        if dictIndex is None:
+            dictIndex = buildDataDictionaryIndex(dataDictionaryTable)
+        row = getDataDictionaryItem(dataDictionaryTable, dataId, idIndex=dictIndex)
+        return roundingSpecFromDictionaryRow(dataDictionaryTable, row)
+    except Exception:
+        pass
+
+    # Fallback if Query import fails (should not happen in-app)
     if dictIndex is None:
         dictIndex = {}
         idCol = _dictTableColIndex(dataDictionaryTable, 'dataID')
@@ -1333,13 +1343,15 @@ def roundingSpecForDataId(dataDictionaryTable, dataId, dictIndex=None):
 
     target = dataId.strip() if dataId else ''
     row = dictIndex.get(target, -1)
+    if row < 0 and target:
+        row = dictIndex.get(target.lower(), -1)
     if row < 0:
-        # Fallback linear scan
         idCol = _dictTableColIndex(dataDictionaryTable, 'dataID')
         if idCol >= 0:
+            tlow = target.lower()
             for r in range(dataDictionaryTable.rowCount()):
                 it = dataDictionaryTable.item(r, idCol)
-                if it and it.text().strip() == target:
+                if it and it.text().strip().lower() == tlow:
                     row = r
                     break
     return roundingSpecFromDictionaryRow(dataDictionaryTable, row)
