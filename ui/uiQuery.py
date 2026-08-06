@@ -436,7 +436,7 @@ class uiQuery(QMainWindow):
                 Logic.logMessage("DEBUG", f"btnDeleteQuickLookPressed: Attempted to delete example Quick Look '{quickLookName}'—skipped")
 
     def onQueryListDoubleClicked(self, item):
-        """Load only the dataID of a list row into the text box for in-place edit."""
+        """Load a list row into the form for in-place edit (dataID, interval, database)."""
         if item is None or self.listQueryList is None:
             return
         text = item.text().strip()
@@ -452,20 +452,22 @@ class uiQuery(QMainWindow):
             self.qleDataID.setText(dataId)
             self.qleDataID.setFocus()
             self.qleDataID.selectAll()
-        # Keep combos aligned with the row so the user sees context (dataID is what they edit)
+        # Align combos with the row so interval/database can be changed before re-add
         # Do not use truthiness on combos — empty QComboBox is falsy
-        if self.cbInterval is not None and interval:
-            idx = self.cbInterval.findText(interval)
-            if idx >= 0:
-                self.cbInterval.setCurrentIndex(idx)
         if self.cbDatabase is not None and database is not None:
             idx = self.cbDatabase.findText(database)
             if idx >= 0:
                 self.cbDatabase.setCurrentIndex(idx)
+        # Interval after database so USGS interval filter applies first
+        if self.cbInterval is not None and interval:
+            idx = self.cbInterval.findText(interval)
+            if idx >= 0:
+                self.cbInterval.setCurrentIndex(idx)
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
-                f"onQueryListDoubleClicked: editing index={self.editingQueryIndex} dataID={dataId!r}",
+                f"onQueryListDoubleClicked: editing index={self.editingQueryIndex} "
+                f"dataID={dataId!r} interval={interval!r} database={database!r}",
             )
 
     def btnAddQueryPressed(self):
@@ -478,17 +480,8 @@ class uiQuery(QMainWindow):
                 Logic.logMessage("DEBUG", "btnAddQueryPressed: No Data ID entered, skipping")
             return
 
-        # In-place edit: keep interval/database from the original list row (only dataID changes)
+        # In-place edit uses current form values (dataID, interval, and database)
         editIdx = self.editingQueryIndex
-        if (
-            editIdx is not None
-            and self.listQueryList is not None
-            and 0 <= editIdx < self.listQueryList.count()
-        ):
-            oldParts = self.listQueryList.item(editIdx).text().strip().split('|', 2)
-            if len(oldParts) == 3:
-                interval = oldParts[1]
-                database = oldParts[2]
 
         # USGS: optional param on OGC; Site-Parameter may need multi-series pick
         if database == 'USGS-NWIS':

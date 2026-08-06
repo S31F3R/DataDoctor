@@ -119,13 +119,10 @@ class uiAbout(QDialog):
             "QPushButton:hover { background: rgba(255, 255, 255, 25); border-radius: 2px; }"
             "QPushButton:pressed { background: rgba(255, 255, 255, 40); }"
         )
-        # Clean 48x48 π glyph (same asset that worked as Secret.png before).
-        # ui/icons/pi.jpg is the full The Net still for reference — do NOT scale that
-        # as the button icon (looks like blank / 80s TV static when shrunk).
+        # Clean 48x48 π glyph for The Net easter egg (bottom-right corner).
         iconPath = Logic.resourcePath('ui/icons/pi.png')
-        if not os.path.exists(iconPath):
-            iconPath = Logic.resourcePath('ui/icons/Secret.png')
-        self.buttonSecret.setIcon(QIcon(iconPath))
+        if os.path.exists(iconPath):
+            self.buttonSecret.setIcon(QIcon(iconPath))
         # Movie pi is small and quiet in the corner
         self.buttonSecret.setIconSize(QSize(16, 16))
         # No-op for now — wire secret behavior when you're ready

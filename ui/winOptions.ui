@@ -179,35 +179,8 @@
       <string>Retro Mode:</string>
      </property>
     </widget>
-    <widget class="QLabel" name="lblSQL">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>180</y>
-       <width>481</width>
-       <height>21</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>SQL Query Builder:</string>
-     </property>
-    </widget>
-    <widget class="QCheckBox" name="chkbEnableSQL">
-     <property name="geometry">
-      <rect>
-       <x>128</x>
-       <y>180</y>
-       <width>21</width>
-       <height>22</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string/>
-     </property>
-    </widget>
     <zorder>lblQc</zorder>
     <zorder>lblDebug</zorder>
-    <zorder>lblSQL</zorder>
     <zorder>lblRawData</zorder>
     <zorder>lblRetroMode</zorder>
     <zorder>lbUTCOffset</zorder>
@@ -215,7 +188,6 @@
     <zorder>chkbRawData</zorder>
     <zorder>chkbDebug</zorder>
     <zorder>chkbQAQC</zorder>
-    <zorder>chkbEnableSQL</zorder>
     <zorder>chkbRetroMode</zorder>
    </widget>
    <widget class="QWidget" name="tabAquarius">

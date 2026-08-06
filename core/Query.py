@@ -697,18 +697,23 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             commonCol = getColByName(dataDictionaryTable, 'commonName')
             commonItem = dataDictionaryTable.item(dictRow, commonCol) if commonCol != -1 else None
             baseLabel = commonItem.text().strip() if commonItem else dataId
+            # Standard dict label for all DBs: "commonName - datatype"
+            dataTypeCol = getColByName(dataDictionaryTable, 'dataType')
+            dataTypeItem = dataDictionaryTable.item(dictRow, dataTypeCol) if dataTypeCol != -1 else None
+            dataType = dataTypeItem.text().strip() if dataTypeItem and dataTypeItem.text().strip() else ''
+            nameLabel = f"{baseLabel} - {dataType}" if dataType else baseLabel
 
             if database == 'USGS-NWIS':
-                # Same idea as Aquarius: dictionary commonName is the operator label.
+                # Dictionary hit: commonName - datatype on top, interval underneath.
                 # (Previously Site Name from OGC always won, so hits looked like misses —
                 #  e.g. bunker "PVLC (USGS)" never appeared; Aquarius UID labels did.)
                 if baseLabel and baseLabel != dataId and baseLabel != dictKey:
-                    fullLabel = f"{baseLabel} \n{intervalStr}"
+                    fullLabel = f"{nameLabel} \n{intervalStr}"
                     if Config.debug:
                         Logic.logMessage(
                             "DEBUG",
                             f"buildTable: USGS dict HIT key={dictKey!r} row={dictRow} "
-                            f"commonName header {i}: {fullLabel}",
+                            f"commonName-datatype header {i}: {fullLabel}",
                         )
                 else:
                     siteName = labelsDict.get(h.strip()) if labelsDict else None
@@ -735,7 +740,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                         ):
                             fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
                         else:
-                            fullLabel = f"{baseLabel} \n{intervalStr}"
+                            fullLabel = f"{nameLabel} \n{intervalStr}"
                         if Config.debug:
                             Logic.logMessage(
                                 "DEBUG",
@@ -743,17 +748,15 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                                 f"fallback header {i}: {fullLabel}",
                             )
             elif database == 'AQUARIUS':
-                fullLabel = f"{baseLabel} \n{dataId}"
+                fullLabel = f"{nameLabel} \n{dataId}"
 
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"buildTable: Aquarius in dict, using dict label, header {i}: {fullLabel}")
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"buildTable: Aquarius in dict, using commonName-datatype, header {i}: {fullLabel}",
+                    )
             else:
-                # USBR / HDB: commonName - dataType
-                dataTypeCol = getColByName(dataDictionaryTable, 'dataType')
-                dataTypeItem = dataDictionaryTable.item(dictRow, dataTypeCol) if dataTypeCol != -1 else None
-                dataType = dataTypeItem.text().strip() if dataTypeItem and dataTypeItem.text().strip() else ''
-                nameLabel = f"{baseLabel} - {dataType}" if dataType else baseLabel
-
+                # USBR / HDB: commonName - datatype, SDID (and MRID when non-zero)
                 if mrid and mrid != '0':
                     fullLabel = f"{nameLabel} \n{dataId}-{mrid}"
 

@@ -102,6 +102,7 @@ class uiMain(QMainWindow):
         self.btnInfo = self.findChild(QPushButton, 'btnInfo')
         self.btnViewLog = self.findChild(QPushButton, 'btnViewLog')
         self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
+        self.btnSQL = self.findChild(QPushButton, 'btnSQL')
         self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
         self.btnUndo = self.findChild(QPushButton, 'btnUndo')
         self.btnUpload = self.findChild(QPushButton, 'btnUpload')
@@ -136,6 +137,7 @@ class uiMain(QMainWindow):
                         (self.btnViewLog, "Notebook", 36),
                         (self.btnInfo, "Info", 36),
                         (self.btnInternalQuery, "InternalQuery", 36),
+                        (self.btnSQL, "SQL", 36),
                         (self.btnUndo, "Reset", 36),
                         (self.btnRefresh, "Refresh", 36),
                         (self.btnUpload, "Upload", 36),
@@ -154,6 +156,7 @@ class uiMain(QMainWindow):
         mainTooltips = {
             self.btnPublicQuery: "Public Queries",
             self.btnInternalQuery: "Internal Queries",
+            self.btnSQL: "SQL Query Builder",
             self.btnDataDictionary: "Data Dictionary",
             self.btnExportCSV: "Export current table to CSV",
             self.btnOptions: "Options",
@@ -187,6 +190,8 @@ class uiMain(QMainWindow):
         self.btnInfo.clicked.connect(self.btnInfoPressed)
         if self.btnViewLog:self.btnViewLog.clicked.connect(self.btnViewLogPressed)
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
+        if self.btnSQL:
+            self.btnSQL.clicked.connect(self.btnSQLPressed)
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
         if self.btnUpload:self.btnUpload.clicked.connect(self.btnUploadPressed)
@@ -393,23 +398,16 @@ class uiMain(QMainWindow):
         self.cbDatabase.addItem("")    
         self.listSnippets.addItem("")        
 
-        # Add back SQL tab if enabled
-        if Config.enableSQL:
-            self.tabWidget.addTab(sqlTab, self.sqlTitle)
-            self.refreshSqlTab()
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Added tabSQL on startup since enabled and refreshed")  
-
+        # SQL tab stays hidden on startup (open via btnSQL toggle, like Data Query)
         if Config.debug:
             Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
 
     def closeEvent(self, event):
-        """Override closeEvent to save splitter sizes if SQL tab is enabled and present."""
+        """Override closeEvent to save splitter sizes if SQL tab is open."""
         try:
-            sqlTab = self.findChild(QWidget, 'tabSQL')
+            sqlTab = self.tabSQL or self.findChild(QWidget, 'tabSQL')
 
-            if Config.enableSQL and sqlTab and self.tabWidget.indexOf(sqlTab) != -1:
+            if sqlTab and self.tabWidget.indexOf(sqlTab) != -1:
                 sqlSplitter = self.findChild(QSplitter, 'sqlSplitter')
                 mainSplitter = self.findChild(QSplitter, 'mainSplitter')
                 if sqlSplitter is not None and mainSplitter is not None:
@@ -1269,6 +1267,28 @@ class uiMain(QMainWindow):
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"onTabCloseRequested: Closed tab at index {index}")
+
+    def btnSQLPressed(self):
+        """Toggle SQL Query Builder tab: show if hidden, hide if already open."""
+        if not self.tabSQL or not self.tabWidget:
+            QMessageBox.warning(self, "SQL Query Builder", "SQL tab is not available.")
+            return
+
+        idx = self.tabWidget.indexOf(self.tabSQL)
+        if idx == -1:
+            # Prefer after Data Query when present; otherwise insert at start
+            dataIdx = self.tabWidget.indexOf(self.tabMain) if self.tabMain else -1
+            insertIndex = dataIdx + 1 if dataIdx != -1 else 0
+            self.tabWidget.insertTab(insertIndex, self.tabSQL, self.sqlTitle)
+            self.refreshSqlTab()
+            idx = self.tabWidget.indexOf(self.tabSQL)
+            self.tabWidget.setCurrentIndex(idx)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"btnSQLPressed: added tabSQL at index {idx}")
+        else:
+            self.tabWidget.removeTab(idx)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"btnSQLPressed: removed tabSQL from index {idx}")
 
     def btnViewLogPressed(self):
         """Show Log Viewer tab (add if closed) and load all rotated app logs, newest first."""

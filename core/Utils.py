@@ -61,7 +61,6 @@ controlLayouts = {
         'chkbQAQC': (156, 90, 21, 22),
         'chkbRetroMode': (88, 120, 21, 22),
         'chkbDebug': (96, 150, 21, 22),
-        'chkbEnableSQL': (128, 180, 21, 22),
         'rbBOP': (210, 0, 141, 22),                 # .ui
         'rbEOP': (350, 0, 131, 22),                 # .ui
         # winQuery
@@ -79,7 +78,6 @@ controlLayouts = {
         'chkbQAQC': (261, 88, 21, 22),              # was 259; RESPONSE +2 x
         'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
         'chkbDebug': (130, 149, 21, 22),
-        'chkbEnableSQL': (206, 179, 21, 22),
         'rbBOP': (193, 0, 141, 22),                 # was 199; -6 x
         'rbEOP': (350, 0, 131, 22),
         'btnDataIdInfo': (406, 5, 31, 20),
@@ -1440,7 +1438,6 @@ def loadConfig():
         'qaqc': True,
         'rawData': False,
         'lastQuickLook': '',
-        'enableSQL': False
     }
 
     if os.path.exists(configPath):
@@ -1667,12 +1664,11 @@ def reloadGlobals():
     Config.periodOffset = resolvePeriodOffset(settings)
     Config.qaqcEnabled = settings['qaqc']
     Config.rawData = settings['rawData']
-    Config.enableSQL = settings['enableSQL']
 
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
-            f"Globals reloaded from user.config, enableSQL={Config.enableSQL}, "
+            f"Globals reloaded from user.config, "
             f"periodOffset={Config.periodOffset}, "
             f"hourTimestampMethod={settings.get('hourTimestampMethod')}, "
             f"sessionRetroMode={Config.retroMode} "

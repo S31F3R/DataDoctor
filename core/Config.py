@@ -16,7 +16,6 @@ appRoot = ""
 deltaChecked = False
 overlayChecked = False
 systemTextColor = ""
-enableSQL = False
 
 # Oracle / HDB credential policy (Options → USBR password change)
 # Pre-12.2 Oracle max was 30 characters; keep 30 for HDB compatibility.
