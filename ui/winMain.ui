@@ -400,7 +400,7 @@
        <item>
         <widget class="QPushButton" name="btnSQL">
          <property name="toolTip">
-          <string>Internal Queries</string>
+          <string>SQL Query Builder</string>
          </property>
          <property name="text">
           <string/>
@@ -420,7 +420,7 @@
        <item>
         <widget class="QPushButton" name="btnGraph">
          <property name="toolTip">
-          <string>Internal Queries</string>
+          <string>Graph data table</string>
          </property>
          <property name="text">
           <string/>
