@@ -2,14 +2,11 @@
 # Graph tab: plot mainTable series with zoom toolbar and dual Y-axis when scales differ.
 
 from __future__ import annotations
-
 import re
 from datetime import datetime
-
 import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QVBoxLayout, QWidget, QSizePolicy, QLabel
-
 from core import Config, Logic
 
 # Lazy matplotlib imports so startup still works if the package is missing
