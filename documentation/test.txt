@@ -9,73 +9,6 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[x] USGS dataDictionary lookup (bunker PVLC — precision is the proof)
-   Concrete bunker row:
-     dataID            = f02e05bac5ca472dbce494a3f54ef451  (bare hex only)
-     siteID            = 09429100
-     database          = USGS-NWIS
-     commonName        = PVLC (USGS)
-     valuePrecision    = Discharge   → Aquarius default DEC(3) if override ignored
-     precisionOverride = DEC(2)      → MUST win
-   Query forms (multi-part — Aquarius is bare UID and already works):
-     09429100-f02e05bac5ca472dbce494a3f54ef451-60
-     09429100-f02e05bac5ca472dbce494a3f54ef451
-   Steps:
-     a. Confirm dict row as above (override DEC(2), not blank).
-     b. Query public/internal with site-tsid or site-tsid-param.
-     c. VALUES must show 2 decimal places (DEC(2)), NOT 3 (Discharge/DEC(3)).
-        That is the definitive proof the dict row + override applied.
-     d. Header shows "PVLC (USGS)" (commonName), like Aquarius shows its label.
-     e. Show details: OGC tags, not "legacy method IDs".
-   Notes: Grok verified offline — buildTable seriesRules → DEC(2), cells e.g.
-     1234.567 → 1234.57. Discharge alone would be 1234.567; total miss → DEC(2)
-     default (also 2dp) so override was the real differentiator vs Discharge.
-     Fix: seriesRules always resolve full query DataID→bare tsid + override.
-
-[x] Data Dictionary Ctrl+S / Save button (reevaluated)
-   Steps:
-     a. Open Data Dictionary (large table OK — ~30k rows).
-     b. Edit a normal cell → Ctrl+S → "Saved" dialog promptly (not hung).
-     c. Double-click database or valuePrecision combobox, pick a value → Ctrl+S
-        while editor still open (or after pick) → saves and dialog appears.
-     d. Click Save toolbar button after a small edit → same "Saved" dialog.
-     e. Re-open Data Dictionary → edits persisted.
-   Notes: Commit open combobox before read; executemany insert; no full-table
-     resizeColumnToContents after save; re-entrancy guard + wait cursor.
-     Prior fail: save "never finished" after Ctrl+S + database combobox.
-
-[x] Data Dictionary combo column widths
-   Steps:
-     a. Open Data Dictionary.
-     b. database column wide enough for longest DB name (e.g. USBR-YAOHDB)
-        and header — not clipped in the closed cell or dropdown.
-     c. valuePrecision: open the dropdown; longest labels (e.g.
-        "Attenuation turbidity  [SIG(3,1)]" / "Turbidity, FormBksctr  [SIG(3,1)]")
-        fully visible including the vertical scrollbar on the popup list.
-     d. After Save, those two columns stay sized (not collapsed).
-   Notes: Prior RESPONSE — still clipped; scrollbar not in width math.
-     Fix: size from QComboBox sizeFromContents + PM_ScrollBarExtent (≥20)
-     + fudge so popup list does not clip.
-
-[x] Cell-level Copy (Details + Data Dictionary)
-   Steps:
-     a. Query with metadata → right-click cell → Show details.
-     b. Click a single cell (only that cell highlights, not whole row).
-     c. Ctrl+C or right-click → Copy → paste is just that cell's text.
-     d. Drag/Ctrl multi-select several cells → Copy → TSV grid in notepad.
-     e. Right-click a cell outside the multi-selection → that cell alone is
-        selected for Copy.
-     f. Data Dictionary: same cell / multi-cell Copy via Ctrl+C and context menu.
-   Notes: SelectItems (was SelectRows). Main data table already SelectItems.
-
-[x] AppImage tool path under scripts/
-   Steps:
-     a. tools live in scripts/appimagetool/appimagetool-<arch>.appimage
-        (not only dist/appimagetool/).
-     b. python scripts/packageAppImage.py finds scripts/… tool automatically.
-     c. Optional: --appimagetool still overrides; dist/appimagetool/ still works
-        as fallback if scripts/ is empty.
-
 [ ] HDB password change UI only shows useful outcomes
    Steps:
      a. Change Oracle password in Options → USBR (user that exists on some HDBs).
@@ -93,9 +26,81 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
+[ ] btnSQL toggles SQL Query Builder tab
+   Steps:
+     a. Startup: no SQL tab visible (same as Data Query / Log until opened).
+     b. Click SQL toolbar button → SQL Query Builder tab appears; hover/pressed icons work.
+     c. Click SQL button again → tab goes away.
+     d. Open SQL tab, close via tab X → tab gone; button can re-open it.
+     e. Options → General: no "SQL Query Builder" checkbox (removed).
+     f. Run a snippet / save splitter sizes while tab open, close app, re-open SQL → sizes restored.
+   Notes: Replaced chkbEnableSQL / Config.enableSQL with btnSQL toggle on winMain.
+
+[ ] Query list double-click edit allows interval (and database) change
+   Steps:
+     a. Public/Internal Query → add a row (e.g. HOUR + a DB).
+     b. Double-click the list row → dataID, interval, and database load into the form.
+     c. Change Data Interval (e.g. HOUR → DAY) and/or database, then Add.
+     d. List row updates with the new interval/database (not stuck on original).
+     e. Change only dataID → still updates that field; other combos keep form values.
+   Notes: Was freezing interval/database from the old list text on in-place edit.
+
+[ ] Data dictionary headers use "commonName - datatype" for all DBs
+   Steps:
+     a. Query a dict-backed USBR series → header top line is "commonName - datatype".
+     b. Query a dict-backed Aquarius series → same "commonName - datatype" top line
+        (second line still dataID / location as before).
+     c. Query a dict-backed USGS series with commonName filled → top line includes
+        " - datatype" when datatype is present (e.g. "PVLC (USGS) - …").
+     d. Series not in the dictionary still use prior fallback labels.
+   Notes: USBR already used this form; Aquarius/USGS now share the same nameLabel.
+
+[ ] Unused About easter-egg icons cleaned up
+   Steps:
+     a. Only ui/icons/pi.png remains (no pi.jpg, no Secret.png).
+     b. About window secret π button still shows the glyph.
+   Notes: Secret.png was identical to pi.png; pi.jpg was unused reference still.
+
+[ ] SQL + Graph button tooltips and hover/pressed icons
+   Steps:
+     a. Hover SQL toolbar button → tooltip "SQL Query Builder"; hover icon swaps.
+     b. Hover Graph toolbar button → tooltip "Graph data table"; hover/pressed icons work.
+     c. Tooltips match the style of Public/Internal/etc. (short labels).
+
+[ ] Graph button plots Data Query table into Graph tab
+   Steps:
+     a. Run a multi-column Data Query so the table has timestamps + values.
+     b. Clear selection → press Graph → Graph tab opens immediately right of Data Query.
+     c. All numeric columns appear; zoom box / pan / home work on the matplotlib toolbar.
+     d. Select one column (click a cell or highlight the column) → Graph → only that series.
+     e. Select cells spanning multiple columns → Graph → those series only.
+     f. Query a stage + large discharge together → dual Y-axis when scales differ a lot.
+     g. Press Graph again with a new selection → plot refreshes in place.
+   Notes: ui/uiGraph.py + matplotlib NavigationToolbar; dual axis when scale ratio ≥ 10.
+     Requires: pip install matplotlib (now in requirements.txt).
+
+[ ] Detach / Attach for Graph and Log Viewer tabs only
+   Steps:
+     a. Open Graph (and/or Log Viewer). Right-click other tabs (Data Query, SQL) →
+        no Detach menu.
+     b. Right-click Graph tab → "Detach tab" → floating window with Graph tab chrome;
+        maximize; plot resizes with the window.
+     c. Right-click the tab inside the floating window → "Attach" → returns to main
+        immediately right of Data Query.
+     d. Detach Log Viewer → its own window (never combined with Graph). Maximize OK.
+     e. Attach Log → last tab in main window.
+     f. Close floating window with X → tab re-attaches (same as Attach).
+     g. While Graph is detached, press Graph again → updates plot in the floating window.
+   Notes: detachedTabWindow; only keys 'graph' and 'log'.
+
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] USGS dataDictionary lookup (bunker PVLC — precisionOverride DEC(2))
+[x] Data Dictionary Ctrl+S / Save button (combobox commit + executemany)
+[x] Data Dictionary combo column widths (sizeFromContents + scrollbar)
+[x] Cell-level Copy (Details + Data Dictionary; SelectItems)
+[x] AppImage tool path under scripts/appimagetool/
 [x] Data Dictionary database column is a dropdown
 [x] Options tab focus + tab order
 [x] App icons layout
@@ -142,5 +147,6 @@ Deferred / known
 --------------------------------------------------------------------------------
 [!] USGS monthly/yearly (OGC has no products)
 [!] Aquarius daily 2300 TZ
-[!] Features still backlog: plots, goat, git/readme, dataDictionary non-destructive bulk update,
-    SQL builder as button, expanded Options tree, Update/ folder unpackers, Mac package script
+[!] Features still backlog: advanced plot tool / quick-look plots, goat, git/readme,
+    dataDictionary non-destructive bulk update, expanded Options tree,
+    Update/ folder unpackers, Mac package script

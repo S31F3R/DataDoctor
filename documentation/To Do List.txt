@@ -4,14 +4,11 @@
 -Mac package script (TBD)
 
 ####### CURRENT BUGS #######
--Double click on query to edit doesn't allow changing of Data Interval. Need to fix this
--USBR data dictionary items use "commonName - datatype" for their label, but non USBR do not. Make "commonName - datatype" standard for all items that show up in data dictionary
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
     -Add a plot that graphs delta pair and overlays delta as a seperate line    
--SQL Query Builder needs to be a button and not an option in Options
 -Expand options to add more config options to the entire program
     -Maybe switch options to tree view or add vertical tabs
     -Aquarius will need an opiton to use credential account or entra account
