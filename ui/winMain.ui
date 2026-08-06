@@ -400,7 +400,7 @@
        <item>
         <widget class="QPushButton" name="btnSQL">
          <property name="toolTip">
-          <string>Internal Queries</string>
+          <string>SQL Query Builder</string>
          </property>
          <property name="text">
           <string/>
