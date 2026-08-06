@@ -17,7 +17,70 @@ from ui.uiDataDictionary import uiDataDictionary
 from ui.uiOptions import uiOptions, warmKeyringCache
 from ui.uiQuery import uiQuery
 from ui.uiDetails import uiDetails
+from ui.uiGraph import GraphPanel
 from core.Oracle import oracleConnection
+
+
+class detachedTabWindow(QMainWindow):
+    """
+    Floating host for Graph or Log Viewer with the same tab chrome as the main window.
+    Right-click the tab → Attach; closing the window also re-attaches.
+    """
+
+    def __init__(self, mainWindow, contentWidget, title, key):
+        super().__init__(None)
+        self.mainWindow = mainWindow
+        self.contentWidget = contentWidget
+        self.tabTitle = title
+        self.key = key  # 'graph' | 'log'
+        self._attaching = False
+
+        self.setWindowTitle(f"Data Doctor — {title}")
+        self.setWindowIcon(mainWindow.windowIcon() if mainWindow else QIcon())
+        self.resize(1000, 700)
+        self.setMinimumSize(400, 300)
+
+        self.hostTabs = QTabWidget(self)
+        self.hostTabs.setTabsClosable(False)
+        self.hostTabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # Reparent content into this window's tab strip (keeps tab look)
+        self.hostTabs.addTab(contentWidget, title)
+        self.setCentralWidget(self.hostTabs)
+
+        tabBar = self.hostTabs.tabBar()
+        tabBar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        tabBar.customContextMenuRequested.connect(self.onTabBarContextMenu)
+
+    def onTabBarContextMenu(self, pos):
+        idx = self.hostTabs.tabBar().tabAt(pos)
+        if idx < 0:
+            return
+        menu = QMenu(self)
+        attachAct = menu.addAction("Attach")
+        chosen = menu.exec(self.hostTabs.tabBar().mapToGlobal(pos))
+        if chosen == attachAct:
+            self.attachBack()
+
+    def attachBack(self):
+        if self._attaching:
+            return
+        self._attaching = True
+        try:
+            if self.mainWindow is not None:
+                self.mainWindow.attachDetachedTab(self.key)
+        finally:
+            self._attaching = False
+
+    def closeEvent(self, event):
+        # Closing the floating window returns the tab to main (does not destroy content)
+        if not self._attaching and self.mainWindow is not None:
+            self._attaching = True
+            try:
+                self.mainWindow.attachDetachedTab(self.key)
+            finally:
+                self._attaching = False
+        event.accept()
+
 
 class mainTableKeyFilter(QObject):
     """
@@ -103,6 +166,7 @@ class uiMain(QMainWindow):
         self.btnViewLog = self.findChild(QPushButton, 'btnViewLog')
         self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
         self.btnSQL = self.findChild(QPushButton, 'btnSQL')
+        self.btnGraph = self.findChild(QPushButton, 'btnGraph')
         self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
         self.btnUndo = self.findChild(QPushButton, 'btnUndo')
         self.btnUpload = self.findChild(QPushButton, 'btnUpload')
@@ -110,6 +174,7 @@ class uiMain(QMainWindow):
         self.tabMain = self.findChild(QWidget, 'tabMain')
         self.tabSQL = self.findChild(QWidget, 'tabSQL')
         self.tabLog = self.findChild(QWidget, 'tabLog')
+        self.tabGraph = None  # created on first graph (GraphPanel)
         self.pteLog = self.findChild(QPlainTextEdit, 'pteLog')
         self.lastQueryType = None
         self.lastQueryItems = []
@@ -120,6 +185,8 @@ class uiMain(QMainWindow):
         self.currentQueryType = "" # str: "AQUARIUS", etc., set post-query
         self.uploadBaselineReady = False
         self.uploadTrackingBlocked = False
+        # Detached floating windows for Graph / Log only ({'graph'|'log': detachedTabWindow})
+        self.detachedWindows = {}
         self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
         self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
         self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
@@ -138,6 +205,7 @@ class uiMain(QMainWindow):
                         (self.btnInfo, "Info", 36),
                         (self.btnInternalQuery, "InternalQuery", 36),
                         (self.btnSQL, "SQL", 36),
+                        (self.btnGraph, "Graph", 36),
                         (self.btnUndo, "Reset", 36),
                         (self.btnRefresh, "Refresh", 36),
                         (self.btnUpload, "Upload", 36),
@@ -157,6 +225,7 @@ class uiMain(QMainWindow):
             self.btnPublicQuery: "Public Queries",
             self.btnInternalQuery: "Internal Queries",
             self.btnSQL: "SQL Query Builder",
+            self.btnGraph: "Graph data table",
             self.btnDataDictionary: "Data Dictionary",
             self.btnExportCSV: "Export current table to CSV",
             self.btnOptions: "Options",
@@ -192,6 +261,8 @@ class uiMain(QMainWindow):
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
         if self.btnSQL:
             self.btnSQL.clicked.connect(self.btnSQLPressed)
+        if self.btnGraph:
+            self.btnGraph.clicked.connect(self.btnGraphPressed)
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
         if self.btnUpload:self.btnUpload.clicked.connect(self.btnUploadPressed)
@@ -214,6 +285,11 @@ class uiMain(QMainWindow):
 
         # Edit triggers / locks applied after each query via Upload.snapshotBaseline
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
+        # Graph + Log: right-click tab → Detach tab
+        if self.tabWidget is not None:
+            tabBar = self.tabWidget.tabBar()
+            tabBar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            tabBar.customContextMenuRequested.connect(self.onMainTabBarContextMenu)
         self.btnRunQuery.clicked.connect(self.runCustomQuery)
         self.btnSaveSnippet.clicked.connect(self.saveSnippet)
         if self.listSnippets is not None:
@@ -263,6 +339,7 @@ class uiMain(QMainWindow):
         # Store titles after removal (in case .ui changes)
         self.dataQueryTitle = "Data Query"
         self.sqlTitle = "SQL Query Builder"
+        self.graphTitle = "Graph"
         self.logTitle = "Log Viewer"
 
         # Log viewer tab: layout pteLog to fill, hide until opened via btnViewLog
@@ -1262,11 +1339,215 @@ class uiMain(QMainWindow):
             QMessageBox.warning(self, "Details Error", f"Failed to show details:\n{e}")
 
     def onTabCloseRequested(self, index):
-        # removeTab hides the page but keeps the widget so we can re-add log/SQL/query tabs
+        # removeTab hides the page but keeps the widget so we can re-add log/SQL/query/graph tabs
+        widget = self.tabWidget.widget(index) if self.tabWidget else None
         self.tabWidget.removeTab(index)
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"onTabCloseRequested: Closed tab at index {index}")
+            name = widget.objectName() if widget is not None else '?'
+            Logic.logMessage("DEBUG", f"onTabCloseRequested: Closed tab at index {index} ({name})")
+
+    def tabKeyForWidget(self, widget):
+        """Return 'graph' / 'log' for detachable tabs, else None."""
+        if widget is None:
+            return None
+        if self.tabGraph is not None and widget is self.tabGraph:
+            return 'graph'
+        if self.tabLog is not None and widget is self.tabLog:
+            return 'log'
+        # objectName fallback (reparent edge cases)
+        name = widget.objectName() if hasattr(widget, 'objectName') else ''
+        if name == 'tabGraph':
+            return 'graph'
+        if name == 'tabLog':
+            return 'log'
+        return None
+
+    def graphInsertIndex(self):
+        """Graph sits immediately to the right of Data Query when present."""
+        if not self.tabWidget:
+            return 0
+        dataIdx = self.tabWidget.indexOf(self.tabMain) if self.tabMain else -1
+        return dataIdx + 1 if dataIdx != -1 else 0
+
+    def sqlInsertIndex(self):
+        """
+        SQL after Data Query and Graph (normal order:
+        Data Query | Graph | SQL | Log).
+        """
+        if not self.tabWidget:
+            return 0
+        idx = self.graphInsertIndex()
+        # If Graph is already in the main tab bar, place SQL after it
+        if self.tabGraph is not None:
+            gIdx = self.tabWidget.indexOf(self.tabGraph)
+            if gIdx != -1:
+                idx = gIdx + 1
+        return idx
+
+    def ensureGraphPanel(self):
+        """Create GraphPanel once; reuse across show/hide/detach."""
+        if self.tabGraph is None:
+            self.tabGraph = GraphPanel(None)
+            self.tabGraph.setObjectName('tabGraph')
+        return self.tabGraph
+
+    def showGraphInMainTabs(self, select=True):
+        """Insert Graph tab at normal position if it is not detached and not already open."""
+        if not self.tabWidget:
+            return -1
+        panel = self.ensureGraphPanel()
+        if self.detachedWindows.get('graph') is not None:
+            # Content lives in floating window — bring that forward instead
+            win = self.detachedWindows['graph']
+            win.show()
+            win.raise_()
+            win.activateWindow()
+            return -1
+        idx = self.tabWidget.indexOf(panel)
+        if idx == -1:
+            idx = self.tabWidget.insertTab(self.graphInsertIndex(), panel, self.graphTitle)
+        if select and idx >= 0:
+            self.tabWidget.setCurrentIndex(idx)
+        return idx
+
+    def btnGraphPressed(self):
+        """
+        Graph selected column(s) from the Data Query table, or the whole table
+        when nothing is selected. Opens/refreshes the Graph tab to the right of
+        Data Query (or updates the detached Graph window).
+        """
+        if self.mainTable is None:
+            QMessageBox.warning(self, "Graph", "Data table is not available.")
+            return
+        if self.mainTable.rowCount() <= 0 or self.mainTable.columnCount() <= 0:
+            QMessageBox.information(
+                self, "Graph",
+                "No data to graph.\n\nRun a Data Query first, then press Graph.",
+            )
+            return
+
+        # Need Data Query tab present so user can see context (create if missing)
+        if self.tabWidget and self.tabMain and self.tabWidget.indexOf(self.tabMain) == -1:
+            self.tabWidget.insertTab(0, self.tabMain, self.dataQueryTitle)
+
+        panel = self.ensureGraphPanel()
+        ok, message = panel.plotFromTable(self.mainTable)
+        if not ok:
+            QMessageBox.warning(self, "Graph", message or "Could not build graph.")
+            return
+
+        if self.detachedWindows.get('graph') is not None:
+            win = self.detachedWindows['graph']
+            win.show()
+            win.raise_()
+            win.activateWindow()
+            if message and Config.debug:
+                Logic.logMessage("DEBUG", f"btnGraphPressed (detached): {message}")
+            return
+
+        self.showGraphInMainTabs(select=True)
+        if message and Config.debug:
+            Logic.logMessage("DEBUG", f"btnGraphPressed: {message}")
+
+    def onMainTabBarContextMenu(self, pos):
+        """Right-click Graph or Log tab → Detach tab."""
+        if not self.tabWidget:
+            return
+        tabBar = self.tabWidget.tabBar()
+        idx = tabBar.tabAt(pos)
+        if idx < 0:
+            return
+        widget = self.tabWidget.widget(idx)
+        key = self.tabKeyForWidget(widget)
+        if key is None:
+            return
+
+        menu = QMenu(self)
+        detachAct = menu.addAction("Detach tab")
+        chosen = menu.exec(tabBar.mapToGlobal(pos))
+        if chosen == detachAct:
+            self.detachTab(key)
+
+    def detachTab(self, key):
+        """
+        Pop Graph or Log into its own maximizable window (one window per tab).
+        """
+        if key not in ('graph', 'log'):
+            return
+        if self.detachedWindows.get(key) is not None:
+            win = self.detachedWindows[key]
+            win.show()
+            win.raise_()
+            win.activateWindow()
+            return
+
+        if key == 'graph':
+            content = self.ensureGraphPanel()
+            title = self.graphTitle
+        else:
+            content = self.tabLog
+            title = self.logTitle
+            if content is None:
+                QMessageBox.warning(self, "Detach", "Log tab is not available.")
+                return
+
+        # Remove from main tab bar if present (widget is kept alive)
+        if self.tabWidget is not None:
+            idx = self.tabWidget.indexOf(content)
+            if idx != -1:
+                self.tabWidget.removeTab(idx)
+
+        win = detachedTabWindow(self, content, title, key)
+        self.detachedWindows[key] = win
+        win.show()
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"detachTab: detached {key!r}")
+
+    def attachDetachedTab(self, key):
+        """
+        Return a detached Graph/Log tab to the main window at normal tab order.
+        """
+        win = self.detachedWindows.pop(key, None)
+        if win is None:
+            return
+
+        # Block floating window closeEvent from re-entering attach
+        win._attaching = True
+
+        if key == 'graph':
+            content = self.tabGraph or win.contentWidget
+            title = self.graphTitle
+        else:
+            content = self.tabLog or win.contentWidget
+            title = self.logTitle
+
+        # Pull content out of the floating host without destroying it
+        if win.hostTabs is not None and content is not None:
+            wIdx = win.hostTabs.indexOf(content)
+            if wIdx != -1:
+                win.hostTabs.removeTab(wIdx)
+
+        # Tear down floating shell (avoid recursive closeEvent)
+        win.hide()
+        win.deleteLater()
+
+        if content is None or self.tabWidget is None:
+            return
+
+        if key == 'graph':
+            self.tabGraph = content
+            insertAt = self.graphInsertIndex()
+            idx = self.tabWidget.insertTab(insertAt, content, title)
+        else:
+            # Log always last
+            idx = self.tabWidget.addTab(content, title)
+
+        self.tabWidget.setCurrentIndex(idx)
+        if key == 'log':
+            self.populateLogViewer()
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"attachDetachedTab: attached {key!r} at index {idx}")
 
     def btnSQLPressed(self):
         """Toggle SQL Query Builder tab: show if hidden, hide if already open."""
@@ -1276,9 +1557,7 @@ class uiMain(QMainWindow):
 
         idx = self.tabWidget.indexOf(self.tabSQL)
         if idx == -1:
-            # Prefer after Data Query when present; otherwise insert at start
-            dataIdx = self.tabWidget.indexOf(self.tabMain) if self.tabMain else -1
-            insertIndex = dataIdx + 1 if dataIdx != -1 else 0
+            insertIndex = self.sqlInsertIndex()
             self.tabWidget.insertTab(insertIndex, self.tabSQL, self.sqlTitle)
             self.refreshSqlTab()
             idx = self.tabWidget.indexOf(self.tabSQL)
@@ -1294,6 +1573,15 @@ class uiMain(QMainWindow):
         """Show Log Viewer tab (add if closed) and load all rotated app logs, newest first."""
         if not self.tabLog or not self.tabWidget:
             QMessageBox.warning(self, "Log Viewer", "Log tab is not available.")
+            return
+
+        # If Log is detached, focus that window and refresh contents
+        if self.detachedWindows.get('log') is not None:
+            self.populateLogViewer()
+            win = self.detachedWindows['log']
+            win.show()
+            win.raise_()
+            win.activateWindow()
             return
 
         idx = self.tabWidget.indexOf(self.tabLog)
@@ -1360,13 +1648,15 @@ class uiMain(QMainWindow):
     def appendLogEntry(self, level, text):
         """
         Live-append one formatted log line at the top of pteLog.
-        No-op unless the Log tab is currently open — avoids UI work when closed.
+        No-op unless the Log tab is open in main or detached — avoids UI work when closed.
         """
         if not self.pteLog or not self.tabLog or not self.tabWidget:
             return
-            
-        # Tab closed (removeTab): skip. Open but not current: still update so it is fresh on switch.
-        if self.tabWidget.indexOf(self.tabLog) == -1:
+
+        logOpenInMain = self.tabWidget.indexOf(self.tabLog) != -1
+        logDetached = self.detachedWindows.get('log') is not None
+        # Tab closed (removeTab) and not floating: skip. Open or detached: still update.
+        if not logOpenInMain and not logDetached:
             return
         if not text:
             return
