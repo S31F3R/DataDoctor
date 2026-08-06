@@ -352,7 +352,7 @@
       </property>
       <property name="maximumSize">
        <size>
-        <width>320</width>
+        <width>400</width>
         <height>16777215</height>
        </size>
       </property>
@@ -400,7 +400,7 @@
        <item>
         <widget class="QPushButton" name="btnSQL">
          <property name="toolTip">
-          <string>SQL Query Builder</string>
+          <string>Internal Queries</string>
          </property>
          <property name="text">
           <string/>
@@ -408,6 +408,26 @@
          <property name="icon">
           <iconset>
            <normaloff>icons/SQL.png</normaloff>icons/SQL.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnGraph">
+         <property name="toolTip">
+          <string>Internal Queries</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/Graph.png</normaloff>icons/Graph.png</iconset>
          </property>
          <property name="iconSize">
           <size>
