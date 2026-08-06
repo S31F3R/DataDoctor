@@ -398,6 +398,26 @@
         </widget>
        </item>
        <item>
+        <widget class="QPushButton" name="btnSQL">
+         <property name="toolTip">
+          <string>Internal Queries</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/SQL.png</normaloff>icons/SQL.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QPushButton" name="btnDataDictionary">
          <property name="baseSize">
           <size>
@@ -447,26 +467,6 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="btnOptions">
-         <property name="toolTip">
-          <string>Options</string>
-         </property>
-         <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset>
-           <normaloff>icons/Options.png</normaloff>icons/Options.png</iconset>
-         </property>
-         <property name="iconSize">
-          <size>
-           <width>36</width>
-           <height>36</height>
-          </size>
-         </property>
-        </widget>
-       </item>
-       <item>
         <widget class="QPushButton" name="btnViewLog">
          <property name="toolTip">
           <string>View application logs</string>
@@ -477,6 +477,26 @@
          <property name="icon">
           <iconset>
            <normaloff>icons/Notebook.png</normaloff>icons/Notebook.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnOptions">
+         <property name="toolTip">
+          <string>Options</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/Options.png</normaloff>icons/Options.png</iconset>
          </property>
          <property name="iconSize">
           <size>
@@ -544,7 +564,6 @@
   <tabstop>btnDataDictionary</tabstop>
   <tabstop>btnExportCSV</tabstop>
   <tabstop>btnOptions</tabstop>
-  <tabstop>btnViewLog</tabstop>
   <tabstop>btnInfo</tabstop>
   <tabstop>btnRefresh</tabstop>
   <tabstop>btnUndo</tabstop>
