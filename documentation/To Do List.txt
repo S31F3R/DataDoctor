@@ -4,6 +4,17 @@
 -Mac package script (TBD)
 
 ####### CURRENT BUGS #######
+-Windows icon works but on a new build and on the first load, the load of the program takes a while and when it comes up, default windows icon is there. Every load after that, icon is there
+    -Not crucial but would like to fix this
+-commonName - datatype works but I want to remove the spaces. all logic needs to have commonName-datatype
+-not able to tell when a column is selected. It used to but this got disabled when clicking a column caused the text to get really big. Need to make the text/header area to highlight to show it's all selected
+-Clicking the view log button when the log tab is already open doesn't close it. this needs to close if already open and open when closed, like SQL query builder button
+-Graph colors need to follow system colors, like the rest of the application does. if system dark mode is on, make the graph a dark mode version. if light version, the current colors are OK
+-Need a tooltip to show the data for a data point on the graph when hoovered over it
+-The title of the graph should be blank
+-Timestamp needs to follow the exact format of the table format
+-When overlay is selected, graph primary and secondary of the column selected. If 4 columns selected, there will be 8 timeseries graphed
+-In the query window, when selected on a query item in the list, if right clicking on that item and dataID is populated, have a pop up that says "Insert Query Above" and another that says "Insert Query Below". If one of these are selected, it will act like the Add Query button but placing it in the list above or below the selected item
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
