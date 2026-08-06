@@ -26,7 +26,7 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[ ] btnSQL toggles SQL Query Builder tab
+[x] btnSQL toggles SQL Query Builder tab
    Steps:
      a. Startup: no SQL tab visible (same as Data Query / Log until opened).
      b. Click SQL toolbar button → SQL Query Builder tab appears; hover/pressed icons work.
@@ -36,7 +36,7 @@ Current Tests
      f. Run a snippet / save splitter sizes while tab open, close app, re-open SQL → sizes restored.
    Notes: Replaced chkbEnableSQL / Config.enableSQL with btnSQL toggle on winMain.
 
-[ ] Query list double-click edit allows interval (and database) change
+[x] Query list double-click edit allows interval (and database) change
    Steps:
      a. Public/Internal Query → add a row (e.g. HOUR + a DB).
      b. Double-click the list row → dataID, interval, and database load into the form.
@@ -45,7 +45,7 @@ Current Tests
      e. Change only dataID → still updates that field; other combos keep form values.
    Notes: Was freezing interval/database from the old list text on in-place edit.
 
-[ ] Data dictionary headers use "commonName - datatype" for all DBs
+[x] Data dictionary headers use "commonName - datatype" for all DBs
    Steps:
      a. Query a dict-backed USBR series → header top line is "commonName - datatype".
      b. Query a dict-backed Aquarius series → same "commonName - datatype" top line
@@ -55,19 +55,19 @@ Current Tests
      d. Series not in the dictionary still use prior fallback labels.
    Notes: USBR already used this form; Aquarius/USGS now share the same nameLabel.
 
-[ ] Unused About easter-egg icons cleaned up
+[x] Unused About easter-egg icons cleaned up
    Steps:
      a. Only ui/icons/pi.png remains (no pi.jpg, no Secret.png).
      b. About window secret π button still shows the glyph.
    Notes: Secret.png was identical to pi.png; pi.jpg was unused reference still.
 
-[ ] SQL + Graph button tooltips and hover/pressed icons
+[x] SQL + Graph button tooltips and hover/pressed icons
    Steps:
      a. Hover SQL toolbar button → tooltip "SQL Query Builder"; hover icon swaps.
      b. Hover Graph toolbar button → tooltip "Graph data table"; hover/pressed icons work.
      c. Tooltips match the style of Public/Internal/etc. (short labels).
 
-[ ] Graph button plots Data Query table into Graph tab
+[x] Graph button plots Data Query table into Graph tab
    Steps:
      a. Run a multi-column Data Query so the table has timestamps + values.
      b. Clear selection → press Graph → Graph tab opens immediately right of Data Query.
@@ -79,7 +79,7 @@ Current Tests
    Notes: ui/uiGraph.py + matplotlib NavigationToolbar; dual axis when scale ratio ≥ 10.
      Requires: pip install matplotlib (now in requirements.txt).
 
-[ ] Detach / Attach for Graph and Log Viewer tabs only
+[x] Detach / Attach for Graph and Log Viewer tabs only
    Steps:
      a. Open Graph (and/or Log Viewer). Right-click other tabs (Data Query, SQL) →
         no Detach menu.

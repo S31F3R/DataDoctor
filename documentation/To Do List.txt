@@ -12,9 +12,17 @@
 -Graph colors need to follow system colors, like the rest of the application does. if system dark mode is on, make the graph a dark mode version. if light version, the current colors are OK
 -Need a tooltip to show the data for a data point on the graph when hoovered over it
 -The title of the graph should be blank
--Timestamp needs to follow the exact format of the table format
+-In the graph, timestamp needs to follow the exact format of the table format
 -When overlay is selected, graph primary and secondary of the column selected. If 4 columns selected, there will be 8 timeseries graphed
 -In the query window, when selected on a query item in the list, if right clicking on that item and dataID is populated, have a pop up that says "Insert Query Above" and another that says "Insert Query Below". If one of these are selected, it will act like the Add Query button but placing it in the list above or below the selected item
+-Make queries store "meta data" information that doesn't show up in the query. The type of metadata I want to store is:
+    -Display delta check yes/no
+    -Overlay pairs checkec yes/no
+    -This needs to be added to the json. When the quicklook is loaded, those boxes should be checked based on what was saved when the quicklook was saved
+-When the Query button is hit, public or internal, refresh the times. FOr example, if Previous day to current was selected and my last query had an end time fo 1313 but now it's 1343 when I go to run a new query, make the end time 1343
+    -Adjust the 3 query options accordingly
+-When Clear Query List is hit, uncheck Display Deltas and Overlay Pairs if they were checked
+-Add tooltips over the graph buttons
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
@@ -26,6 +34,7 @@
         -Maybe default to entra, then if that doesn't exist then use credential if there? Need to research this
     -USBR will need:
         -Apply Overwrite Flag
+-Add datatype as an option to add to labels
 
 ####### MAIN INTERFACE MODIFICATIONS #######
 -Stress relief button that makes screaming goat sounds
