@@ -28,8 +28,7 @@ Or add the cert to your system trust store.
   - Packaged dictionary for merge: `Project Files/temp/bunker.db`
   - Live user dictionary: `Project Files/core/bunker.db`
   - Copies `DataDoctor.ico` next to `DataDoctor.pyw` for the Windows taskbar icon
-  - **Does not** ship `.venv` by default (avoids a zip that looks like pure Python env files). Use `--include-venv` only when you want a portable env; `--keep-stage` leaves `dist/winStage*` for inspection
-  - Validates layout before zipping (requires `Project Files/DataDoctor.pyw`, `core/`, `ui/`)
+  - Optional: `--skip-venv` to omit Project Files\\.venv
 - Merge: `updateBunker.cmd` → `Project Files/scripts/updateBunker.py` (then removes `temp/`)
 - Linux AppImage (true `.AppImage` only — no zip/tar from this script):
   `python scripts/packageAppImage.py`
