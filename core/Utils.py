@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
     QListWidget, QTreeView, QPushButton, QCheckBox, QRadioButton, QComboBox,
-    QApplication,
+    QApplication, QHeaderView,
 )
 from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
@@ -610,8 +610,9 @@ def applyTableRowMetrics(table, font=None):
         vHeader.setMinimumSectionSize(max(metrics.height() + 2, 16))
 
         hHeader = table.horizontalHeader()
-        # Cell selection must not resize header sections (style "selected" chrome)
-        hHeader.setHighlightSections(False)
+        # Horizontal header may highlight selection (column pick); widths stay
+        # Interactive so "selected" chrome does not resize sections.
+        hHeader.setHighlightSections(True)
         vHeader.setHighlightSections(False)
         if Config.retroMode:
             hHeader.setMinimumHeight(tableHeaderBarHeight(font, metrics))
@@ -637,11 +638,13 @@ def autoSizeTableColumns(table, sampleRows=100):
     if numCols == 0:
         return
 
-    # Prevent selection highlight from changing section metrics / clipping labels
+    # Horizontal may highlight selection; keep Interactive resize so highlight
+    # chrome never re-measures column width (that caused giant headers).
     try:
         hHeader = table.horizontalHeader()
         vHeader = table.verticalHeader()
-        hHeader.setHighlightSections(False)
+        hHeader.setHighlightSections(True)
+        hHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         vHeader.setHighlightSections(False)
     except Exception:
         pass
