@@ -170,14 +170,27 @@ def assignAxes(seriesList, ratioThreshold=10.0):
     return left, right
 
 
-def headerLabel(table, col):
-    """Single-line legend label from multi-line table header."""
+def headerFirstLine(table, col):
+    """
+    First non-empty line of the table header only (ignore dataID / interval
+    lines below the first \\n). Used for graph legends.
+    """
     item = table.horizontalHeaderItem(col) if table is not None else None
     if item is None:
         return f"Col {col + 1}"
-    text = (item.text() or '').replace('\n', ' ').strip()
-    text = re.sub(r'\s+', ' ', text)
-    return text or f"Col {col + 1}"
+    text = item.text() or ''
+    for line in text.split('\n'):
+        line = line.strip()
+        if line:
+            return line
+    return f"Col {col + 1}"
+
+
+def headerLabel(table, col):
+    """Single-line legend label from multi-line table header (first line only)."""
+    # Prefer first header line so legends match dict "commonName-datatype"
+    # without the dataID / interval second line.
+    return headerFirstLine(table, col)
 
 
 def isSystemDarkMode():
@@ -229,10 +242,14 @@ def selectedDataColumns(table):
     return list(range(table.columnCount()))
 
 
-def _overlaySeriesFromColumn(table, col, baseLabel):
+def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None):
     """
     For overlay columns, return [(primaryLabel, vals), (secondaryLabel, vals)]
     from per-cell UserRole primaryVal / secondaryVal. Empty list if not overlay data.
+
+    Legend labels use the first line of each series' original header (dict-style
+    commonName-datatype), not raw dataIDs. headerFirstLines is [primary, secondary]
+    when available from columnMetadata.
     """
     if table is None or table.rowCount() <= 0:
         return []
@@ -254,21 +271,21 @@ def _overlaySeriesFromColumn(table, col, baseLabel):
     if not hasAny:
         return []
 
-    # Prefer short labels from role dataIds when present
-    pId = sId = None
-    for r in range(nRows):
-        item = table.item(r, col)
-        if item is None:
-            continue
-        role = item.data(Qt.ItemDataRole.UserRole)
-        if isinstance(role, dict) and role.get('overlay'):
-            pId = role.get('dataId1') or pId
-            sId = role.get('dataId2') or sId
-            if pId and sId:
-                break
-
-    pLabel = f"{baseLabel} (primary)" if not pId else f"{pId} (primary)"
-    sLabel = f"{baseLabel} (secondary)" if not sId else f"{sId} (secondary)"
+    # Prefer stored first-lines from the pre-overlay headers (distinct per series)
+    pName = sName = None
+    if isinstance(headerFirstLines, (list, tuple)) and len(headerFirstLines) >= 2:
+        pName = (headerFirstLines[0] or '').strip() or None
+        sName = (headerFirstLines[1] or '').strip() or None
+    fallback = (baseLabel or headerFirstLine(table, col) or f"Col {col + 1}").strip()
+    pName = pName or fallback
+    sName = sName or fallback
+    # If both collapsed to the same label, disambiguate with primary/secondary
+    if pName == sName:
+        pLabel = f"{pName} (primary)"
+        sLabel = f"{sName} (secondary)"
+    else:
+        pLabel = pName
+        sLabel = sName
     out = []
     if np.any(np.isfinite(primary)):
         out.append((pLabel, primary))
@@ -316,10 +333,13 @@ def extractSeries(table, columns=None, columnMetadata=None):
         label = headerLabel(table, c)
         meta = metaList[c] if c < len(metaList) else {}
         colType = (meta.get('type') if isinstance(meta, dict) else None) or ''
+        headerLines = meta.get('headerFirstLines') if isinstance(meta, dict) else None
 
         # Overlay column: graph primary + secondary (not the merged cell alone)
         if colType == 'overlay':
-            overlaySeries = _overlaySeriesFromColumn(table, c, label)
+            overlaySeries = _overlaySeriesFromColumn(
+                table, c, label, headerFirstLines=headerLines
+            )
             if overlaySeries:
                 series.extend(overlaySeries)
                 continue
@@ -330,7 +350,9 @@ def extractSeries(table, columns=None, columnMetadata=None):
             sample = table.item(0, c) if nRows > 0 else None
             role0 = sample.data(Qt.ItemDataRole.UserRole) if sample is not None else None
             if isinstance(role0, dict) and role0.get('overlay'):
-                overlaySeries = _overlaySeriesFromColumn(table, c, label)
+                overlaySeries = _overlaySeriesFromColumn(
+                    table, c, label, headerFirstLines=headerLines
+                )
                 if overlaySeries:
                     series.extend(overlaySeries)
                     continue
