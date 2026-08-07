@@ -26,78 +26,63 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[ ] commonName-datatype header (no spaces around dash)
+[ ] Column header highlight — all selected columns
    Steps:
-     a. Query any dict-backed series (USBR / Aquarius / USGS with commonName).
-     b. Header top line is "commonName-datatype" (e.g. "Parker Stage-ft"), not "commonName - datatype".
-     c. Series without datatype still show commonName alone.
-   Notes: Spaces around dash removed project-wide for dict labels.
+     a. Single-click one column header → that header + cells highlight.
+     b. Select a cell range spanning 2+ columns → every selected column's header
+        is highlighted (not only the focused column).
+     c. Ctrl/extend multi-select across columns → all those headers stay highlighted.
+     d. Clear selection / click one cell → only that column's header stays (or none
+        if selection empty).
+     e. Header text size / column width still do not jump.
+   Notes: selectionChanged syncs all selected columns; Interactive resize kept.
 
-[ ] Log Viewer button toggles tab (open / close)
+[ ] Graph overlay legends use header first-line labels
    Steps:
-     a. Click View Log → Log Viewer tab opens (last tab) and loads logs.
-     b. Click View Log again → tab closes (same as SQL toggle).
-     c. If Log is detached, click View Log → focuses the floating window (does not close).
-     d. Re-open after close works.
+     a. Overlay query with two dict-backed series that have different commonNames.
+     b. Graph that overlay column → legends use first header line for primary and
+        secondary (e.g. "Parker Stage-ft"), not raw dataIDs.
+     c. When both names match, legends disambiguate with (primary)/(secondary).
+     d. Normal columns still use first header line only (no second-line dataID).
+   Notes: columnMetadata.headerFirstLines stores pre-overlay pair labels.
 
-[ ] Column header highlight when column selected
+[ ] Quick Look missing delta/overlay meta → checkboxes unchecked
    Steps:
-     a. Single-click a Data Query column header → whole column selected.
-     b. Header section is visibly highlighted (selection color), not just cells.
-     c. Header text size / column width do NOT jump or grow larger.
-     d. Click another header → previous header highlight clears; new one highlights.
-     e. Double-click still sorts.
+     a. Load a legacy quick look (plain JSON array, no displayDelta/overlayPairs).
+     b. Display Deltas and Overlay Pairs are both unchecked (False).
+     c. Load a v2 quick look saved with them True → boxes checked.
+     d. Save + reload still restores True/False correctly.
 
-[ ] Graph: system dark/light colors + blank title + hover tooltip + table timestamps
-   Steps:
-     a. Light system theme: graph uses light axes (current style OK).
-     b. Dark system theme (or dark Qt palette): dark figure/axes, readable tick labels.
-     c. Graph title is blank (no series count / dual-axis title).
-     d. Hover a data point → tooltip shows timestamp (table format) and value(s).
-     e. X-axis tick labels match table vertical-header format (HOUR/DAY/MONTH/YEAR).
-   Notes: Retro mode still uses neon green theme.
-
-[ ] Graph: overlay columns plot primary + secondary
-   Steps:
-     a. Run overlay query; select one overlay column → Graph.
-     b. Two series plotted (primary and secondary), not the merged overlay value alone.
-     c. Select 4 overlay columns → 8 series graphed.
-     d. Normal (non-overlay) columns still graph one series each.
-
-[ ] Graph toolbar button tooltips
-   Steps:
-     a. Open Graph; hover Home / Back / Forward / Pan / Zoom / Configure / Save.
-     b. Each control has a short tooltip.
-
-[ ] Query list: Insert Above / Insert Below
-   Steps:
-     a. Select a list item; enter a DataID in the form; right-click the list item.
-     b. Menu shows "Insert Query Above" and "Insert Query Below".
-     c. Choosing one inserts dataID|interval|database at that position (like Add).
-     d. Without DataID filled, menu items are disabled or not offered.
-     e. Double-click edit / Add still work as before.
-
-[ ] Quick Look saves Display Deltas + Overlay Pairs metadata
-   Steps:
-     a. Check Display Deltas and/or Overlay Pairs; Save Quick Look.
-     b. Clear list / uncheck boxes; Load that Quick Look → checkboxes restore.
-     c. Legacy array-only JSON still loads (queries only; checkboxes stay as-is or default off).
-
-[ ] Query button refreshes Prev Day / Prev Week end times
+[ ] Prev Day / Prev Week times refresh on open, load quick look, and Query
    Steps:
      a. Select Previous day to current; note end time.
-     b. Wait a minute (or change system clock mentally); press Query.
-     c. Query uses an updated end time (current now), not the stale window open time.
-     d. Previous week to current behaves the same; Custom DateTime is left alone.
+     b. Close query window; wait a few minutes; re-open Public/Internal Query.
+     c. End time is updated to approximately now (start still previous day 01:00).
+     d. Load any quick look while Prev Day/Week is selected → end time snaps to now.
+     e. Press Query → end time is current at click (not stale).
+     f. Custom DateTime: open / load / query does NOT change start or end
+        (historical ranges stay put).
+   Notes: refreshRelativeQueryTimes on showEvent, load quick look, and btnQuery.
 
-[ ] Clear Query List unchecks Deltas and Overlay
+[ ] Windows package script — clean layout (not a raw .venv dump)
    Steps:
-     a. Check Display Deltas and Overlay Pairs; add list items.
-     b. Clear Query List → list empty AND both checkboxes unchecked.
+     a. From project root: python scripts/packageWindows.py
+     b. Zip top level has Data Doctor.exe, Project Files/, README.txt, UPDATE.txt
+        (NOT Scripts/, Lib/, pyvenv.cfg as the whole zip).
+     c. Project Files/ has DataDoctor.pyw, core/, ui/, requirements.txt, temp/bunker.db.
+     d. .venv is absent unless --include-venv was passed.
+     e. Optional: --keep-stage leaves dist/winStage* to inspect before/without zip.
+   Notes: Selective launcher copy; venv opt-in; validateStage before zip.
 
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] commonName-datatype header (no spaces around dash)
+[x] Log Viewer button toggles tab (open / close)
+[x] Graph: system dark/light colors + blank title + hover tooltip + table timestamps
+[x] Graph toolbar button tooltips
+[x] Query list: Insert Above / Insert Below
+[x] Clear Query List unchecks Deltas and Overlay
 [x] btnSQL toggles SQL Query Builder tab
 [x] Query list double-click edit allows interval (and database) change
 [x] Data dictionary headers use "commonName - datatype" for all DBs (pre-space-strip)
