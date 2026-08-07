@@ -778,63 +778,9 @@ def pasteClipboardToSelection(mainWindow):
     return True
 
 
-def highlightColumnHeader(table, col):
-    """
-    Visually mark the selected column's header without enabling Qt's
-    highlightSections (that chrome was resizing / bloating header text).
-
-    Uses BackgroundRole / ForegroundRole on the header item and headerData —
-    column widths stay fixed (no bold/size jump from section:selected chrome).
-    """
-    if table is None:
-        return
+def _headerHighlightBrushes(table):
+    """Selection palette brushes for header highlight (light/dark safe)."""
     from PyQt6.QtGui import QBrush, QColor, QPalette
-    from PyQt6.QtCore import Qt as _Qt
-
-    def _clearCol(c):
-        if c is None or c < 0 or c >= table.columnCount():
-            return
-        prevItem = table.horizontalHeaderItem(c)
-        if prevItem is not None:
-            prevItem.setData(_Qt.ItemDataRole.BackgroundRole, None)
-            prevItem.setData(_Qt.ItemDataRole.ForegroundRole, None)
-            try:
-                prevItem.setBackground(QBrush())
-                prevItem.setForeground(QBrush())
-            except Exception:
-                pass
-        model = table.model()
-        if model is not None:
-            try:
-                model.setHeaderData(
-                    c, _Qt.Orientation.Horizontal, None, _Qt.ItemDataRole.BackgroundRole
-                )
-                model.setHeaderData(
-                    c, _Qt.Orientation.Horizontal, None, _Qt.ItemDataRole.ForegroundRole
-                )
-            except Exception:
-                pass
-
-    prev = getattr(table, '_highlightedHeaderCol', None)
-    # Clear previous header highlight
-    if prev is not None and prev != col:
-        _clearCol(prev)
-
-    if col is None or col < 0 or col >= table.columnCount():
-        table._highlightedHeaderCol = None
-        try:
-            table.horizontalHeader().viewport().update()
-        except Exception:
-            pass
-        return
-
-    item = table.horizontalHeaderItem(col)
-    if item is None:
-        from PyQt6.QtWidgets import QTableWidgetItem
-        item = QTableWidgetItem(f"Column {col + 1}")
-        table.setHorizontalHeaderItem(col, item)
-
-    # Prefer the view's selection palette so light/dark themes match
     try:
         pal = table.palette()
         bg = pal.color(QPalette.ColorRole.Highlight)
@@ -842,33 +788,166 @@ def highlightColumnHeader(table, col):
     except Exception:
         bg = QColor(48, 140, 198)
         fg = QColor(255, 255, 255)
+    return QBrush(bg), QBrush(fg)
 
-    bgBrush = QBrush(bg)
-    fgBrush = QBrush(fg)
+
+def _clearHeaderColHighlight(table, c):
+    """Remove manual background/foreground from one header column."""
+    if table is None or c is None or c < 0 or c >= table.columnCount():
+        return
+    from PyQt6.QtGui import QBrush
+    from PyQt6.QtCore import Qt as _Qt
+
+    prevItem = table.horizontalHeaderItem(c)
+    if prevItem is not None:
+        prevItem.setData(_Qt.ItemDataRole.BackgroundRole, None)
+        prevItem.setData(_Qt.ItemDataRole.ForegroundRole, None)
+        try:
+            prevItem.setBackground(QBrush())
+            prevItem.setForeground(QBrush())
+        except Exception:
+            pass
+    model = table.model()
+    if model is not None:
+        try:
+            model.setHeaderData(
+                c, _Qt.Orientation.Horizontal, None, _Qt.ItemDataRole.BackgroundRole
+            )
+            model.setHeaderData(
+                c, _Qt.Orientation.Horizontal, None, _Qt.ItemDataRole.ForegroundRole
+            )
+        except Exception:
+            pass
+
+
+def _paintHeaderColHighlight(table, c, bgBrush, fgBrush):
+    """Apply highlight brushes to one header column."""
+    if table is None or c is None or c < 0 or c >= table.columnCount():
+        return
+    from PyQt6.QtCore import Qt as _Qt
+    from PyQt6.QtWidgets import QTableWidgetItem
+
+    item = table.horizontalHeaderItem(c)
+    if item is None:
+        item = QTableWidgetItem(f"Column {c + 1}")
+        table.setHorizontalHeaderItem(c, item)
     try:
         item.setBackground(bgBrush)
         item.setForeground(fgBrush)
     except Exception:
         item.setData(_Qt.ItemDataRole.BackgroundRole, bgBrush)
         item.setData(_Qt.ItemDataRole.ForegroundRole, fgBrush)
-
     model = table.model()
     if model is not None:
         try:
             model.setHeaderData(
-                col, _Qt.Orientation.Horizontal, bgBrush, _Qt.ItemDataRole.BackgroundRole
+                c, _Qt.Orientation.Horizontal, bgBrush, _Qt.ItemDataRole.BackgroundRole
             )
             model.setHeaderData(
-                col, _Qt.Orientation.Horizontal, fgBrush, _Qt.ItemDataRole.ForegroundRole
+                c, _Qt.Orientation.Horizontal, fgBrush, _Qt.ItemDataRole.ForegroundRole
             )
         except Exception:
             pass
 
-    table._highlightedHeaderCol = col
-    # Force header repaint (item data alone sometimes waits for hover)
+
+def selectedColumnsFromTable(table):
+    """Return sorted unique column indices present in the current selection."""
+    if table is None:
+        return []
+    cols = set()
+    for idx in table.selectedIndexes():
+        cols.add(idx.column())
+    for r in table.selectedRanges():
+        for c in range(r.leftColumn(), r.rightColumn() + 1):
+            cols.add(c)
+    return sorted(cols)
+
+
+def highlightColumnHeaders(table, cols):
+    """
+    Visually mark every selected column's header.
+
+    Supports multi-column selection (ranges / Ctrl multi-select). Uses item
+    BackgroundRole plus Qt highlightSections so multi-col is visible without
+    resizing (section resize mode stays Interactive).
+    """
+    if table is None:
+        return
+
+    if cols is None:
+        cols = []
+    want = set()
+    for c in cols:
+        try:
+            ci = int(c)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= ci < table.columnCount():
+            want.add(ci)
+
+    prev = set(getattr(table, '_highlightedHeaderCols', set()) or set())
+    # Also accept legacy single-col attribute
+    legacy = getattr(table, '_highlightedHeaderCol', None)
+    if legacy is not None:
+        prev.add(legacy)
+
+    for c in prev - want:
+        _clearHeaderColHighlight(table, c)
+
+    if want:
+        bgBrush, fgBrush = _headerHighlightBrushes(table)
+        for c in want:
+            _paintHeaderColHighlight(table, c, bgBrush, fgBrush)
+
+    table._highlightedHeaderCols = want
+    table._highlightedHeaderCol = next(iter(want), None)  # back-compat
     try:
-        table.horizontalHeader().viewport().update()
-        table.horizontalHeader().updateSection(col)
+        header = table.horizontalHeader()
+        header.viewport().update()
+        for c in want | prev:
+            if 0 <= c < table.columnCount():
+                header.updateSection(c)
+    except Exception:
+        pass
+
+
+def highlightColumnHeader(table, col):
+    """Highlight a single header column (wrapper around multi-col helper)."""
+    if col is None or col < 0:
+        highlightColumnHeaders(table, [])
+    else:
+        highlightColumnHeaders(table, [col])
+
+
+def syncHeaderHighlightsFromSelection(table):
+    """Paint header highlight for every column that has selected cells."""
+    if table is None:
+        return
+    highlightColumnHeaders(table, selectedColumnsFromTable(table))
+
+
+def ensureHeaderSelectionSync(mainWindow):
+    """
+    Connect selectionChanged once so multi-column cell selection updates
+    all matching header highlights (not only the last header-click column).
+    """
+    if mainWindow is None:
+        return
+    table = getattr(mainWindow, 'mainTable', None)
+    if table is None:
+        return
+    if getattr(table, '_headerSelSyncConnected', False):
+        return
+    selModel = table.selectionModel()
+    if selModel is None:
+        return
+
+    def _onSelectionChanged(*_args):
+        syncHeaderHighlightsFromSelection(table)
+
+    try:
+        selModel.selectionChanged.connect(_onSelectionChanged)
+        table._headerSelSyncConnected = True
     except Exception:
         pass
 
@@ -881,8 +960,8 @@ def selectEntireColumn(mainWindow, col):
     current cell (looks like highlight then snap to first cell). Also re-apply
     after the event loop so Qt's default header click handling cannot undo us.
 
-    Header highlight is painted manually (highlightSections stays False so
-    text/width do not grow when a column is selected).
+    Header highlight covers every selected column (multi-select via cells or
+    shift/ctrl ranges is synced from selectionChanged).
     """
     if mainWindow is None:
         return
@@ -892,6 +971,8 @@ def selectEntireColumn(mainWindow, col):
     from PyQt6.QtCore import QTimer
     from PyQt6.QtCore import QItemSelection, QItemSelectionModel
     from PyQt6.QtWidgets import QTableWidgetSelectionRange
+
+    ensureHeaderSelectionSync(mainWindow)
 
     table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
@@ -911,7 +992,7 @@ def selectEntireColumn(mainWindow, col):
                 QTableWidgetSelectionRange(0, c, rows - 1, c),
                 True,
             )
-            highlightColumnHeader(table, c)
+            highlightColumnHeaders(table, [c])
             return
         topLeft = model.index(0, c)
         bottomRight = model.index(rows - 1, c)
@@ -928,7 +1009,8 @@ def selectEntireColumn(mainWindow, col):
             topLeft,
             QItemSelectionModel.SelectionFlag.NoUpdate,
         )
-        highlightColumnHeader(table, c)
+        # Reflect full selection (single column here; multi-col via selectionChanged)
+        highlightColumnHeaders(table, selectedColumnsFromTable(table) or [c])
 
     _applyColumnSelection(col)
     # Defer once so any post-sectionClicked selection reset is overwritten

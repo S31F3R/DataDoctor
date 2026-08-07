@@ -284,6 +284,8 @@ class uiMain(QMainWindow):
         self.mainTable.viewport().installEventFilter(self.mainTableKeyFilter)
 
         # Edit triggers / locks applied after each query via Upload.snapshotBaseline
+        # Multi-column selection → highlight every selected column header
+        Upload.ensureHeaderSelectionSync(self)
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
         # Graph + Log: right-click tab → Detach tab
         if self.tabWidget is not None:
