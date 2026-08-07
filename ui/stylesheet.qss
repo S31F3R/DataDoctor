@@ -22,3 +22,11 @@ QTabBar::close-button:hover {
 QTabBar::close-button:pressed {
     image: url(ui/icons/Tab-close-dark.png); /* Darker for press */
 }
+/* Column header selection: color only — never bold/size jump that reflowed width */
+QHeaderView::section:horizontal {
+    font-weight: normal;
+}
+QHeaderView::section:horizontal:selected,
+QHeaderView::section:horizontal:checked {
+    font-weight: normal;
+}
