@@ -9,8 +9,7 @@ import numpy as np
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPalette, QCursor
 from PyQt6.QtWidgets import (
-    QApplication, QVBoxLayout, QHBoxLayout, QWidget, QSizePolicy, QLabel,
-    QCheckBox, QScrollArea, QFrame, QToolTip,
+    QApplication, QVBoxLayout, QWidget, QSizePolicy, QLabel, QToolTip,
 )
 from core import Config, Logic
 
@@ -374,10 +373,15 @@ def extractSeries(table, columns=None, columnMetadata=None):
     return timestamps, tsTexts, series, warnings
 
 
+# Legend toggle markers (checkbox look without a side panel)
+_LEGEND_ON = '☑'
+_LEGEND_OFF = '☐'
+
+
 class GraphPanel(QWidget):
     """
     Graph content: matplotlib canvas + NavigationToolbar (zoom / pan / home).
-    Left-side series checkboxes (hide/show + rescale), arrow-key pan, Qt hover tooltips.
+    In-plot legend with click-to-toggle (checkbox marks), arrow-key pan, Qt tooltips.
     """
 
     def __init__(self, parent=None):
@@ -397,19 +401,19 @@ class GraphPanel(QWidget):
         self.figure = None
         self.canvas = None
         self.toolbar = None
-        self._plotRow = None       # HBox: legend | canvas
-        self._legendScroll = None
-        self._legendHost = None
-        self._legendLayout = None
         self._ax = None
         self._ax2 = None
+        self._legend = None
         self._hoverCid = None
         self._keyCid = None
-        self._lineData = []  # list of dicts: line, label, xs, ys, checkbox, color
+        self._pickCid = None
+        self._lineData = []  # list of dicts: line, label, xs, ys, color, visible
         self._tsDisplayFmt = '%m/%d/%y %H:%M:00'
         self._useDatetime = False
         self._theme = 'light'
         self._lastTipKey = None
+        # Map legend artist id → entry index for pick events
+        self._legendPickMap = {}
 
     def clearPlot(self):
         try:
@@ -417,8 +421,9 @@ class GraphPanel(QWidget):
         except Exception:
             pass
         self._lastTipKey = None
+        self._legendPickMap = {}
         if self.canvas is not None:
-            for cid in (self._hoverCid, self._keyCid):
+            for cid in (self._hoverCid, self._keyCid, self._pickCid):
                 if cid is not None:
                     try:
                         self.canvas.mpl_disconnect(cid)
@@ -426,23 +431,20 @@ class GraphPanel(QWidget):
                         pass
             self._hoverCid = None
             self._keyCid = None
+            self._pickCid = None
             if self.toolbar is not None:
                 self._layout.removeWidget(self.toolbar)
                 self.toolbar.setParent(None)
                 self.toolbar.deleteLater()
-            if self._plotRow is not None:
-                self._layout.removeWidget(self._plotRow)
-                self._plotRow.setParent(None)
-                self._plotRow.deleteLater()
+            self._layout.removeWidget(self.canvas)
+            self.canvas.setParent(None)
+            self.canvas.deleteLater()
             self.toolbar = None
             self.canvas = None
             self.figure = None
-            self._plotRow = None
-            self._legendScroll = None
-            self._legendHost = None
-            self._legendLayout = None
             self._ax = None
             self._ax2 = None
+            self._legend = None
             self._lineData = []
         if self._placeholder is not None:
             self._placeholder.show()
@@ -551,77 +553,114 @@ class GraphPanel(QWidget):
             '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
         ]
 
-    def _buildLegendPanel(self, theme):
-        """Left-side scrollable series checkboxes (replaces matplotlib legend)."""
-        scroll = QScrollArea(self)
-        scroll.setObjectName('graphLegendScroll')
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setMinimumWidth(160)
-        scroll.setMaximumWidth(280)
-        scroll.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+    def _legendLabel(self, baseLabel, visible=True):
+        mark = _LEGEND_ON if visible else _LEGEND_OFF
+        return f"{mark} {baseLabel}"
 
-        host = QWidget(scroll)
-        hostLayout = QVBoxLayout(host)
-        hostLayout.setContentsMargins(6, 6, 6, 6)
-        hostLayout.setSpacing(4)
-        title = QLabel("Series")
-        title.setStyleSheet("font-weight: bold;")
-        hostLayout.addWidget(title)
-
-        if theme == 'dark':
-            host.setStyleSheet(
-                "QWidget { background: #2b2b2b; color: #e0e0e0; }"
-                "QCheckBox { spacing: 6px; }"
-            )
-            scroll.setStyleSheet("QScrollArea { background: #2b2b2b; border: none; }")
-        elif theme == 'retro':
-            host.setStyleSheet(
-                "QWidget { background: #1a1a1a; color: #00FF00; }"
-                "QCheckBox { spacing: 6px; color: #00FF00; }"
-            )
-            scroll.setStyleSheet("QScrollArea { background: #1a1a1a; border: none; }")
-        else:
-            host.setStyleSheet("QCheckBox { spacing: 6px; }")
-
-        hostLayout.addStretch(1)
-        scroll.setWidget(host)
-        self._legendScroll = scroll
-        self._legendHost = host
-        self._legendLayout = hostLayout
-        return scroll
-
-    def _addLegendCheckbox(self, label, color, entry):
-        """Add one checked series toggle to the left legend panel."""
-        if self._legendLayout is None:
+    def _buildInteractiveLegend(self, theme):
+        """
+        In-plot legend (same spot as before). Click an entry to toggle that
+        series; labels use ☑/☐ so it still feels like checkboxes without a side panel.
+        """
+        if self._ax is None or not self._lineData:
+            self._legend = None
             return
-        cb = QCheckBox(label)
-        cb.setChecked(True)
-        cb.setToolTip("Uncheck to hide this series and rescale the graph")
-        # Color swatch via stylesheet border/text when possible
+
+        lines = [e['line'] for e in self._lineData if e.get('line') is not None]
+        labels = [
+            self._legendLabel(e.get('label') or '', e.get('line').get_visible())
+            for e in self._lineData if e.get('line') is not None
+        ]
+        if not lines:
+            self._legend = None
+            return
+
+        legend = self._ax.legend(lines, labels, loc='best', fontsize=8)
+        legend.set_title("Click to show/hide")
         try:
-            cb.setStyleSheet(
-                f"QCheckBox {{ color: {color}; }}"
-                f"QCheckBox::indicator {{ width: 14px; height: 14px; }}"
-            )
+            legend.get_title().set_fontsize(7)
         except Exception:
             pass
-        # Insert before the trailing stretch
-        stretchItem = self._legendLayout.takeAt(self._legendLayout.count() - 1)
-        self._legendLayout.addWidget(cb)
-        if stretchItem is not None:
-            self._legendLayout.addItem(stretchItem)
-        entry['checkbox'] = cb
-        cb.toggled.connect(lambda checked, e=entry: self._onSeriesToggled(e, checked))
 
-    def _onSeriesToggled(self, entry, checked):
+        if theme == 'dark':
+            try:
+                legend.get_frame().set_facecolor('#2b2b2b')
+                legend.get_frame().set_edgecolor('#888888')
+                for text in legend.get_texts():
+                    text.set_color('#e0e0e0')
+                legend.get_title().set_color('#aaaaaa')
+            except Exception:
+                pass
+        elif theme == 'retro':
+            try:
+                legend.get_frame().set_facecolor('#1a1a1a')
+                legend.get_frame().set_edgecolor('#00FF00')
+                for text in legend.get_texts():
+                    text.set_color('#00FF00')
+                legend.get_title().set_color('#00FF00')
+            except Exception:
+                pass
+
+        # Make legend lines + text pickable → toggle series
+        self._legendPickMap = {}
+        try:
+            legLines = legend.get_lines()
+            legTexts = legend.get_texts()
+            for i, (legLine, legText) in enumerate(zip(legLines, legTexts)):
+                if i >= len(self._lineData):
+                    break
+                legLine.set_picker(8)
+                legText.set_picker(8)
+                self._legendPickMap[id(legLine)] = i
+                self._legendPickMap[id(legText)] = i
+                # Keep legend proxy always visible (dim when series off)
+                legLine.set_visible(True)
+        except Exception as e:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"_buildInteractiveLegend pick setup: {e}")
+
+        self._legend = legend
+
+    def _onLegendPick(self, event):
+        """Toggle series visibility when a legend line or label is clicked."""
+        artist = getattr(event, 'artist', None)
+        if artist is None:
+            return
+        idx = self._legendPickMap.get(id(artist))
+        if idx is None or idx < 0 or idx >= len(self._lineData):
+            return
+        entry = self._lineData[idx]
         line = entry.get('line')
-        if line is not None:
-            line.set_visible(bool(checked))
+        if line is None:
+            return
+        visible = not line.get_visible()
+        line.set_visible(visible)
+        entry['visible'] = visible
+        self._refreshLegendAppearance()
         self._rescaleToVisible()
         if self.canvas is not None:
             self.canvas.draw_idle()
+
+    def _refreshLegendAppearance(self):
+        """Update ☑/☐ marks and dim legend proxies for hidden series."""
+        if self._legend is None:
+            return
+        try:
+            legLines = self._legend.get_lines()
+            legTexts = self._legend.get_texts()
+            for i, entry in enumerate(self._lineData):
+                if i >= len(legTexts):
+                    break
+                line = entry.get('line')
+                visible = bool(line.get_visible()) if line is not None else True
+                base = entry.get('label') or ''
+                legTexts[i].set_text(self._legendLabel(base, visible))
+                alpha = 1.0 if visible else 0.35
+                legTexts[i].set_alpha(alpha)
+                if i < len(legLines):
+                    legLines[i].set_alpha(alpha)
+        except Exception:
+            pass
 
     def _rescaleToVisible(self):
         """
@@ -677,7 +716,6 @@ class GraphPanel(QWidget):
             if y2 is not None:
                 self._ax2.set_ylim(y2)
 
-        # Push new view into nav toolbar stack so Home still works from zoomed states
         try:
             if self.toolbar is not None:
                 self.toolbar.push_current()
@@ -723,14 +761,8 @@ class GraphPanel(QWidget):
         self.toolbar.setObjectName('graphToolbar')
         self._applyToolbarTooltips()
 
-        theme = 'light'  # applied after axes created
         self._layout.addWidget(self.toolbar)
-
-        # Legend (left) + canvas (right)
-        self._plotRow = QWidget(self)
-        rowLayout = QHBoxLayout(self._plotRow)
-        rowLayout.setContentsMargins(0, 0, 0, 0)
-        rowLayout.setSpacing(0)
+        self._layout.addWidget(self.canvas, stretch=1)
 
         ax = fig.add_subplot(111)
         self._ax = ax
@@ -738,11 +770,6 @@ class GraphPanel(QWidget):
         theme = self._applyTheme(fig, ax)
         self._theme = theme
         colorCycle = self._colorCycle(theme)
-
-        legendScroll = self._buildLegendPanel(theme)
-        rowLayout.addWidget(legendScroll, stretch=0)
-        rowLayout.addWidget(self.canvas, stretch=1)
-        self._layout.addWidget(self._plotRow, stretch=1)
 
         n = len(series[0][1])
         useDatetime = (
@@ -781,16 +808,14 @@ class GraphPanel(QWidget):
                     markersize=3,
                     picker=5,
                 )
-                entry = {
+                self._lineData.append({
                     'line': line,
                     'label': label,
                     'xs': np.asarray(x[mask], dtype=float),
                     'ys': np.asarray(y[mask], dtype=float),
                     'color': color,
-                    'checkbox': None,
-                }
-                self._lineData.append(entry)
-                self._addLegendCheckbox(label, color, entry)
+                    'visible': True,
+                })
             ylabelColor = colorCycle[0] if not isRight else colorCycle[min(1, len(colorCycle) - 1)]
             axTarget.set_ylabel(
                 'Value' + (' (right)' if isRight else ''),
@@ -808,10 +833,9 @@ class GraphPanel(QWidget):
         if useDatetime:
             ax.xaxis_date()
             ax.xaxis.set_major_formatter(mdates.DateFormatter(self._tsDisplayFmt))
-            # Rotate labels without tight_layout thrashing
-            for label in ax.get_xticklabels():
-                label.set_rotation(30)
-                label.set_horizontalalignment('right')
+            for tickLabel in ax.get_xticklabels():
+                tickLabel.set_rotation(30)
+                tickLabel.set_horizontalalignment('right')
             ax.set_xlabel('Timestamp')
         else:
             ax.set_xlabel('Row')
@@ -824,10 +848,12 @@ class GraphPanel(QWidget):
         else:
             ax.grid(True, alpha=0.3)
 
-        # Qt tooltips (no mpl annotation → no frame jump at plot edges)
+        # In-plot legend with ☑/☐ click-to-toggle (no left panel)
+        self._buildInteractiveLegend(theme)
+
         self._hoverCid = self.canvas.mpl_connect('motion_notify_event', self._onHover)
         self._keyCid = self.canvas.mpl_connect('key_press_event', self._onKeyPress)
-        # Also handle keys on the panel when canvas doesn't have focus
+        self._pickCid = self.canvas.mpl_connect('pick_event', self._onLegendPick)
         self.canvas.setFocus()
 
         self.canvas.draw_idle()

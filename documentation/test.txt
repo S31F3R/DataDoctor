@@ -34,7 +34,7 @@ Current Tests
      d. Can leave the mouse on the point and read the tooltip without chasing it.
    Notes: QToolTip instead of matplotlib annotation; fixed subplot margins (no tight_layout).
 
-[ ] Graph arrow keys pan the view
+[x] Graph arrow keys pan the view
    Steps:
      a. Graph data; zoom in with the toolbar Zoom tool.
      b. Click the plot canvas so it has focus.
@@ -43,14 +43,14 @@ Current Tests
      e. Home still resets the view.
    Notes: Works with canvas focus or Graph tab focus.
 
-[ ] Graph series checkboxes (left legend) hide lines + rescale
+[x] Graph series legend click-to-toggle (☑/☐) + rescale
    Steps:
-     a. Graph multiple series → left panel lists each with a checked box and color.
-     b. Uncheck one series → line hides; Y scale rescales to remaining visible data.
-     c. Uncheck a series with an outlier → scale no longer stretched by that outlier.
-     d. Re-check → line returns and scale updates.
-     e. All start checked by default.
-   Notes: Replaces matplotlib in-plot legend.
+     a. Graph multiple series → in-plot legend (same corner as before) with ☑ labels.
+     b. Click a legend entry → series hides (mark becomes ☐, entry dims); scale rescales.
+     c. Hide a series with an outlier → scale no longer stretched by that outlier.
+     d. Click again → series returns (☑) and scale updates.
+     e. All start shown (☑). No left side panel.
+   Notes: Click legend line or text; no separate checkbox panel (saves plot space).
 
 
 Confirmed
