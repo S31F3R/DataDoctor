@@ -176,6 +176,19 @@ def modifyTable(
             # Header: keep primary header (two-line style)
             finalHeaders.append(headers[pIdx] if pIdx < len(headers) else f"Overlay {pairIndex}")
 
+            def _firstHeaderLine(h):
+                """First non-empty line of a multi-line header (graph legends)."""
+                if not h:
+                    return ''
+                for line in str(h).split('\n'):
+                    line = line.strip()
+                    if line:
+                        return line
+                return str(h).strip()
+
+            pHeaderFirst = _firstHeaderLine(headers[pIdx] if pIdx < len(headers) else '')
+            sHeaderFirst = _firstHeaderLine(headers[sIdx] if sIdx < len(headers) else '')
+
             primaryDb = databases[pairIndex * 2]
             primaryId = dataIds[pairIndex * 2]
             lookupId = [
@@ -191,6 +204,8 @@ def modifyTable(
                 'queryInfos': [queryInfos[pairIndex * 2], queryInfos[pairIndex * 2 + 1]],
                 'pairIndex': pairIndex,
                 'lookupId': lookupId,
+                # First line of each pair's original header for graph legends
+                'headerFirstLines': [pHeaderFirst, sHeaderFirst],
             })
         else:
             # Keep both columns as normal (already formatted in buildTable; keep text)

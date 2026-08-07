@@ -945,10 +945,10 @@ def _parseQuickLookPayload(data):
     """
     Normalize loaded JSON/txt content into (queryStrings, metaDict).
 
-    metaDict keys: displayDelta, overlayPairs (bools). Missing → None (caller
-    leaves checkbox state alone for legacy files that never stored them).
+    metaDict keys: displayDelta, overlayPairs (bools).
+    Missing keys default to False so legacy files uncheck the boxes.
     """
-    meta = {'displayDelta': None, 'overlayPairs': None}
+    meta = {'displayDelta': False, 'overlayPairs': False}
     if isinstance(data, dict):
         queries = data.get('queries')
         if queries is None:
@@ -965,14 +965,16 @@ def _parseQuickLookPayload(data):
             meta['overlayPairs'] = bool(data.get('overlay'))
         return queries, meta
     if isinstance(data, list):
+        # Legacy plain array — no metadata stored → checkboxes off
         return data, meta
     return [], meta
 
 
 def loadQuickLook(cbQuickLook, listQueryList, chkbDelta=None, chkbOverlay=None):
     """
-    Load quick look into listQueryList. When chkbDelta/chkbOverlay are given and
-    the JSON stores metadata, restore those checkboxes.
+    Load quick look into listQueryList. Always restore Display Deltas /
+    Overlay Pairs checkboxes when those widgets are passed: saved True/False,
+    or False when the file has no metadata (legacy array JSON).
     """
     quickLookName = cbQuickLook.currentText()
 
@@ -1044,11 +1046,11 @@ def loadQuickLook(cbQuickLook, listQueryList, chkbDelta=None, chkbOverlay=None):
                 if Config.debug:
                     logMessage("DEBUG", "loadQuickLook: Added item {}".format(f'{dataID}|{interval}|{database}'))
 
-        # Restore Display Deltas / Overlay Pairs when the file stores them
-        if chkbDelta is not None and meta.get('displayDelta') is not None:
-            chkbDelta.setChecked(bool(meta['displayDelta']))
-        if chkbOverlay is not None and meta.get('overlayPairs') is not None:
-            chkbOverlay.setChecked(bool(meta['overlayPairs']))
+        # Always set checkboxes from meta (defaults False for legacy / missing keys)
+        if chkbDelta is not None:
+            chkbDelta.setChecked(bool(meta.get('displayDelta')))
+        if chkbOverlay is not None:
+            chkbOverlay.setChecked(bool(meta.get('overlayPairs')))
         
         if Config.debug:
             logMessage(

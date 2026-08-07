@@ -233,6 +233,9 @@ class uiQuery(QMainWindow):
             self.queryType = 'public'
             self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/PublicQuery.png')))
             self.setWindowTitle("Public Query")
+        # Prev Day / Prev Week: snap end time to now whenever the window opens
+        # (Custom DateTime is left alone so historical ranges stay intact).
+        self.refreshRelativeQueryTimes()
         super().showEvent(event)
 
     def eventFilter(self, obj, event):
@@ -411,6 +414,8 @@ class uiQuery(QMainWindow):
             chkbDelta=self.chkbDelta,
             chkbOverlay=self.chkbOverlay,
         )
+        # Relative date ranges should be "now" after loading a quick look too
+        self.refreshRelativeQueryTimes()
         configPath = Utils.getConfigPath()
         config = {}
         
