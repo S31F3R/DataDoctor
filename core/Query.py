@@ -697,14 +697,14 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             commonCol = getColByName(dataDictionaryTable, 'commonName')
             commonItem = dataDictionaryTable.item(dictRow, commonCol) if commonCol != -1 else None
             baseLabel = commonItem.text().strip() if commonItem else dataId
-            # Standard dict label for all DBs: "commonName - datatype"
+            # Standard dict label for all DBs: "commonName-datatype" (no spaces around dash)
             dataTypeCol = getColByName(dataDictionaryTable, 'dataType')
             dataTypeItem = dataDictionaryTable.item(dictRow, dataTypeCol) if dataTypeCol != -1 else None
             dataType = dataTypeItem.text().strip() if dataTypeItem and dataTypeItem.text().strip() else ''
-            nameLabel = f"{baseLabel} - {dataType}" if dataType else baseLabel
+            nameLabel = f"{baseLabel}-{dataType}" if dataType else baseLabel
 
             if database == 'USGS-NWIS':
-                # Dictionary hit: commonName - datatype on top, interval underneath.
+                # Dictionary hit: commonName-datatype on top, interval underneath.
                 # (Previously Site Name from OGC always won, so hits looked like misses —
                 #  e.g. bunker "PVLC (USGS)" never appeared; Aquarius UID labels did.)
                 if baseLabel and baseLabel != dataId and baseLabel != dictKey:
@@ -756,7 +756,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                         f"buildTable: Aquarius in dict, using commonName-datatype, header {i}: {fullLabel}",
                     )
             else:
-                # USBR / HDB: commonName - datatype, SDID (and MRID when non-zero)
+                # USBR / HDB: commonName-datatype, SDID (and MRID when non-zero)
                 if mrid and mrid != '0':
                     fullLabel = f"{nameLabel} \n{dataId}-{mrid}"
 
@@ -839,8 +839,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     header.setStretchLastSection(False)
     vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-    # Cell selection must not light up / resize header sections
-    header.setHighlightSections(False)
+    # Horizontal: highlight selected column header (Interactive mode keeps width fixed).
+    # Vertical: leave off so row labels do not flash/resize with cell selection.
+    header.setHighlightSections(True)
     vHeader.setHighlightSections(False)
 
     # Row height before setRowCount so new sections pick up the platform-tuned size

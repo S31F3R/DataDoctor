@@ -3,7 +3,7 @@
 import json
 import os
 from PyQt6.QtWidgets import (QMainWindow, QLineEdit, QComboBox, QDateTimeEdit, QListWidget, QPushButton, QRadioButton,
-                            QButtonGroup, QCheckBox, QMessageBox, QInputDialog)
+                            QButtonGroup, QCheckBox, QMessageBox, QInputDialog, QMenu)
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6 import uic
@@ -144,6 +144,8 @@ class uiQuery(QMainWindow):
         # NOTE: empty QListWidget is falsy in PyQt6 (len==0) — always test is not None
         if self.listQueryList is not None:
             self.listQueryList.itemDoubleClicked.connect(self.onQueryListDoubleClicked)
+            self.listQueryList.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            self.listQueryList.customContextMenuRequested.connect(self.showQueryListContextMenu)
 
         # Install event filters
         self.qleDataID.installEventFilter(self)
@@ -260,6 +262,9 @@ class uiQuery(QMainWindow):
         try:
             if Config.debug:
                 Logic.logMessage("DEBUG", "btnQueryPressed: Starting query process, queryType={}".format(self.queryType))
+            # Refresh relative date ranges so end time is "now" at click, not when
+            # the window was first opened / radio was last selected.
+            self.refreshRelativeQueryTimes()
             startDate = self.dteStartDate.dateTime().toString('yyyy-MM-dd hh:mm')
             endDate = self.dteEndDate.dateTime().toString('yyyy-MM-dd hh:mm')
             queryItems = []
@@ -382,14 +387,30 @@ class uiQuery(QMainWindow):
         name = dlg.textValue().strip() if ok else ""
 
         if ok and name:
-            Logic.saveQuickLook(name, self.listQueryList)
+            deltaChecked = bool(self.chkbDelta.isChecked()) if self.chkbDelta is not None else False
+            overlayChecked = bool(self.chkbOverlay.isChecked()) if self.chkbOverlay is not None else False
+            Logic.saveQuickLook(
+                name,
+                self.listQueryList,
+                displayDelta=deltaChecked,
+                overlayPairs=overlayChecked,
+            )
             Utils.loadQuickLooks(self.cbQuickLook)
 
             if Config.debug:
-                Logic.logMessage("DEBUG", f"btnSaveQuickLookPressed: Saved '{name}' and reloaded combo box")
+                Logic.logMessage(
+                    "DEBUG",
+                    f"btnSaveQuickLookPressed: Saved '{name}' "
+                    f"(displayDelta={deltaChecked}, overlayPairs={overlayChecked})",
+                )
 
     def btnLoadQuickLookPressed(self):
-        Logic.loadQuickLook(self.cbQuickLook, self.listQueryList)
+        Logic.loadQuickLook(
+            self.cbQuickLook,
+            self.listQueryList,
+            chkbDelta=self.chkbDelta,
+            chkbOverlay=self.chkbOverlay,
+        )
         configPath = Utils.getConfigPath()
         config = {}
         
@@ -471,52 +492,14 @@ class uiQuery(QMainWindow):
             )
 
     def btnAddQueryPressed(self):
-        dataID = self.qleDataID.text().strip()
-        interval = self.cbInterval.currentText()
-        database = self.cbDatabase.currentText()
-
-        if not dataID:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnAddQueryPressed: No Data ID entered, skipping")
-            return
-
         # In-place edit uses current form values (dataID, interval, and database)
         editIdx = self.editingQueryIndex
+        itemText = self.buildQueryListItemText()
+        if not itemText:
+            if Config.debug:
+                Logic.logMessage("DEBUG", "btnAddQueryPressed: No Data ID entered or resolve cancelled")
+            return
 
-        # USGS: optional param on OGC; Site-Parameter may need multi-series pick
-        if database == 'USGS-NWIS':
-            try:
-                from core import USGS
-                resolved = USGS.resolveUsgsDataId(dataID, parent=self)
-                if resolved is None:
-                    classified = USGS.classifyUid(dataID)
-                    if classified and classified[0] == 'ogcLookup':
-                        QMessageBox.warning(
-                            self,
-                            "USGS Data ID",
-                            f"No time series found for '{dataID}', or selection was cancelled.\n\n"
-                            "Use Site-time_series_id or Site-time_series_id-parameter,\n"
-                            "or Site-parameter (e.g. 09428500-00065) when only one series exists.",
-                        )
-                        return
-                    # Invalid form
-                    if classified is None:
-                        QMessageBox.warning(
-                            self,
-                            "USGS Data ID",
-                            "Invalid USGS Data ID.\n\n"
-                            "Accepted forms:\n"
-                            "  Site-time_series_id[-parameter]\n"
-                            "  Site-parameter (looks up time_series_id)\n"
-                            "  Site-methodID-parameter (legacy)",
-                        )
-                        return
-                else:
-                    dataID = resolved
-            except Exception as e:
-                Logic.logException("btnAddQueryPressed: USGS resolve failed", e)
-
-        itemText = f"{dataID}|{interval}|{database}"
         if (
             editIdx is not None
             and self.listQueryList is not None
@@ -564,8 +547,140 @@ class uiQuery(QMainWindow):
         self.editingQueryIndex = None
         if self.qleDataID:
             self.qleDataID.clear()
+        # Clear Display Deltas / Overlay Pairs when the list is wiped
+        if self.chkbDelta is not None:
+            self.chkbDelta.setChecked(False)
+        if self.chkbOverlay is not None:
+            self.chkbOverlay.setChecked(False)
         if Config.debug:
-            Logic.logMessage("DEBUG", "btnClearQueryPressed: Cleared query list")
+            Logic.logMessage(
+                "DEBUG",
+                "btnClearQueryPressed: Cleared query list and unchecked delta/overlay",
+            )
+
+    def refreshRelativeQueryTimes(self):
+        """
+        Re-apply Previous day / Previous week ranges so end = now at Query click.
+        Custom DateTime is left unchanged.
+        """
+        try:
+            if self.rbPrevDayToCurrent is not None and self.rbPrevDayToCurrent.isChecked():
+                Logic.setQueryDateRange(
+                    self, self.rbPrevDayToCurrent, self.dteStartDate, self.dteEndDate
+                )
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "refreshRelativeQueryTimes: refreshed Prev Day → Current")
+            elif self.rbPrevWeekToCurrent is not None and self.rbPrevWeekToCurrent.isChecked():
+                Logic.setQueryDateRange(
+                    self, self.rbPrevWeekToCurrent, self.dteStartDate, self.dteEndDate
+                )
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "refreshRelativeQueryTimes: refreshed Prev Week → Current")
+        except Exception as e:
+            Logic.logException("refreshRelativeQueryTimes failed", e)
+
+    def buildQueryListItemText(self):
+        """
+        Build 'dataID|interval|database' from the form (same rules as Add Query).
+        Returns None if invalid / cancelled (e.g. empty DataID or USGS cancel).
+        """
+        dataID = self.qleDataID.text().strip() if self.qleDataID is not None else ''
+        interval = self.cbInterval.currentText() if self.cbInterval is not None else ''
+        database = self.cbDatabase.currentText() if self.cbDatabase is not None else ''
+
+        if not dataID:
+            return None
+
+        if database == 'USGS-NWIS':
+            try:
+                from core import USGS
+                resolved = USGS.resolveUsgsDataId(dataID, parent=self)
+                if resolved is None:
+                    classified = USGS.classifyUid(dataID)
+                    if classified and classified[0] == 'ogcLookup':
+                        QMessageBox.warning(
+                            self,
+                            "USGS Data ID",
+                            f"No time series found for '{dataID}', or selection was cancelled.\n\n"
+                            "Use Site-time_series_id or Site-time_series_id-parameter,\n"
+                            "or Site-parameter (e.g. 09428500-00065) when only one series exists.",
+                        )
+                        return None
+                    if classified is None:
+                        QMessageBox.warning(
+                            self,
+                            "USGS Data ID",
+                            "Invalid USGS Data ID.\n\n"
+                            "Accepted forms:\n"
+                            "  Site-time_series_id[-parameter]\n"
+                            "  Site-parameter (looks up time_series_id)\n"
+                            "  Site-methodID-parameter (legacy)",
+                        )
+                        return None
+                else:
+                    dataID = resolved
+            except Exception as e:
+                Logic.logException("buildQueryListItemText: USGS resolve failed", e)
+
+        return f"{dataID}|{interval}|{database}"
+
+    def showQueryListContextMenu(self, pos):
+        """
+        Right-click a query list item: Insert Query Above / Below when DataID is set.
+        Inserts act like Add Query but place the new row relative to the clicked item.
+        """
+        if self.listQueryList is None:
+            return
+        item = self.listQueryList.itemAt(pos)
+        if item is None:
+            return
+        # Select the right-clicked row so the user sees the anchor
+        row = self.listQueryList.row(item)
+        self.listQueryList.setCurrentRow(row)
+
+        dataID = self.qleDataID.text().strip() if self.qleDataID is not None else ''
+        menu = QMenu(self)
+        actAbove = menu.addAction("Insert Query Above")
+        actBelow = menu.addAction("Insert Query Below")
+        # Only useful when form has a DataID ready to insert
+        actAbove.setEnabled(bool(dataID))
+        actBelow.setEnabled(bool(dataID))
+        if not dataID:
+            actAbove.setToolTip("Enter a Data ID first")
+            actBelow.setToolTip("Enter a Data ID first")
+
+        chosen = menu.exec(self.listQueryList.mapToGlobal(pos))
+        if chosen is None:
+            return
+        if chosen == actAbove:
+            self.insertQueryAt(row, below=False)
+        elif chosen == actBelow:
+            self.insertQueryAt(row, below=True)
+
+    def insertQueryAt(self, anchorRow, below=False):
+        """Insert form values into the list above or below anchorRow (like Add Query)."""
+        if self.listQueryList is None:
+            return
+        itemText = self.buildQueryListItemText()
+        if not itemText:
+            if Config.debug:
+                Logic.logMessage("DEBUG", "insertQueryAt: no item text (empty DataID or cancel)")
+            return
+        insertAt = anchorRow + 1 if below else anchorRow
+        insertAt = max(0, min(insertAt, self.listQueryList.count()))
+        self.listQueryList.insertItem(insertAt, itemText)
+        self.listQueryList.setCurrentRow(insertAt)
+        # Cancel any in-place edit mode so the next Add appends cleanly
+        self.editingQueryIndex = None
+        if self.qleDataID is not None:
+            self.qleDataID.clear()
+            self.qleDataID.setFocus()
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"insertQueryAt: inserted at {insertAt} ({'below' if below else 'above'} "
+                f"anchor {anchorRow}): {itemText}",
+            )
 
     def btnDataIdInfoPressed(self):
         QMessageBox.information(
