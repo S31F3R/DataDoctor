@@ -1432,7 +1432,10 @@ class uiMain(QMainWindow):
             self.tabWidget.insertTab(0, self.tabMain, self.dataQueryTitle)
 
         panel = self.ensureGraphPanel()
-        ok, message = panel.plotFromTable(self.mainTable)
+        ok, message = panel.plotFromTable(
+            self.mainTable,
+            columnMetadata=getattr(self, 'columnMetadata', None),
+        )
         if not ok:
             QMessageBox.warning(self, "Graph", message or "Could not build graph.")
             return
@@ -1570,12 +1573,12 @@ class uiMain(QMainWindow):
                 Logic.logMessage("DEBUG", f"btnSQLPressed: removed tabSQL from index {idx}")
 
     def btnViewLogPressed(self):
-        """Show Log Viewer tab (add if closed) and load all rotated app logs, newest first."""
+        """Toggle Log Viewer tab: show if hidden, hide if already open (like SQL)."""
         if not self.tabLog or not self.tabWidget:
             QMessageBox.warning(self, "Log Viewer", "Log tab is not available.")
             return
 
-        # If Log is detached, focus that window and refresh contents
+        # If Log is detached, focus that window and refresh contents (do not close)
         if self.detachedWindows.get('log') is not None:
             self.populateLogViewer()
             win = self.detachedWindows['log']
@@ -1589,18 +1592,15 @@ class uiMain(QMainWindow):
             # Always open Log Viewer as the last tab (not next to the active tab)
             self.tabWidget.addTab(self.tabLog, self.logTitle)
             idx = self.tabWidget.indexOf(self.tabLog)
+            self.tabWidget.setCurrentIndex(idx)
+            self.populateLogViewer()
             if Config.debug:
                 Logic.logMessage("DEBUG", f"btnViewLogPressed: added tabLog at end index {idx}")
-        elif idx != self.tabWidget.count() - 1:
-            # Already open but not last (e.g. other tabs added after) — move to end
+        else:
+            # Already open → close (toggle off), same as btnSQL
             self.tabWidget.removeTab(idx)
-            self.tabWidget.addTab(self.tabLog, self.logTitle)
-            idx = self.tabWidget.indexOf(self.tabLog)
             if Config.debug:
-                Logic.logMessage("DEBUG", f"btnViewLogPressed: moved tabLog to end index {idx}")
-
-        self.tabWidget.setCurrentIndex(idx)
-        self.populateLogViewer()
+                Logic.logMessage("DEBUG", f"btnViewLogPressed: removed tabLog from index {idx}")
 
     def logViewerLineHeight(self):
         """
@@ -1867,6 +1867,17 @@ if __name__ == '__main__':
 
         # Show main window
         winMain.show()
+        # Re-apply window icon after first show (Windows sometimes paints the
+        # default icon on the very first frame before the process icon sticks).
+        if not appIcon.isNull():
+            def _reapplyIcon(icon=appIcon, window=winMain, application=app):
+                try:
+                    application.setWindowIcon(icon)
+                    window.setWindowIcon(icon)
+                except Exception:
+                    pass
+            QTimer.singleShot(0, _reapplyIcon)
+            QTimer.singleShot(250, _reapplyIcon)
         try:
             Logic.logMessage("INFO", f"Config directory: {Utils.getConfigDir()}")
         except Exception:

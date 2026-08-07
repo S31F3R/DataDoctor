@@ -898,26 +898,82 @@ def convertLegacyQuickLooks():
             except Exception as e:                
                 logMessage("ERROR", f"convertLegacyQuickLooks: Failed to convert {txtPath}: {e}")
 
-def saveQuickLook(textQuickLookName, listQueryList):
+def saveQuickLook(textQuickLookName, listQueryList, displayDelta=False, overlayPairs=False):
+    """
+    Save query list + optional UI metadata to quickLook JSON.
+
+    Format (v2 object):
+      {
+        "queries": ["dataID|interval|database", ...],
+        "displayDelta": true/false,
+        "overlayPairs": true/false
+      }
+
+    Legacy plain-array files still load; new saves always write the object form.
+    """
     name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
 
     if not name:
         if Config.debug:
             logMessage("WARN", "Empty quick look name—skipped.")
         return
-    data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
+    queries = [listQueryList.item(x).text() for x in range(listQueryList.count())]
+    payload = {
+        'queries': queries,
+        'displayDelta': bool(displayDelta),
+        'overlayPairs': bool(overlayPairs),
+    }
     quicklookPath = os.path.join(Utils.getQuickLookDir(), f'{name}.json')
     os.makedirs(os.path.dirname(quicklookPath), exist_ok=True)
 
     try:
         with open(quicklookPath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
+            json.dump(payload, f, indent=4)
         if Config.debug:
-            logMessage("DEBUG", "saveQuickLook: Saved Quick Look to {}".format(quicklookPath))
+            logMessage(
+                "DEBUG",
+                "saveQuickLook: Saved Quick Look to {} "
+                "(displayDelta={}, overlayPairs={})".format(
+                    quicklookPath, displayDelta, overlayPairs
+                ),
+            )
     except Exception as e:        
         logMessage("ERROR", "saveQuickLook: Failed to save Quick Look to {}: {}".format(quicklookPath, e))
 
-def loadQuickLook(cbQuickLook, listQueryList):
+
+def _parseQuickLookPayload(data):
+    """
+    Normalize loaded JSON/txt content into (queryStrings, metaDict).
+
+    metaDict keys: displayDelta, overlayPairs (bools). Missing → None (caller
+    leaves checkbox state alone for legacy files that never stored them).
+    """
+    meta = {'displayDelta': None, 'overlayPairs': None}
+    if isinstance(data, dict):
+        queries = data.get('queries')
+        if queries is None:
+            # Allow accidental {"items": [...]} etc.
+            queries = data.get('items') or data.get('queryList') or []
+        if not isinstance(queries, list):
+            queries = []
+        if 'displayDelta' in data:
+            meta['displayDelta'] = bool(data.get('displayDelta'))
+        # Accept both overlayPairs and overlay (older experiments)
+        if 'overlayPairs' in data:
+            meta['overlayPairs'] = bool(data.get('overlayPairs'))
+        elif 'overlay' in data:
+            meta['overlayPairs'] = bool(data.get('overlay'))
+        return queries, meta
+    if isinstance(data, list):
+        return data, meta
+    return [], meta
+
+
+def loadQuickLook(cbQuickLook, listQueryList, chkbDelta=None, chkbOverlay=None):
+    """
+    Load quick look into listQueryList. When chkbDelta/chkbOverlay are given and
+    the JSON stores metadata, restore those checkboxes.
+    """
     quickLookName = cbQuickLook.currentText()
 
     if not quickLookName:
@@ -943,27 +999,31 @@ def loadQuickLook(cbQuickLook, listQueryList):
         quickLookPath = exampleTxtPath
     
     if not quickLookPath:        
-        logMessage("DEWARNBUG", "Quick look '{}' not found.".format(quickLookName))
+        logMessage("WARN", "Quick look '{}' not found.".format(quickLookName))
         return
     
     try:
         if quickLookPath.endswith('.json'):
             with open(quickLookPath, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+                raw = json.load(f)
         else: # .txt
             with open(quickLookPath, 'r', encoding='utf-8-sig') as f:
                 content = f.read().strip()
             if content:
                 if ',' in content:
                     # Legacy comma-separated format
-                    data = content.split(',')
+                    raw = content.split(',')
                 else:
                     # New line-separated format
-                    data = content.splitlines()
+                    raw = content.splitlines()
             else:
-                data = []
+                raw = []
+
+        data, meta = _parseQuickLookPayload(raw)
         
         for itemText in data:
+            if not isinstance(itemText, str):
+                continue
             itemText = itemText.strip()
             if not itemText:
                 continue
@@ -983,13 +1043,30 @@ def loadQuickLook(cbQuickLook, listQueryList):
 
                 if Config.debug:
                     logMessage("DEBUG", "loadQuickLook: Added item {}".format(f'{dataID}|{interval}|{database}'))
+
+        # Restore Display Deltas / Overlay Pairs when the file stores them
+        if chkbDelta is not None and meta.get('displayDelta') is not None:
+            chkbDelta.setChecked(bool(meta['displayDelta']))
+        if chkbOverlay is not None and meta.get('overlayPairs') is not None:
+            chkbOverlay.setChecked(bool(meta['overlayPairs']))
         
         if Config.debug:
-            logMessage("DEBUG", "loadQuickLook: Loaded '{}' with {} items".format(quickLookName, listQueryList.count()))
+            logMessage(
+                "DEBUG",
+                "loadQuickLook: Loaded '{}' with {} items "
+                "(displayDelta={}, overlayPairs={})".format(
+                    quickLookName,
+                    listQueryList.count(),
+                    meta.get('displayDelta'),
+                    meta.get('overlayPairs'),
+                ),
+            )
         
         # If loaded from user .txt, convert to .json and delete .txt
         if quickLookPath == userTxtPath:
-            saveQuickLook(quickLookName, listQueryList)
+            deltaVal = bool(chkbDelta.isChecked()) if chkbDelta is not None else False
+            overlayVal = bool(chkbOverlay.isChecked()) if chkbOverlay is not None else False
+            saveQuickLook(quickLookName, listQueryList, displayDelta=deltaVal, overlayPairs=overlayVal)
             os.remove(userTxtPath)
             if Config.debug:
                 logMessage("DEBUG", f"loadQuickLook: Converted legacy {userTxtPath} to .json and deleted .txt")

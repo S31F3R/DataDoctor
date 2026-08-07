@@ -778,6 +778,101 @@ def pasteClipboardToSelection(mainWindow):
     return True
 
 
+def highlightColumnHeader(table, col):
+    """
+    Visually mark the selected column's header without enabling Qt's
+    highlightSections (that chrome was resizing / bloating header text).
+
+    Uses BackgroundRole / ForegroundRole on the header item and headerData —
+    column widths stay fixed (no bold/size jump from section:selected chrome).
+    """
+    if table is None:
+        return
+    from PyQt6.QtGui import QBrush, QColor, QPalette
+    from PyQt6.QtCore import Qt as _Qt
+
+    def _clearCol(c):
+        if c is None or c < 0 or c >= table.columnCount():
+            return
+        prevItem = table.horizontalHeaderItem(c)
+        if prevItem is not None:
+            prevItem.setData(_Qt.ItemDataRole.BackgroundRole, None)
+            prevItem.setData(_Qt.ItemDataRole.ForegroundRole, None)
+            try:
+                prevItem.setBackground(QBrush())
+                prevItem.setForeground(QBrush())
+            except Exception:
+                pass
+        model = table.model()
+        if model is not None:
+            try:
+                model.setHeaderData(
+                    c, _Qt.Orientation.Horizontal, None, _Qt.ItemDataRole.BackgroundRole
+                )
+                model.setHeaderData(
+                    c, _Qt.Orientation.Horizontal, None, _Qt.ItemDataRole.ForegroundRole
+                )
+            except Exception:
+                pass
+
+    prev = getattr(table, '_highlightedHeaderCol', None)
+    # Clear previous header highlight
+    if prev is not None and prev != col:
+        _clearCol(prev)
+
+    if col is None or col < 0 or col >= table.columnCount():
+        table._highlightedHeaderCol = None
+        try:
+            table.horizontalHeader().viewport().update()
+        except Exception:
+            pass
+        return
+
+    item = table.horizontalHeaderItem(col)
+    if item is None:
+        from PyQt6.QtWidgets import QTableWidgetItem
+        item = QTableWidgetItem(f"Column {col + 1}")
+        table.setHorizontalHeaderItem(col, item)
+
+    # Prefer the view's selection palette so light/dark themes match
+    try:
+        pal = table.palette()
+        bg = pal.color(QPalette.ColorRole.Highlight)
+        fg = pal.color(QPalette.ColorRole.HighlightedText)
+    except Exception:
+        bg = QColor(48, 140, 198)
+        fg = QColor(255, 255, 255)
+
+    bgBrush = QBrush(bg)
+    fgBrush = QBrush(fg)
+    try:
+        item.setBackground(bgBrush)
+        item.setForeground(fgBrush)
+    except Exception:
+        item.setData(_Qt.ItemDataRole.BackgroundRole, bgBrush)
+        item.setData(_Qt.ItemDataRole.ForegroundRole, fgBrush)
+
+    model = table.model()
+    if model is not None:
+        try:
+            model.setHeaderData(
+                col, _Qt.Orientation.Horizontal, bgBrush, _Qt.ItemDataRole.BackgroundRole
+            )
+            model.setHeaderData(
+                col, _Qt.Orientation.Horizontal, fgBrush, _Qt.ItemDataRole.ForegroundRole
+            )
+        except Exception:
+            pass
+
+    table._highlightedHeaderCol = col
+    # Force header repaint (item data alone sometimes waits for hover)
+    try:
+        table.horizontalHeader().viewport().update()
+        table.horizontalHeader().updateSection(col)
+    except Exception:
+        pass
+
+
 def selectEntireColumn(mainWindow, col):
     """
     Highlight all cells in a column (header single-click).
@@ -785,6 +880,9 @@ def selectEntireColumn(mainWindow, col):
     Avoid setCurrentCell — in SelectItems mode it collapses the range to the
     current cell (looks like highlight then snap to first cell). Also re-apply
     after the event loop so Qt's default header click handling cannot undo us.
+
+    Header highlight is painted manually (highlightSections stays False so
+    text/width do not grow when a column is selected).
     """
     if mainWindow is None:
         return
@@ -813,6 +911,7 @@ def selectEntireColumn(mainWindow, col):
                 QTableWidgetSelectionRange(0, c, rows - 1, c),
                 True,
             )
+            highlightColumnHeader(table, c)
             return
         topLeft = model.index(0, c)
         bottomRight = model.index(rows - 1, c)
@@ -829,6 +928,7 @@ def selectEntireColumn(mainWindow, col):
             topLeft,
             QItemSelectionModel.SelectionFlag.NoUpdate,
         )
+        highlightColumnHeader(table, c)
 
     _applyColumnSelection(col)
     # Defer once so any post-sectionClicked selection reset is overwritten
