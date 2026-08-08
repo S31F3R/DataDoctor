@@ -54,6 +54,7 @@ Thumbs.db
 temp/
 tmp/
 documentation/*.grok
+secret.grok
 
 # Local update downloads (launcher / AppImage / dev)
 Update/
