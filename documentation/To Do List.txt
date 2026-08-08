@@ -1,12 +1,22 @@
-####### TASKS #######
--Expand update flow later: zip drops into an Update/ folder and platform-specific unpackers (Linux/Mac scripts TBD)
--Linux/Mac package scripts (Windows: scripts/packageWindows.py exists; Linux AppImage: scripts/packageAppImage.py)
--Mac package script (TBD)
+####### CURRENT TASKS #######
+(none — see documentation/test.txt for in-progress / retest items)
+
+####### FUTURE TASKS #######
+-Expand update flow (in progress foundation — see test.txt "Python zip + applyUpdate")
+    -Done so far: scripts/packagePython.py (raw Python runtime zip), scripts/applyUpdate.py;
+     Windows/Mac packages include Update/ drop folder + applyUpdate.cmd / applyUpdate.sh
+    -Still open:
+        -AppImage / Linux full-package apply path
+        -Optional auto-detect update on startup (prompt user?)
+        -Decide whether packaged quickLook overwrites same-named user files only (current)
+          vs never touching quickLook on update
+        -Version check / refuse downgrade?
+-Expand update flow later notes (original):
+    -Launcher install once; later drop raw Python zip into Update/, run apply script
+    -Includes bunker.db merge + requirements.txt install + cleanup zip
 
 ####### CURRENT BUGS #######
--Windows icon works but on a new build and on the first load, the load of the program takes a while and when it comes up, default windows icon is there. Every load after that, icon is there
-    -Not crucial but would like to fix this
-    -Partial: deferred re-apply of window icon after show (still may need shell cache / first cold start)
+(none — handled items moved to documentation/test.txt)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
@@ -19,9 +29,6 @@
     -USBR will need:
         -Apply Overwrite Flag
 -Add datatype as an option to add to labels
-
-####### MAIN INTERFACE MODIFICATIONS #######
--Stress relief button that makes screaming goat sounds
 
 ####### QUERY ENHANCEMENTS MODIFICATIONS #######
 -Aquarius daily TZ offset (UC 2300 vs expected 0000)
@@ -51,3 +58,6 @@
 -When Seifer confirms a test item: mark [x] in test.txt (and leave off this list)
 -If a test fails: keep in test.txt with notes; do not put back on To Do until abandoned
 -Clean up test.txt after confirmed [x] items (standard workflow): drop long steps for [x] into a short Confirmed list; keep retest items detailed
+-Commits: Grok may commit freely on all paths EXCEPT documentation/
+    - documentation/ (To Do List, test.txt, notes, API docs, etc.) → Seifer only
+    - Everything else is allowed (code, scripts, ui, README.md, requirements, sounds, icons, …)

@@ -5,6 +5,8 @@ Workflow:
   - This file = in-progress / Seifer tests here
   - PASS → mark [x] here (stay off To Do); Grok may clean confirmed [x] items
   - FAIL → note here; Grok re-fixes
+  - Grok may commit any non-documentation/ paths; documentation/ commits stay with Seifer
+    (README.md and other non-docs paths are fair game)
 
 Current Tests
 --------------------------------------------------------------------------------
@@ -26,35 +28,53 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[ ] Graph hover tooltip stable at top edge (no frame jump)
+[ ] Mac package script
    Steps:
-     a. Graph a series with points near the top of the plot.
-     b. Hover those points → Qt tooltip shows label / timestamp / value.
-     c. Plot outline / axes do NOT drop or jump when the tooltip appears.
-     d. Can leave the mouse on the point and read the tooltip without chasing it.
-   Notes: QToolTip instead of matplotlib annotation; fixed subplot margins (no tight_layout).
+     a. From project root: python scripts/packageMac.py --skip-venv
+     b. dist/DataDoctor-macOS-YYYYMMDD.zip contains Data Doctor.command + Project Files/
+        + Update/ + applyUpdate.sh
+     c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
+     d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[x] Graph arrow keys pan the view
+[x] USGS-NWIS intervals: no HOUR; default INSTANT:15
    Steps:
-     a. Graph data; zoom in with the toolbar Zoom tool.
-     b. Click the plot canvas so it has focus.
-     c. Left / Right arrows pan along the X axis.
-     d. Up / Down arrows pan along the Y axis (both Y axes when dual).
-     e. Home still resets the view.
-   Notes: Works with canvas focus or Graph tab focus.
+     a. Public or Internal Query → database USGS-NWIS.
+     b. Interval list has INSTANT:15, INSTANT:1, INSTANT:60, DAY only (no HOUR / MONTH / YEAR).
+     c. INSTANT:15 is selected by default (or when previous interval was HOUR).
+     d. User can switch to DAY / other instants. Non-USGS DBs still show full list including HOUR.
 
-[x] Graph series legend click-to-toggle (☑/☐) + rescale
+[x] Options password fields: no layout WARN spam
    Steps:
-     a. Graph multiple series → in-plot legend (same corner as before) with ☑ labels.
-     b. Click a legend entry → series hides (mark becomes ☐, entry dims); scale rescales.
-     c. Hide a series with an outlier → scale no longer stretched by that outlier.
-     d. Click again → series returns (☑) and scale updates.
-     e. All start shown (☑). No left side panel.
-   Notes: Click legend line or text; no separate checkbox panel (saves plot space).
+     a. Open Options with debug on.
+     b. Log does NOT show "No layout for qleAQPassword/qleOraclePassword/qleUSGSAPIKey".
+     c. AQ password, Oracle password, USGS API key still mask/reveal via eye buttons.
+
+[ ] Python zip + applyUpdate (first pass)
+   Steps:
+     a. python scripts/packagePython.py → dist/DataDoctor-Python-YYYYMMDD.zip
+     b. Zip has DataDoctor.py (no .pyw), README.txt, core/ (with bunker.db), ui/,
+        quickLook/, certs/, oracle/, requirements.txt — no scripts/, no temp/
+     c. Full package (Windows/Mac) includes empty Update/ and applyUpdate.cmd / .sh
+     d. On a test install: drop Python zip into Update/, run applyUpdate → code refreshes,
+        bunker merges via install's updateBunker, pip runs; zip removed; app still starts.
+   Notes: raw Python tree only; launcher-side applyUpdate does merge/pip.
+
 
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Graph opens with Zoom tool active
+[x] Graph save remembers last folder
+[x] Context menu Graph + selection window
+[x] Aquarius Server Link placeholder
+[x] Goat stress-relief button plays scream
+[x] About π button — worthy gate
+[x] SQL Query Builder opens with zero tabs open
+[x] Graph middle-mouse pan + range clamp
+[x] Windows first-load icon (retest / improve-only)
+[x] Graph hover tooltip stable at top edge (no frame jump)
+[x] Graph arrow keys pan the view
+[x] Graph series legend click-to-toggle (☑/☐) + rescale
 [x] Column header highlight — all selected columns
 [x] Graph overlay legends use header first-line labels
 [x] Quick Look missing delta/overlay meta → checkboxes unchecked
@@ -124,7 +144,7 @@ Deferred / known
 --------------------------------------------------------------------------------
 [!] USGS monthly/yearly (OGC has no products)
 [!] Aquarius daily 2300 TZ
-[!] Features still backlog: advanced plot tool / quick-look plots, goat, git/readme,
-    dataDictionary non-destructive bulk update, expanded Options tree,
-    Update/ folder unpackers, Mac package script
-[!] Windows first-load icon (default icon until second open) — not crucial
+[!] Features still backlog: advanced plot tool / quick-look plots, git/readme,
+    dataDictionary non-destructive bulk update, expanded Options tree
+[!] Windows first-load icon — improve-only
+[!] AppImage applyUpdate path not wired the same as launcher packages yet
