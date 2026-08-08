@@ -407,6 +407,9 @@ class GraphPanel(QWidget):
         self._hoverCid = None
         self._keyCid = None
         self._pickCid = None
+        self._pressCid = None
+        self._releaseCid = None
+        self._scrollCid = None
         self._lineData = []  # list of dicts: line, label, xs, ys, color, visible
         self._tsDisplayFmt = '%m/%d/%y %H:%M:00'
         self._useDatetime = False
@@ -414,6 +417,13 @@ class GraphPanel(QWidget):
         self._lastTipKey = None
         # Map legend artist id → entry index for pick events
         self._legendPickMap = {}
+        # Full data extents (with padding) — pan stays inside these
+        self._xDataLim = None
+        self._yDataLim = None
+        self._y2DataLim = None
+        self._clamping = False
+        # Middle-mouse pan state: (last xdata, last ydata) in axes coords
+        self._midPan = None
 
     def clearPlot(self):
         try:
@@ -422,8 +432,15 @@ class GraphPanel(QWidget):
             pass
         self._lastTipKey = None
         self._legendPickMap = {}
+        self._xDataLim = None
+        self._yDataLim = None
+        self._y2DataLim = None
+        self._midPan = None
         if self.canvas is not None:
-            for cid in (self._hoverCid, self._keyCid, self._pickCid):
+            for cid in (
+                self._hoverCid, self._keyCid, self._pickCid,
+                self._pressCid, self._releaseCid, self._scrollCid,
+            ):
                 if cid is not None:
                     try:
                         self.canvas.mpl_disconnect(cid)
@@ -432,6 +449,9 @@ class GraphPanel(QWidget):
             self._hoverCid = None
             self._keyCid = None
             self._pickCid = None
+            self._pressCid = None
+            self._releaseCid = None
+            self._scrollCid = None
             if self.toolbar is not None:
                 self._layout.removeWidget(self.toolbar)
                 self.toolbar.setParent(None)
@@ -716,11 +736,75 @@ class GraphPanel(QWidget):
             if y2 is not None:
                 self._ax2.set_ylim(y2)
 
+        self._clampView()
         try:
             if self.toolbar is not None:
                 self.toolbar.push_current()
         except Exception:
             pass
+
+    def _storeDataLimits(self):
+        """Capture padded data extents after initial plot (pan boundary)."""
+        if self._ax is None:
+            self._xDataLim = self._yDataLim = self._y2DataLim = None
+            return
+        try:
+            self._xDataLim = tuple(self._ax.get_xlim())
+            self._yDataLim = tuple(self._ax.get_ylim())
+            self._y2DataLim = (
+                tuple(self._ax2.get_ylim()) if self._ax2 is not None else None
+            )
+        except Exception:
+            self._xDataLim = self._yDataLim = self._y2DataLim = None
+
+    def _clampAxis(self, ax, getLim, setLim, dataLim):
+        """Keep a view window inside dataLim (allow zoom-in; block pan past ends)."""
+        if ax is None or dataLim is None:
+            return
+        d0, d1 = dataLim
+        if d1 < d0:
+            d0, d1 = d1, d0
+        dataSpan = d1 - d0
+        if dataSpan <= 0 or not np.isfinite(dataSpan):
+            return
+        try:
+            v0, v1 = getLim()
+        except Exception:
+            return
+        if v1 < v0:
+            v0, v1 = v1, v0
+        viewSpan = v1 - v0
+        if not np.isfinite(viewSpan) or viewSpan <= 0:
+            return
+        if viewSpan >= dataSpan:
+            setLim(d0, d1)
+            return
+        if v0 < d0:
+            v0 = d0
+            v1 = d0 + viewSpan
+        if v1 > d1:
+            v1 = d1
+            v0 = d1 - viewSpan
+        setLim(v0, v1)
+
+    def _clampView(self):
+        """Constrain pan to the original timeseries / data range."""
+        if self._clamping or self._ax is None:
+            return
+        self._clamping = True
+        try:
+            self._clampAxis(
+                self._ax, self._ax.get_xlim, self._ax.set_xlim, self._xDataLim
+            )
+            self._clampAxis(
+                self._ax, self._ax.get_ylim, self._ax.set_ylim, self._yDataLim
+            )
+            if self._ax2 is not None and self._y2DataLim is not None:
+                self._clampAxis(
+                    self._ax2, self._ax2.get_ylim, self._ax2.set_ylim, self._y2DataLim
+                )
+        finally:
+            self._clamping = False
 
     def plotFromTable(self, table, columns=None, columnMetadata=None):
         """
@@ -851,9 +935,23 @@ class GraphPanel(QWidget):
         # In-plot legend with ☑/☐ click-to-toggle (no left panel)
         self._buildInteractiveLegend(theme)
 
-        self._hoverCid = self.canvas.mpl_connect('motion_notify_event', self._onHover)
+        # Capture home extents before any pan (used as clamp bounds)
+        self.canvas.draw()
+        self._storeDataLimits()
+
+        self._hoverCid = self.canvas.mpl_connect('motion_notify_event', self._onMotion)
         self._keyCid = self.canvas.mpl_connect('key_press_event', self._onKeyPress)
         self._pickCid = self.canvas.mpl_connect('pick_event', self._onLegendPick)
+        self._pressCid = self.canvas.mpl_connect('button_press_event', self._onButtonPress)
+        self._releaseCid = self.canvas.mpl_connect('button_release_event', self._onButtonRelease)
+        # Clamp toolbar pan/zoom navigation as well
+        try:
+            self._ax.callbacks.connect('xlim_changed', self._onAxisLimitsChanged)
+            self._ax.callbacks.connect('ylim_changed', self._onAxisLimitsChanged)
+            if self._ax2 is not None:
+                self._ax2.callbacks.connect('ylim_changed', self._onAxisLimitsChanged)
+        except Exception:
+            pass
         self.canvas.setFocus()
 
         self.canvas.draw_idle()
@@ -891,6 +989,69 @@ class GraphPanel(QWidget):
         if qtKey is not None:
             self._handleArrowPan(qtKey)
 
+    def _onAxisLimitsChanged(self, ax):
+        """Keep toolbar pan/zoom from leaving the timeseries range."""
+        if self._clamping:
+            return
+        self._clampView()
+
+    def _onButtonPress(self, event):
+        """Middle mouse button starts free pan (no toolbar mode needed)."""
+        if event is None or event.button != 2 or event.inaxes is None:
+            return
+        # Store display pixels so pan stays stable after limit changes
+        self._midPan = (float(event.x), float(event.y))
+        try:
+            QToolTip.hideText()
+        except Exception:
+            pass
+
+    def _onButtonRelease(self, event):
+        if event is not None and event.button == 2 and self._midPan is not None:
+            self._midPan = None
+            try:
+                if self.toolbar is not None:
+                    self.toolbar.push_current()
+            except Exception:
+                pass
+
+    def _onMotion(self, event):
+        """Middle-mouse drag pans; otherwise show hover tooltip."""
+        if self._midPan is not None:
+            self._handleMiddlePan(event)
+            return
+        self._onHover(event)
+
+    def _handleMiddlePan(self, event):
+        """Pan axes by middle-mouse drag, clamped to data range."""
+        if self._ax is None or self.canvas is None or self._midPan is None:
+            return
+        if event is None or event.x is None or event.y is None:
+            return
+        lastPx, lastPy = self._midPan
+        curPx, curPy = float(event.x), float(event.y)
+        try:
+            inv = self._ax.transData.inverted()
+            p0 = inv.transform((lastPx, lastPy))
+            p1 = inv.transform((curPx, curPy))
+            dx = float(p0[0] - p1[0])
+            dy = float(p0[1] - p1[1])
+            x0, x1 = self._ax.get_xlim()
+            y0, y1 = self._ax.get_ylim()
+            self._ax.set_xlim(x0 + dx, x1 + dx)
+            self._ax.set_ylim(y0 + dy, y1 + dy)
+            if self._ax2 is not None:
+                y20, y21 = self._ax2.get_ylim()
+                span1 = (y1 - y0) if (y1 - y0) != 0 else 1.0
+                span2 = y21 - y20
+                dy2 = dy * (span2 / span1) if span1 else 0.0
+                self._ax2.set_ylim(y20 + dy2, y21 + dy2)
+        except Exception:
+            return
+        self._clampView()
+        self._midPan = (curPx, curPy)
+        self.canvas.draw_idle()
+
     def _handleArrowPan(self, qtKey):
         """
         Pan current view by ~12% of visible range.
@@ -927,6 +1088,7 @@ class GraphPanel(QWidget):
         else:
             return False
 
+        self._clampView()
         try:
             if self.toolbar is not None:
                 self.toolbar.push_current()
