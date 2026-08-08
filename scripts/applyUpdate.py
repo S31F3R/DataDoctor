@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Apply a DataDoctor update zip from the install's Update/ folder.
+Apply a DataDoctor Python zip from the install's Update/ folder.
 
 Expected install layout (launcher package):
   <install root>/
     Data Doctor.exe | Data Doctor.command | …
     applyUpdate.cmd | applyUpdate.sh | this script (or under Project Files/scripts/)
-    Update/                 ← drop DataDoctor-Update-*.zip here
+    Update/                 ← drop DataDoctor-Python-*.zip here (from packagePython.py)
     Project Files/
       DataDoctor.py[w]
       core/                 ← live bunker.db stays here
@@ -29,7 +29,7 @@ Does NOT:
 
 Run from install root:
   python applyUpdate.py
-  python applyUpdate.py --zip Update/DataDoctor-Update-20260808.zip
+  python applyUpdate.py --zip Update/DataDoctor-Python-20260808.zip
   python "Project Files/scripts/applyUpdate.py"
 """
 
@@ -225,11 +225,11 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Apply DataDoctor update zip from Update/")
+    parser = argparse.ArgumentParser(description="Apply DataDoctor Python zip from Update/")
     parser.add_argument(
         "--zip",
         default=None,
-        help="Path to update zip (default: newest *.zip in Update/)",
+        help="Path to Python zip (default: newest *.zip in Update/)",
     )
     parser.add_argument(
         "--install-root",
@@ -262,7 +262,7 @@ def main() -> int:
         if zipPath is None:
             print(
                 f"ERROR: No *.zip found in {updateDir}\n"
-                "  Place a DataDoctor-Update-*.zip there, or pass --zip path",
+                "  Place a DataDoctor-Python-*.zip there (scripts/packagePython.py), or pass --zip path",
                 file=sys.stderr,
             )
             return 1

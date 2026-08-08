@@ -123,7 +123,7 @@ def writeUpdateReadme(stage: Path):
 FULL APP UPDATE
 ---------------
 1) Close DataDoctor.
-2) Drop a DataDoctor-Update-*.zip into Update/
+2) Drop a DataDoctor-Python-*.zip (from packagePython.py) into Update/
 3) Run:
      ./applyUpdate.sh
    Or:
@@ -245,7 +245,7 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
     updateDrop = stage / "Update"
     updateDrop.mkdir(parents=True, exist_ok=True)
     (updateDrop / "README.txt").write_text(
-        "Drop a DataDoctor-Update-*.zip here, then run applyUpdate.sh from the install root.\n",
+        "Drop a DataDoctor-Python-*.zip here (from packagePython.py), then run applyUpdate.sh from the install root.\n",
         encoding="utf-8",
     )
     applySh = stage / "applyUpdate.sh"

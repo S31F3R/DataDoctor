@@ -131,7 +131,7 @@ def writeUpdateReadme(stage: Path):
 FULL APP UPDATE (recommended after first install)
 ------------------------------------------------
 1) Close DataDoctor.
-2) Download a DataDoctor-Update-*.zip (lightweight payload from packageUpdate.py).
+2) Download a DataDoctor-Python-*.zip (raw Python payload from packagePython.py).
 3) Place the zip in this folder:
      Update\\
 4) Double-click applyUpdate.cmd
@@ -257,11 +257,11 @@ def main():
     else:
         print("WARN: applyUpdate.py not found", file=sys.stderr)
 
-    # Empty Update/ drop folder for future DataDoctor-Update-*.zip files
+    # Empty Update/ drop folder for DataDoctor-Python-*.zip (from packagePython.py)
     updateDrop = stage / "Update"
     updateDrop.mkdir(parents=True, exist_ok=True)
     (updateDrop / "README.txt").write_text(
-        "Drop a DataDoctor-Update-*.zip here, then run applyUpdate.cmd from the install root.\n",
+        "Drop a DataDoctor-Python-*.zip here (from packagePython.py), then run applyUpdate.cmd from the install root.\n",
         encoding="utf-8",
     )
 

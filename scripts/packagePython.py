@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
 """
-Build a lightweight *update* zip for installs that already have a launcher + venv.
+Build a raw Python runtime zip for DataDoctor (no launcher, no .venv).
 
-Users drop the zip into their install's Update/ folder and run applyUpdate
-(applyUpdate.cmd / applyUpdate.sh / python applyUpdate.py).
-
-Zip layout (all relative to Project Files when applied):
-  DataDoctor.py
+Contents are the app files you point Python at under Project Files/:
+  DataDoctor.py / DataDoctor.pyw
   requirements.txt
-  core/          (includes bunker.db as the *merge source* only — apply uses temp merge)
+  core/          (bunker.db also under temp/ as merge source for applyUpdate)
   ui/
-  quickLook/     (stock snippets; does not delete user-added files)
+  quickLook/     (stock snippets; apply does not delete user-added files)
   VERSION.txt
+  scripts/updateBunker.py  (optional merge helper)
 
-Optional:
-  scripts/updateBunker.py  (merge helper if install is older)
+Typical uses:
+  - Drop into an existing launcher install's Update/ folder → run applyUpdate
+  - Manual/raw install: unzip and run with a local Python 3.13 + venv
 
 Run from project root:
-  python scripts/packageUpdate.py
-  python scripts/packageUpdate.py --out dist/DataDoctor-Update.zip
+  python scripts/packagePython.py
+  python scripts/packagePython.py --out dist/DataDoctor-Python.zip
 """
 
 from __future__ import annotations
@@ -61,12 +60,12 @@ def copyTree(src: Path, dst: Path, ignoreNames=None):
 def main() -> int:
     root = projectRoot()
     parser = argparse.ArgumentParser(
-        description="Package a DataDoctor update zip (raw Python payload for Update/)"
+        description="Package DataDoctor as a raw Python runtime zip"
     )
     parser.add_argument(
         "--out",
         default=None,
-        help="Output zip path (default: dist/DataDoctor-Update-YYYYMMDD.zip)",
+        help="Output zip path (default: dist/DataDoctor-Python-YYYYMMDD.zip)",
     )
     parser.add_argument(
         "--keep-build",
@@ -81,9 +80,9 @@ def main() -> int:
         return 1
 
     stamp = datetime.now().strftime("%Y%m%d")
-    outZip = Path(args.out) if args.out else (root / "dist" / f"DataDoctor-Update-{stamp}.zip")
+    outZip = Path(args.out) if args.out else (root / "dist" / f"DataDoctor-Python-{stamp}.zip")
     outZip.parent.mkdir(parents=True, exist_ok=True)
-    stage = root / "dist" / f"updateStage{stamp}"
+    stage = root / "dist" / f"pythonStage{stamp}"
     if stage.exists():
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
@@ -102,7 +101,7 @@ def main() -> int:
     if req.is_file():
         shutil.copy2(req, stage / "requirements.txt")
 
-    # Bunker as merge source (applyUpdate moves this to temp/ for updateBunker)
+    # Bunker as merge source (applyUpdate uses temp/ for updateBunker)
     bunker = root / "core" / "bunker.db"
     if bunker.is_file():
         (stage / "temp").mkdir(parents=True, exist_ok=True)
@@ -116,9 +115,11 @@ def main() -> int:
         shutil.copy2(updateBunker, stage / "scripts" / "updateBunker.py")
 
     versionText = (
-        f"DataDoctor update package\n"
+        f"DataDoctor Python package\n"
         f"Built: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-        f"Drop this zip into your install's Update/ folder and run applyUpdate.\n"
+        f"Raw runtime tree (no launcher / venv).\n"
+        f"Update path: drop into install Update/ and run applyUpdate.\n"
+        f"Manual path: unzip, create a venv, pip install -r requirements.txt, run DataDoctor.py.\n"
     )
     (stage / "VERSION.txt").write_text(versionText, encoding="utf-8")
 
@@ -133,7 +134,7 @@ def main() -> int:
 
     sizeKiB = outZip.stat().st_size // 1024
     print(f"Wrote {outZip} ({sizeKiB} KiB)")
-    print("Install: place zip in <install>/Update/ then run applyUpdate.")
+    print("Use: drop into <install>/Update/ then applyUpdate, or unzip for a raw Python run.")
 
     if not args.keepBuild and stage.exists():
         shutil.rmtree(stage, ignore_errors=True)
