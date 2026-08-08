@@ -3,6 +3,7 @@
 import json
 import math
 import os
+import random
 import struct
 import time
 
@@ -12,7 +13,7 @@ from PyQt6.QtWidgets import (
     QGraphicsOpacityEffect,
 )
 from PyQt6.QtCore import Qt, QUrl, QSize, QObject, QEvent, QTimer, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QPixmap, QFont, QIcon, QImage
+from PyQt6.QtGui import QPixmap, QFont, QIcon, QImage, QColor, QPainter
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import uic
 
@@ -57,8 +58,37 @@ def _addTitle(title, factory, markKey):
     _CATALOG.append({"title": title, "factory": factory, "key": markKey})
 
 
+def _starfieldPixmap(width=900, height=479, seed=31415):
+    """Plain starfield for SELECT mode — no app logo / wordmark."""
+    pm = QPixmap(width, height)
+    pm.fill(QColor(0, 0, 0))
+    painter = QPainter(pm)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+    rng = random.Random(seed)
+    for _ in range(180):
+        x = rng.randint(0, width - 1)
+        y = rng.randint(0, height - 1)
+        bright = rng.randint(140, 255)
+        size = 1 if rng.random() < 0.85 else 2
+        painter.fillRect(x, y, size, size, QColor(bright, bright, min(255, bright + 20)))
+    # A few cyan/magenta glints for coin-op feel
+    for _ in range(24):
+        x = rng.randint(0, width - 1)
+        y = rng.randint(0, height - 1)
+        if rng.random() < 0.5:
+            painter.fillRect(x, y, 1, 1, QColor(80, 220, 255))
+        else:
+            painter.fillRect(x, y, 1, 1, QColor(255, 80, 200))
+    painter.end()
+    return pm
+
+
 class uiAbout(QDialog):
     """About dialog: Retro PNG bg with transparent info overlay and looping music."""
+
+    _TITLE_DEFAULT = "About Data Doctor"
+    _TITLE_CABINET = "S31F3R's Secret"
+
     def __init__(self, winMain=None):
         super().__init__(parent=winMain)
         uic.loadUi(Logic.resourcePath('ui/winAbout.ui'), self)
@@ -69,6 +99,7 @@ class uiAbout(QDialog):
         self._cabList = None
         self._cabHeader = None
         self._cabHint = None
+        self._cabBackdrop = None
         self._playLabel = None
         self._splashBg = None
         self._splashRpo = None
@@ -88,7 +119,7 @@ class uiAbout(QDialog):
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
         self.buttonSecret = self.findChild(QPushButton, 'buttonSecret')
         self.setFixedSize(900, 479)
-        self.setWindowTitle('About Data Doctor')
+        self.setWindowTitle(self._TITLE_DEFAULT)
 
         pngPath = Logic.resourcePath('ui/DataDoctor.png')
         pixmap = QPixmap(pngPath)
@@ -203,6 +234,18 @@ class uiAbout(QDialog):
     def _ensureCabinetWidgets(self):
         fam = getattr(self, "_retroFam", "monospace")
         pt = getattr(self, "_retroPt", 9)
+
+        # Covers About art (logo/wordmark) while SELECT / cabinet is active
+        backdrop = QLabel(self)
+        backdrop.setObjectName("cabBackdrop")
+        backdrop.setGeometry(0, 0, 900, 479)
+        backdrop.setPixmap(_starfieldPixmap(900, 479))
+        backdrop.setScaledContents(False)
+        backdrop.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        backdrop.setStyleSheet("background-color: black;")
+        backdrop.hide()
+        self._cabBackdrop = backdrop
+
         header = QLabel(self)
         header.setObjectName("cabHeader")
         header.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -347,18 +390,45 @@ class uiAbout(QDialog):
         elif key == Qt.Key.Key_R:
             self._playPulses.append("r")
 
+    def _applyCabinetShell(self, active):
+        """
+        Cabinet presentation: clean starfield (no About logo) + secret window title.
+        Reverts both when leaving cabinet mode entirely.
+        """
+        if active:
+            self.setWindowTitle(self._TITLE_CABINET)
+            if self.backgroundLabel is not None:
+                self.backgroundLabel.hide()
+            if self._cabBackdrop is not None:
+                self._cabBackdrop.show()
+                # Under list chrome / play / splash, above empty dialog
+                self._cabBackdrop.lower()
+                if self.backgroundLabel is not None:
+                    self.backgroundLabel.lower()
+        else:
+            self.setWindowTitle(self._TITLE_DEFAULT)
+            if self._cabBackdrop is not None:
+                self._cabBackdrop.hide()
+            if self.backgroundLabel is not None:
+                self.backgroundLabel.show()
+                self.backgroundLabel.lower()
+
     def _openCabinet(self):
         if self.textInfo is not None:
             self.textInfo.hide()
         if self.buttonSecret is not None:
             self.buttonSecret.hide()
         self._cabinetMode = True
+        self._applyCabinetShell(True)
         self._refreshCatalog()
         self._showCatalogChrome(True)
         if self._cabList is not None:
             self._cabList.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _showCatalogChrome(self, visible):
+        if visible and self._cabBackdrop is not None:
+            self._cabBackdrop.show()
+            self._cabBackdrop.raise_()
         for w in (self._cabHeader, self._cabList, self._cabHint):
             if w is None:
                 continue
@@ -375,6 +445,7 @@ class uiAbout(QDialog):
         self._cabinetMode = False
         self._playMode = False
         self._splashMode = False
+        self._applyCabinetShell(False)
         if self.textInfo is not None:
             self.textInfo.show()
         if self.buttonSecret is not None:
@@ -394,6 +465,7 @@ class uiAbout(QDialog):
         if self._playLabel is not None:
             self._playLabel.hide()
             self._playLabel.clear()
+        self._applyCabinetShell(False)
         if self.textInfo is not None:
             self.textInfo.show()
         if self.buttonSecret is not None:
