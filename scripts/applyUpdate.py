@@ -267,7 +267,7 @@ def main() -> int:
             )
             return 1
 
-    print(f"Update zip: {zipPath}")
+    print(f"Python zip: {zipPath}")
     return apply(zipPath, installRoot, keepExtract=args.keepExtract)
 
 
