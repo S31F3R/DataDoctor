@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
 from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, QEvent, pyqtSignal, QTimer
 from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
 from PyQt6 import uic
-from core import Logic, Query, Utils, Config, Upload
+from core import Logic, Query, Utils, Config, Upload, Update
 from ui.uiAbout import uiAbout
 from ui.uiDataDictionary import uiDataDictionary
 from ui.uiOptions import uiOptions, warmKeyringCache
@@ -1976,6 +1976,8 @@ if __name__ == '__main__':
             pass
         # Warm keyring off the critical path so first Options open is not cold
         QTimer.singleShot(0, warmKeyringCache)
+        # GitHub release check (silent if no releases / offline / already current)
+        Update.scheduleStartupUpdateCheck(winMain, delayMs=3000)
 
         # Convert legacy quickLooks
         try:

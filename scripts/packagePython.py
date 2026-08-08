@@ -151,7 +151,14 @@ def main() -> int:
     if licenseSrc.is_file():
         shutil.copy2(licenseSrc, stage / "LICENSE")
 
+    # Version for release notes (tag on GitHub should match core/Version.py)
+    try:
+        from core.Version import VERSION as appVersion
+    except Exception:
+        appVersion = "unknown"
+
     readme = f"""DataDoctor — Python package
+Version: {appVersion}
 Built: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
 Raw app tree only (no launcher, no .venv, no update scripts).
@@ -173,11 +180,17 @@ MANUAL INSTALL
 3) .venv/bin/pip install -r requirements.txt   (Windows: .venv\\Scripts\\pip ...)
 4) .venv/bin/python DataDoctor.py
 
+GITHUB RELEASES
+---------------
+Attach this zip as DataDoctor-Python.zip (or DataDoctor-Python-vX.Y.Z.zip).
+Tag the release vX.Y.Z to match core/Version.py (e.g. v3.0.0 or v3.0.1-rc.1).
+Mark beta/RC releases as Pre-release on GitHub.
+
 UPDATING A LAUNCHER INSTALL
 ---------------------------
 Launcher packages ship applyUpdate + updateBunker. Drop this zip into that
-install's Update/ folder and run applyUpdate there — merge/pip are handled
-on the launcher side, not by anything inside this zip.
+install's Update/ folder and run applyUpdate — merge/pip are handled on the
+launcher side, not by anything inside this zip.
 """
     (stage / "README.txt").write_text(readme.strip() + "\n", encoding="utf-8")
 

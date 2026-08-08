@@ -163,6 +163,7 @@ class uiOptions(QDialog):
         self.chkbQAQC = self.findChild(QCheckBox, 'chkbQAQC')
         self.chkbRawData = self.findChild(QCheckBox, 'chkbRawData')
         self.chkbDebug = self.findChild(QCheckBox, 'chkbDebug')
+        self.chkbBetaUpdates = self.findChild(QCheckBox, 'chkbBetaUpdates')
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
         self.btnShowPassword = self.findChild(QPushButton, 'btnShowPassword')
         self.btnShowOraclePassword = self.findChild(QPushButton, 'btnShowOraclePassword')
@@ -305,6 +306,7 @@ class uiOptions(QDialog):
             self.chkbQAQC,
             self.chkbRetroMode,
             self.chkbDebug,
+            self.chkbBetaUpdates,
         ]
         for a, b in zip(chain, chain[1:]):
             if a is not None and b is not None:
@@ -506,6 +508,14 @@ class uiOptions(QDialog):
 
         if Config.debug:
             Logic.logMessage("DEBUG", "Set chkbDebug to: {}".format(self.chkbDebug.isChecked()))
+        if self.chkbBetaUpdates is not None:
+            channel = (config.get('updateChannel') or 'stable').strip().lower()
+            self.chkbBetaUpdates.setChecked(channel in ('beta', 'pre', 'prerelease', 'rc'))
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"Set chkbBetaUpdates to: {self.chkbBetaUpdates.isChecked()} (channel={channel})",
+                )
         tnsPath = config.get('tnsNamesLocation', '')
 
         if tnsPath.startswith(Config.appRoot):
@@ -615,12 +625,16 @@ class uiOptions(QDialog):
         hourMethod = 'EOP' if self.rbEOP.isChecked() else 'BOP'
         # Drop legacy enableSQL — SQL tab is toggled via btnSQL on the main window
         config.pop('enableSQL', None)
+        updateChannel = 'stable'
+        if self.chkbBetaUpdates is not None and self.chkbBetaUpdates.isChecked():
+            updateChannel = 'beta'
         config.update({
             'utcOffset': self.cbUTCOffset.currentText(),
             'retroMode': newRetro,
             'qaqc': self.chkbQAQC.isChecked(),
             'rawData': self.chkbRawData.isChecked(),
             'debugMode': self.chkbDebug.isChecked(),
+            'updateChannel': updateChannel,
             'tnsNamesLocation': tnsPath,
             'hourTimestampMethod': hourMethod,
             # Keep periodOffset in sync: EOP = True (end-of-period), BOP = False

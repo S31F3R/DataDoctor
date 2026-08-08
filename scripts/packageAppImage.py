@@ -431,6 +431,28 @@ def main() -> int:
     sizeMb = outAppImage.stat().st_size / (1024 * 1024)
     print(f"Done: {outAppImage} ({sizeMb:.1f} MB)  arch={arch}")
 
+    # Sidecars next to the AppImage (same folder users keep the binary in)
+    try:
+        side = outAppImage.parent
+        applySrc = root / "scripts" / "applyAppImageUpdate.sh"
+        if applySrc.is_file():
+            dest = side / "applyAppImageUpdate.sh"
+            shutil.copy2(applySrc, dest)
+            dest.chmod(dest.stat().st_mode | 0o111)
+            print(f"Wrote {dest}")
+        updateDrop = side / "Update"
+        updateDrop.mkdir(parents=True, exist_ok=True)
+        (updateDrop / "README.txt").write_text(
+            "App downloads a new .AppImage here on update.\n"
+            "Then run applyAppImageUpdate.sh (or let the app quit-and-apply).\n"
+            "GitHub release asset should be named like DataDoctor-x86_64.AppImage\n"
+            "or a zip containing that AppImage.\n",
+            encoding="utf-8",
+        )
+        print(f"Update drop folder: {updateDrop}")
+    except Exception as e:
+        print(f"WARN: could not write AppImage sidecars: {e}", file=sys.stderr)
+
     if not args.keepBuild:
         shutil.rmtree(workPath, ignore_errors=True)
         shutil.rmtree(pyDist, ignore_errors=True)

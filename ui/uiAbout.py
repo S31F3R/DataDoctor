@@ -6,7 +6,7 @@ from PyQt6.QtCore import Qt, QUrl, QSize, QObject, QEvent
 from PyQt6.QtGui import QPixmap, QFont, QIcon
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import uic
-from core import Logic, Utils, Config
+from core import Logic, Utils, Config, Version
 
 class uiAbout(QDialog):
     """About dialog: Retro PNG bg with transparent info overlay and looping music."""
@@ -38,8 +38,8 @@ class uiAbout(QDialog):
         self.textInfo.setFont(retroFontObj)
         
         infoList = [
-            ('Version', '3.0.0'),
-            ('GitHub', 'https://github.com/S31F3R/DataDoctor'),
+            ('Version', Version.displayVersion()),
+            ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
             ('Author', 'S31F3R'),
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
