@@ -149,56 +149,12 @@ class uiOptions(QDialog):
         if self.qleAQServer is not None:
             self.qleAQServer.setPlaceholderText("https://yourserverlink.com")
 
-        # Replace qleAQPassword with customPasswordEdit
-        oldAQPassword = self.findChild(QLineEdit, 'qleAQPassword')
-
-        if oldAQPassword:
-            parent = oldAQPassword.parent()
-            layout = parent.layout() if parent else None
-
-            if layout:
-                index = layout.indexOf(oldAQPassword)
-
-                if index != -1:
-                    self.qleAQPassword = Utils.customPasswordEdit(parent)
-                    self.qleAQPassword.setObjectName('qleAQPassword')
-                    self.qleAQPassword.setPlaceholderText(oldAQPassword.placeholderText())
-                    self.qleAQPassword.setMaxLength(oldAQPassword.maxLength())
-                    self.qleAQPassword.setAlignment(oldAQPassword.alignment())
-                    self.qleAQPassword.setStyleSheet(oldAQPassword.styleSheet())
-                    self.qleAQPassword.setEnabled(oldAQPassword.isEnabled())
-                    layout.replaceWidget(oldAQPassword, self.qleAQPassword)
-                    oldAQPassword.deleteLater()
-
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", "Replaced qleAQPassword with customPasswordEdit using layout")
-                else:
-                    if Config.debug:
-                        Logic.logMessage("WARN", "No index for qleAQPassword in layout, using geometry fallback")
-            else:
-                if Config.debug:
-                    Logic.logMessage("WARN", "No layout for qleAQPassword parent, using geometry fallback")
-
-            if not layout or index == -1:
-                geom = oldAQPassword.geometry()
-                self.qleAQPassword = Utils.customPasswordEdit(parent)
-                self.qleAQPassword.setObjectName('qleAQPassword')
-                self.qleAQPassword.setPlaceholderText(oldAQPassword.placeholderText())
-                self.qleAQPassword.setMaxLength(oldAQPassword.maxLength())
-                self.qleAQPassword.setAlignment(oldAQPassword.alignment())
-                self.qleAQPassword.setStyleSheet(oldAQPassword.styleSheet())
-                self.qleAQPassword.setEnabled(oldAQPassword.isEnabled())
-                self.qleAQPassword.setGeometry(geom)
-                oldAQPassword.hide()
-                oldAQPassword.deleteLater()
-                self.qleAQPassword.show()
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Replaced qleAQPassword with customPasswordEdit at geometry {geom.x()},{geom.y()},{geom.width()},{geom.height()}")
-        else:
-            if Config.debug:
-                Logic.logMessage("ERROR", "qleAQPassword not found, cannot replace")
-
+        # Options tabs use absolute geometry (no layouts). Swap plain QLineEdits
+        # for customPasswordEdit in place — geometry path is expected, not an error.
+        self.qleAQPassword = self._replaceWithPasswordEdit(
+            'qleAQPassword',
+            maxLength=None,
+        )
         self.qleTNSNames = self.findChild(QLineEdit, 'qleTNSNames')
         self.rbBOP = self.findChild(QRadioButton, 'rbBOP')
         self.rbEOP = self.findChild(QRadioButton, 'rbEOP')
@@ -212,109 +168,14 @@ class uiOptions(QDialog):
         self.btnShowOraclePassword = self.findChild(QPushButton, 'btnShowOraclePassword')
         self.qleOracleUser = self.findChild(QLineEdit, 'qleOracleUser')
 
-        # Replace qleOraclePassword with customPasswordEdit
-        oldOraclePassword = self.findChild(QLineEdit, 'qleOraclePassword')
-
-        if oldOraclePassword:
-            parent = oldOraclePassword.parent()
-            layout = parent.layout() if parent else None
-
-            if layout:
-                index = layout.indexOf(oldOraclePassword)
-
-                if index != -1:
-                    self.qleOraclePassword = Utils.customPasswordEdit(parent)
-                    self.qleOraclePassword.setObjectName('qleOraclePassword')
-                    self.qleOraclePassword.setPlaceholderText(oldOraclePassword.placeholderText())
-                    self.qleOraclePassword.setMaxLength(
-                        int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30)
-                    )
-                    self.qleOraclePassword.setAlignment(oldOraclePassword.alignment())
-                    self.qleOraclePassword.setStyleSheet(oldOraclePassword.styleSheet())
-                    self.qleOraclePassword.setEnabled(oldOraclePassword.isEnabled())
-                    layout.replaceWidget(oldOraclePassword, self.qleOraclePassword)
-                    oldOraclePassword.deleteLater()
-
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", "Replaced qleOraclePassword with customPasswordEdit using layout")
-                else:
-                    if Config.debug:
-                        Logic.logMessage("WARN", "No index for qleOraclePassword in layout, using geometry fallback")
-            else:
-                if Config.debug:
-                    Logic.logMessage("WARN", "No layout for qleOraclePassword parent, using geometry fallback")
-
-            if not layout or index == -1:
-                geom = oldOraclePassword.geometry()
-                self.qleOraclePassword = Utils.customPasswordEdit(parent)
-                self.qleOraclePassword.setObjectName('qleOraclePassword')
-                self.qleOraclePassword.setPlaceholderText(oldOraclePassword.placeholderText())
-                self.qleOraclePassword.setMaxLength(
-                    int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30)
-                )
-                self.qleOraclePassword.setAlignment(oldOraclePassword.alignment())
-                self.qleOraclePassword.setStyleSheet(oldOraclePassword.styleSheet())
-                self.qleOraclePassword.setEnabled(oldOraclePassword.isEnabled())
-                self.qleOraclePassword.setGeometry(geom)
-                oldOraclePassword.hide()
-                oldOraclePassword.deleteLater()
-                self.qleOraclePassword.show()
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Replaced qleOraclePassword with customPasswordEdit at geometry {geom.x()},{geom.y()},{geom.width()},{geom.height()}")
-        else:
-            if Config.debug:
-                Logic.logMessage("ERROR", "qleOraclePassword not found, cannot replace")
-
-        # Replace qleUSGSAPIKey with customPasswordEdit
-        oldUSGSAPIKey = self.findChild(QLineEdit, 'qleUSGSAPIKey')
-
-        if oldUSGSAPIKey:
-            parent = oldUSGSAPIKey.parent()
-            layout = parent.layout() if parent else None
-
-            if layout:
-                index = layout.indexOf(oldUSGSAPIKey)
-
-                if index != -1:
-                    self.qleUSGSAPIKey = Utils.customPasswordEdit(parent)
-                    self.qleUSGSAPIKey.setObjectName('qleUSGSAPIKey')
-                    self.qleUSGSAPIKey.setPlaceholderText(oldUSGSAPIKey.placeholderText())
-                    self.qleUSGSAPIKey.setMaxLength(oldUSGSAPIKey.maxLength())
-                    self.qleUSGSAPIKey.setAlignment(oldUSGSAPIKey.alignment())
-                    self.qleUSGSAPIKey.setStyleSheet(oldUSGSAPIKey.styleSheet())
-                    self.qleUSGSAPIKey.setEnabled(oldUSGSAPIKey.isEnabled())
-                    layout.replaceWidget(oldUSGSAPIKey, self.qleUSGSAPIKey)
-                    oldUSGSAPIKey.deleteLater()
-
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", "Replaced qleUSGSAPIKey with customPasswordEdit using layout")
-                else:
-                    if Config.debug:
-                        Logic.logMessage("WARN", "No index for qleUSGSAPIKey in layout, using geometry fallback")
-            else:
-                if Config.debug:
-                    Logic.logMessage("WARN", "No layout for qleUSGSAPIKey parent, using geometry fallback")
-
-            if not layout or index == -1:
-                geom = oldUSGSAPIKey.geometry()
-                self.qleUSGSAPIKey = Utils.customPasswordEdit(parent)
-                self.qleUSGSAPIKey.setObjectName('qleUSGSAPIKey')
-                self.qleUSGSAPIKey.setPlaceholderText(oldUSGSAPIKey.placeholderText())
-                self.qleUSGSAPIKey.setMaxLength(oldUSGSAPIKey.maxLength())
-                self.qleUSGSAPIKey.setAlignment(oldUSGSAPIKey.alignment())
-                self.qleUSGSAPIKey.setStyleSheet(oldUSGSAPIKey.styleSheet())
-                self.qleUSGSAPIKey.setEnabled(oldUSGSAPIKey.isEnabled())
-                self.qleUSGSAPIKey.setGeometry(geom)
-                oldUSGSAPIKey.hide()
-                oldUSGSAPIKey.deleteLater()
-                self.qleUSGSAPIKey.show()
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Replaced qleUSGSAPIKey with customPasswordEdit at geometry {geom.x()},{geom.y()},{geom.width()},{geom.height()}")
-        else:
-            if Config.debug:
-                Logic.logMessage("ERROR", "qleUSGSAPIKey not found, cannot replace")
+        self.qleOraclePassword = self._replaceWithPasswordEdit(
+            'qleOraclePassword',
+            maxLength=int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30),
+        )
+        self.qleUSGSAPIKey = self._replaceWithPasswordEdit(
+            'qleUSGSAPIKey',
+            maxLength=None,
+        )
 
         self.btnShowUSGSKey = self.findChild(QPushButton, 'btnShowUSGSKey')
 
@@ -382,6 +243,55 @@ class uiOptions(QDialog):
 
         if Config.debug:
             Logic.logMessage("DEBUG", "uiOptions initialized")
+
+    def _replaceWithPasswordEdit(self, objectName, maxLength=None):
+        """
+        Swap a plain QLineEdit from the .ui for customPasswordEdit.
+
+        winOptions tabs use absolute geometry (no layout on the parent page), so
+        the geometry path is normal — not a warning.
+        """
+        old = self.findChild(QLineEdit, objectName)
+        if old is None:
+            if Config.debug:
+                Logic.logMessage("ERROR", f"{objectName} not found, cannot replace")
+            return None
+
+        parent = old.parent()
+        geom = old.geometry()
+        newEdit = Utils.customPasswordEdit(parent)
+        newEdit.setObjectName(objectName)
+        newEdit.setPlaceholderText(old.placeholderText())
+        if maxLength is not None:
+            newEdit.setMaxLength(int(maxLength))
+        else:
+            newEdit.setMaxLength(old.maxLength())
+        newEdit.setAlignment(old.alignment())
+        newEdit.setStyleSheet(old.styleSheet())
+        newEdit.setEnabled(old.isEnabled())
+
+        layout = parent.layout() if parent is not None else None
+        if layout is not None:
+            index = layout.indexOf(old)
+            if index != -1:
+                layout.replaceWidget(old, newEdit)
+                old.deleteLater()
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Replaced {objectName} via layout")
+                return newEdit
+
+        # Expected path for geometry-based Options tabs
+        newEdit.setGeometry(geom)
+        old.hide()
+        old.deleteLater()
+        newEdit.show()
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"Replaced {objectName} at geometry "
+                f"{geom.x()},{geom.y()},{geom.width()}x{geom.height()}",
+            )
+        return newEdit
 
     def setupOptionsTabOrder(self):
         """
