@@ -118,30 +118,21 @@ SUPPORT NOTES
 
 
 def writeUpdateReadme(stage: Path):
-    text = """DataDoctor — updating bunker.db (data dictionary)
+    text = """DataDoctor — updates (macOS)
 
-When you install a new package over an existing copy, your live data dictionary
-is Project Files/core/bunker.db. The package also ships a fresh dictionary at:
-
-  Project Files/temp/bunker.db
-
-That temp file is the *source* for merges. Your live core/bunker.db is the
-*destination* (user data you keep).
-
-HOW TO MERGE
-------------
+FULL APP UPDATE
+---------------
 1) Close DataDoctor.
-2) From the install root (next to Data Doctor.command):
-     python3 "Project Files/scripts/updateBunker.py"
-   Or if you have Project Files/.venv:
-     "Project Files/.venv/bin/python" "Project Files/scripts/updateBunker.py"
-3) The script will:
-     - Back up your live bunker.db
-     - Merge dictionary rows from temp/bunker.db into core/bunker.db
-     - Only update matched fields; insert new rows; never delete your rows
-     - Remove Project Files/temp/ when done
+2) Drop a DataDoctor-Update-*.zip into Update/
+3) Run:
+     ./applyUpdate.sh
+   Or:
+     python3 "Project Files/scripts/applyUpdate.py"
+4) Restart DataDoctor.
 
-Dry run (no writes):
+DICTIONARY-ONLY MERGE
+---------------------
+  python3 "Project Files/scripts/updateBunker.py"
   python3 "Project Files/scripts/updateBunker.py" --dry-run
 """
     (stage / "UPDATE.txt").write_text(text.strip() + "\n", encoding="utf-8")
@@ -236,6 +227,12 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
     else:
         print("WARN: updateBunker.py not found", file=sys.stderr)
 
+    applyUpdateSrc = root / "scripts" / "applyUpdate.py"
+    if applyUpdateSrc.is_file():
+        shutil.copy2(applyUpdateSrc, scriptsDir / "applyUpdate.py")
+    else:
+        print("WARN: applyUpdate.py not found", file=sys.stderr)
+
     bunkerSrc = root / "core" / "bunker.db"
     tempDir = projectFiles / "temp"
     if bunkerSrc.is_file():
@@ -244,6 +241,39 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
         print("Packaged bunker.db → Project Files/temp/bunker.db")
     else:
         print("WARN: core/bunker.db missing — temp merge payload not packaged", file=sys.stderr)
+
+    updateDrop = stage / "Update"
+    updateDrop.mkdir(parents=True, exist_ok=True)
+    (updateDrop / "README.txt").write_text(
+        "Drop a DataDoctor-Update-*.zip here, then run applyUpdate.sh from the install root.\n",
+        encoding="utf-8",
+    )
+    applySh = stage / "applyUpdate.sh"
+    applySh.write_text(
+        """#!/bin/bash
+set -e
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+PY=""
+if [ -x "$ROOT/Project Files/.venv/bin/python" ]; then
+  PY="$ROOT/Project Files/.venv/bin/python"
+elif [ -x "$ROOT/Project Files/.venv/bin/python3" ]; then
+  PY="$ROOT/Project Files/.venv/bin/python3"
+elif command -v python3 >/dev/null 2>&1; then
+  PY="$(command -v python3)"
+else
+  PY="python"
+fi
+SCRIPT="$ROOT/Project Files/scripts/applyUpdate.py"
+if [ ! -f "$SCRIPT" ]; then
+  echo "ERROR: applyUpdate.py not found" >&2
+  exit 1
+fi
+exec "$PY" "$SCRIPT" "$@"
+""",
+        encoding="utf-8",
+    )
+    applySh.chmod(0o755)
 
     writeLauncher(stage)
     writeReadme(stage)

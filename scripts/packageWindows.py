@@ -126,35 +126,37 @@ SUPPORT NOTES
 
 
 def writeUpdateReadme(stage: Path):
-    text = """DataDoctor — updating bunker.db (data dictionary)
+    text = """DataDoctor — updates
 
-When you install a new package over an existing copy, your live data dictionary
-is Project Files\\core\\bunker.db. The package also ships a fresh dictionary at:
-
-  Project Files\\temp\\bunker.db
-
-That temp file is the *source* for merges. Your live core\\bunker.db is the
-*destination* (user data you keep).
-
-HOW TO MERGE
-------------
+FULL APP UPDATE (recommended after first install)
+------------------------------------------------
 1) Close DataDoctor.
-2) From the install root (where Data Doctor.exe and updateBunker.cmd live),
-   double-click updateBunker.cmd
-   Or in Command Prompt:
-     updateBunker.cmd
-3) The script will:
-     - Back up your live bunker.db
-     - Merge dictionary rows from Project Files\\temp\\bunker.db into
-       Project Files\\core\\bunker.db
-     - Only update dataType / siteName / valuePrecision / database on match
-       (dataID + siteID); insert new rows; never delete your rows
-     - Remove Project Files\\temp\\ (and the packaged bunker.db) when done
+2) Download a DataDoctor-Update-*.zip (lightweight payload from packageUpdate.py).
+3) Place the zip in this folder:
+     Update\\
+4) Double-click applyUpdate.cmd
+   Or:
+     applyUpdate.cmd
+5) applyUpdate will:
+     - Extract the zip
+     - Refresh Project Files code (DataDoctor.py, ui/, core/* except live bunker)
+     - Merge data dictionary into Project Files\\core\\bunker.db
+     - pip install -r requirements.txt into Project Files\\.venv
+     - Delete the zip when finished
+6) Restart DataDoctor.
 
-If paths differ, pass them explicitly:
+DICTIONARY-ONLY MERGE (temp bunker from a full package)
+------------------------------------------------------
+When you install a new *full* package over an existing copy, your live data
+dictionary is Project Files\\core\\bunker.db. The package also ships a fresh
+dictionary at Project Files\\temp\\bunker.db (merge source).
+
+1) Close DataDoctor.
+2) Double-click updateBunker.cmd
+3) The script backs up live bunker.db, merges rows, never deletes yours.
+
+Manual:
   python "Project Files\\scripts\\updateBunker.py" --packaged "Project Files\\temp\\bunker.db" --user "Project Files\\core\\bunker.db"
-
-Dry run (no writes):
   python "Project Files\\scripts\\updateBunker.py" --dry-run
 """
     (stage / "UPDATE.txt").write_text(text.strip() + "\n", encoding="utf-8")
@@ -229,7 +231,7 @@ def main():
     if req.is_file():
         shutil.copy2(req, projectFiles / "requirements.txt")
 
-    # scripts: updateBunker.py lives under Project Files/scripts (not zip root)
+    # scripts under Project Files/scripts (not zip root)
     scriptsDir = projectFiles / "scripts"
     scriptsDir.mkdir(parents=True, exist_ok=True)
     updateBunkerSrc = (
@@ -249,6 +251,20 @@ def main():
     else:
         print("WARN: updateBunker.py not found", file=sys.stderr)
 
+    applyUpdateSrc = root / "scripts" / "applyUpdate.py"
+    if applyUpdateSrc.is_file():
+        shutil.copy2(applyUpdateSrc, scriptsDir / "applyUpdate.py")
+    else:
+        print("WARN: applyUpdate.py not found", file=sys.stderr)
+
+    # Empty Update/ drop folder for future DataDoctor-Update-*.zip files
+    updateDrop = stage / "Update"
+    updateDrop.mkdir(parents=True, exist_ok=True)
+    (updateDrop / "README.txt").write_text(
+        "Drop a DataDoctor-Update-*.zip here, then run applyUpdate.cmd from the install root.\n",
+        encoding="utf-8",
+    )
+
     # Packaged bunker.db for merge → Project Files/temp/ (live user DB is core/)
     bunkerSrc = root / "core" / "bunker.db"
     tempDir = projectFiles / "temp"
@@ -259,37 +275,48 @@ def main():
     else:
         print("WARN: core/bunker.db missing — temp merge payload not packaged", file=sys.stderr)
 
-    # updateBunker.cmd at zip root must call Project Files\\scripts\\updateBunker.py
-    cmdPath = stage / "updateBunker.cmd"
-    cmdPath.write_text(
-        "\r\n".join([
-            "@echo off",
-            "REM Merge packaged Project Files\\temp\\bunker.db into live core\\bunker.db",
-            "setlocal",
-            'cd /d "%~dp0"',
-            'set "PY="',
-            'if exist "Project Files\\.venv\\Scripts\\python.exe" set "PY=Project Files\\.venv\\Scripts\\python.exe"',
-            'if not defined PY if exist ".venv\\Scripts\\python.exe" set "PY=.venv\\Scripts\\python.exe"',
-            'if not defined PY set "PY=python"',
-            'set "SCRIPT=%~dp0Project Files\\scripts\\updateBunker.py"',
-            'if not exist "%SCRIPT%" (',
-            "  echo ERROR: updateBunker.py not found at Project Files\\scripts\\",
-            "  pause",
-            "  exit /b 1",
-            ")",
-            '"%PY%" "%SCRIPT%" %*',
-            "set ERR=%ERRORLEVEL%",
-            "if %ERR% neq 0 (",
-            "  echo.",
-            "  echo updateBunker failed with exit code %ERR%",
-            "  pause",
-            ")",
-            "endlocal",
-            "exit /b %ERR%",
-            "",
-        ]),
-        encoding="utf-8",
-        newline="\r\n",
+    def writeRootCmd(name: str, scriptRel: str, banner: str):
+        path = stage / name
+        path.write_text(
+            "\r\n".join([
+                "@echo off",
+                f"REM {banner}",
+                "setlocal",
+                'cd /d "%~dp0"',
+                'set "PY="',
+                'if exist "Project Files\\.venv\\Scripts\\python.exe" set "PY=Project Files\\.venv\\Scripts\\python.exe"',
+                'if not defined PY if exist ".venv\\Scripts\\python.exe" set "PY=.venv\\Scripts\\python.exe"',
+                'if not defined PY set "PY=python"',
+                f'set "SCRIPT=%~dp0{scriptRel}"',
+                'if not exist "%SCRIPT%" (',
+                f"  echo ERROR: script not found at {scriptRel}",
+                "  pause",
+                "  exit /b 1",
+                ")",
+                '"%PY%" "%SCRIPT%" %*',
+                "set ERR=%ERRORLEVEL%",
+                "if %ERR% neq 0 (",
+                "  echo.",
+                "  echo Command failed with exit code %ERR%",
+                "  pause",
+                ")",
+                "endlocal",
+                "exit /b %ERR%",
+                "",
+            ]),
+            encoding="utf-8",
+            newline="\r\n",
+        )
+
+    writeRootCmd(
+        "updateBunker.cmd",
+        "Project Files\\scripts\\updateBunker.py",
+        "Merge packaged Project Files\\temp\\bunker.db into live core\\bunker.db",
+    )
+    writeRootCmd(
+        "applyUpdate.cmd",
+        "Project Files\\scripts\\applyUpdate.py",
+        "Apply newest zip in Update\\ to this install",
     )
 
     # README + UPDATE (generated every run so installer version notes stay current)
