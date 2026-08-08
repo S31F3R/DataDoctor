@@ -3,12 +3,8 @@
 import json
 import math
 import os
-import random
-import shutil
 import struct
-import subprocess
 import time
-import wave
 
 from PyQt6.QtWidgets import (
     QDialog, QLabel, QTextBrowser, QPushButton, QMessageBox,
@@ -53,19 +49,12 @@ def _writeMark(key, value):
         pass
 
 
-# Populated by _addTitle calls further down in this file.
-# Each entry: title (list), splash (launch line), factory(host, markKey)->session, key
+# Populated by _addTitle further down. title / factory(host, key) / key
 _CATALOG = []
 
 
-def _addTitle(title, splash, factory, markKey):
-    """Register a cabinet title. factory(host, markKey) returns a play session."""
-    _CATALOG.append({
-        "title": title,
-        "splash": splash,
-        "factory": factory,
-        "key": markKey,
-    })
+def _addTitle(title, factory, markKey):
+    _CATALOG.append({"title": title, "factory": factory, "key": markKey})
 
 
 class uiAbout(QDialog):
@@ -82,7 +71,6 @@ class uiAbout(QDialog):
         self._cabHint = None
         self._playLabel = None
         self._splashBg = None
-        self._splashTitle = None
         self._splashRpo = None
         self._splashRpoFx = None
         self._splashAnim = None
@@ -94,24 +82,20 @@ class uiAbout(QDialog):
         self._playKeys = {
             "left": False, "right": False, "up": False, "down": False,
         }
-        self._playPulses = []  # one-shot: escape, space, p, r, click
+        self._playPulses = []
 
-        # Define controls
         self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
         self.buttonSecret = self.findChild(QPushButton, 'buttonSecret')
         self.setFixedSize(900, 479)
         self.setWindowTitle('About Data Doctor')
 
-        # Setup window
         pngPath = Logic.resourcePath('ui/DataDoctor.png')
         pixmap = QPixmap(pngPath)
         scaledPixmap = pixmap.scaled(900, 479, Qt.AspectRatioMode.KeepAspectRatio)
         self.backgroundLabel.setPixmap(scaledPixmap)
         self.backgroundLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # About always uses the pixel font (CRT look), with roomy line-height
         aboutFont = Utils.makeFontForRole('about')
-        # Prefer Press Start when available even if retro is off
         fam = Utils.ensureRetroFontLoaded() or aboutFont.family()
         pt = Utils.rolePointSize('about', retro=True)
         retroFontObj = QFont(fam, pt)
@@ -127,27 +111,21 @@ class uiAbout(QDialog):
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
         ]
-
         htmlContent = (
             f'<html><body style="color: white; font-family: \'{fam}\'; '
             f'font-size: {pt}pt; padding-left: 50px; white-space: nowrap; line-height: 2.2;">'
         )
-
         for label, content in infoList:
             if 'GitHub' in label:
                 htmlContent += f'{label}: <a href="{content}" style="color: white;">{content}</a><br>'
             else:
                 htmlContent += f'{label}: {content}<br>'
         htmlContent += '</body></html>'
-
         self.textInfo.setHtml(htmlContent)
         self.textInfo.setOpenExternalLinks(True)
         self.textInfo.setStyleSheet("background-color: transparent; border: none;")
         self.textInfo.setGeometry(70, 140, 800, 200)
         self.setupSecretButton()
-        # QMediaPlayer (music role) instead of QSoundEffect (event role): better for a
-        # long looping track, and avoids PipeWire/Pulse muting "event" streams on Linux.
-        # Same Qt6 APIs on Windows/macOS/Linux — keep audioOutput alive on self.
         self.mediaPlayer = None
         self.audioOutput = None
         self.setupMusic()
@@ -155,7 +133,6 @@ class uiAbout(QDialog):
         self._ensurePlayHost()
 
     def setupMusic(self):
-        """Load looping About music. Safe no-op if multimedia backend is unavailable."""
         try:
             wavPath = Logic.resourcePath('ui/sounds/8-Bit-Perplexion.wav')
             self.audioOutput = QAudioOutput(self)
@@ -163,7 +140,6 @@ class uiAbout(QDialog):
             self.mediaPlayer = QMediaPlayer(self)
             self.mediaPlayer.setAudioOutput(self.audioOutput)
             self.mediaPlayer.setSource(QUrl.fromLocalFile(wavPath))
-            # -1 == QMediaPlayer.Loops.Infinite (literal avoids enum quirks across PyQt builds)
             self.mediaPlayer.setLoops(-1)
             self.mediaPlayer.errorOccurred.connect(self.onMusicError)
         except Exception as e:
@@ -179,7 +155,6 @@ class uiAbout(QDialog):
             return
         if self._playMode or self._splashMode:
             return
-        # Restart cleanly when the dialog is reopened
         self.mediaPlayer.setPosition(0)
         self.mediaPlayer.play()
 
@@ -188,10 +163,8 @@ class uiAbout(QDialog):
             self.mediaPlayer.stop()
 
     def setupSecretButton(self):
-        """Tiny corner control — The Net (1995) π backdoor icon, bottom-right."""
         if not self.buttonSecret:
             return
-        # Stay above the background art; bottom-right like Angela's screen
         self.buttonSecret.raise_()
         self.buttonSecret.setGeometry(900 - 26, 479 - 26, 22, 22)
         self.buttonSecret.setText("")
@@ -203,11 +176,9 @@ class uiAbout(QDialog):
             "QPushButton:hover { background: rgba(255, 255, 255, 25); border-radius: 2px; }"
             "QPushButton:pressed { background: rgba(255, 255, 255, 40); }"
         )
-        # Clean 48x48 π glyph for The Net easter egg (bottom-right corner).
         iconPath = Logic.resourcePath('ui/icons/pi.png')
         if os.path.exists(iconPath):
             self.buttonSecret.setIcon(QIcon(iconPath))
-        # Movie pi is small and quiet in the corner
         self.buttonSecret.setIconSize(QSize(16, 16))
         self.buttonSecret.clicked.connect(self.buttonSecretPressed)
 
@@ -220,20 +191,16 @@ class uiAbout(QDialog):
         noBtn = dlg.addButton("NO", QMessageBox.ButtonRole.RejectRole)
         dlg.setDefaultButton(noBtn)
         dlg.setEscapeButton(noBtn)
-
         filterObj = _WorthyKeyFilter(dlg, self)
         dlg.installEventFilter(filterObj)
-        # Catch keys even when a child has focus
         for child in dlg.findChildren(QObject):
             try:
                 child.installEventFilter(filterObj)
             except Exception:
                 pass
-
         dlg.exec()
 
     def _ensureCabinetWidgets(self):
-        """Overlay list used only after the gate. Starfield stays; chrome hides."""
         fam = getattr(self, "_retroFam", "monospace")
         pt = getattr(self, "_retroPt", 9)
         header = QLabel(self)
@@ -284,7 +251,6 @@ class uiAbout(QDialog):
         self._cabHint = hint
 
     def _ensurePlayHost(self):
-        """In-window canvas + coin-op style splash (shared by every title)."""
         fam = getattr(self, "_retroFam", "monospace")
         pt = getattr(self, "_retroPt", 9)
 
@@ -305,25 +271,15 @@ class uiAbout(QDialog):
         bg.hide()
         self._splashBg = bg
 
-        title = QLabel(self)
-        title.setObjectName("splashTitle")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setGeometry(40, 150, 820, 50)
-        title.setStyleSheet(
-            f"color: #ffff66; background: transparent; "
-            f"font-family: '{fam}'; font-size: {pt + 2}pt;"
-        )
-        title.hide()
-        self._splashTitle = title
-
+        # Shared splash: only READY PLAYER ONE (no per-title line)
         rpo = QLabel(self)
         rpo.setObjectName("splashRpo")
         rpo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        rpo.setGeometry(40, 240, 820, 40)
+        rpo.setGeometry(40, 200, 820, 60)
         rpo.setText("READY PLAYER ONE")
         rpo.setStyleSheet(
             f"color: #66ffff; background: transparent; "
-            f"font-family: '{fam}'; font-size: {pt + 1}pt;"
+            f"font-family: '{fam}'; font-size: {pt + 3}pt;"
         )
         fx = QGraphicsOpacityEffect(rpo)
         fx.setOpacity(0.0)
@@ -333,7 +289,7 @@ class uiAbout(QDialog):
         self._splashRpoFx = fx
 
         self._gameTimer = QTimer(self)
-        self._gameTimer.setInterval(16)  # ~60 fps
+        self._gameTimer.setInterval(16)
         self._gameTimer.timeout.connect(self._onGameTick)
 
         self._splashHoldTimer = QTimer(self)
@@ -341,7 +297,6 @@ class uiAbout(QDialog):
         self._splashHoldTimer.timeout.connect(self._onSplashHoldDone)
 
     def eventFilter(self, obj, event):
-        # Catalog navigation
         if (
             self._cabinetMode
             and not self._playMode
@@ -357,7 +312,6 @@ class uiAbout(QDialog):
                 self._launchIndex(self._cabList.currentRow())
                 return True
 
-        # In-window play / splash input
         if self._playMode or self._splashMode:
             if obj is self._playLabel or obj is self:
                 et = event.type()
@@ -374,8 +328,8 @@ class uiAbout(QDialog):
 
     def _handlePlayKey(self, key, pressed):
         mapping = {
-            Qt.Key.Key_Left: "left", Qt.Key.Key_A: "left",
-            Qt.Key.Key_Right: "right", Qt.Key.Key_D: "right",
+            Qt.Key.Key_Left: "left", Qt.Key.Key_A: "left", Qt.Key.Key_Z: "left",
+            Qt.Key.Key_Right: "right", Qt.Key.Key_D: "right", Qt.Key.Key_Slash: "right",
             Qt.Key.Key_Up: "up", Qt.Key.Key_W: "up",
             Qt.Key.Key_Down: "down", Qt.Key.Key_S: "down",
         }
@@ -388,9 +342,9 @@ class uiAbout(QDialog):
             self._playPulses.append("escape")
         elif key == Qt.Key.Key_Space:
             self._playPulses.append("space")
-        elif key in (Qt.Key.Key_P,):
+        elif key == Qt.Key.Key_P:
             self._playPulses.append("p")
-        elif key in (Qt.Key.Key_R,):
+        elif key == Qt.Key.Key_R:
             self._playPulses.append("r")
 
     def _openCabinet(self):
@@ -428,7 +382,6 @@ class uiAbout(QDialog):
             self.buttonSecret.raise_()
 
     def _resetToDefaultAbout(self):
-        """Full reset used on close so next open is stock About."""
         self._stopEmbeddedSession()
         self._hideSplash()
         self._showCatalogChrome(False)
@@ -480,23 +433,17 @@ class uiAbout(QDialog):
         self._startSplash(entry)
 
     def _startSplash(self, entry):
-        """Shared coin-op intro: title line, then fade READY PLAYER ONE, hold, play."""
+        """Shared intro: fade READY PLAYER ONE only, hold, then play."""
         self._stopEmbeddedSession()
         self._pendingEntry = entry
         self._splashMode = True
         self._playMode = False
-
-        if self._splashTitle is not None:
-            self._splashTitle.setText(entry.get("splash") or entry.get("title") or "")
         if self._splashRpoFx is not None:
             self._splashRpoFx.setOpacity(0.0)
-
-        for w in (self._splashBg, self._splashTitle, self._splashRpo):
+        for w in (self._splashBg, self._splashRpo):
             if w is not None:
                 w.show()
                 w.raise_()
-
-        # Cancel any prior anim/hold
         if self._splashAnim is not None:
             try:
                 self._splashAnim.stop()
@@ -505,8 +452,6 @@ class uiAbout(QDialog):
             self._splashAnim = None
         if self._splashHoldTimer is not None:
             self._splashHoldTimer.stop()
-
-        # Fade in secondary line (~1.6s), then hold ~2s before play
         if self._splashRpoFx is not None:
             anim = QPropertyAnimation(self._splashRpoFx, b"opacity", self)
             anim.setDuration(1600)
@@ -545,7 +490,7 @@ class uiAbout(QDialog):
             self._splashAnim = None
         if self._splashHoldTimer is not None:
             self._splashHoldTimer.stop()
-        for w in (self._splashBg, self._splashTitle, self._splashRpo):
+        for w in (self._splashBg, self._splashRpo):
             if w is not None:
                 w.hide()
         if self._splashRpoFx is not None:
@@ -557,7 +502,6 @@ class uiAbout(QDialog):
         self._playKeys = {k: False for k in self._playKeys}
         self._playPulses = []
         self._lastTick = time.perf_counter()
-
         try:
             self._session = entry["factory"](self, entry["key"])
         except Exception as e:
@@ -565,13 +509,11 @@ class uiAbout(QDialog):
             self._playMode = False
             self._returnToCatalog()
             return
-
         if self._playLabel is not None:
             self._playLabel.show()
             self._playLabel.raise_()
             self._playLabel.setFocus(Qt.FocusReason.OtherFocusReason)
             self._playLabel.clear()
-
         if self._gameTimer is not None:
             self._gameTimer.start()
 
@@ -619,20 +561,17 @@ class uiAbout(QDialog):
             self._refreshCatalog()
             if self._cabList is not None:
                 self._cabList.setFocus(Qt.FocusReason.OtherFocusReason)
-            # Soft ambient while browsing list
             self.startMusic()
         else:
             self.startMusic()
 
     def keyPressEvent(self, event):
         if self._splashMode:
-            # Allow skip: Esc cancels to catalog; Space/Enter skips hold after fade
             if event.key() == Qt.Key.Key_Escape:
                 self._hideSplash()
                 self._returnToCatalog()
                 return
             if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
-                # Only skip remaining hold if already fully faded
                 if self._splashRpoFx is not None and self._splashRpoFx.opacity() >= 0.99:
                     if self._splashHoldTimer is not None:
                         self._splashHoldTimer.stop()
@@ -661,7 +600,6 @@ class uiAbout(QDialog):
 
     def showEvent(self, event):
         Utils.centerWindowToParent(self)
-        # Never resume mid-cabinet/play after a close — stock About only
         if not self._cabinetMode and not self._playMode and not self._splashMode:
             if self.textInfo is not None:
                 self.textInfo.show()
@@ -677,7 +615,6 @@ class uiAbout(QDialog):
         super().closeEvent(event)
 
     def reject(self):
-        # Esc / dialog reject also forces stock About next time
         self.stopMusic()
         self._resetToDefaultAbout()
         super().reject()
@@ -691,7 +628,6 @@ class _WorthyKeyFilter(QObject):
         self._dialog = dialog
         self._about = about
         self._buf = []
-        # Arrow form + letter tail; WASD form is accepted via remaps below
         self._need = [
             Qt.Key.Key_Up, Qt.Key.Key_Up,
             Qt.Key.Key_Down, Qt.Key.Key_Down,
@@ -702,14 +638,11 @@ class _WorthyKeyFilter(QObject):
         self._done = False
 
     def _mapKey(self, key, text):
-        # WASD ↔ arrows; B/A letters (any case)
         if key in (Qt.Key.Key_W,):
             return Qt.Key.Key_Up
         if key in (Qt.Key.Key_S,):
             return Qt.Key.Key_Down
         if key in (Qt.Key.Key_A,):
-            # Ambiguous: A is both left (WASD) and the final letter.
-            # Prefer letter A when we are already past the directional prefix.
             if len(self._buf) >= 8:
                 return Qt.Key.Key_A
             return Qt.Key.Key_Left
@@ -722,7 +655,6 @@ class _WorthyKeyFilter(QObject):
             Qt.Key.Key_Left, Qt.Key.Key_Right,
         ):
             return key
-        # Typed character fallback (e.g. some layouts)
         ch = (text or '').lower()
         if ch == 'w':
             return Qt.Key.Key_Up
@@ -741,7 +673,6 @@ class _WorthyKeyFilter(QObject):
     def eventFilter(self, obj, event):
         if self._done or event.type() != QEvent.Type.KeyPress:
             return super().eventFilter(obj, event)
-
         key = event.key()
         if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if self._buf == self._need:
@@ -752,13 +683,10 @@ class _WorthyKeyFilter(QObject):
                     QApplication.instance().processEvents()
                     about._openCabinet()
                 return True
-            # Wrong sequence + Enter: reset and stay on dialog
             self._buf = []
             return True
-
         mapped = self._mapKey(key, event.text())
         if mapped is None:
-            # Ignore modifiers / unrelated keys without full reset (shift on BA)
             if key in (
                 Qt.Key.Key_Shift, Qt.Key.Key_Control, Qt.Key.Key_Alt,
                 Qt.Key.Key_Meta, Qt.Key.Key_CapsLock,
@@ -766,12 +694,10 @@ class _WorthyKeyFilter(QObject):
                 return False
             self._buf = []
             return False
-
         expected = self._need[len(self._buf)] if len(self._buf) < len(self._need) else None
         if expected is not None and mapped == expected:
             self._buf.append(mapped)
         else:
-            # Restart if this key could begin a new attempt
             if mapped == self._need[0]:
                 self._buf = [mapped]
             else:
@@ -780,837 +706,67 @@ class _WorthyKeyFilter(QObject):
 
 
 # ===========================================================================
-# Below: cabinet titles (keep additions registered via _addTitle)
+# Cabinet titles — original content only (see secret.grok)
 # ===========================================================================
 
-
 if pygame is not None:
-    # Screen matches the Data Doctor About dialog (winAbout.ui / uiAbout.py): 900 x 479
-    windowWidth = 900
-    windowHeight = 479
-    mazeCols = 28
-    mazeRows = 26
-    # Largest integer tile that still leaves a HUD strip inside 479px height
-    tileSize = (windowHeight - 36) // mazeRows  # 17 → maze 476 x 442, HUD 37px
-    mazePixelW = mazeCols * tileSize
-    mazePixelH = mazeRows * tileSize
-    hudHeight = windowHeight - mazePixelH
-    # Horizontal centering offset (playfield is narrower than the window)
-    offsetX = (windowWidth - mazePixelW) // 2
-    offsetY = 0
-    width = windowWidth
-    height = windowHeight
-    # Speeds were tuned at tileSize 16; scale so feel stays consistent
-    speedScale = tileSize / 16.0
-    fps = 60
-    sampleRate = 22050
-
-    # Colors
-    BLACK = (0, 0, 0)
-    BLUE = (0, 0, 200)
-    WHITE = (255, 255, 255)
-    YELLOW = (255, 255, 0)
-    RED = (255, 0, 0)
-    PINK = (255, 184, 255)
+    W, H = 900, 479
     CYAN = (0, 255, 255)
-    ORANGE = (255, 184, 82)
-    frightenedBlue = (33, 33, 255)
-    frightenedWhite = (255, 255, 255)
+    MAGENTA = (255, 0, 200)
+    WHITE = (255, 255, 255)
+    YELLOW = (255, 255, 100)
+    BLACK = (0, 0, 0)
 
-    # Game constants (speeds scale with tile size)
-    pacmanSpeed = 2.0 * speedScale
-    ghostSpeedBase = 1.75 * speedScale
-    pelletPoints = 10
-    powerPelletPoints = 50
-    ghostPoints = [200, 400, 800, 1600]
-    centerSnap = 2.5 * speedScale  # How close to tile center before allowing a turn
-
-    # Rows that open to the side tunnels (wrap left/right)
-    tunnelRows = frozenset({8, 9, 10, 14, 15, 16})
-
-    # Classic-ish maze layout
-    # 0 = empty/walkable, 1 = wall, 2 = pellet, 3 = power pellet
-    mazeLayout = [
-        "1111111111111111111111111111",
-        "1222222222222112222222222221",
-        "1211112111112112111112111121",
-        "1311112111112112111112111131",
-        "1222222222222222222222222221",
-        "1211112112111111112112111121",
-        "1222222112222112222112222221",
-        "1111112111110110111112111111",
-        "0000012111110110111112100000",
-        "0000012110000000000112100000",
-        "0000012110111111110112100000",
-        "1111112110111111110112111111",
-        "1000000000000000000000000001",
-        "1111112110111111110112111111",
-        "0000012110111111110112100000",
-        "0000012110000000000112100000",
-        "0000012110111111110112100000",
-        "1111112110111111110112111111",
-        "1222222222222112222222222221",
-        "1211112111112112111112111121",
-        "1322212112222222222112112231",
-        "1111212112111111112112111211",
-        "1222212222222112222222221221",
-        "1211112111112112111112111121",
-        "1222222222222222222222222221",
-        "1111111111111111111111111111",
-    ]
-
-
-    def loadMaze():
-        maze = []
-        pellets = []
-        powerPellets = []
-        for y, row in enumerate(mazeLayout):
-            mazeRow = []
-            for x, char in enumerate(row):
-                if char == "1":
-                    mazeRow.append(1)
-                else:
-                    mazeRow.append(0)
-                    if char == "2":
-                        pellets.append((x, y))
-                    elif char == "3":
-                        powerPellets.append((x, y))
-            maze.append(mazeRow)
-        return maze, pellets, powerPellets
-
-
-    maze, initialPellets, initialPowerPellets = loadMaze()
-
-
-    def isWall(x, y):
-        """Check if tile (x, y) is a wall. Tunnel rows wrap off-screen."""
-        if y < 0 or y >= mazeRows:
-            return True
-        if x < 0 or x >= mazeCols:
-            return y not in tunnelRows
-        return maze[y][x] == 1
-
-
-    def getTileCenter(tx, ty):
-        return Vector2(tx * tileSize + tileSize // 2, ty * tileSize + tileSize // 2)
-
-
-    def applyTunnelWrap(pos):
-        """Wrap horizontally through side tunnels."""
-        maxX = mazeCols * tileSize
-        if pos.x < 0:
-            pos.x += maxX
-        elif pos.x >= maxX:
-            pos.x -= maxX
-        return pos
-
-
-    def tileFromPos(pos):
-        tx = int(pos.x // tileSize) % mazeCols
-        ty = int(pos.y // tileSize)
-        return tx, ty
-
-
-    # ---------------------------------------------------------------------------
-    # Sound generation (classic arcade-style effects, synthesized)
-    # ---------------------------------------------------------------------------
-
-    def clampSample(value):
-        return max(-32767, min(32767, int(value)))
-
-
-    def writeWav(path, samples):
-        with wave.open(path, "w") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(sampleRate)
-            frames = b"".join(struct.pack("<h", clampSample(s)) for s in samples)
-            wf.writeframes(frames)
-
-
-    def sineWave(freq, t):
-        return math.sin(2 * math.pi * freq * t)
-
-
-    def squareWave(freq, t):
-        return 1.0 if sineWave(freq, t) >= 0 else -1.0
-
-
-    def envelope(i, n, attack=0.02, release=0.15):
-        if n <= 1:
-            return 0.0
-        t = i / (n - 1)
-        a = min(1.0, t / attack) if attack > 0 else 1.0
-        r = min(1.0, (1.0 - t) / release) if release > 0 else 1.0
-        return a * r
-
-
-    def genWakka(high=True):
-        """Classic short chomp — alternating high/low chirp."""
-        freq = 740 if high else 520
-        n = int(sampleRate * 0.07)
-        samples = []
-        for i in range(n):
-            t = i / sampleRate
-            env = envelope(i, n, 0.01, 0.35)
-            samples.append(9000 * env * squareWave(freq, t))
-        return samples
-
-
-    def genEatGhost():
-        """Ascending blips when a frightened ghost is eaten."""
-        samples = []
-        for step, freq in enumerate((400, 530, 700, 920, 1200)):
-            n = int(sampleRate * 0.07)
+    def _synthTone(freq, ms, vol=0.35, decay=True):
+        """Tiny original beep as pygame Sound (no external samples)."""
+        try:
+            rate = 22050
+            n = max(1, int(rate * ms / 1000.0))
+            buf = bytearray()
             for i in range(n):
-                t = i / sampleRate
-                env = envelope(i, n, 0.05, 0.25)
-                samples.append(11000 * env * sineWave(freq, t))
-        return samples
+                t = i / rate
+                env = (1.0 - i / n) if decay else 1.0
+                sample = int(vol * env * 32767 * math.sin(2 * math.pi * freq * t))
+                sample = max(-32767, min(32767, sample))
+                buf += struct.pack("<h", sample)
+            return pygame.mixer.Sound(buffer=bytes(buf))
+        except Exception:
+            return None
 
-
-    def genDeath():
-        """Descending warble for Pac-Man death."""
-        samples = []
-        duration = 1.4
-        n = int(sampleRate * duration)
-        for i in range(n):
-            t = i / sampleRate
-            # Falling base tone with vibrato
-            base = 700 - 450 * (t / duration)
-            vib = 30 * math.sin(2 * math.pi * 12 * t)
-            env = envelope(i, n, 0.02, 0.2) * (1.0 - 0.3 * (t / duration))
-            samples.append(12000 * env * sineWave(base + vib, t))
-        return samples
-
-
-    def genPowerPellet():
-        """Bright ding for power pellet."""
-        samples = []
-        for freq in (520, 780, 1040):
-            n = int(sampleRate * 0.09)
-            for i in range(n):
-                t = i / sampleRate
-                env = envelope(i, n, 0.02, 0.4)
-                samples.append(10000 * env * sineWave(freq, t))
-        return samples
-
-
-    def genStartJingle():
-        """Short intro-style jingle."""
-        notes = [
-            (392, 0.12), (523, 0.12), (659, 0.12), (784, 0.18),
-            (659, 0.10), (784, 0.28),
-        ]
-        samples = []
-        for freq, dur in notes:
-            n = int(sampleRate * dur)
-            for i in range(n):
-                t = i / sampleRate
-                env = envelope(i, n, 0.04, 0.25)
-                tone = 0.7 * sineWave(freq, t) + 0.3 * sineWave(freq * 2, t)
-                samples.append(10000 * env * tone)
-        return samples
-
-
-    def genExtraLife():
-        """Extra-life / level-clear sparkle."""
-        samples = []
-        for freq in (880, 1175, 1480, 1760):
-            n = int(sampleRate * 0.08)
-            for i in range(n):
-                t = i / sampleRate
-                env = envelope(i, n, 0.03, 0.3)
-                samples.append(9000 * env * sineWave(freq, t))
-        return samples
-
-
-    def genSiren(frightened=False):
-        """Looping ghost siren (normal or frightened)."""
-        duration = 0.45
-        n = int(sampleRate * duration)
-        samples = []
-        lo, hi = (180, 320) if not frightened else (280, 480)
-        for i in range(n):
-            t = i / sampleRate
-            # Triangle-ish sweep up then down
-            phase = (t / duration) * 2.0
-            if phase > 1.0:
-                phase = 2.0 - phase
-            freq = lo + (hi - lo) * phase
-            env = 0.55
-            samples.append(7000 * env * sineWave(freq, t))
-        return samples
-
-
-    def ensureSoundFiles(soundDir):
-        """Fill missing clips only when the directory is writable (dev fallback)."""
-        if not soundDir or not os.path.isdir(soundDir):
-            return
-        if not os.access(soundDir, os.W_OK):
-            return
-        generators = {
-            "n0.wav": lambda: genWakka(True),
-            "n1.wav": lambda: genWakka(False),
-            "n2.wav": genEatGhost,
-            "n3.wav": genDeath,
-            "n4.wav": genPowerPellet,
-            "n5.wav": genStartJingle,
-            "n6.wav": genExtraLife,
-            "n7.wav": lambda: genSiren(False),
-            "n8.wav": lambda: genSiren(True),
-        }
-        for name, gen in generators.items():
-            path = os.path.join(soundDir, name)
-            if not os.path.isfile(path):
-                try:
-                    writeWav(path, gen())
-                except OSError:
-                    pass
-
-
-
-
-    class SoundManager:
-        """Plays classic arcade SFX via pygame.mixer, or simpleaudio as fallback."""
-
-        mapping = {
-            "wakka0": "n0.wav",
-            "wakka1": "n1.wav",
-            "eatGhost": "n2.wav",
-            "death": "n3.wav",
-            "powerPellet": "n4.wav",
-            "start": "n5.wav",
-            "extraLife": "n6.wav",
-            "siren": "n7.wav",
-            "frightened": "n8.wav",
-        }
-
-        def __init__(self, soundDir):
-            self.enabled = False
-            self.backend = None  # "pygame" or "simpleaudio"
+    class _ToneBox:
+        def __init__(self):
+            self.ok = False
             self.sounds = {}
-            self.paths = {}
-            self.wakkaToggle = 0
-            self.loopKey = None
-            self.loopPlay = None  # simpleaudio PlayObject or pygame Channel
-            self.soundDir = soundDir
-
-            ensureSoundFiles(soundDir)
-            for key, filename in self.mapping.items():
-                self.paths[key] = os.path.join(soundDir, filename)
-
-            if self.initPygameMixer():
-                self.backend = "pygame"
-                self.enabled = True
-                return
-            if self.initPaplay():
-                self.backend = "paplay"
-                self.enabled = True
-                return
-            pass  # silent if no audio backend
-
-        def initPygameMixer(self):
-            try:
-                _ = pygame.mixer.get_init
-            except (NotImplementedError, AttributeError):
-                return False
             try:
                 if pygame.mixer.get_init() is None:
-                    pygame.mixer.init(frequency=sampleRate, size=-16, channels=1, buffer=512)
-            except (pygame.error, NotImplementedError):
-                return False
-
-            volumes = {
-                "wakka0": 0.35, "wakka1": 0.35, "eatGhost": 0.55, "death": 0.6,
-                "powerPellet": 0.5, "start": 0.45, "extraLife": 0.5,
-                "siren": 0.22, "frightened": 0.28,
-            }
-            loaded = False
-            for key, path in self.paths.items():
-                try:
-                    snd = pygame.mixer.Sound(path)
-                    snd.set_volume(volumes.get(key, 0.5))
-                    self.sounds[key] = snd
-                    loaded = True
-                except (pygame.error, NotImplementedError):
-                    self.sounds[key] = None
-            return loaded
-
-        def initPaplay(self):
-            """Fallback: PulseAudio paplay (works when pygame.mixer is missing)."""
-            self.paplayBin = shutil.which("paplay")
-            if not self.paplayBin:
-                return False
-            # Need at least the wav files on disk
-            return all(os.path.isfile(p) for p in self.paths.values())
+                    pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
+                self.sounds = {
+                    "flip": _synthTone(220, 40, 0.3),
+                    "bump": _synthTone(480, 70, 0.35),
+                    "wall": _synthTone(160, 30, 0.2),
+                    "score": _synthTone(660, 90, 0.3),
+                    "drain": _synthTone(90, 280, 0.4),
+                    "launch": _synthTone(320, 120, 0.35),
+                }
+                self.ok = True
+            except Exception:
+                self.ok = False
 
         def play(self, name):
-            if not self.enabled:
+            if not self.ok:
                 return
-            if self.backend == "pygame":
-                snd = self.sounds.get(name)
-                if not snd:
-                    return
-                try:
-                    snd.play()
-                except (pygame.error, NotImplementedError):
-                    pass
-                return
-
-            # paplay one-shot
-            path = self.paths.get(name)
-            if not path:
+            snd = self.sounds.get(name)
+            if snd is None:
                 return
             try:
-                subprocess.Popen(
-                    [self.paplayBin, path],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+                snd.play()
             except Exception:
                 pass
 
-        def playWakka(self):
-            name = "wakka0" if self.wakkaToggle == 0 else "wakka1"
-            self.wakkaToggle = 1 - self.wakkaToggle
-            self.play(name)
+    class _CabinetPb:
+        """Original cyberpunk pinball — embedded in About (no extra window)."""
 
-        def startSiren(self, frightened=False):
-            if not self.enabled:
-                return
-            self.stopLoops()
-            key = "frightened" if frightened else "siren"
-            self.loopKey = key
-            if self.backend == "pygame":
-                snd = self.sounds.get(key)
-                if not snd:
-                    self.loopKey = None
-                    return
-                try:
-                    self.loopPlay = snd.play(loops=-1)
-                except (pygame.error, NotImplementedError):
-                    self.loopKey = None
-                    self.loopPlay = None
-                return
-
-            # paplay: launch first loop iteration; updateLoops restarts it
-            self.spawnPaplayLoop()
-
-        def spawnPaplayLoop(self):
-            path = self.paths.get(self.loopKey) if self.loopKey else None
-            if not path:
-                return
-            try:
-                self.loopPlay = subprocess.Popen(
-                    [self.paplayBin, path],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            except Exception:
-                self.loopPlay = None
-
-        def updateLoops(self):
-            """Restart paplay loop clips when they finish."""
-            if not self.enabled or self.backend != "paplay" or not self.loopKey:
-                return
-            proc = self.loopPlay
-            if proc is None or proc.poll() is not None:
-                self.spawnPaplayLoop()
-
-        def stopLoops(self):
-            play = self.loopPlay
-            self.loopKey = None
-            self.loopPlay = None
-            if not play:
-                return
-            try:
-                if self.backend == "pygame":
-                    play.stop()
-                else:
-                    play.terminate()
-            except Exception:
-                pass
-
-
-    # ---------------------------------------------------------------------------
-    # Entities
-    # ---------------------------------------------------------------------------
-
-    class PacMan:
-        def __init__(self):
-            self.tileX = 13
-            self.tileY = 24  # Bottom center lane (walkable)
-            self.pos = getTileCenter(self.tileX, self.tileY)
-            self.direction = Vector2(-1, 0)  # Classic: starts facing left
-            self.nextDirection = Vector2(-1, 0)
-            self.radius = tileSize // 2 - 2
-            self.mouthPhase = 0.0
-            self.speed = pacmanSpeed
-
-        def readInput(self, keys):
-            # keys is a held-direction dict from the About host (not pygame key array)
-            if keys.get("left"):
-                self.nextDirection = Vector2(-1, 0)
-            elif keys.get("right"):
-                self.nextDirection = Vector2(1, 0)
-            elif keys.get("up"):
-                self.nextDirection = Vector2(0, -1)
-            elif keys.get("down"):
-                self.nextDirection = Vector2(0, 1)
-
-        def alignToLane(self):
-            """Keep Pac-Man centered in the corridor he is traveling."""
-            if self.direction.x != 0:
-                # Horizontal travel: lock Y to tile center
-                ty = int(self.pos.y // tileSize)
-                self.pos.y = ty * tileSize + tileSize // 2
-            elif self.direction.y != 0:
-                # Vertical travel: lock X to tile center
-                tx = int(self.pos.x // tileSize)
-                # Do not break tunnel wrap mid-tile
-                if 0 <= self.pos.x < mazeCols * tileSize:
-                    self.pos.x = tx * tileSize + tileSize // 2
-
-        def canEnter(self, tx, ty):
-            return not isWall(tx, ty)
-
-        def tryTurn(self):
-            """At tile centers, adopt nextDirection if the tile ahead is free."""
-            if self.nextDirection.length_squared() == 0:
-                return
-
-            # Already moving that way — do not re-snap to center (that freezes movement)
-            if (self.direction.x == self.nextDirection.x
-                    and self.direction.y == self.nextDirection.y):
-                return
-
-            # Reverse is always allowed mid-tile (classic Pac-Man feel)
-            if (self.direction.length_squared() > 0
-                    and self.nextDirection.x == -self.direction.x
-                    and self.nextDirection.y == -self.direction.y):
-                self.direction = Vector2(self.nextDirection)
-                return
-
-            tx, ty = tileFromPos(self.pos)
-            center = getTileCenter(tx, ty)
-            dx = abs(self.pos.x - center.x)
-            dy = abs(self.pos.y - center.y)
-            # Must be near the center to take a perpendicular turn
-            if dx > centerSnap or dy > centerSnap:
-                return
-
-            nextTx = tx + int(self.nextDirection.x)
-            nextTy = ty + int(self.nextDirection.y)
-            if self.canEnter(nextTx, nextTy):
-                self.pos = Vector2(center)
-                self.direction = Vector2(self.nextDirection)
-
-        def update(self, dt, keys):
-            self.readInput(keys)
-            self.tryTurn()
-            self.alignToLane()
-
-            if self.direction.length_squared() == 0:
-                self.mouthPhase = 0.0
-                return
-
-            move = self.direction * self.speed
-            newPos = self.pos + move
-
-            # Probe a point just ahead of the sprite
-            probeX = newPos.x + self.direction.x * (self.radius + 1)
-            probeY = newPos.y + self.direction.y * (self.radius + 1)
-            probeTileX = int(math.floor(probeX / tileSize))
-            probeTileY = int(math.floor(probeY / tileSize))
-
-            if not isWall(probeTileX, probeTileY):
-                self.pos = applyTunnelWrap(newPos)
-                self.alignToLane()
-            else:
-                # Stop flush at the center of the current tile
-                tx, ty = tileFromPos(self.pos)
-                self.pos = getTileCenter(tx, ty)
-                self.direction = Vector2(0, 0)
-
-            # Mouth chomp animation
-            self.mouthPhase += 14.0 * dt
-            if self.mouthPhase > 1.0:
-                self.mouthPhase -= 1.0
-
-        def draw(self, screen):
-            px, py = int(round(self.pos.x)), int(round(self.pos.y))
-            pygame.draw.circle(screen, YELLOW, (px, py), self.radius)
-
-            if self.direction.length_squared() > 0:
-                angle = math.atan2(self.direction.y, self.direction.x)
-            else:
-                angle = 0.0
-
-            # Mouth opens and closes (0 .. ~40 degrees)
-            openAmount = abs(math.sin(self.mouthPhase * math.pi)) * math.radians(40)
-            if openAmount < 0.05:
-                return
-
-            mouthStart = angle + openAmount
-            mouthEnd = angle - openAmount
-            points = [(px, py)]
-            for i in range(12):
-                a = mouthStart + (mouthEnd - mouthStart) * (i / 11)
-                points.append((px + math.cos(a) * self.radius,
-                               py + math.sin(a) * self.radius))
-            pygame.draw.polygon(screen, BLACK, points)
-
-        def getTile(self):
-            return tileFromPos(self.pos)
-
-
-    class Ghost:
-        # Spawn tiles (all walkable open tiles in/near the house)
-        spawnTiles = {
-            "Blinky": (13, 9),
-            "Pinky": (12, 9),
-            "Inky": (14, 9),
-            "Clyde": (15, 9),
-        }
-        houseTile = (13, 9)
-
-        def __init__(self, color, name, scatterCorner):
-            self.color = color
-            self.name = name
-            self.scatterCorner = scatterCorner
-            self.radius = tileSize // 2 - 1
-            self.reset()
-
-        def reset(self, outside=False):
-            if outside and self.name == "Blinky":
-                # Door tiles on row 7 are open at x=12 and x=15
-                tx, ty = 12, 7
-            else:
-                tx, ty = self.spawnTiles[self.name]
-            self.pos = getTileCenter(tx, ty)
-            self.direction = Vector2(-1, 0)
-            self.mode = "scatter"
-            self.frightenedTimer = 0.0
-            self.speed = ghostSpeedBase
-            self.eaten = False
-            self.respawnTimer = 0.0
-            self.decisionTile = None  # only pick a new heading once per tile
-
-        def frighten(self, duration):
-            if self.eaten:
-                return
-            if self.mode != "frightened":
-                self.direction = Vector2(-self.direction.x, -self.direction.y)
-                self.decisionTile = None
-            self.mode = "frightened"
-            self.frightenedTimer = duration
-
-        def getTarget(self, pacman, blinkyPos):
-            px, py = pacman.getTile()
-
-            if self.mode == "frightened":
-                return Vector2(
-                    random.randint(0, mazeCols - 1) * tileSize + tileSize // 2,
-                    random.randint(0, mazeRows - 1) * tileSize + tileSize // 2,
-                )
-
-            if self.mode == "scatter":
-                return getTileCenter(*self.scatterCorner)
-
-            # Chase personalities
-            if self.name == "Blinky":
-                return getTileCenter(px, py)
-
-            if self.name == "Pinky":
-                aheadX = px + int(pacman.direction.x * 4)
-                aheadY = py + int(pacman.direction.y * 4)
-                return getTileCenter(aheadX, aheadY)
-
-            if self.name == "Inky":
-                if blinkyPos is not None:
-                    pacCenter = getTileCenter(px, py)
-                    ahead = pacCenter + pacman.direction * (2 * tileSize)
-                    vec = ahead - blinkyPos
-                    return ahead + vec
-                return getTileCenter(px, py)
-
-            # Clyde: chase when far, scatter when close
-            dist = (self.pos - getTileCenter(px, py)).length()
-            if dist > 8 * tileSize:
-                return getTileCenter(px, py)
-            return getTileCenter(*self.scatterCorner)
-
-        def validDirections(self, tx, ty, allowReverse=False):
-            dirs = [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]
-            valid = []
-            reverse = Vector2(-self.direction.x, -self.direction.y)
-            for d in dirs:
-                if not allowReverse and self.direction.length_squared() > 0:
-                    if d.x == reverse.x and d.y == reverse.y:
-                        continue
-                nextTx = tx + int(d.x)
-                nextTy = ty + int(d.y)
-                if not isWall(nextTx, nextTy):
-                    valid.append(d)
-            return valid
-
-        def chooseDirection(self, target):
-            tx, ty = tileFromPos(self.pos)
-            valid = self.validDirections(tx, ty, allowReverse=False)
-
-            # Dead end or corridor end: reverse is allowed
-            if not valid:
-                valid = self.validDirections(tx, ty, allowReverse=True)
-
-            if not valid:
-                return
-
-            if self.mode == "frightened":
-                self.direction = random.choice(valid)
-                return
-
-            bestDir = valid[0]
-            bestDist = float("inf")
-            for d in valid:
-                nextCenter = getTileCenter(tx + int(d.x), ty + int(d.y))
-                # Handle tunnel wrap distance roughly
-                dist = (nextCenter - target).length_squared()
-                if dist < bestDist:
-                    bestDist = dist
-                    bestDir = d
-            self.direction = bestDir
-
-        def alignToLane(self):
-            if self.direction.x != 0:
-                ty = int(self.pos.y // tileSize)
-                self.pos.y = ty * tileSize + tileSize // 2
-            elif self.direction.y != 0:
-                if 0 <= self.pos.x < mazeCols * tileSize:
-                    tx = int(self.pos.x // tileSize)
-                    self.pos.x = tx * tileSize + tileSize // 2
-
-        def update(self, dt, pacman, blinkyPos=None):
-            if self.eaten:
-                self.respawnTimer -= dt
-                if self.respawnTimer <= 0:
-                    self.eaten = False
-                    self.mode = "chase"
-                    self.pos = getTileCenter(*self.houseTile)
-                    self.direction = Vector2(-1, 0)
-                return
-
-            if self.mode == "frightened":
-                self.speed = ghostSpeedBase * 0.55
-                self.frightenedTimer -= dt
-                if self.frightenedTimer <= 0:
-                    self.mode = "chase"
-                    self.speed = ghostSpeedBase
-            else:
-                self.speed = ghostSpeedBase
-
-            tx, ty = tileFromPos(self.pos)
-            center = getTileCenter(tx, ty)
-            distToCenter = (self.pos - center).length()
-            target = self.getTarget(pacman, blinkyPos)
-
-            # Decide once per tile, only when close enough to the center to turn cleanly.
-            # Using decisionTile avoids snapping back to center every frame (which freezes ghosts).
-            if distToCenter <= self.speed and self.decisionTile != (tx, ty):
-                self.pos = Vector2(center)
-                self.decisionTile = (tx, ty)
-                self.chooseDirection(target)
-
-            if self.direction.length_squared() == 0:
-                self.pos = Vector2(center)
-                self.decisionTile = (tx, ty)
-                self.chooseDirection(target)
-                if self.direction.length_squared() == 0:
-                    return
-
-            newPos = self.pos + self.direction * self.speed
-            probeX = newPos.x + self.direction.x * (self.radius + 1)
-            probeY = newPos.y + self.direction.y * (self.radius + 1)
-            probeTx = int(math.floor(probeX / tileSize))
-            probeTy = int(math.floor(probeY / tileSize))
-
-            if not isWall(probeTx, probeTy):
-                self.pos = applyTunnelWrap(newPos)
-                self.alignToLane()
-            else:
-                # Hit a wall: snap to center and force a new decision (allow reverse)
-                self.pos = Vector2(center)
-                self.decisionTile = None
-                self.chooseDirection(target)
-                if self.direction.length_squared() > 0:
-                    retry = self.pos + self.direction * self.speed
-                    rTx = int(math.floor(
-                        (retry.x + self.direction.x * (self.radius + 1)) / tileSize
-                    ))
-                    rTy = int(math.floor(
-                        (retry.y + self.direction.y * (self.radius + 1)) / tileSize
-                    ))
-                    if not isWall(rTx, rTy):
-                        self.pos = applyTunnelWrap(retry)
-                        self.decisionTile = (tx, ty)
-                        self.alignToLane()
-
-        def draw(self, screen):
-            if self.eaten:
-                # Eyes only while returning home
-                px, py = int(round(self.pos.x)), int(round(self.pos.y))
-                pygame.draw.circle(screen, WHITE, (px - 4, py - 2), 3)
-                pygame.draw.circle(screen, WHITE, (px + 4, py - 2), 3)
-                pygame.draw.circle(screen, BLACK, (px - 4, py - 2), 1)
-                pygame.draw.circle(screen, BLACK, (px + 4, py - 2), 1)
-                return
-
-            px, py = int(round(self.pos.x)), int(round(self.pos.y))
-
-            if self.mode == "frightened":
-                # Flash near end of frightened time
-                if self.frightenedTimer < 2.0 and int(self.frightenedTimer * 6) % 2 == 0:
-                    color = frightenedWhite
-                else:
-                    color = frightenedBlue
-            else:
-                color = self.color
-
-            # Body
-            pygame.draw.circle(screen, color, (px, py), self.radius)
-            # Skirt
-            skirtTop = py
-            pygame.draw.rect(
-                screen, color,
-                pygame.Rect(px - self.radius, skirtTop, self.radius * 2, self.radius),
-            )
-            # Wavy bottom
-            for i in range(3):
-                cx = px - self.radius + 3 + i * 5
-                pygame.draw.circle(screen, color, (cx, py + self.radius - 1), 3)
-
-            # Eyes looking toward movement
-            lookX = int(self.direction.x * 2)
-            lookY = int(self.direction.y * 2)
-            for ex in (-4, 4):
-                pygame.draw.circle(screen, WHITE, (px + ex, py - 3), 3)
-                pygame.draw.circle(screen, BLACK, (px + ex + lookX, py - 3 + lookY), 1)
-
-        def eat(self):
-            self.eaten = True
-            self.mode = "eaten"
-            self.respawnTimer = 1.5
-            self.pos = getTileCenter(*self.houseTile)
-
-
-    # ---------------------------------------------------------------------------
-    # Game
-    # ---------------------------------------------------------------------------
-
-    class _CabinetPm:
-        """Embedded session: renders into About via offscreen surface (no extra window)."""
-
-        def __init__(self, host, markKey="pm"):
+        def __init__(self, host, markKey="pb"):
             self.host = host
             self._markKey = markKey
             self.running = True
@@ -1625,12 +781,11 @@ if pygame is not None:
                 pass
             try:
                 if pygame.mixer.get_init() is None:
-                    pygame.mixer.init(frequency=sampleRate, size=-16, channels=1, buffer=512)
+                    pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
             except Exception:
                 pass
 
-            # Offscreen only — never open a second OS window
-            self.screen = pygame.Surface((windowWidth, windowHeight))
+            self.screen = pygame.Surface((W, H))
             fontPath = None
             try:
                 fontPath = Logic.resourcePath("ui/fonts/PressStart2P-Regular.ttf")
@@ -1638,327 +793,441 @@ if pygame is not None:
                 fontPath = None
             if fontPath and os.path.isfile(fontPath):
                 try:
-                    self.font = pygame.font.Font(fontPath, 14)
-                    self.bigFont = pygame.font.Font(fontPath, 22)
+                    self.font = pygame.font.Font(fontPath, 12)
+                    self.bigFont = pygame.font.Font(fontPath, 18)
                 except Exception:
-                    self.font = pygame.font.Font(None, 32)
-                    self.bigFont = pygame.font.Font(None, 56)
+                    self.font = pygame.font.Font(None, 28)
+                    self.bigFont = pygame.font.Font(None, 44)
             else:
-                self.font = pygame.font.Font(None, 32)
-                self.bigFont = pygame.font.Font(None, 56)
+                self.font = pygame.font.Font(None, 28)
+                self.bigFont = pygame.font.Font(None, 44)
 
-            self.playSurface = pygame.Surface((mazePixelW, windowHeight))
+            self.tableImg = None
+            self.ballImg = None
+            self.flipImg = None
             try:
-                self.soundDir = Logic.resourcePath("ui/sounds")
+                tpath = Logic.resourcePath("ui/fx/a0.png")
+                bpath = Logic.resourcePath("ui/fx/a1.png")
+                fpath = Logic.resourcePath("ui/fx/a2.png")
+                if os.path.isfile(tpath):
+                    self.tableImg = pygame.image.load(tpath).convert()
+                    if self.tableImg.get_size() != (W, H):
+                        self.tableImg = pygame.transform.smoothscale(self.tableImg, (W, H))
+                if os.path.isfile(bpath):
+                    self.ballImg = pygame.image.load(bpath).convert_alpha()
+                if os.path.isfile(fpath):
+                    self.flipImg = pygame.image.load(fpath).convert_alpha()
             except Exception:
-                self.soundDir = ""
-            self.audio = SoundManager(self.soundDir)
+                pass
 
-            self.highScore = self.loadHighScore()
-            self.resetGame()
-            self.state = "MENU"
-            self.anyGhostFrightened = False
-            self._animTicks = 0
-
-        def loadHighScore(self):
-            return _readMark(self._markKey)
-
-        def saveHighScore(self):
-            _writeMark(self._markKey, self.highScore)
-
-        def resetGame(self):
-            global pacmanSpeed, ghostSpeedBase
-            pacmanSpeed = 2.0 * speedScale
-            ghostSpeedBase = 1.75 * speedScale
-
+            self.audio = _ToneBox()
+            self.highScore = _readMark(self._markKey)
+            self.state = "MENU"  # MENU, PLAYING, PAUSED, GAME_OVER
             self.score = 0
-            self.level = 1
-            self.lives = 3
-            self.pacman = PacMan()
-            self.ghosts = [
-                Ghost(RED, "Blinky", (25, 1)),
-                Ghost(PINK, "Pinky", (2, 1)),
-                Ghost(CYAN, "Inky", (25, 24)),
-                Ghost(ORANGE, "Clyde", (2, 24)),
-            ]
-            self.ghosts[0].reset(outside=True)
-            self.pellets = list(initialPellets)
-            self.powerPellets = list(initialPowerPellets)
-            self.frightenedDuration = 7.0
-            self.modeTimer = 0.0
-            self.currentMode = "scatter"
-            self.ghostEatenCombo = 0
+            self.ballsLeft = 3
             self.message = ""
             self.messageTimer = 0.0
-            self.deathTimer = 0.0
-            self.anyGhostFrightened = False
-            self.audio.stopLoops()
 
-        def startLevel(self):
-            self.pacman = PacMan()
-            for g in self.ghosts:
-                g.reset(outside=(g.name == "Blinky"))
-            self.pellets = list(initialPellets)
-            self.powerPellets = list(initialPowerPellets)
-            self.modeTimer = 0.0
-            self.currentMode = "scatter"
-            self.ghostEatenCombo = 0
-            self.anyGhostFrightened = False
-            self.audio.stopLoops()
-            self.audio.startSiren(frightened=False)
+            # Physics layout (tuned for 900x479 art)
+            self.ballR = 9
+            self.gravity = 520.0
+            self.damping = 0.999
+            self.maxSpeed = 780.0
 
-        def respawnAfterDeath(self):
-            self.pacman = PacMan()
-            for g in self.ghosts:
-                g.reset(outside=(g.name == "Blinky"))
-            self.modeTimer = 0.0
-            self.currentMode = "scatter"
-            self.ghostEatenCombo = 0
-            self.anyGhostFrightened = False
-            self.audio.stopLoops()
-            self.audio.startSiren(frightened=False)
+            # Flippers: pivot positions near drain
+            self.leftPivot = Vector2(310, 420)
+            self.rightPivot = Vector2(590, 420)
+            self.flipLen = 78
+            self.flipRestL = math.radians(28)
+            self.flipUpL = math.radians(-28)
+            self.flipRestR = math.radians(152)
+            self.flipUpR = math.radians(208)
+            self.leftAng = self.flipRestL
+            self.rightAng = self.flipRestR
+            self.leftAngPrev = self.leftAng
+            self.rightAngPrev = self.rightAng
+            self.flipSpeed = 14.0
 
-        def updateSiren(self):
-            frightened = any(g.mode == "frightened" and not g.eaten for g in self.ghosts)
-            if frightened != self.anyGhostFrightened:
-                self.anyGhostFrightened = frightened
-                self.audio.startSiren(frightened=frightened)
+            # Bumpers (approx glowing circles on art)
+            self.bumpers = [
+                {"pos": Vector2(340, 170), "r": 28, "pts": 100, "flash": 0.0},
+                {"pos": Vector2(450, 130), "r": 30, "pts": 150, "flash": 0.0},
+                {"pos": Vector2(560, 170), "r": 28, "pts": 100, "flash": 0.0},
+                {"pos": Vector2(450, 230), "r": 22, "pts": 200, "flash": 0.0},
+            ]
+
+            # Static segments: outer walls + sling-ish rails
+            self.segments = [
+                # left wall
+                (Vector2(70, 30), Vector2(70, 400)),
+                # right inner (gap at top lets ball leave plunger into field)
+                (Vector2(800, 100), Vector2(800, 360)),
+                # top
+                (Vector2(70, 30), Vector2(800, 30)),
+                # plunger lane walls
+                (Vector2(820, 40), Vector2(820, 430)),
+                (Vector2(875, 40), Vector2(875, 450)),
+                (Vector2(820, 40), Vector2(875, 40)),
+                # lane roof open toward field (angled entry)
+                (Vector2(800, 100), Vector2(820, 70)),
+                # bottom left / right floors flanking drain
+                (Vector2(70, 400), Vector2(280, 450)),
+                (Vector2(620, 450), Vector2(800, 400)),
+                # upper curve suggestions
+                (Vector2(100, 80), Vector2(200, 50)),
+                (Vector2(700, 50), Vector2(780, 90)),
+            ]
+
+            self.drainRect = pygame.Rect(360, 445, 180, 40)
+            self.plungerX = 847
+            self.plungerYMin = 120
+            self.plungerYMax = 420
+            self.plungerPower = 0.0
+            self.charging = False
+
+            self.ball = Vector2(self.plungerX, 380)
+            self.vel = Vector2(0, 0)
+            self.onPlunger = True
+            self.combo = 0
+
+        def loadHigh(self):
+            return _readMark(self._markKey)
+
+        def saveHigh(self):
+            _writeMark(self._markKey, self.highScore)
+
+        def resetBall(self):
+            self.ball = Vector2(self.plungerX, 380)
+            self.vel = Vector2(0, 0)
+            self.onPlunger = True
+            self.plungerPower = 0.0
+            self.charging = False
+            self.combo = 0
+
+        def beginPlay(self):
+            self.score = 0
+            self.ballsLeft = 3
+            self.highScore = self.loadHigh()
+            self.resetBall()
+            self.state = "PLAYING"
+            self.message = ""
+            self.messageTimer = 0.0
+
+        def flipperTip(self, pivot, ang):
+            return pivot + Vector2(math.cos(ang), math.sin(ang)) * self.flipLen
+
+        def _segBounce(self, a, b, elasticity=0.85, flipVel=None):
+            """Bounce ball off segment a-b if intersecting."""
+            ab = b - a
+            abLen2 = ab.length_squared()
+            if abLen2 < 1e-6:
+                return False
+            t = max(0.0, min(1.0, (self.ball - a).dot(ab) / abLen2))
+            closest = a + ab * t
+            delta = self.ball - closest
+            dist = delta.length()
+            if dist >= self.ballR or dist < 1e-6:
+                return False
+            n = delta / dist
+            # push out
+            self.ball = closest + n * (self.ballR + 0.5)
+            vn = self.vel.dot(n)
+            if vn < 0:
+                self.vel -= n * (1.0 + elasticity) * vn
+            if flipVel is not None:
+                self.vel += flipVel * 0.55
+            speed = self.vel.length()
+            if speed > self.maxSpeed:
+                self.vel.scale_to_length(self.maxSpeed)
+            return True
+
+        def _circleBounce(self, center, radius, pts):
+            delta = self.ball - center
+            dist = delta.length()
+            minD = radius + self.ballR
+            if dist >= minD or dist < 1e-6:
+                return False
+            n = delta / dist
+            self.ball = center + n * (minD + 0.5)
+            vn = self.vel.dot(n)
+            if vn < 0:
+                self.vel -= n * 1.9 * vn
+            # kick outward
+            self.vel += n * 120
+            if self.vel.length() > self.maxSpeed:
+                self.vel.scale_to_length(self.maxSpeed)
+            self.score += pts
+            self.combo += 1
+            if self.score > self.highScore:
+                self.highScore = self.score
+                self.saveHigh()
+            self.audio.play("bump")
+            return True
+
+        def updateFlippers(self, dt, keys):
+            self.leftAngPrev = self.leftAng
+            self.rightAngPrev = self.rightAng
+            leftWant = self.flipUpL if keys.get("left") else self.flipRestL
+            rightWant = self.flipUpR if keys.get("right") else self.flipRestR
+            self.leftAng += (leftWant - self.leftAng) * min(1.0, self.flipSpeed * dt)
+            self.rightAng += (rightWant - self.rightAng) * min(1.0, self.flipSpeed * dt)
+
+        def flipperAngularVel(self, ang, angPrev, dt):
+            if dt <= 1e-6:
+                return 0.0
+            return (ang - angPrev) / dt
 
         def update(self, dt, keys):
             if self.state != "PLAYING":
                 return
-
-            self.audio.updateLoops()
-
-            if self.deathTimer > 0:
-                self.deathTimer -= dt
-                if self.deathTimer <= 0:
-                    if self.lives <= 0:
-                        self.state = "GAME_OVER"
-                        if self.score > self.highScore:
-                            self.highScore = self.score
-                        self.saveHighScore()
-                    else:
-                        self.respawnAfterDeath()
-                return
-
-            self.pacman.update(dt, keys)
-
-            self.modeTimer += dt
-            if self.modeTimer > 25.0:
-                self.currentMode = "chase" if self.currentMode == "scatter" else "scatter"
-                self.modeTimer = 0.0
-                for g in self.ghosts:
-                    if g.mode not in ("frightened", "eaten") and not g.eaten:
-                        g.mode = self.currentMode
-                        g.direction = Vector2(-g.direction.x, -g.direction.y)
-                        g.decisionTile = None
-
-            blinky = next((g for g in self.ghosts if g.name == "Blinky"), None)
-            for ghost in self.ghosts:
-                ghost.update(dt, self.pacman, blinky.pos if blinky else None)
-
-            self.updateSiren()
-
-            pTile = self.pacman.getTile()
-            if pTile in self.pellets:
-                self.pellets.remove(pTile)
-                self.score += pelletPoints
-                self.audio.playWakka()
-
-            if pTile in self.powerPellets:
-                self.powerPellets.remove(pTile)
-                self.score += powerPelletPoints
-                self.ghostEatenCombo = 0
-                self.audio.play("powerPellet")
-                for g in self.ghosts:
-                    g.frighten(self.frightenedDuration)
-
-            for ghost in self.ghosts:
-                if ghost.eaten:
-                    continue
-                dist = (ghost.pos - self.pacman.pos).length()
-                if dist < tileSize * 0.7:
-                    if ghost.mode == "frightened":
-                        points = ghostPoints[min(self.ghostEatenCombo, 3)]
-                        self.score += points
-                        self.ghostEatenCombo += 1
-                        ghost.eat()
-                        self.audio.play("eatGhost")
-                    else:
-                        self.lives -= 1
-                        self.audio.stopLoops()
-                        self.audio.play("death")
-                        self.deathTimer = 1.5
-                        break
-
-            if len(self.pellets) == 0 and len(self.powerPellets) == 0:
-                global pacmanSpeed, ghostSpeedBase
-                self.level += 1
-                pacmanSpeed = min(pacmanSpeed + 0.1 * speedScale, 3.5 * speedScale)
-                ghostSpeedBase = min(ghostSpeedBase + 0.08 * speedScale, 2.8 * speedScale)
-                self.frightenedDuration = max(3.0, self.frightenedDuration - 0.8)
-                self.audio.play("extraLife")
-                self.startLevel()
-                self.message = f"LEVEL {self.level}"
-                self.messageTimer = 2.0
-
             if self.messageTimer > 0:
                 self.messageTimer -= dt
 
-            if self.score > self.highScore:
-                self.highScore = self.score
-                self.saveHighScore()
+            self.updateFlippers(dt, keys)
 
-        def drawMaze(self, surface):
-            inset = max(2, tileSize // 4)
-            for y in range(mazeRows):
-                for x in range(mazeCols):
-                    if maze[y][x] == 1:
-                        rect = pygame.Rect(x * tileSize, y * tileSize, tileSize, tileSize)
-                        pygame.draw.rect(surface, BLUE, rect)
-                        pygame.draw.rect(surface, (0, 0, 150), rect.inflate(-inset, -inset))
+            # Plunger charge / launch
+            if self.onPlunger:
+                if keys.get("down") or keys.get("up"):
+                    # up/down or we'll also use space via pulses separately
+                    self.charging = True
+                    self.plungerPower = min(1.0, self.plungerPower + dt * 1.2)
+                    self.ball.y = self.plungerYMax - self.plungerPower * (self.plungerYMax - self.plungerYMin) * 0.35
+                return
 
-        def draw(self):
-            self.screen.fill(BLACK)
-            surf = self.playSurface
-            surf.fill(BLACK)
-            self.drawMaze(surf)
+            # Gravity
+            self.vel.y += self.gravity * dt
+            self.vel *= self.damping
+            self.ball += self.vel * dt
 
-            pelletR = max(2, tileSize // 8)
-            for px, py in self.pellets:
-                cx = px * tileSize + tileSize // 2
-                cy = py * tileSize + tileSize // 2
-                pygame.draw.circle(surf, WHITE, (cx, cy), pelletR)
+            # Walls
+            hitWall = False
+            for a, b in self.segments:
+                if self._segBounce(a, b, 0.8):
+                    hitWall = True
+            if hitWall:
+                self.audio.play("wall")
 
-            pulse = max(5, tileSize // 3) + int(math.sin(self._animTicks / 12.0) * 2)
-            for px, py in self.powerPellets:
-                cx = px * tileSize + tileSize // 2
-                cy = py * tileSize + tileSize // 2
-                pygame.draw.circle(surf, WHITE, (cx, cy), pulse)
+            # Flippers as segments with angular kick
+            for pivot, ang, angPrev, rest in (
+                (self.leftPivot, self.leftAng, self.leftAngPrev, self.flipRestL),
+                (self.rightPivot, self.rightAng, self.rightAngPrev, self.flipRestR),
+            ):
+                tip = self.flipperTip(pivot, ang)
+                w = self.flipperAngularVel(ang, angPrev, dt)
+                # tangential direction at contact approx tip motion
+                tang = Vector2(-math.sin(ang), math.cos(ang)) * (w * self.flipLen)
+                if self._segBounce(pivot, tip, 0.55, flipVel=tang if abs(w) > 0.5 else Vector2(0, 0)):
+                    if abs(w) > 1.0:
+                        self.audio.play("flip")
+                        self.score += 10
 
-            if self.deathTimer <= 0 or self.state != "PLAYING":
-                self.pacman.draw(surf)
-            for ghost in self.ghosts:
-                ghost.draw(surf)
+            # Bumpers
+            for b in self.bumpers:
+                if b["flash"] > 0:
+                    b["flash"] -= dt
+                if self._circleBounce(b["pos"], b["r"], b["pts"]):
+                    b["flash"] = 0.12
 
-            self.screen.blit(surf, (offsetX, offsetY))
+            # Keep in bounds soft
+            if self.ball.x < 50:
+                self.ball.x = 50
+                self.vel.x = abs(self.vel.x) * 0.7
+            if self.ball.x > 890:
+                self.ball.x = 890
+                self.vel.x = -abs(self.vel.x) * 0.7
+            if self.ball.y < 20:
+                self.ball.y = 20
+                self.vel.y = abs(self.vel.y) * 0.7
 
-            hudY = mazePixelH + max(2, (hudHeight - 24) // 2)
-            scoreText = self.font.render(f"SCORE: {self.score:06d}", True, WHITE)
-            self.screen.blit(scoreText, (16, hudY))
+            # Drain
+            if self.ball.y > 470 or (
+                self.drainRect.collidepoint(int(self.ball.x), int(self.ball.y)) and self.ball.y > 440
+            ):
+                self.audio.play("drain")
+                self.ballsLeft -= 1
+                if self.score > self.highScore:
+                    self.highScore = self.score
+                    self.saveHigh()
+                if self.ballsLeft <= 0:
+                    self.state = "GAME_OVER"
+                    self.saveHigh()
+                else:
+                    self.resetBall()
+                    self.message = f"BALL {4 - self.ballsLeft}"
+                    self.messageTimer = 1.5
 
-            lifeR = max(6, tileSize // 3)
-            lifeX = 16 + scoreText.get_width() + 14
-            lifeCy = hudY + scoreText.get_height() // 2
-            for i in range(self.lives):
-                lx = lifeX + i * (lifeR * 2 + 6)
-                pygame.draw.circle(self.screen, YELLOW, (lx + lifeR, lifeCy), lifeR)
-                pygame.draw.circle(
-                    self.screen, BLACK, (lx + lifeR + 2, lifeCy), max(2, lifeR // 3)
-                )
+        def launch(self):
+            if not self.onPlunger:
+                return
+            power = max(0.25, self.plungerPower)
+            self.onPlunger = False
+            self.charging = False
+            # Shoot up the lane, then into the upper field
+            self.ball = Vector2(self.plungerX, 90)
+            self.vel = Vector2(-180 - 220 * power, -280 - 360 * power)
+            self.plungerPower = 0.0
+            self.audio.play("launch")
 
-            hsText = self.font.render(f"HIGH: {self.highScore:06d}", True, CYAN)
-            self.screen.blit(hsText, (windowWidth // 2 - hsText.get_width() // 2, hudY))
-
-            levelText = self.font.render(f"LEVEL {self.level}", True, CYAN)
-            self.screen.blit(levelText, (windowWidth - levelText.get_width() - 16, hudY))
-
-            if self.state == "MENU":
-                title = self.bigFont.render("PAC-MAN", True, YELLOW)
-                self.screen.blit(title, (windowWidth // 2 - title.get_width() // 2, 150))
-                start = self.font.render("PRESS SPACE OR CLICK TO START", True, WHITE)
-                self.screen.blit(start, (windowWidth // 2 - start.get_width() // 2, 250))
-                hs = self.font.render(f"HIGH SCORE: {self.highScore}", True, CYAN)
-                self.screen.blit(hs, (windowWidth // 2 - hs.get_width() // 2, 320))
-
-            elif self.state == "PAUSED":
-                pause = self.bigFont.render("PAUSED", True, CYAN)
-                self.screen.blit(
-                    pause,
-                    (windowWidth // 2 - pause.get_width() // 2, windowHeight // 2 - 50),
-                )
-
-            elif self.state == "GAME_OVER":
-                go = self.bigFont.render("GAME OVER", True, RED)
-                self.screen.blit(go, (windowWidth // 2 - go.get_width() // 2, 160))
-                sc = self.font.render(f"FINAL SCORE: {self.score}", True, WHITE)
-                self.screen.blit(sc, (windowWidth // 2 - sc.get_width() // 2, 240))
-                if self.score >= self.highScore and self.highScore > 0:
-                    nhs = self.font.render("NEW HIGH SCORE!", True, YELLOW)
-                    self.screen.blit(nhs, (windowWidth // 2 - nhs.get_width() // 2, 280))
-                again = self.font.render("PRESS R or SPACE TO RESTART", True, WHITE)
-                self.screen.blit(again, (windowWidth // 2 - again.get_width() // 2, 360))
-
-            if self.messageTimer > 0 and self.message:
-                msg = self.font.render(self.message, True, YELLOW)
-                self.screen.blit(msg, (windowWidth // 2 - msg.get_width() // 2, 80))
-
-        def beginPlay(self):
-            self.resetGame()
-            self.state = "PLAYING"
-            self.audio.play("start")
-            self.audio.startSiren(frightened=False)
-
-        def handlePulses(self, pulses):
+        def handlePulses(self, pulses, keys):
             for p in pulses:
                 if p == "escape":
                     if self.state == "PLAYING":
-                        self.audio.stopLoops()
                         self.state = "MENU"
                     else:
-                        # Leave embedded session → catalog
                         self.running = False
                 elif p == "p":
                     if self.state == "PLAYING":
-                        self.audio.stopLoops()
                         self.state = "PAUSED"
                     elif self.state == "PAUSED":
                         self.state = "PLAYING"
-                        self.audio.startSiren(frightened=self.anyGhostFrightened)
                 elif p in ("space", "click"):
-                    if self.state in ("MENU", "GAME_OVER"):
+                    if self.state == "MENU":
                         self.beginPlay()
+                    elif self.state == "GAME_OVER":
+                        self.beginPlay()
+                    elif self.state == "PLAYING" and self.onPlunger:
+                        self.launch()
                 elif p == "r":
-                    if self.state == "GAME_OVER":
+                    if self.state in ("GAME_OVER", "MENU"):
                         self.beginPlay()
 
+            # Hold space while on plunger: charge (pulse is one-shot — use keys.down)
+            # Space mapped only as pulse; charge with down/s
+            if self.state == "PLAYING" and self.onPlunger and keys.get("down"):
+                self.charging = True
+
+        def drawFlipper(self, pivot, ang, mirror=False):
+            # Procedural neon flipper for reliable rotation; optional sprite underlay
+            tip = self.flipperTip(pivot, ang)
+            mid = (pivot + tip) * 0.5
+            # fat line
+            pygame.draw.line(self.screen, (0, 200, 255), pivot, tip, 14)
+            pygame.draw.line(self.screen, (180, 255, 255), pivot, tip, 6)
+            pygame.draw.circle(self.screen, CYAN, (int(pivot.x), int(pivot.y)), 8)
+            pygame.draw.circle(self.screen, WHITE, (int(tip.x), int(tip.y)), 5)
+            if self.flipImg is not None:
+                try:
+                    deg = -math.degrees(ang)
+                    img = self.flipImg
+                    if mirror:
+                        img = pygame.transform.flip(img, True, False)
+                        deg = -math.degrees(math.pi - ang)
+                    rot = pygame.transform.rotozoom(img, deg, 0.55)
+                    rect = rot.get_rect(center=(int(mid.x), int(mid.y)))
+                    self.screen.blit(rot, rect)
+                except Exception:
+                    pass
+
+        def draw(self):
+            if self.tableImg is not None:
+                self.screen.blit(self.tableImg, (0, 0))
+            else:
+                self.screen.fill((10, 0, 20))
+                pygame.draw.rect(self.screen, (40, 0, 60), (60, 20, 780, 440), 2)
+
+            # Dim overlay for HUD readability on neon art
+            hud = pygame.Surface((W, 36), pygame.SRCALPHA)
+            hud.fill((0, 0, 0, 140))
+            self.screen.blit(hud, (0, 0))
+
+            # Bumper flashes
+            for b in self.bumpers:
+                if b["flash"] > 0:
+                    pygame.draw.circle(
+                        self.screen, (255, 100, 255),
+                        (int(b["pos"].x), int(b["pos"].y)), int(b["r"] + 6), 2
+                    )
+
+            # Flippers
+            self.drawFlipper(self.leftPivot, self.leftAng, mirror=False)
+            self.drawFlipper(self.rightPivot, self.rightAng, mirror=True)
+
+            # Plunger spring indicator
+            if self.onPlunger or self.state == "MENU":
+                py = int(self.plungerYMax - self.plungerPower * 80)
+                pygame.draw.line(self.screen, MAGENTA, (self.plungerX, py), (self.plungerX, 450), 4)
+                pygame.draw.circle(self.screen, CYAN, (self.plungerX, py), 6)
+
+            # Ball
+            bx, by = int(self.ball.x), int(self.ball.y)
+            if self.ballImg is not None:
+                r = self.ballImg.get_rect(center=(bx, by))
+                self.screen.blit(self.ballImg, r)
+            else:
+                pygame.draw.circle(self.screen, WHITE, (bx, by), self.ballR)
+                pygame.draw.circle(self.screen, CYAN, (bx, by), self.ballR, 2)
+
+            # HUD
+            sc = self.font.render(f"SCORE {self.score:06d}", True, CYAN)
+            self.screen.blit(sc, (16, 10))
+            hs = self.font.render(f"HI {self.highScore:06d}", True, MAGENTA)
+            self.screen.blit(hs, (W // 2 - hs.get_width() // 2, 10))
+            bl = self.font.render(f"BALLS {self.ballsLeft}", True, YELLOW)
+            self.screen.blit(bl, (W - bl.get_width() - 16, 10))
+
+            if self.state == "MENU":
+                title = self.bigFont.render("PINBALL", True, CYAN)
+                self.screen.blit(title, (W // 2 - title.get_width() // 2, 160))
+                sub = self.font.render("CYBER TABLE", True, MAGENTA)
+                self.screen.blit(sub, (W // 2 - sub.get_width() // 2, 200))
+                go = self.font.render("SPACE TO START", True, WHITE)
+                self.screen.blit(go, (W // 2 - go.get_width() // 2, 260))
+                ctrl = self.font.render("Z/LEFT  /  RIGHT  |  DOWN CHARGE  SPACE LAUNCH", True, (180, 180, 200))
+                self.screen.blit(ctrl, (W // 2 - ctrl.get_width() // 2, 320))
+
+            elif self.state == "PAUSED":
+                t = self.bigFont.render("PAUSED", True, YELLOW)
+                self.screen.blit(t, (W // 2 - t.get_width() // 2, H // 2 - 20))
+
+            elif self.state == "GAME_OVER":
+                t = self.bigFont.render("GAME OVER", True, MAGENTA)
+                self.screen.blit(t, (W // 2 - t.get_width() // 2, 170))
+                s = self.font.render(f"SCORE {self.score}", True, WHITE)
+                self.screen.blit(s, (W // 2 - s.get_width() // 2, 230))
+                a = self.font.render("SPACE / R  RETRY", True, CYAN)
+                self.screen.blit(a, (W // 2 - a.get_width() // 2, 290))
+
+            if self.messageTimer > 0 and self.message:
+                m = self.font.render(self.message, True, YELLOW)
+                self.screen.blit(m, (W // 2 - m.get_width() // 2, 50))
+
+            # Always show light controls while playing
+            if self.state == "PLAYING" and self.onPlunger:
+                tip = self.font.render("HOLD DOWN TO CHARGE  ·  SPACE TO LAUNCH", True, WHITE)
+                self.screen.blit(tip, (W // 2 - tip.get_width() // 2, H - 28))
+
         def toImage(self):
-            # Ensure contiguous RGB bytes for QImage
             rgb = self.screen
             if rgb.get_bytesize() != 3:
                 rgb = self.screen.convert(24)
             raw = pygame.image.tobytes(rgb, "RGB")
-            qimg = QImage(raw, windowWidth, windowHeight, windowWidth * 3, QImage.Format.Format_RGB888)
+            qimg = QImage(raw, W, H, W * 3, QImage.Format.Format_RGB888)
             return qimg.copy()
 
         def tick(self, dt, keys, pulses):
-            self._animTicks += 1
-            self.handlePulses(pulses or [])
+            keys = keys or {}
+            self.handlePulses(pulses or [], keys)
             if not self.running:
                 return None
-            self.update(dt, keys or {})
+            # continuous charge
+            if self.state == "PLAYING" and self.onPlunger and keys.get("down"):
+                self.plungerPower = min(1.0, self.plungerPower + dt * 1.15)
+                self.ball.y = self.plungerYMax - self.plungerPower * 70
+            self.update(dt, keys)
             self.draw()
             return self.toImage()
 
         def stop(self):
             self.running = False
-            try:
-                self.audio.stopLoops()
-            except Exception:
-                pass
+            if self.score > self.highScore:
+                self.highScore = self.score
+                self.saveHigh()
 
-    def _factoryPm(host, markKey="pm"):
-        return _CabinetPm(host, markKey)
+    def _factoryPb(host, markKey="pb"):
+        return _CabinetPb(host, markKey)
 
-    _addTitle(
-        "PAC-MAN",
-        "PAC-MAN  1980  RECREATION",
-        _factoryPm,
-        "pm",
-    )
+    _addTitle("PINBALL", _factoryPb, "pb")
 
 else:
-    def _factoryPm(host, markKey="pm"):
+    def _factoryPb(host, markKey="pb"):
         return None
-
