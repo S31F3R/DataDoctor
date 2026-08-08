@@ -558,8 +558,6 @@ class GraphPanel(QWidget):
         self._useDatetime = False
         self._theme = 'light'
         self._lastTipKey = None
-        # Map legend artist id → entry index for pick events
-        self._legendPickMap = {}
         # Full data extents (with padding) — pan stays inside these
         self._xDataLim = None
         self._yDataLim = None
@@ -574,7 +572,6 @@ class GraphPanel(QWidget):
         except Exception:
             pass
         self._lastTipKey = None
-        self._legendPickMap = {}
         self._xDataLim = None
         self._yDataLim = None
         self._y2DataLim = None
@@ -724,6 +721,9 @@ class GraphPanel(QWidget):
         """
         In-plot legend (same spot as before). Click an entry to toggle that
         series; labels use ☑/☐ so it still feels like checkboxes without a side panel.
+
+        Toggles are handled in button_press (not pick_event): zoom/pan mode holds
+        canvas.widgetlock, which blocks Figure.pick and would silence legend clicks.
         """
         if self._ax is None or not self._lineData:
             self._legend = None
@@ -764,38 +764,88 @@ class GraphPanel(QWidget):
             except Exception:
                 pass
 
-        # Make legend lines + text pickable → toggle series
-        self._legendPickMap = {}
+        # Keep legend proxy lines always drawn (dimmed when series is off)
         try:
-            legLines = legend.get_lines()
-            legTexts = legend.get_texts()
-            for i, (legLine, legText) in enumerate(zip(legLines, legTexts)):
-                if i >= len(self._lineData):
-                    break
-                legLine.set_picker(8)
-                legText.set_picker(8)
-                self._legendPickMap[id(legLine)] = i
-                self._legendPickMap[id(legText)] = i
-                # Keep legend proxy always visible (dim when series off)
+            for legLine in legend.get_lines():
                 legLine.set_visible(True)
-        except Exception as e:
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"_buildInteractiveLegend pick setup: {e}")
+        except Exception:
+            pass
 
         self._legend = legend
 
-    def _onLegendPick(self, event):
-        """Toggle series visibility when a legend line or label is clicked."""
-        artist = getattr(event, 'artist', None)
-        if artist is None:
-            return
-        idx = self._legendPickMap.get(id(artist))
+    def _legendRenderer(self):
+        """Best-effort renderer for window-extent hit tests."""
+        if self.canvas is None:
+            return None
+        try:
+            return self.canvas.get_renderer()
+        except Exception:
+            return None
+
+    def _isOverLegend(self, event):
+        """True if the mouse event is inside the legend frame (display coords)."""
+        if self._legend is None or event is None:
+            return False
+        if event.x is None or event.y is None:
+            return False
+        try:
+            bbox = self._legend.get_window_extent(self._legendRenderer())
+            pad = 3.0
+            # Cast to plain bool — bbox coords are often numpy scalars
+            return bool(
+                bbox.x0 - pad <= event.x <= bbox.x1 + pad
+                and bbox.y0 - pad <= event.y <= bbox.y1 + pad
+            )
+        except Exception:
+            return False
+
+    def _legendHitIndex(self, event):
+        """
+        Series index if (event.x, event.y) hits a legend row (line sample or label).
+        None if not over a row (still may be over legend frame — see _isOverLegend).
+        """
+        if self._legend is None or event is None:
+            return None
+        if event.x is None or event.y is None:
+            return None
+        if not self._isOverLegend(event):
+            return None
+        renderer = self._legendRenderer()
+        try:
+            texts = self._legend.get_texts()
+            lines = self._legend.get_lines()
+            for i, text in enumerate(texts):
+                if i >= len(self._lineData):
+                    break
+                try:
+                    tb = text.get_window_extent(renderer)
+                except Exception:
+                    continue
+                # Extend left to cover the colored line sample next to the label
+                x0 = tb.x0 - 30.0
+                if i < len(lines):
+                    try:
+                        lb = lines[i].get_window_extent(renderer)
+                        x0 = min(x0, lb.x0 - 4.0)
+                    except Exception:
+                        pass
+                y0, y1 = tb.y0 - 3.0, tb.y1 + 3.0
+                x1 = tb.x1 + 6.0
+                if x0 <= event.x <= x1 and y0 <= event.y <= y1:
+                    return i
+        except Exception as e:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"_legendHitIndex: {e}")
+        return None
+
+    def _toggleSeriesAt(self, idx):
+        """Toggle visibility of series at _lineData index; refresh legend + axes."""
         if idx is None or idx < 0 or idx >= len(self._lineData):
-            return
+            return False
         entry = self._lineData[idx]
         line = entry.get('line')
         if line is None:
-            return
+            return False
         visible = not line.get_visible()
         line.set_visible(visible)
         entry['visible'] = visible
@@ -803,6 +853,58 @@ class GraphPanel(QWidget):
         self._rescaleToVisible()
         if self.canvas is not None:
             self.canvas.draw_idle()
+        return True
+
+    def _cancelToolbarInteraction(self):
+        """
+        Abort zoom rubberband / pan that the toolbar already started on this click.
+        Needed because the toolbar's button_press runs before ours (registered first).
+        """
+        tb = self.toolbar
+        if tb is None or self.canvas is None:
+            return
+        try:
+            zinfo = getattr(tb, '_zoom_info', None)
+            if zinfo is not None:
+                try:
+                    cid = getattr(zinfo, 'cid', None)
+                    if cid is not None:
+                        self.canvas.mpl_disconnect(cid)
+                except Exception:
+                    pass
+                try:
+                    tb.remove_rubberband()
+                except Exception:
+                    pass
+                tb._zoom_info = None
+
+            pinfo = getattr(tb, '_pan_info', None)
+            if pinfo is not None:
+                try:
+                    cid = getattr(pinfo, 'cid', None)
+                    if cid is not None:
+                        self.canvas.mpl_disconnect(cid)
+                except Exception:
+                    pass
+                try:
+                    for ax in getattr(pinfo, 'axes', ()) or ():
+                        try:
+                            ax.end_pan()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                # Restore toolbar's normal motion handler (release_pan does this)
+                try:
+                    tb._id_drag = self.canvas.mpl_connect(
+                        'motion_notify_event', tb.mouse_move
+                    )
+                except Exception:
+                    pass
+                tb._pan_info = None
+        except Exception as e:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"_cancelToolbarInteraction: {e}")
 
     def _refreshLegendAppearance(self):
         """Update ☑/☐ marks and dim legend proxies for hidden series."""
@@ -1086,7 +1188,8 @@ class GraphPanel(QWidget):
 
         self._hoverCid = self.canvas.mpl_connect('motion_notify_event', self._onMotion)
         self._keyCid = self.canvas.mpl_connect('key_press_event', self._onKeyPress)
-        self._pickCid = self.canvas.mpl_connect('pick_event', self._onLegendPick)
+        # Legend toggles use button_press (not pick_event): zoom/pan holds widgetlock
+        # which disables Figure.pick, so pick_event never fires while Zoom is default-on.
         self._pressCid = self.canvas.mpl_connect('button_press_event', self._onButtonPress)
         self._releaseCid = self.canvas.mpl_connect('button_release_event', self._onButtonRelease)
         # Clamp toolbar pan/zoom navigation as well
@@ -1141,8 +1244,30 @@ class GraphPanel(QWidget):
         self._clampView()
 
     def _onButtonPress(self, event):
-        """Middle mouse button starts free pan (no toolbar mode needed)."""
-        if event is None or event.button != 2 or event.inaxes is None:
+        """
+        Left-click: toggle series via legend rows (works while Zoom/Pan is active).
+        Middle-click: free pan without needing toolbar pan mode.
+        """
+        if event is None:
+            return
+
+        # Legend show/hide — must not rely on pick_event (blocked by widgetlock in zoom)
+        if event.button == 1:
+            idx = self._legendHitIndex(event)
+            if idx is not None:
+                self._toggleSeriesAt(idx)
+                self._cancelToolbarInteraction()
+                try:
+                    QToolTip.hideText()
+                except Exception:
+                    pass
+                return
+            # Click on legend frame/title: don't start a zoom rubberband there
+            if self._isOverLegend(event):
+                self._cancelToolbarInteraction()
+                return
+
+        if event.button != 2 or event.inaxes is None:
             return
         # Store display pixels so pan stays stable after limit changes
         self._midPan = (float(event.x), float(event.y))
