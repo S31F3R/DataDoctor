@@ -1002,27 +1002,39 @@ class uiMain(QMainWindow):
             header = self.mainTable.horizontalHeader()
             col = header.logicalIndexAt(pos)
 
-            if col < 0 or col >= len(self.columnMetadata):
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "showHeaderContextMenu: Invalid column {} clicked".format(col))
+            if col < 0:
                 return
-            meta = self.columnMetadata[col]
-            meta['col'] = col # Add col for stats computation
+            # columnMetadata may be shorter than table (edge cases) — still allow Graph
+            meta = self.columnMetadata[col] if col < len(self.columnMetadata) else None
+            if meta is not None:
+                meta['col'] = col  # Add col for stats computation
             menu = QMenu(self)
-            
-            if meta['type'] == 'normal':
-                action = menu.addAction("Show Query Info")
-                action.triggered.connect(lambda: self.showHeaderDetails("headerNormal", meta))
-            elif meta['type'] == 'delta':
-                action = menu.addAction("Show details")
-                action.triggered.connect(lambda: self.showHeaderDetails("headerDelta", meta))
-            elif meta['type'] == 'overlay':
-                action = menu.addAction("Show details")
-                action.triggered.connect(lambda: self.showHeaderDetails("headerOverlay", meta))
-            
-            menu.exec(header.mapToGlobal(pos))
+
+            if meta is not None:
+                if meta.get('type') == 'normal':
+                    action = menu.addAction("Show Query Info")
+                    action.triggered.connect(lambda: self.showHeaderDetails("headerNormal", meta))
+                elif meta.get('type') == 'delta':
+                    action = menu.addAction("Show details")
+                    action.triggered.connect(lambda: self.showHeaderDetails("headerDelta", meta))
+                elif meta.get('type') == 'overlay':
+                    action = menu.addAction("Show details")
+                    action.triggered.connect(lambda: self.showHeaderDetails("headerOverlay", meta))
+
+            graphAction = menu.addAction("Graph")
+            graphAction.triggered.connect(
+                lambda checked=False, c=col: self.graphTableSelection(columns=[c])
+            )
+
+            if menu.actions():
+                menu.exec(header.mapToGlobal(pos))
             if Config.debug:
-                Logic.logMessage("DEBUG", "showHeaderContextMenu: Displayed menu for column {}, type {}".format(col, meta['type']))
+                Logic.logMessage(
+                    "DEBUG",
+                    "showHeaderContextMenu: Displayed menu for column {}, type {}".format(
+                        col, (meta or {}).get('type')
+                    ),
+                )
         except Exception as e:
             Logic.logException("showHeaderContextMenu failed", e)
 
@@ -1161,9 +1173,14 @@ class uiMain(QMainWindow):
                 detailsAction = menu.addAction("Show details")
                 detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'overlay', multiTypes=types))
 
-            # Clipboard: always Copy; Paste only on internal (public is read-only)
+            # Graph selection (highlighted rows/cols); always available when table has data
             if menu.actions():
                 menu.addSeparator()
+            graphAction = menu.addAction("Graph")
+            graphAction.triggered.connect(lambda: self.graphTableSelection())
+
+            # Clipboard: always Copy; Paste only on internal (public is read-only)
+            menu.addSeparator()
             copyAction = menu.addAction("Copy")
             copyAction.setShortcut("Ctrl+C")
             copyAction.triggered.connect(lambda: Upload.copySelectionToClipboard(self))
@@ -1174,7 +1191,7 @@ class uiMain(QMainWindow):
 
             if menu.actions():
                 # If the right-clicked cell is outside the current multi-selection,
-                # select only that cell so Copy/Paste target the intended cell.
+                # select only that cell so Copy/Paste/Graph target the intended range.
                 sel = self.mainTable.selectionModel()
                 if sel is not None and not sel.isSelected(index):
                     self.mainTable.clearSelection()
@@ -1442,10 +1459,16 @@ class uiMain(QMainWindow):
         return idx
 
     def btnGraphPressed(self):
+        """Graph toolbar button — plots current table selection (or full table)."""
+        self.graphTableSelection()
+
+    def graphTableSelection(self, columns=None, rows=None):
         """
-        Graph selected column(s) from the Data Query table, or the whole table
-        when nothing is selected. Opens/refreshes the Graph tab to the right of
-        Data Query (or updates the detached Graph window).
+        Graph from the Data Query table.
+
+        - columns / rows: optional explicit subsets (header Graph passes a column).
+        - Otherwise uses the highlighted selection; empty selection → full table.
+        - Partial row selection graphs only that timeseries window.
         """
         if self.mainTable is None:
             QMessageBox.warning(self, "Graph", "Data table is not available.")
@@ -1468,6 +1491,8 @@ class uiMain(QMainWindow):
         panel = self.ensureGraphPanel()
         ok, message = panel.plotFromTable(
             self.mainTable,
+            columns=columns,
+            rows=rows,
             columnMetadata=getattr(self, 'columnMetadata', None),
         )
         if not ok:
@@ -1480,12 +1505,12 @@ class uiMain(QMainWindow):
             win.raise_()
             win.activateWindow()
             if message and Config.debug:
-                Logic.logMessage("DEBUG", f"btnGraphPressed (detached): {message}")
+                Logic.logMessage("DEBUG", f"graphTableSelection (detached): {message}")
             return
 
         self.showGraphInMainTabs(select=True)
         if message and Config.debug:
-            Logic.logMessage("DEBUG", f"btnGraphPressed: {message}")
+            Logic.logMessage("DEBUG", f"graphTableSelection: {message}")
 
     def onMainTabBarContextMenu(self, pos):
         """Right-click Graph or Log tab → Detach tab."""

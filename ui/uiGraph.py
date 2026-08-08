@@ -3,6 +3,7 @@
 # Supports dark/light system palette, hover tooltips, table timestamp formats, overlay pairs.
 
 from __future__ import annotations
+import os
 import re
 from datetime import datetime
 import numpy as np
@@ -10,8 +11,9 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPalette, QCursor
 from PyQt6.QtWidgets import (
     QApplication, QVBoxLayout, QWidget, QSizePolicy, QLabel, QToolTip,
+    QFileDialog, QMessageBox,
 )
-from core import Config, Logic
+from core import Config, Logic, Utils
 
 # Lazy matplotlib imports so startup still works if the package is missing
 _mplReady = False
@@ -19,10 +21,11 @@ Figure = None
 FigureCanvasQTAgg = None
 NavigationToolbar2QT = None
 mdates = None
+_mplModule = None
 
 
 def _ensureMatplotlib():
-    global _mplReady, Figure, FigureCanvasQTAgg, NavigationToolbar2QT, mdates
+    global _mplReady, Figure, FigureCanvasQTAgg, NavigationToolbar2QT, mdates, _mplModule
     if _mplReady:
         return True
     try:
@@ -31,17 +34,123 @@ def _ensureMatplotlib():
             FigureCanvasQTAgg as _Canvas,
             NavigationToolbar2QT as _Toolbar,
         )
+        import matplotlib as _mpl
         import matplotlib.dates as _mdates
 
         Figure = _Figure
         FigureCanvasQTAgg = _Canvas
         NavigationToolbar2QT = _Toolbar
         mdates = _mdates
+        _mplModule = _mpl
         _mplReady = True
         return True
     except Exception as e:
         Logic.logException("uiGraph: matplotlib import failed", e)
         return False
+
+
+_GraphToolbarCls = None
+
+
+def _makeGraphToolbarClass():
+    """Subclass NavigationToolbar2QT once matplotlib is available."""
+    global _GraphToolbarCls
+    if _GraphToolbarCls is not None:
+        return _GraphToolbarCls
+    if not _ensureMatplotlib():
+        return None
+
+    class GraphToolbar(NavigationToolbar2QT):
+        """Zoom-default toolbar; graph saves remember last folder like CSV export."""
+
+        def __init__(self, canvas, parent=None):
+            super().__init__(canvas, parent)
+            self._activateDefaultZoom()
+
+        def _activateDefaultZoom(self):
+            """Enter zoom-to-rect mode so the user can drag-zoom immediately."""
+            try:
+                # zoom() toggles — only enter if not already zoom
+                mode = getattr(self, 'mode', None)
+                modeName = str(mode).lower() if mode is not None else ''
+                if 'zoom' not in modeName:
+                    self.zoom()
+            except Exception as e:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"GraphToolbar default zoom: {e}")
+
+        def save_figure(self, *args):
+            """Save figure; start in last graph-save folder (persisted in user.config)."""
+            try:
+                import json
+                filetypes = self.canvas.get_supported_filetypes_grouped()
+                sorted_filetypes = sorted(filetypes.items())
+                default_filetype = self.canvas.get_default_filetype()
+
+                config = Utils.loadConfig()
+                startpath = (config.get('lastGraphSavePath') or '').strip()
+                if not startpath or not os.path.isdir(startpath):
+                    # Fall back to last CSV export folder, then Documents
+                    startpath = (config.get('lastExportPath') or '').strip()
+                if not startpath or not os.path.isdir(startpath):
+                    startpath = os.path.expanduser("~/Documents")
+                startpath = os.path.normpath(os.path.abspath(startpath))
+
+                start = os.path.join(startpath, self.canvas.get_default_filename())
+                filters = []
+                selectedFilter = None
+                for name, exts in sorted_filetypes:
+                    exts_list = " ".join(f'*.{ext}' for ext in exts)
+                    filt = f'{name} ({exts_list})'
+                    if default_filetype in exts:
+                        selectedFilter = filt
+                    filters.append(filt)
+                filters = ';;'.join(filters)
+
+                fname, _filt = QFileDialog.getSaveFileName(
+                    self.canvas.parent() or self,
+                    "Save graph",
+                    start,
+                    filters,
+                    selectedFilter,
+                )
+                if not fname:
+                    return fname
+                try:
+                    self.canvas.figure.savefig(fname)
+                except Exception as e:
+                    QMessageBox.critical(
+                        self, "Error saving file", str(e),
+                        QMessageBox.StandardButton.Ok,
+                    )
+                    return fname
+
+                # Remember folder for next graph save
+                saveDir = os.path.dirname(os.path.abspath(fname))
+                try:
+                    config = Utils.loadConfig()
+                    config['lastGraphSavePath'] = saveDir
+                    with open(Utils.getConfigPath(), 'w', encoding='utf-8') as f:
+                        json.dump(config, f, indent=2)
+                except Exception as e:
+                    Logic.logException("GraphToolbar: failed to save lastGraphSavePath", e)
+                # Keep matplotlib's own memory in sync for this session
+                try:
+                    if _mplModule is not None:
+                        _mplModule.rcParams['savefig.directory'] = saveDir
+                except Exception:
+                    pass
+                return fname
+            except Exception as e:
+                Logic.logException("GraphToolbar.save_figure failed", e)
+                # Fall back to stock behavior if something unexpected breaks
+                try:
+                    return super().save_figure(*args)
+                except Exception:
+                    return None
+
+    _GraphToolbarCls = GraphToolbar
+    return _GraphToolbarCls
 
 
 # Timestamp formats used by Data Query vertical headers (most specific first)
@@ -244,7 +353,28 @@ def selectedDataColumns(table):
     return list(range(table.columnCount()))
 
 
-def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None):
+def selectedDataRows(table):
+    """
+    Row indices to graph from selection.
+    - Selected cells / ranges → those rows only (partial timeseries)
+    - No selection → all rows
+    """
+    if table is None or table.rowCount() <= 0:
+        return []
+
+    rows = set()
+    for idx in table.selectedIndexes():
+        rows.add(idx.row())
+    for r in table.selectedRanges():
+        for row in range(r.topRow(), r.bottomRow() + 1):
+            rows.add(row)
+
+    if rows:
+        return sorted(rows)
+    return list(range(table.rowCount()))
+
+
+def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None, rows=None):
     """
     For overlay columns, return [(primaryLabel, vals), (secondaryLabel, vals)]
     from per-cell UserRole primaryVal / secondaryVal. Empty list if not overlay data.
@@ -252,14 +382,20 @@ def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None):
     Legend labels use the first line of each series' original header (dict-style
     commonName-datatype), not raw dataIDs. headerFirstLines is [primary, secondary]
     when available from columnMetadata.
+
+    rows: optional list of table row indices to include (selection subset).
     """
     if table is None or table.rowCount() <= 0:
         return []
-    nRows = table.rowCount()
-    primary = np.full(nRows, np.nan)
-    secondary = np.full(nRows, np.nan)
+    if rows is None:
+        rows = list(range(table.rowCount()))
+    if not rows:
+        return []
+    n = len(rows)
+    primary = np.full(n, np.nan)
+    secondary = np.full(n, np.nan)
     hasAny = False
-    for r in range(nRows):
+    for i, r in enumerate(rows):
         item = table.item(r, col)
         if item is None:
             continue
@@ -267,8 +403,8 @@ def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None):
         if not isinstance(role, dict) or not role.get('overlay'):
             continue
         hasAny = True
-        primary[r] = parseNumeric(role.get('primaryVal', ''))
-        secondary[r] = parseNumeric(role.get('secondaryVal', ''))
+        primary[i] = parseNumeric(role.get('primaryVal', ''))
+        secondary[i] = parseNumeric(role.get('secondaryVal', ''))
 
     if not hasAny:
         return []
@@ -296,11 +432,12 @@ def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None):
     return out
 
 
-def extractSeries(table, columns=None, columnMetadata=None):
+def extractSeries(table, columns=None, rows=None, columnMetadata=None):
     """
     Read timestamps + numeric series from mainTable.
 
     Overlay columns expand to primary + secondary series (UserRole values).
+    columns / rows default to current selection, or the full table when empty.
 
     Returns (timestamps list[datetime|None], tsTexts list[str], series list[(label, values)], warnings)
     """
@@ -313,10 +450,15 @@ def extractSeries(table, columns=None, columnMetadata=None):
     if not columns:
         return [], [], [], ["No columns available to graph."]
 
-    nRows = table.rowCount()
+    if rows is None:
+        rows = selectedDataRows(table)
+    if not rows:
+        return [], [], [], ["No rows available to graph."]
+
+    n = len(rows)
     timestamps = []
     tsTexts = []
-    for r in range(nRows):
+    for r in rows:
         vh = table.verticalHeaderItem(r)
         tsText = vh.text() if vh is not None else ''
         tsTexts.append(tsText)
@@ -325,7 +467,7 @@ def extractSeries(table, columns=None, columnMetadata=None):
 
     # If almost no timestamps parsed, use row index as X
     parsedCount = sum(1 for t in timestamps if t is not None)
-    useDatetime = parsedCount >= max(2, int(nRows * 0.5))
+    useDatetime = parsedCount >= max(2, int(n * 0.5))
     if not useDatetime:
         warnings.append("Could not parse most timestamps; using row index on the X axis.")
 
@@ -340,7 +482,7 @@ def extractSeries(table, columns=None, columnMetadata=None):
         # Overlay column: graph primary + secondary (not the merged cell alone)
         if colType == 'overlay':
             overlaySeries = _overlaySeriesFromColumn(
-                table, c, label, headerFirstLines=headerLines
+                table, c, label, headerFirstLines=headerLines, rows=rows
             )
             if overlaySeries:
                 series.extend(overlaySeries)
@@ -349,20 +491,21 @@ def extractSeries(table, columns=None, columnMetadata=None):
 
         # Also try overlay detection from cell roles even without metadata
         if not colType or colType == 'normal':
-            sample = table.item(0, c) if nRows > 0 else None
+            sampleRow = rows[0]
+            sample = table.item(sampleRow, c)
             role0 = sample.data(Qt.ItemDataRole.UserRole) if sample is not None else None
             if isinstance(role0, dict) and role0.get('overlay'):
                 overlaySeries = _overlaySeriesFromColumn(
-                    table, c, label, headerFirstLines=headerLines
+                    table, c, label, headerFirstLines=headerLines, rows=rows
                 )
                 if overlaySeries:
                     series.extend(overlaySeries)
                     continue
 
-        vals = np.empty(nRows, dtype=float)
-        for r in range(nRows):
+        vals = np.empty(n, dtype=float)
+        for i, r in enumerate(rows):
             item = table.item(r, c)
-            vals[r] = parseNumeric(item.text() if item is not None else '')
+            vals[i] = parseNumeric(item.text() if item is not None else '')
         if not np.any(np.isfinite(vals)):
             warnings.append(f"Skipped '{label}' (no numeric values).")
             continue
@@ -806,9 +949,10 @@ class GraphPanel(QWidget):
         finally:
             self._clamping = False
 
-    def plotFromTable(self, table, columns=None, columnMetadata=None):
+    def plotFromTable(self, table, columns=None, rows=None, columnMetadata=None):
         """
         Build/rebuild the graph from mainTable.
+        columns / rows: optional subsets (default = current selection, else full table).
         Returns (ok: bool, message: str).
         """
         if not _ensureMatplotlib():
@@ -824,7 +968,7 @@ class GraphPanel(QWidget):
                 columnMetadata = getattr(parent, 'columnMetadata', None)
 
         timestamps, tsTexts, series, warnings = extractSeries(
-            table, columns, columnMetadata=columnMetadata
+            table, columns=columns, rows=rows, columnMetadata=columnMetadata
         )
         if not series:
             msg = warnings[0] if warnings else "Nothing to graph."
@@ -841,7 +985,8 @@ class GraphPanel(QWidget):
         self.canvas = FigureCanvasQTAgg(fig)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.toolbar = NavigationToolbar2QT(self.canvas, self)
+        ToolbarCls = _makeGraphToolbarClass() or NavigationToolbar2QT
+        self.toolbar = ToolbarCls(self.canvas, self)
         self.toolbar.setObjectName('graphToolbar')
         self._applyToolbarTooltips()
 

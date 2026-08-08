@@ -1433,6 +1433,7 @@ def loadConfig():
     configPath = getConfigPath()
     defaults = {
         'lastExportPath': '',
+        'lastGraphSavePath': '',
         'debugMode': False,
         'utcOffset': 'UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London',
         'periodOffset': True,
