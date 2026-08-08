@@ -21,14 +21,15 @@ ALL_INTERVALS = (
     'YEAR',
     'WATER YEAR',
 )
-# USGS OGC/legacy only expose continuous + daily (no monthly/yearly series)
+# USGS-NWIS: no HOUR product; continuous instants + daily only (no monthly/yearly)
+# INSTANT:15 first — default for most USGS series when USGS-NWIS is selected
 USGS_INTERVALS = (
-    'HOUR',
-    'INSTANT:1',
     'INSTANT:15',
+    'INSTANT:1',
     'INSTANT:60',
     'DAY',
 )
+USGS_DEFAULT_INTERVAL = 'INSTANT:15'
 
 
 class uiQuery(QMainWindow):
@@ -159,8 +160,11 @@ class uiQuery(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", "uiQuery initialized")
 
-    def populateIntervalCombo(self, intervals):
-        """Replace cbInterval items; keep selection if still valid, else fall back."""
+    def populateIntervalCombo(self, intervals, preferred=None):
+        """
+        Replace cbInterval items.
+        Keep prior selection if still in the list; otherwise use preferred, else first item.
+        """
         # Do not use `if not self.cbInterval` — empty QComboBox is falsy (len==0)
         if self.cbInterval is None:
             return
@@ -173,24 +177,30 @@ class uiQuery(QMainWindow):
             idx = self.cbInterval.findText(prev)
             if idx >= 0:
                 self.cbInterval.setCurrentIndex(idx)
-            elif prev in ('MONTH', 'YEAR', 'WATER YEAR'):
-                # Coarser-than-daily was selected but blocked (e.g. switched to USGS)
-                dayIdx = self.cbInterval.findText('DAY')
-                self.cbInterval.setCurrentIndex(dayIdx if dayIdx >= 0 else 0)
+            elif preferred:
+                prefIdx = self.cbInterval.findText(preferred)
+                self.cbInterval.setCurrentIndex(prefIdx if prefIdx >= 0 else 0)
             elif self.cbInterval.count() > 0:
                 self.cbInterval.setCurrentIndex(0)
         finally:
             self.cbInterval.blockSignals(False)
 
     def updateIntervalForDatabase(self, database=None):
-        """USGS-NWIS: hide intervals past DAY. Any other DB: full list."""
+        """
+        USGS-NWIS: no HOUR / no coarser-than-DAY; default INSTANT:15.
+        Any other DB: full interval list.
+        """
         if self.cbDatabase is None:
             return
         db = self.cbDatabase.currentText() if database is None else database
         if db == 'USGS-NWIS':
-            self.populateIntervalCombo(USGS_INTERVALS)
+            # Drop HOUR and monthly+; default INSTANT:15 when prev is invalid (e.g. HOUR)
+            self.populateIntervalCombo(USGS_INTERVALS, preferred=USGS_DEFAULT_INTERVAL)
             if Config.debug:
-                Logic.logMessage("DEBUG", "cbInterval limited to daily-and-finer for USGS-NWIS")
+                Logic.logMessage(
+                    "DEBUG",
+                    f"cbInterval USGS-NWIS list; current={self.cbInterval.currentText()!r}",
+                )
         else:
             self.populateIntervalCombo(ALL_INTERVALS)
             if Config.debug:
