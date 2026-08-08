@@ -167,6 +167,7 @@ class uiMain(QMainWindow):
         self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
         self.btnSQL = self.findChild(QPushButton, 'btnSQL')
         self.btnGraph = self.findChild(QPushButton, 'btnGraph')
+        self.btnGoat = self.findChild(QPushButton, 'btnGoat')
         self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
         self.btnUndo = self.findChild(QPushButton, 'btnUndo')
         self.btnUpload = self.findChild(QPushButton, 'btnUpload')
@@ -187,6 +188,9 @@ class uiMain(QMainWindow):
         self.uploadTrackingBlocked = False
         # Detached floating windows for Graph / Log only ({'graph'|'log': detachedTabWindow})
         self.detachedWindows = {}
+        self._appIcon = QIcon()  # set from main after load (Windows re-apply)
+        self._goatPlayer = None
+        self._goatAudio = None
         self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
         self.btnSaveSnippet = self.findChild(QPushButton, 'btnSaveSnippet')
         self.cbDatabase = self.findChild(QComboBox, 'cbDatabase')
@@ -202,6 +206,7 @@ class uiMain(QMainWindow):
                         (self.btnExportCSV, "ExportCSV", 36),
                         (self.btnOptions, "Options", 36),
                         (self.btnViewLog, "Notebook", 36),
+                        (self.btnGoat, "Goat", 36),
                         (self.btnInfo, "Info", 36),
                         (self.btnInternalQuery, "InternalQuery", 36),
                         (self.btnSQL, "SQL", 36),
@@ -216,7 +221,7 @@ class uiMain(QMainWindow):
 
         # Set button style        
         for btn, iconName, iconSize in buttonIcons:
-            if btn:
+            if btn is not None:
                 Utils.buttonStyle(btn, iconName, iconSize=iconSize)
 
         # Ensure every main toolbar / data-tab button has a tooltip
@@ -230,6 +235,7 @@ class uiMain(QMainWindow):
             self.btnExportCSV: "Export current table to CSV",
             self.btnOptions: "Options",
             self.btnViewLog: "View application logs",
+            self.btnGoat: "FOR EMERGENCIES ONLY!!!",
             self.btnInfo: "About Data Doctor",
             self.btnRefresh: "Refresh current query",
             self.btnUndo: "Reset column sort to timestamp order",
@@ -259,10 +265,12 @@ class uiMain(QMainWindow):
         self.btnInfo.clicked.connect(self.btnInfoPressed)
         if self.btnViewLog:self.btnViewLog.clicked.connect(self.btnViewLogPressed)
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
-        if self.btnSQL:
+        if self.btnSQL is not None:
             self.btnSQL.clicked.connect(self.btnSQLPressed)
-        if self.btnGraph:
+        if self.btnGraph is not None:
             self.btnGraph.clicked.connect(self.btnGraphPressed)
+        if self.btnGoat is not None:
+            self.btnGoat.clicked.connect(self.btnGoatPressed)
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
         if self.btnUpload:self.btnUpload.clicked.connect(self.btnUploadPressed)
@@ -486,7 +494,11 @@ class uiMain(QMainWindow):
         try:
             sqlTab = self.tabSQL or self.findChild(QWidget, 'tabSQL')
 
-            if sqlTab and self.tabWidget.indexOf(sqlTab) != -1:
+            if (
+                sqlTab is not None
+                and self.tabWidget is not None
+                and self.tabWidget.indexOf(sqlTab) != -1
+            ):
                 sqlSplitter = self.findChild(QSplitter, 'sqlSplitter')
                 mainSplitter = self.findChild(QSplitter, 'mainSplitter')
                 if sqlSplitter is not None and mainSplitter is not None:
@@ -504,6 +516,19 @@ class uiMain(QMainWindow):
         except Exception as e:
             Logic.logException("closeEvent failed", e)
         super().closeEvent(event)
+
+    def showEvent(self, event):
+        """Re-apply app icon after the window is shown (Windows first-paint glitch)."""
+        super().showEvent(event)
+        icon = getattr(self, '_appIcon', None)
+        if icon is not None and not icon.isNull():
+            try:
+                self.setWindowIcon(icon)
+                app = QApplication.instance()
+                if app is not None:
+                    app.setWindowIcon(icon)
+            except Exception:
+                pass
 
     def loadSnippets(self):
         """Load SQL snippets from quickLook/sql into listSnippets (saved order first)."""
@@ -817,7 +842,8 @@ class uiMain(QMainWindow):
         exportTable = self.mainTable
         useSqlFormat = False
 
-        currentWidget = self.tabWidget.currentWidget() if self.tabWidget else None
+        # QTabWidget is falsy when it has 0 tabs — always use `is not None`
+        currentWidget = self.tabWidget.currentWidget() if self.tabWidget is not None else None
         sqlTab = self.tabSQL or self.findChild(QWidget, 'tabSQL')
 
         # Detect SQL tab by objectName / index — identity (is) is unreliable across findChild wrappers
@@ -1342,7 +1368,9 @@ class uiMain(QMainWindow):
 
     def onTabCloseRequested(self, index):
         # removeTab hides the page but keeps the widget so we can re-add log/SQL/query/graph tabs
-        widget = self.tabWidget.widget(index) if self.tabWidget else None
+        if self.tabWidget is None:
+            return
+        widget = self.tabWidget.widget(index)
         self.tabWidget.removeTab(index)
 
         if Config.debug:
@@ -1367,9 +1395,9 @@ class uiMain(QMainWindow):
 
     def graphInsertIndex(self):
         """Graph sits immediately to the right of Data Query when present."""
-        if not self.tabWidget:
+        if self.tabWidget is None:
             return 0
-        dataIdx = self.tabWidget.indexOf(self.tabMain) if self.tabMain else -1
+        dataIdx = self.tabWidget.indexOf(self.tabMain) if self.tabMain is not None else -1
         return dataIdx + 1 if dataIdx != -1 else 0
 
     def sqlInsertIndex(self):
@@ -1377,7 +1405,7 @@ class uiMain(QMainWindow):
         SQL after Data Query and Graph (normal order:
         Data Query | Graph | SQL | Log).
         """
-        if not self.tabWidget:
+        if self.tabWidget is None:
             return 0
         idx = self.graphInsertIndex()
         # If Graph is already in the main tab bar, place SQL after it
@@ -1396,7 +1424,7 @@ class uiMain(QMainWindow):
 
     def showGraphInMainTabs(self, select=True):
         """Insert Graph tab at normal position if it is not detached and not already open."""
-        if not self.tabWidget:
+        if self.tabWidget is None:
             return -1
         panel = self.ensureGraphPanel()
         if self.detachedWindows.get('graph') is not None:
@@ -1430,7 +1458,11 @@ class uiMain(QMainWindow):
             return
 
         # Need Data Query tab present so user can see context (create if missing)
-        if self.tabWidget and self.tabMain and self.tabWidget.indexOf(self.tabMain) == -1:
+        if (
+            self.tabWidget is not None
+            and self.tabMain is not None
+            and self.tabWidget.indexOf(self.tabMain) == -1
+        ):
             self.tabWidget.insertTab(0, self.tabMain, self.dataQueryTitle)
 
         panel = self.ensureGraphPanel()
@@ -1457,7 +1489,7 @@ class uiMain(QMainWindow):
 
     def onMainTabBarContextMenu(self, pos):
         """Right-click Graph or Log tab → Detach tab."""
-        if not self.tabWidget:
+        if self.tabWidget is None:
             return
         tabBar = self.tabWidget.tabBar()
         idx = tabBar.tabAt(pos)
@@ -1556,7 +1588,8 @@ class uiMain(QMainWindow):
 
     def btnSQLPressed(self):
         """Toggle SQL Query Builder tab: show if hidden, hide if already open."""
-        if not self.tabSQL or not self.tabWidget:
+        # Empty QTabWidget is falsy in PyQt6 — never use bare `if self.tabWidget`
+        if self.tabSQL is None or self.tabWidget is None:
             QMessageBox.warning(self, "SQL Query Builder", "SQL tab is not available.")
             return
 
@@ -1574,9 +1607,35 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"btnSQLPressed: removed tabSQL from index {idx}")
 
+    def btnGoatPressed(self):
+        """Play the emergency stress-relief sound."""
+        try:
+            from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+            from PyQt6.QtCore import QUrl
+        except Exception as e:
+            Logic.logMessage("WARN", f"Goat audio backend unavailable: {e}")
+            return
+
+        wavPath = Logic.resourcePath('ui/sounds/Goat.wav')
+        if not os.path.isfile(wavPath):
+            Logic.logMessage("WARN", f"Goat sound missing: {wavPath}")
+            return
+
+        try:
+            if self._goatPlayer is None:
+                self._goatAudio = QAudioOutput(self)
+                self._goatAudio.setVolume(0.95)
+                self._goatPlayer = QMediaPlayer(self)
+                self._goatPlayer.setAudioOutput(self._goatAudio)
+            self._goatPlayer.setSource(QUrl.fromLocalFile(wavPath))
+            self._goatPlayer.setPosition(0)
+            self._goatPlayer.play()
+        except Exception as e:
+            Logic.logException("btnGoatPressed failed", e)
+
     def btnViewLogPressed(self):
         """Toggle Log Viewer tab: show if hidden, hide if already open (like SQL)."""
-        if not self.tabLog or not self.tabWidget:
+        if self.tabLog is None or self.tabWidget is None:
             QMessageBox.warning(self, "Log Viewer", "Log tab is not available.")
             return
 
@@ -1652,7 +1711,7 @@ class uiMain(QMainWindow):
         Live-append one formatted log line at the top of pteLog.
         No-op unless the Log tab is open in main or detached — avoids UI work when closed.
         """
-        if not self.pteLog or not self.tabLog or not self.tabWidget:
+        if self.pteLog is None or self.tabLog is None or self.tabWidget is None:
             return
 
         logOpenInMain = self.tabWidget.indexOf(self.tabLog) != -1
@@ -1867,6 +1926,10 @@ if __name__ == '__main__':
         except Exception as e:
             Logic.logException("Startup: loadQuickLooks failed", e)
 
+        # Keep icon on the main window for showEvent re-apply (Windows cold start)
+        if not appIcon.isNull():
+            winMain._appIcon = appIcon
+
         # Show main window
         winMain.show()
         # Re-apply window icon after first show (Windows sometimes paints the
@@ -1879,7 +1942,9 @@ if __name__ == '__main__':
                 except Exception:
                     pass
             QTimer.singleShot(0, _reapplyIcon)
-            QTimer.singleShot(250, _reapplyIcon)
+            QTimer.singleShot(100, _reapplyIcon)
+            QTimer.singleShot(500, _reapplyIcon)
+            QTimer.singleShot(1500, _reapplyIcon)
         try:
             Logic.logMessage("INFO", f"Config directory: {Utils.getConfigDir()}")
         except Exception:
