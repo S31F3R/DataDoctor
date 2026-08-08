@@ -9,6 +9,113 @@ from PyQt6.QtGui import QColor, QBrush, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
 from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils, Upload
 
+# ---------------------------------------------------------------------------
+# Display timestamps by interval
+#   HOUR / INSTANT → mm/dd/yy HH:MM:00
+#   DAY            → mm/dd/yy          (drop time)
+#   MONTH          → mm/yy             (drop day)
+#   YEAR / WATER YEAR → yyyy
+# ---------------------------------------------------------------------------
+
+_TS_FMT_HOUR = '%m/%d/%y %H:%M:00'
+_TS_FMT_DAY = '%m/%d/%y'
+_TS_FMT_MONTH = '%m/%y'
+_TS_FMT_YEAR = '%Y'
+
+# Parse order: most specific first
+_TS_PARSE_FORMATS = (
+    '%m/%d/%y %H:%M:00',
+    '%m/%d/%y %H:%M:%S',
+    '%m/%d/%y %H:%M',
+    '%m/%d/%y',
+    '%m/%y',
+    '%Y',
+)
+
+
+def waterYearNumber(dt):
+    """USBR-style water year: Oct–Sep, labeled by the calendar year it ends in."""
+    if dt.month >= 10:
+        return dt.year + 1
+    return dt.year
+
+
+def timestampFormatForInterval(intervalStr):
+    """strftime pattern for table / series display for this interval."""
+    if not intervalStr:
+        return _TS_FMT_HOUR
+    iv = str(intervalStr).strip().upper()
+    if iv == 'DAY':
+        return _TS_FMT_DAY
+    if iv == 'MONTH':
+        return _TS_FMT_MONTH
+    if iv in ('YEAR', 'WATER YEAR'):
+        return _TS_FMT_YEAR
+    # HOUR, INSTANT:n, unknown → full datetime
+    return _TS_FMT_HOUR
+
+
+def formatTimestamp(dt, intervalStr=None):
+    """Format a datetime for display / gap alignment for the given interval."""
+    if dt is None:
+        return ''
+    iv = (intervalStr or '').strip().upper()
+    if iv == 'WATER YEAR':
+        return f'{waterYearNumber(dt):04d}'
+    return dt.strftime(timestampFormatForInterval(intervalStr))
+
+
+def periodStart(dt, intervalStr=None):
+    """
+    Collapse a datetime to the start of its interval period (for ordering / match).
+    Used so a mid-month daily point still belongs to that month's mm/yy bucket, etc.
+    """
+    if dt is None:
+        return None
+    iv = (intervalStr or '').strip().upper()
+    if iv == 'DAY':
+        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    if iv == 'MONTH':
+        return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if iv == 'YEAR':
+        return datetime(dt.year, 1, 1)
+    if iv == 'WATER YEAR':
+        # Order by water-year label (end calendar year)
+        return datetime(waterYearNumber(dt), 1, 1)
+    if iv == 'HOUR':
+        return dt.replace(minute=0, second=0, microsecond=0)
+    if iv.startswith('INSTANT:'):
+        return dt.replace(second=0, microsecond=0)
+    return dt
+
+
+def parseDisplayTimestamp(tsStr):
+    """
+    Parse a vertical-header / series timestamp string into datetime.
+    Supports hour, day, month (day=1), and year-only forms.
+    Returns None if unparseable.
+    """
+    if tsStr is None:
+        return None
+    s = str(tsStr).strip()
+    if not s:
+        return None
+    for fmt in _TS_PARSE_FORMATS:
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def addMonths(dt, months=1):
+    """Advance dt by `months` calendar months (day clamped to 1st for MONTH steps)."""
+    monthIndex = dt.month - 1 + months
+    year = dt.year + monthIndex // 12
+    month = monthIndex % 12 + 1
+    return dt.replace(year=year, month=month, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
 class sortWorkerSignals(QObject):
     sortDone = pyqtSignal(list, bool)
 
@@ -26,10 +133,8 @@ class sortWorker(QRunnable):
             def sortKey(row):
                 # row = {'ts': str, 'cells': [cellDict|None, ...]}
                 if self.byTimestamp:
-                    try:
-                        return datetime.strptime(row['ts'], '%m/%d/%y %H:%M:00')
-                    except ValueError:
-                        return datetime.min
+                    dt = parseDisplayTimestamp(row['ts'])
+                    return dt if dt is not None else datetime.min
                 try:
                     cell = row['cells'][self.col] if self.col < len(row['cells']) else None
                     text = cell['text'] if cell else ''
@@ -159,7 +264,15 @@ class queryWorker(QRunnable):
 
                             if Config.debug:
                                 Logic.logMessage("DEBUG", f"queryWorker: USGS Site Name for {dataID}: {groupLabels[dataID]!r}")
-                        alignedData = gapCheck(self.timestamps, outputData, dataID)
+                            # Dual-key OGC meta by bare time_series_id so Show details
+                            # still resolves when dictionary / column lookup uses tsid only.
+                            if isinstance(raw, dict) and (raw.get('kind') or '').lower() == 'ogc':
+                                tsidKey = dictionaryLookupKey(dataID, 'USGS-NWIS')
+                                if tsidKey and tsidKey != dataID and tsidKey not in groupRawResponses:
+                                    groupRawResponses[tsidKey] = raw
+                        alignedData = gapCheck(
+                            self.timestamps, outputData, dataID, interval=interval
+                        )
                         values = [line.split(',')[1] if line else '' for line in alignedData]
                         groupResult[dataID] = values
                     else:
@@ -192,60 +305,111 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
     except ValueError as e:
         Logic.logMessage("ERROR", "Invalid date format in buildTimestamps: {}".format(e))
         return []
-    if intervalStr == 'HOUR':
+
+    iv = (intervalStr or '').strip().upper()
+    timestamps = []
+
+    if iv == 'HOUR':
         delta = timedelta(hours=1)
-        start = start.replace(minute=0, second=0)
-    elif intervalStr.startswith('INSTANT:'):
+        current = start.replace(minute=0, second=0, microsecond=0)
+        while current <= end:
+            timestamps.append(formatTimestamp(current, iv))
+            current += delta
+    elif iv.startswith('INSTANT:'):
         try:
             minutes = int(intervalStr.split(':')[1])
             delta = timedelta(minutes=minutes)
-            start = start.replace(second=0)
-            if minutes == 1:
-                pass
-            elif minutes == 15:
-                minute = (start.minute // 15) * 15
-                start = start.replace(minute=minute)
+            current = start.replace(second=0, microsecond=0)
+            if minutes == 15:
+                current = current.replace(minute=(current.minute // 15) * 15)
             elif minutes == 60:
-                start = start.replace(minute=0)
-            else:
+                current = current.replace(minute=0)
+            elif minutes != 1:
                 Logic.logMessage("ERROR", "Unsupported INSTANT interval: {}".format(intervalStr))
                 return []
+            while current <= end:
+                timestamps.append(formatTimestamp(current, intervalStr))
+                current += delta
         except (IndexError, ValueError) as e:
             Logic.logMessage("ERROR", "Invalid INSTANT interval format: {}".format(e))
             return []
-    elif intervalStr == 'DAY':
-        delta = timedelta(days=1)
-        start = start.replace(hour=0, minute=0, second=0)
+    elif iv == 'DAY':
+        # mm/dd/yy — drop time
+        current = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        endDay = end.replace(hour=0, minute=0, second=0, microsecond=0)
+        while current <= endDay:
+            timestamps.append(formatTimestamp(current, iv))
+            current += timedelta(days=1)
+    elif iv == 'MONTH':
+        # mm/yy — drop day
+        current = start.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        endMonth = end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        while current <= endMonth:
+            timestamps.append(formatTimestamp(current, iv))
+            current = addMonths(current, 1)
+    elif iv == 'YEAR':
+        # yyyy
+        for year in range(start.year, end.year + 1):
+            timestamps.append(f'{year:04d}')
+    elif iv == 'WATER YEAR':
+        # yyyy of water year (Oct–Sep, labeled by end calendar year)
+        wyStart = waterYearNumber(start)
+        wyEnd = waterYearNumber(end)
+        for year in range(wyStart, wyEnd + 1):
+            timestamps.append(f'{year:04d}')
     else:
         Logic.logMessage("ERROR", "Unknown intervalStr: {}".format(intervalStr))
         return []
-    timestamps = []
-    current = start
-    # Inclusive end so a full-interval end time (e.g. 14:00 on HOUR) is not dropped
-    while current <= end:
-        ts = current.strftime('%m/%d/%y %H:%M:00')
-        timestamps.append(ts)
-        current += delta
-        if delta.total_seconds() <= 0:
-            break
+
     if Config.debug:
-        Logic.logMessage("DEBUG", "Generated {} timestamps, sample first 3: {}".format(len(timestamps), timestamps[:3]))
+        Logic.logMessage(
+            "DEBUG",
+            "Generated {} timestamps ({}), sample first 3: {}".format(
+                len(timestamps), iv or intervalStr, timestamps[:3]
+            ),
+        )
     return timestamps
 
-def gapCheck(timestamps, data, dataID=''):
+def gapCheck(timestamps, data, dataID='', interval=None):
+    """
+    Align data rows to expected timestamps.
+    `timestamps` are already interval-formatted (from buildTimestamps).
+    Actual rows are re-keyed with formatTimestamp(..., interval) so DAY/MONTH/YEAR match.
+    """
     if Config.debug:
-        Logic.logMessage("DEBUG", "gapCheck for dataID '{}': timestamps len={}, data len={}".format(dataID, len(timestamps), len(data)))
+        Logic.logMessage(
+            "DEBUG",
+            "gapCheck for dataID '{}': timestamps len={}, data len={}, interval={}".format(
+                dataID, len(timestamps), len(data), interval
+            ),
+        )
     if not timestamps:
         return data
-    try:
-        expectedDateTimes = [datetime.strptime(ts, '%m/%d/%y %H:%M:00') for ts in timestamps]
-    except ValueError as e:
-        Logic.logMessage("ERROR", "Invalid timestamp format in timestamps: {}".format(e))
-        return data
+
+    expected = []
+    for ts in timestamps:
+        dt = parseDisplayTimestamp(ts)
+        if dt is None:
+            Logic.logMessage("ERROR", "Invalid timestamp in expected list: {!r}".format(ts))
+            return data
+        expected.append((ts, dt))
+
+    # Infer interval from first expected string if not provided
+    if not interval and timestamps:
+        sample = timestamps[0]
+        if len(sample) == 4 and sample.isdigit():
+            interval = 'YEAR'
+        elif len(sample) == 5 and sample[2] == '/':
+            interval = 'MONTH'
+        elif ' ' not in sample and sample.count('/') == 2:
+            interval = 'DAY'
+        else:
+            interval = 'HOUR'
+
     newData = []
     removed = []
     i = 0
-    for expectedDateTime in expectedDateTimes:
+    for tsStr, expectedDateTime in expected:
         found = False
         while i < len(data):
             line = data[i]
@@ -253,32 +417,38 @@ def gapCheck(timestamps, data, dataID=''):
                 i += 1
                 continue
             parts = line.split(',')
-            if len(parts) < 2:                
+            if len(parts) < 2:
                 Logic.logMessage("WARN", "Malformed data row skipped: '{}' for '{}'".format(line, dataID))
                 i += 1
                 continue
             actualTimestampStr = parts[0].strip()
-            try:
-                actualDateTime = datetime.strptime(actualTimestampStr, '%m/%d/%y %H:%M:%S')
-            except ValueError:
-                Logic.logMessage("WARN", "Invalid ts skipped: '{}' in '{}' for '{}'".format(actualTimestampStr, line, dataID))  
+            actualDateTime = parseDisplayTimestamp(actualTimestampStr)
+            if actualDateTime is None:
+                Logic.logMessage(
+                    "WARN",
+                    "Invalid ts skipped: '{}' in '{}' for '{}'".format(
+                        actualTimestampStr, line, dataID
+                    ),
+                )
                 i += 1
                 continue
-            if actualDateTime == expectedDateTime:
-                if not actualTimestampStr.endswith(':00'):
-                    actualTimestampStr = actualDateTime.strftime('%m/%d/%y %H:%M:00')
-                    line = actualTimestampStr + ',' + ','.join(parts[1:])
-                newData.append(line)
+
+            # Normalize actual to interval display key / period for compare
+            actualKey = formatTimestamp(actualDateTime, interval)
+            actualPeriod = periodStart(actualDateTime, interval)
+            expectedPeriod = periodStart(expectedDateTime, interval)
+            if actualKey == tsStr or actualPeriod == expectedPeriod:
+                # Canonical expected display string + original value column(s)
+                newData.append(f'{tsStr},{",".join(parts[1:])}')
                 found = True
                 i += 1
                 break
-            elif actualDateTime < expectedDateTime:
+            elif actualPeriod is not None and expectedPeriod is not None and actualPeriod < expectedPeriod:
                 removed.append(actualTimestampStr)
                 i += 1
             else:
                 break
         if not found:
-            tsStr = expectedDateTime.strftime('%m/%d/%y %H:%M:00')
             newData.append(tsStr + ',')
     while i < len(data):
         line = data[i]
@@ -301,26 +471,121 @@ def combineParameters(data, newData):
         data[d] = f'{data[d]},{parseLine[1]}'
     return data
 
+def usgsDictionaryDataId(dataId):
+    """
+    Extract the dataDictionary dataID key from a USGS query DataID.
+
+    Dictionary stores bare time_series_id (32-char hex) or legacy numeric methodID.
+    Query forms:
+      site-time_series_id
+      site-time_series_id-parameter   ← must NOT treat parameter as part of the key
+      time_series_id                  ← bare tsid also accepted
+      site-methodID-parameter         ← legacy; key is methodID (2nd segment)
+
+    Prefer the 32-char hex segment wherever it sits so an optional parameter
+    after another '-' never becomes the lookup key.
+    """
+    raw = str(dataId or '').strip()
+    if not raw:
+        return raw
+    try:
+        from core.USGS import isTimeSeriesId
+    except Exception:
+        isTimeSeriesId = lambda s: bool(
+            s and len(s) == 32 and all(c in '0123456789abcdefABCDEF' for c in s)
+        )
+
+    if isTimeSeriesId(raw):
+        return raw.lower()
+
+    parts = [p for p in raw.split('-') if p != '']
+    # OGC: any segment that is a 32-char hex time_series_id
+    for p in parts:
+        if isTimeSeriesId(p):
+            return p.lower()
+    # Legacy Site-methodID-parameter (or Site-methodID): 2nd segment
+    if len(parts) >= 2:
+        return parts[1]
+    return raw
+
+
+def dictionaryLookupKey(dataId, database):
+    """
+    Map a query dataID to the dataDictionary dataID key.
+
+    - USBR-*: SDID is the part before the first '-' (SDID-MRID → SDID)
+    - USGS-NWIS: bare time_series_id (hex, lowercased) or legacy methodID —
+      never site number, never optional parameter after tsid
+    - AQUARIUS / others: full dataID
+    """
+    if not dataId:
+        return dataId
+    db = str(database or '').strip()
+    raw = str(dataId).strip()
+    if db.startswith('USBR-') and '-' in raw:
+        return raw.split('-', 1)[0]
+    if db == 'USGS-NWIS' or db.upper() == 'USGS-NWIS':
+        return usgsDictionaryDataId(raw)
+    return raw
+
+
 def getDataDictionaryItem(table, dataId, idIndex=None):
     """Find dictionary row for dataId. Prefer idIndex from buildDataDictionaryIndex()."""
-    if idIndex is not None:
-        return idIndex.get(dataId.strip() if dataId else '', -1)
-    idCol = getColByName(table, 'dataID')
+    target = (dataId or '').strip() if dataId else ''
+    if not target:
+        return -1
 
+    if idIndex is not None:
+        row = idIndex.get(target, -1)
+        if row >= 0:
+            return row
+        # Case-insensitive / dual-key aliases (hex tsid lowercased at index build)
+        row = idIndex.get(target.lower(), -1)
+        if row >= 0:
+            return row
+        # Index may also map full Site-tsid → row; try extracted USGS key
+        uk = usgsDictionaryDataId(target)
+        if uk and uk != target:
+            row = idIndex.get(uk, -1)
+            if row >= 0:
+                return row
+            row = idIndex.get(uk.lower(), -1)
+            if row >= 0:
+                return row
+        return -1
+
+    idCol = getColByName(table, 'dataID')
     if idCol == -1:
         return -1
-    target = dataId.strip() if dataId else ''
+    targetLower = target.lower()
+    uk = usgsDictionaryDataId(target)
+    ukLower = uk.lower() if uk else ''
     for r in range(table.rowCount()):
         item = table.item(r, idCol)
-
-        if item and item.text().strip() == target:
+        if not item:
+            continue
+        cell = item.text().strip()
+        if not cell:
+            continue
+        if cell == target or cell.lower() == targetLower:
+            return r
+        if uk and (cell == uk or cell.lower() == ukLower):
+            return r
+        # Dict row stored full Site-tsid[-param] form
+        cellKey = usgsDictionaryDataId(cell)
+        if cellKey and (cellKey == targetLower or cellKey == ukLower or cellKey == target or cellKey == uk):
             return r
     return -1
+
 
 def buildDataDictionaryIndex(table):
     """
     One-pass map dataID -> row index for O(1) lookups.
     Scanning 40k rows per series column was a major cost on wide queries.
+
+    Also indexes:
+      - lowercase of each key (hex tsid case variants)
+      - bare USGS time_series_id extracted from full Site-tsid[-param] cells
     """
     index = {}
     if table is None:
@@ -328,12 +593,28 @@ def buildDataDictionaryIndex(table):
     idCol = getColByName(table, 'dataID')
     if idCol == -1:
         return index
+
+    def addKey(key, row):
+        if not key:
+            return
+        if key not in index:
+            index[key] = row
+        low = key.lower()
+        if low not in index:
+            index[low] = row
+
     for r in range(table.rowCount()):
         item = table.item(r, idCol)
-        if item:
-            key = item.text().strip()
-            if key and key not in index:
-                index[key] = r
+        if not item:
+            continue
+        key = item.text().strip()
+        if not key:
+            continue
+        addKey(key, r)
+        # If cell is Site-tsid[-param] (or bare tsid), also map bare hex key
+        bare = usgsDictionaryDataId(key)
+        if bare and bare != key:
+            addKey(bare, r)
     return index
 
 def getColByName(table, name):
@@ -391,8 +672,21 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         if intervalStr.startswith('INSTANT:'):
             intervalStr = 'INSTANT'
         database = databases[i] if databases and i < len(databases) else None
-        dictKey = lookupIds[i] if lookupIds else dataId
+        # Prefer precomputed lookupIds (USGS → bare tsid; USBR → SDID); else derive
+        if lookupIds and i < len(lookupIds) and lookupIds[i]:
+            dictKey = lookupIds[i]
+        else:
+            dictKey = dictionaryLookupKey(dataId, database)
         dictRow = getDataDictionaryItem(dataDictionaryTable, dictKey, idIndex=dictIndex)
+        # USGS Site-tsid[-param]: always retry bare time_series_id if first key missed
+        if dictRow < 0 and database and str(database).upper().startswith('USGS'):
+            bareTsid = usgsDictionaryDataId(dataId)
+            if bareTsid and bareTsid != dictKey:
+                dictRow = getDataDictionaryItem(
+                    dataDictionaryTable, bareTsid, idIndex=dictIndex
+                )
+                if dictRow >= 0:
+                    dictKey = bareTsid
         mrid = None
 
         if database and database.startswith('USBR-') and '-' in dataId:
@@ -403,42 +697,66 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             commonCol = getColByName(dataDictionaryTable, 'commonName')
             commonItem = dataDictionaryTable.item(dictRow, commonCol) if commonCol != -1 else None
             baseLabel = commonItem.text().strip() if commonItem else dataId
+            # Standard dict label for all DBs: "commonName-datatype" (no spaces around dash)
+            dataTypeCol = getColByName(dataDictionaryTable, 'dataType')
+            dataTypeItem = dataDictionaryTable.item(dictRow, dataTypeCol) if dataTypeCol != -1 else None
+            dataType = dataTypeItem.text().strip() if dataTypeItem and dataTypeItem.text().strip() else ''
+            nameLabel = f"{baseLabel}-{dataType}" if dataType else baseLabel
 
             if database == 'USGS-NWIS':
-                # Prefer live Site Name from API meta (public + internal OGC)
-                siteName = labelsDict.get(dataId) if labelsDict else None
-                # Also try original header key (buildHeader entry) if dataId was rewritten
-                if not siteName and labelsDict and h.strip() in labelsDict:
-                    siteName = labelsDict.get(h.strip())
-                fullLabel = usgsHeaderFromSiteName(siteName, intervalStr)
-                if fullLabel:
+                # Dictionary hit: commonName-datatype on top, interval underneath.
+                # (Previously Site Name from OGC always won, so hits looked like misses —
+                #  e.g. bunker "PVLC (USGS)" never appeared; Aquarius UID labels did.)
+                if baseLabel and baseLabel != dataId and baseLabel != dictKey:
+                    fullLabel = f"{nameLabel} \n{intervalStr}"
                     if Config.debug:
-                        Logic.logMessage("DEBUG", f"buildTable: USGS in dict via Site Name, header {i}: {fullLabel}")
+                        Logic.logMessage(
+                            "DEBUG",
+                            f"buildTable: USGS dict HIT key={dictKey!r} row={dictRow} "
+                            f"commonName-datatype header {i}: {fullLabel}",
+                        )
                 else:
-                    parts = dataId.split('-')
-
-                    if len(parts) == 3 and parts[0].isdigit() and (parts[1].isdigit() or (len(parts[1]) == 32 and parts[1].isalnum())) and parts[2].isdigit():
-                        fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
-
+                    siteName = labelsDict.get(h.strip()) if labelsDict else None
+                    if not siteName and labelsDict:
+                        siteName = labelsDict.get(dataId)
+                    fullLabel = usgsHeaderFromSiteName(siteName, intervalStr)
+                    if fullLabel:
                         if Config.debug:
-                            Logic.logMessage("DEBUG", f"buildTable: USGS in dict, header {i}: {fullLabel}")
+                            Logic.logMessage(
+                                "DEBUG",
+                                f"buildTable: USGS dict HIT key={dictKey!r} row={dictRow} "
+                                f"via Site Name, header {i}: {fullLabel}",
+                            )
                     else:
-                        fullLabel = f"{baseLabel} \n{intervalStr}"
-                        
+                        parts = dataId.split('-')
+                        if (
+                            len(parts) == 3
+                            and parts[0].isdigit()
+                            and (
+                                parts[1].isdigit()
+                                or (len(parts[1]) == 32 and parts[1].isalnum())
+                            )
+                            and parts[2].isdigit()
+                        ):
+                            fullLabel = f"{parts[0]}-{parts[2]} \n{intervalStr}"
+                        else:
+                            fullLabel = f"{nameLabel} \n{intervalStr}"
                         if Config.debug:
-                            Logic.logMessage("DEBUG", f"buildTable: USGS in dict but non-USGS format, header {i}: {fullLabel}")
+                            Logic.logMessage(
+                                "DEBUG",
+                                f"buildTable: USGS dict HIT key={dictKey!r} row={dictRow} "
+                                f"fallback header {i}: {fullLabel}",
+                            )
             elif database == 'AQUARIUS':
-                fullLabel = f"{baseLabel} \n{dataId}"
+                fullLabel = f"{nameLabel} \n{dataId}"
 
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"buildTable: Aquarius in dict, using dict label, header {i}: {fullLabel}")
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"buildTable: Aquarius in dict, using commonName-datatype, header {i}: {fullLabel}",
+                    )
             else:
-                # USBR / HDB: commonName - dataType
-                dataTypeCol = getColByName(dataDictionaryTable, 'dataType')
-                dataTypeItem = dataDictionaryTable.item(dictRow, dataTypeCol) if dataTypeCol != -1 else None
-                dataType = dataTypeItem.text().strip() if dataTypeItem and dataTypeItem.text().strip() else ''
-                nameLabel = f"{baseLabel} - {dataType}" if dataType else baseLabel
-
+                # USBR / HDB: commonName-datatype, SDID (and MRID when non-zero)
                 if mrid and mrid != '0':
                     fullLabel = f"{nameLabel} \n{dataId}-{mrid}"
 
@@ -451,9 +769,15 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                         Logic.logMessage("DEBUG", f"buildTable: USBR in dict, header {i}: {fullLabel}")
         else:
             if database == 'USGS-NWIS':
-                siteName = labelsDict.get(dataId) if labelsDict else None
-                if not siteName and labelsDict and h.strip() in labelsDict:
-                    siteName = labelsDict.get(h.strip())
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"buildTable: USGS dict MISS key={dictKey!r} "
+                        f"queryDataId={h.strip()!r} (expected bare time_series_id in dataID col)",
+                    )
+                siteName = labelsDict.get(h.strip()) if labelsDict else None
+                if not siteName and labelsDict:
+                    siteName = labelsDict.get(dataId)
                 fullLabel = usgsHeaderFromSiteName(siteName, intervalStr)
                 if fullLabel:
                     if Config.debug:
@@ -503,7 +827,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         Logic.logMessage("DEBUG", f"buildTable: Setting table to {numRows} rows, {numCols} columns ({totalCells} cells)")
 
     # Freeze UI work before allocating — Windows marks Not Responding if this blocks too long
-    wasSorting = table.isSortingEnabled()
+    # Built-in sorting stays OFF always: single-click header must only highlight
+    # (double-click uses customSortTable). Do not re-enable from .ui defaults.
     table.setSortingEnabled(False)
     table.blockSignals(True)
     table.setUpdatesEnabled(False)
@@ -514,6 +839,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     header.setStretchLastSection(False)
     vHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+    # Horizontal: highlight selected column header (Interactive mode keeps width fixed).
+    # Vertical: leave off so row labels do not flash/resize with cell selection.
+    header.setHighlightSections(True)
+    vHeader.setHighlightSections(False)
 
     # Row height before setRowCount so new sections pick up the platform-tuned size
     # (non-retro Windows is tighter; Linux Noto +10; retro keeps roomier pad)
@@ -539,6 +868,13 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         timestamps = [row.split(',', 1)[0].strip() for row in data]
         table.setVerticalHeaderLabels(timestamps)
         vHeader.setVisible(True)
+        # Center timestamps in the vertical header column
+        tsAlign = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        vHeader.setDefaultAlignment(tsAlign)
+        for r in range(len(timestamps)):
+            tsItem = table.verticalHeaderItem(r)
+            if tsItem is not None:
+                tsItem.setTextAlignment(tsAlign)
         # Fixed min width from sample only (not ResizeToContents)
         font = table.font()
         metrics = QFontMetrics(font)
@@ -556,6 +892,31 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     align = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
     rawData = Config.rawData
+    # Per-series RoundingSpec from data dictionary (valuePrecision + precisionOverride).
+    # Always pass the *full query DataID* + database so USGS site-tsid[-param] is
+    # parsed down to bare time_series_id and precisionOverride is applied.
+    # Discharge alone → DEC(3); with precisionOverride DEC(2) → must be DEC(2).
+    seriesRules = []
+    for i in range(numCols):
+        qDataId = None
+        if buildHeader and i < len(buildHeader):
+            qDataId = buildHeader[i].strip() if buildHeader[i] else None
+        dbName = databases[i] if databases and i < len(databases) else None
+        if dataDictionaryTable is not None and qDataId:
+            rule = Logic.roundingSpecForDataId(
+                dataDictionaryTable, qDataId, dictIndex=dictIndex, database=dbName
+            )
+            seriesRules.append(rule)
+            if Config.debug and dbName and str(dbName).upper().startswith('USGS'):
+                Logic.logMessage(
+                    "DEBUG",
+                    f"buildTable seriesRules[{i}]: qDataId={qDataId!r} "
+                    f"db={dbName!r} → {rule}",
+                )
+        else:
+            seriesRules.append(Logic.DEFAULT_ROUNDING_SPEC)
+    table.columnRoundingRules = list(seriesRules)
+
     # Yield often enough that Windows does not show "Not Responding"
     yieldEvery = 200 if totalCells > 200000 else 500 if numRows > 2000 else 1000
     progressBase = 90
@@ -572,7 +933,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         for colIdx in range(min(numCols, len(rowData))):
             cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
             if not rawData and cellText:
-                display = Logic.valuePrecision(cellText)
+                rule = seriesRules[colIdx] if colIdx < len(seriesRules) else Logic.DEFAULT_ROUNDING_SPEC
+                display = Logic.valuePrecision(cellText, rule=rule)
             else:
                 display = cellText
             item = QTableWidgetItem(display)
@@ -598,11 +960,9 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
     table.blockSignals(False)
     table.setUpdatesEnabled(True)
-    # Leave sorting off for very large tables (click-to-sort still works via customSort)
-    if totalCells < 100000:
-        table.setSortingEnabled(wasSorting)
-    else:
-        table.setSortingEnabled(False)
+    # Always leave built-in sorting OFF. Qt sorts on single header click when
+    # enabled; we sort only on double-click via customSortTable.
+    table.setSortingEnabled(False)
 
     table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
     table.setMinimumSize(0, 0)
@@ -621,7 +981,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     if Config.debug:
         Logic.logMessage("DEBUG", "buildTable: complete (QAQC deferred to executeQuery)")
 
-def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=None):
+def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=None, mainWindow=None):
     if not Config.qaqcEnabled:
         if Config.debug:
             Logic.logMessage("DEBUG", "qaqc: Skipped, QAQC disabled in config")
@@ -639,6 +999,13 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
     cutoffMaxCol = getColByName(dataDictionaryTable, 'cutoffMax') if dataDictionaryTable else -1
     rateOfChangeCol = getColByName(dataDictionaryTable, 'rateOfChange') if dataDictionaryTable else -1
 
+    if mainWindow is None and table is not None:
+        try:
+            mainWindow = table.window()
+        except Exception:
+            mainWindow = None
+    columnMetadata = getattr(mainWindow, 'columnMetadata', None) or [] if mainWindow is not None else []
+
     now = datetime.now()
     numCols = min(table.columnCount(), len(lookupIds) if lookupIds is not None else table.columnCount())
     numRows = table.rowCount()
@@ -649,6 +1016,12 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
     table.blockSignals(True)
 
     for col in range(numCols):
+        meta = columnMetadata[col] if col < len(columnMetadata) else {}
+        # Delta columns use their own +/− foreground colors — never run QAQC on them
+        if isinstance(meta, dict) and meta.get('type') == 'delta':
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"qaqc: Skipping delta column {col}")
+            continue
         lookupId = lookupIds[col] if lookupIds is not None and col < len(lookupIds) else None
         if Config.debug:
             Logic.logMessage("DEBUG", "qaqc: Processing column {} for lookupId {}".format(col, lookupId))
@@ -690,10 +1063,10 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
                 if tsItem:
                     tsStr = tsItem.text()
                     try:
-                        tsDt = datetime.strptime(tsStr, '%m/%d/%y %H:%M:00')
-                        if tsDt <= now:
+                        tsDt = parseDisplayTimestamp(tsStr)
+                        if tsDt is not None and tsDt <= now:
                             item.setBackground(blueMissing)
-                    except ValueError:
+                    except (ValueError, TypeError):
                         pass
                 continue
             try:
@@ -732,6 +1105,7 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
     table.setUpdatesEnabled(True)
 
 def customSortTable(table, col, dataDictionaryTable):
+    """Sort by column (intended for header double-click, not single-click)."""
     try:
         pool = QThreadPool.globalInstance()
 
@@ -754,7 +1128,8 @@ def customSortTable(table, col, dataDictionaryTable):
     except Exception as e:
         Logic.logException(f"customSortTable failed for col {col}", e)
         try:
-            table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            # ExtendedSelection for multi-cell copy/paste ranges
+            table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         except Exception:
             pass
 
@@ -765,8 +1140,12 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
         table.blockSignals(True)
         table.setUpdatesEnabled(False)
 
+        tsAlign = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        table.verticalHeader().setDefaultAlignment(tsAlign)
         for rowIdx, row in enumerate(sortedRows):
-            table.setVerticalHeaderItem(rowIdx, QTableWidgetItem(row['ts']))
+            tsHeader = QTableWidgetItem(row['ts'])
+            tsHeader.setTextAlignment(tsAlign)
+            table.setVerticalHeaderItem(rowIdx, tsHeader)
             cells = row.get('cells', [])
 
             for c in range(table.columnCount()):
@@ -813,7 +1192,9 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
         except Exception:
             pass
         try:
-            table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            # ExtendedSelection so multi-cell copy/paste and column highlight work
+            table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+            table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         except Exception:
             pass
 
@@ -885,12 +1266,21 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
             elif firstDb == 'AQUARIUS':
                 firstInterval = 'INSTANT:1'
 
-        # Round down startDate to nearest firstInterval
+        # Align start/end to the first series interval (HOUR/INSTANT round;
+        # DAY+ truncate time / period boundaries). Same firstInterval used for
+        # table timestamps — do not change interval selection logic.
         startDate = roundDownToInterval(startDate, firstInterval)
+        endDate = roundDownToInterval(endDate, firstInterval)
 
-        # Convert back to str for buildTimestamps
+        # Convert back to str for buildTimestamps / API workers
         startDateStr = startDate.strftime('%Y-%m-%d %H:%M')
         endDateStr = endDate.strftime('%Y-%m-%d %H:%M')
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"executeQuery: interval={firstInterval} normalized range "
+                f"{startDateStr} → {endDateStr}",
+            )
         timestamps = buildTimestamps(startDateStr, endDateStr, firstInterval)
 
         if not timestamps:
@@ -1079,7 +1469,18 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         originalDataIds = [item[0] for item in queryItems]
         originalIntervals = [item[1] for item in queryItems]
         databases = [item[2] for item in queryItems]
-        lookupIds = [item[0].split('-')[0] if item[2].startswith('USBR-') and '-' in item[0] else item[0] for item in queryItems]
+        # Dict keys: USBR → SDID; USGS → bare time_series_id (or legacy methodID);
+        # else full dataID. USGS query form is site-tsid[-param] — never use site/param as key.
+        lookupIds = [
+            dictionaryLookupKey(item[0], item[2]) for item in queryItems
+        ]
+        if Config.debug:
+            for (qid, _iv, db, *_rest), lk in zip(queryItems, lookupIds):
+                if db and str(db).upper().startswith('USGS'):
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"executeQuery: USGS dict key {qid!r} → {lk!r}",
+                    )
         data = []
         numTs = len(timestamps)
         # Progress/UI yield cadence — every 10 rows + per-row debug made huge tables look hung
@@ -1131,18 +1532,26 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 return
 
             # Remap Aquarius rawResponses keys to API labels. USGS stays keyed by DataID
-            # so context-menu lookup by lookupId still works after Site Name headers.
+            # and is dual-keyed by bare time_series_id (dict stores tsid alone).
+            # Keep original dataID keys too (Aquarius headers may use UID or label).
             if Config.debug:
                 Logic.logMessage("DEBUG", f"executeQuery: Remapping rawResponses keys, labelsDict type={type(labelsDict)}, keys={list(labelsDict.keys()) if labelsDict else []}")
-            if labelsDict:
-                remapped = {}
-                for k, v in rawResponses.items():
-                    isUsgsMeta = isinstance(v, dict) and (v.get('kind') in ('ogc', 'legacy') or 'seriesMeta' in v)
-                    if isUsgsMeta:
-                        remapped[k] = v
-                    else:
-                        remapped[labelsDict.get(k, k)] = v
-                rawResponses = remapped
+            remapped = {}
+            for k, v in rawResponses.items():
+                remapped[k] = v
+                isUsgsMeta = isinstance(v, dict) and (
+                    (v.get('kind') in ('ogc', 'legacy') or 'seriesMeta' in v)
+                )
+                if isUsgsMeta:
+                    # Dual-key by bare tsid so Show details works after dictionaryLookupKey
+                    tsidKey = dictionaryLookupKey(k, 'USGS-NWIS')
+                    if tsidKey and tsidKey != k and tsidKey not in remapped:
+                        remapped[tsidKey] = v
+                elif labelsDict:
+                    labelKey = labelsDict.get(k, k)
+                    if labelKey is not None and str(labelKey).strip() != '':
+                        remapped[labelKey] = v
+            rawResponses = remapped
 
             # Store rawResponses for details / context menu
             mainWindow.storeQueryData(rawResponses, 'internal' if isInternal else 'public')
@@ -1192,6 +1601,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         finalLookupIds,
                         dictIndex=dictIndex,
                         progressDialog=progressDialog,
+                        mainWindow=mainWindow,
                     )
                 if overlayChecked:
                     if progressDialog is not None:
@@ -1240,6 +1650,7 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                         lookupIds,
                         dictIndex=dictIndex,
                         progressDialog=progressDialog,
+                        mainWindow=mainWindow,
                     )
 
             # After QAQC/overlay: blue box + black text for HDB r_base fills (no interval)
@@ -1312,9 +1723,18 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
     except Exception as e:
         Logic.logException("executeQuery failed", e)
         try:
-            from core.Oracle import OracleAuthError
-            title = "Oracle Login Failed" if isinstance(e, OracleAuthError) else "Query Error"
-            QMessageBox.warning(mainWindow, title, str(e) if isinstance(e, OracleAuthError) else f"Query failed:\n{e}")
+            from core.Oracle import OracleAuthError, OraclePasswordExpiredError
+            if isinstance(e, OraclePasswordExpiredError):
+                title = "Oracle Password Expired"
+            elif isinstance(e, OracleAuthError):
+                title = "Oracle Login Failed"
+            else:
+                title = "Query Error"
+            QMessageBox.warning(
+                mainWindow,
+                title,
+                str(e) if isinstance(e, OracleAuthError) else f"Query failed:\n{e}",
+            )
         except Exception:
             try:
                 QMessageBox.warning(mainWindow, "Query Error", f"Query failed:\n{e}")
@@ -1329,29 +1749,54 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
 
 def roundDownToInterval(dt, interval):
-    """Round down datetime to the nearest specified interval."""
-    if interval == 'HOUR' or interval == 'INSTANT:60':
-        # Round down to nearest hour
+    """
+    Snap datetime down to the start of its interval bucket.
+
+    HOUR / INSTANT: round minutes/seconds.
+    DAY+: truncate time (and day/month for coarser periods) so API start/end
+    match display buckets. Applied to both start and end in executeQuery.
+    """
+    if dt is None:
+        return dt
+    iv = (interval or '').strip().upper()
+    if iv == 'HOUR' or iv == 'INSTANT:60':
         dt = dt.replace(minute=0, second=0, microsecond=0)
-    elif interval == 'INSTANT:1':
-        # Round down to nearest minute
+    elif iv == 'INSTANT:1':
         dt = dt.replace(second=0, microsecond=0)
-    elif interval == 'INSTANT:15':
-        # Round down to nearest 15-minute interval
+    elif iv == 'INSTANT:15':
         try:
             n = 15
             minutesDown = (dt.minute // n) * n
             dt = dt.replace(minute=minutesDown, second=0, microsecond=0)
         except ValueError:
             if Config.debug:
-                Logic.logMessage("WARN", f"Error rounding INSTANT:15, no rounding applied")
+                Logic.logMessage("WARN", "Error rounding INSTANT:15, no rounding applied")
             return dt
+    elif iv == 'DAY':
+        # Drop time — daily series are date-only
+        dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif iv == 'MONTH':
+        # Drop day + time — monthly series keyed by mm/yy
+        dt = dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif iv == 'YEAR':
+        dt = datetime(dt.year, 1, 1)
+    elif iv == 'WATER YEAR':
+        # Start of water year containing dt (Oct 1 → Sep 30, label = end year)
+        if dt.month >= 10:
+            dt = datetime(dt.year, 10, 1)
+        else:
+            dt = datetime(dt.year - 1, 10, 1)
+    elif iv.startswith('INSTANT:'):
+        # Unknown instant step: zero seconds only
+        dt = dt.replace(second=0, microsecond=0)
     else:
-        # For other intervals, no manipulation needed
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Interval {interval} does not require rounding, returning unchanged")
+            Logic.logMessage(
+                "DEBUG",
+                f"Interval {interval} does not require rounding, returning unchanged",
+            )
         return dt
-    
+
     if Config.debug:
-        Logic.logMessage("DEBUG", f"Rounded down {dt} to {interval}")
+        Logic.logMessage("DEBUG", f"Rounded down to {interval}: {dt}")
     return dt

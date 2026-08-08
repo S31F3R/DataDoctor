@@ -4,10 +4,14 @@ import os
 import sys
 import json
 import configparser
+import subprocess
+import tempfile
+import time
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
     QListWidget, QTreeView, QPushButton, QCheckBox, QRadioButton, QComboBox,
+    QApplication, QHeaderView,
 )
 from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon, QPixmap
 from core import Logic, Config, Utils
@@ -57,7 +61,7 @@ controlLayouts = {
         'chkbQAQC': (156, 90, 21, 22),
         'chkbRetroMode': (88, 120, 21, 22),
         'chkbDebug': (96, 150, 21, 22),
-        'chkbEnableSQL': (128, 180, 21, 22),
+        'chkbBetaUpdates': (220, 180, 21, 22),
         'rbBOP': (210, 0, 141, 22),                 # .ui
         'rbEOP': (350, 0, 131, 22),                 # .ui
         # winQuery
@@ -75,7 +79,7 @@ controlLayouts = {
         'chkbQAQC': (261, 88, 21, 22),              # was 259; RESPONSE +2 x
         'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
         'chkbDebug': (130, 149, 21, 22),
-        'chkbEnableSQL': (206, 179, 21, 22),
+        'chkbBetaUpdates': (300, 179, 21, 22),
         'rbBOP': (193, 0, 141, 22),                 # was 199; -6 x
         'rbEOP': (350, 0, 131, 22),
         'btnDataIdInfo': (406, 5, 31, 20),
@@ -132,6 +136,221 @@ platformLayoutYNudge = {
 # Query-style lists that need tight item rows on Windows non-retro
 # (SQL snippet list + Query dataID list only — not every QListWidget)
 compactListObjectNames = frozenset({'listSnippets', 'listQueryList'})
+
+
+def _findWindowsLauncherExe(script, cwd):
+    """
+    Prefer the VB.NET 'Data Doctor.exe' when present next to the install layout
+    (zip root / launcher folder / parent of Project Files).
+    """
+    candidates = []
+    roots = []
+    for base in (cwd, os.path.dirname(script) if script else '', Config.appRoot or ''):
+        if not base:
+            continue
+        base = os.path.abspath(base)
+        roots.append(base)
+        roots.append(os.path.dirname(base))  # Project Files → zip root
+        roots.append(os.path.dirname(os.path.dirname(base)))
+    seen = set()
+    for root in roots:
+        if not root or root in seen:
+            continue
+        seen.add(root)
+        for name in ('Data Doctor.exe', 'DataDoctor.exe'):
+            path = os.path.join(root, name)
+            if os.path.isfile(path):
+                candidates.append(path)
+    return candidates[0] if candidates else None
+
+
+def restartApplication():
+    """
+    Relaunch this process then quit the current app.
+
+    Windows cannot reliably use os.execl (pythonw, spaces, VB launcher).
+    Strategy:
+      1. Prefer python + DataDoctor.py(w) (same process that is running)
+      2. Fall back to Data Doctor.exe launcher only if no script path
+      3. On Windows: temp .cmd waits, starts app, logs to %TEMP%\\DataDoctorRestart.log
+      4. On Unix: QProcess.startDetached / subprocess, then quit
+
+    Returns True if a restart was scheduled, False on hard failure.
+    Retro mode (and other config) must already be saved before calling.
+    """
+    try:
+        program = os.path.abspath(sys.executable)
+        # sys.argv[0] may be relative; resolve against cwd
+        argv0 = sys.argv[0] if sys.argv else ''
+        script = os.path.abspath(argv0) if argv0 else ''
+        if script and not os.path.isfile(script):
+            for alt in (
+                script,
+                script + 'w' if not script.endswith('w') else script[:-1],
+                os.path.join(Config.appRoot or '', 'DataDoctor.py'),
+                os.path.join(Config.appRoot or '', 'DataDoctor.pyw'),
+            ):
+                if alt and os.path.isfile(alt):
+                    script = os.path.abspath(alt)
+                    break
+        extra = list(sys.argv[1:]) if len(sys.argv) > 1 else []
+        cwd = os.getcwd()
+
+        if script and os.path.isfile(script):
+            cwd = os.path.dirname(script) or cwd
+        if Config.appRoot and os.path.isdir(Config.appRoot):
+            if os.path.isfile(os.path.join(Config.appRoot, 'DataDoctor.py')) or \
+               os.path.isfile(os.path.join(Config.appRoot, 'DataDoctor.pyw')):
+                cwd = Config.appRoot
+
+        Logic.logMessage(
+            "INFO",
+            f"restartApplication: program={program!r} script={script!r} "
+            f"extra={extra!r} cwd={cwd!r} platform={sys.platform}",
+        )
+
+        if sys.platform == 'win32':
+            # Prefer re-exec of the same Python + script (avoids wrong/old launcher)
+            childCwd = cwd
+            if script and os.path.isfile(script):
+                # Use pythonw if current is pythonw (no console flash)
+                exe = program
+                childArgs = [exe, script] + extra
+            else:
+                launcher = _findWindowsLauncherExe(script, cwd)
+                if launcher:
+                    childCwd = os.path.dirname(launcher) or cwd
+                    childArgs = [launcher]
+                    Logic.logMessage(
+                        "INFO",
+                        f"restartApplication: fallback Windows launcher {launcher!r}",
+                    )
+                else:
+                    childArgs = [program] + extra
+
+            logPath = os.path.join(tempfile.gettempdir(), 'DataDoctorRestart.log')
+            # Build a robust .cmd: delay, cd, start, log failures (no interactive pause)
+            quotedArgs = ' '.join(f'"{a}"' for a in childArgs)
+            batLines = [
+                '@echo off',
+                'setlocal EnableExtensions',
+                f'echo DataDoctor restart %DATE% %TIME% > "{logPath}"',
+                f'echo cwd={childCwd} >> "{logPath}"',
+                f'echo cmd={quotedArgs} >> "{logPath}"',
+                'rem Wait for parent process to exit',
+                'ping -n 3 127.0.0.1 >nul',
+                f'cd /d "{childCwd}" 2>> "{logPath}"',
+                f'if errorlevel 1 echo CD failed >> "{logPath}"',
+                # start "" = empty window title; /D sets working directory
+                f'start "" /D "{childCwd}" {quotedArgs}',
+                f'if errorlevel 1 (',
+                f'  echo START failed errorlevel=%errorlevel% >> "{logPath}"',
+                f') else (',
+                f'  echo START ok >> "{logPath}"',
+                f')',
+                'del "%~f0" >nul 2>&1',
+                '',
+            ]
+            fd, batPath = tempfile.mkstemp(suffix='.cmd', prefix='DataDoctorRestart_')
+            os.close(fd)
+            with open(batPath, 'w', encoding='utf-8', newline='\r\n') as f:
+                f.write('\r\n'.join(batLines))
+
+            Logic.logMessage(
+                "INFO",
+                f"restartApplication: bat={batPath} log={logPath} args={childArgs}",
+            )
+
+            # Launch hidden cmd that runs the bat — DETACHED, no CREATE_NO_WINDOW
+            # combo that fails on some hosts; use SW_HIDE via start /b from python.
+            DETACHED_PROCESS = 0x00000008
+            CREATE_NEW_PROCESS_GROUP = 0x00000200
+            CREATE_NO_WINDOW = 0x08000000
+            launched = False
+            # 1) Detached cmd /c bat (hidden console)
+            try:
+                subprocess.Popen(
+                    ['cmd.exe', '/c', batPath],
+                    cwd=childCwd,
+                    close_fds=True,
+                    creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                launched = True
+            except Exception as e:
+                Logic.logMessage("WARN", f"restartApplication: hidden cmd failed ({e})")
+
+            # 2) ShellExecute on the bat
+            if not launched:
+                try:
+                    os.startfile(batPath)  # nosec B606
+                    launched = True
+                except Exception as e:
+                    Logic.logMessage("WARN", f"restartApplication: startfile failed ({e})")
+
+            # 3) Last resort: start child immediately (may race with exit)
+            if not launched:
+                try:
+                    subprocess.Popen(
+                        childArgs,
+                        cwd=childCwd,
+                        close_fds=True,
+                        creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    launched = True
+                    Logic.logMessage("INFO", "restartApplication: direct Popen child")
+                except Exception as e:
+                    Logic.logException("restartApplication: all Windows launch paths failed", e)
+                    return False
+
+            if not launched:
+                return False
+        else:
+            # Linux / macOS
+            args = [program]
+            if script and os.path.isfile(script):
+                args.append(script)
+            args.extend(extra)
+            try:
+                from PyQt6.QtCore import QProcess
+                ok = QProcess.startDetached(program, args[1:], cwd)
+                if not ok:
+                    raise RuntimeError('QProcess.startDetached returned False')
+                Logic.logMessage("INFO", f"restartApplication: QProcess.startDetached {args}")
+            except Exception as e:
+                Logic.logMessage("WARN", f"restartApplication: QProcess failed ({e}); subprocess")
+                subprocess.Popen(args, cwd=cwd, start_new_session=True)
+                Logic.logMessage("INFO", f"restartApplication: subprocess.Popen {args}")
+
+        # Quit after a short delay so the restart spawn is fully underway
+        app = QApplication.instance()
+
+        def quitApp():
+            try:
+                if app is not None:
+                    app.closeAllWindows()
+                    app.quit()
+                else:
+                    os._exit(0)  # library API
+            except Exception:
+                os._exit(0)  # library API
+
+        if app is not None:
+            delayMs = 500 if sys.platform == 'win32' else 250
+            QTimer.singleShot(delayMs, quitApp)
+        else:
+            time.sleep(0.3)
+            os._exit(0)  # library API
+        return True
+    except Exception as e:
+        Logic.logException("restartApplication failed", e)
+        return False
+
 
 class customPasswordEdit(QLineEdit):
     """Password field using Qt's native echo modes (no dual realText/display bookkeeping).
@@ -393,6 +612,10 @@ def applyTableRowMetrics(table, font=None):
         vHeader.setMinimumSectionSize(max(metrics.height() + 2, 16))
 
         hHeader = table.horizontalHeader()
+        # Horizontal header may highlight selection (column pick); widths stay
+        # Interactive so "selected" chrome does not resize sections.
+        hHeader.setHighlightSections(True)
+        vHeader.setHighlightSections(False)
         if Config.retroMode:
             hHeader.setMinimumHeight(tableHeaderBarHeight(font, metrics))
         else:
@@ -416,6 +639,17 @@ def autoSizeTableColumns(table, sampleRows=100):
     numRows = table.rowCount()
     if numCols == 0:
         return
+
+    # Horizontal may highlight selection; keep Interactive resize so highlight
+    # chrome never re-measures column width (that caused giant headers).
+    try:
+        hHeader = table.horizontalHeader()
+        vHeader = table.verticalHeader()
+        hHeader.setHighlightSections(True)
+        hHeader.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        vHeader.setHighlightSections(False)
+    except Exception:
+        pass
 
     font = table.font()
     metrics = QFontMetrics(font)
@@ -441,6 +675,8 @@ def autoSizeTableColumns(table, sampleRows=100):
             finalWidth = maxCell + (headerWidth - maxCell) + 10
         else:
             finalWidth += 20
+        # Extra pad so multi-line header text is not clipped at edges
+        finalWidth += 2
         table.setColumnWidth(c, finalWidth)
 
     if Config.debug:
@@ -829,35 +1065,124 @@ def applyStylesAndFonts(app, mainTable, queryList):
         pass
 
 def loadDataDictionary(table):
-    """Load the data dictionary into the provided table."""
+    """Load the data dictionary into the provided table (migrates schema if needed)."""
+    Logic.ensureDataDictionarySchema()
     Logic.buildDataDictionary(table)
+    # Combobox delegates + combo column widths (editor window only — safe no-op otherwise)
+    try:
+        parent = table.window() if table is not None else None
+        if parent is not None and hasattr(parent, 'applyValuePrecisionDelegate'):
+            parent.applyValuePrecisionDelegate()
+        if parent is not None and hasattr(parent, 'applyDatabaseDelegate'):
+            parent.applyDatabaseDelegate()
+        if parent is not None and hasattr(parent, 'sizeComboColumns'):
+            parent.sizeComboColumns()
+    except Exception:
+        pass
 
 def loadQuickLooks(cbQuickLook):
     """Load all Quick Looks into the provided combobox."""
     Logic.loadAllQuickLooks(cbQuickLook)
 
+def hdbDatabaseLabel(entry):
+    """
+    Strip optional |SCHEMA suffix from an hdbOracleDatabases entry.
+    'USBR-UCHDB2|UCHDBA' → 'USBR-UCHDB2'; bare names pass through.
+    """
+    s = str(entry or '').strip()
+    if '|' in s:
+        return s.split('|', 1)[0].strip()
+    return s
+
+
+def hdbSchemaForDatabase(dbName):
+    """
+    Resolve HDB Oracle schema for a database label (e.g. USBR-UCHDB2 → UCHDBA).
+
+    Prefer Config.hdbOracleDatabases 'LABEL|SCHEMA' entries. Fall back to the
+    historical rstrip('2')+'A' derivation when the DB is not listed.
+    """
+    label = hdbDatabaseLabel(dbName)
+    if not label:
+        return ''
+
+    # Match against config entries (with or without USBR- prefix on either side)
+    entries = getattr(Config, 'hdbOracleDatabases', ()) or ()
+    labelUpper = label.upper()
+    shortUpper = labelUpper.split('-', 1)[-1] if '-' in labelUpper else labelUpper
+
+    for entry in entries:
+        entryStr = str(entry or '').strip()
+        if not entryStr:
+            continue
+        if '|' in entryStr:
+            namePart, schemaPart = entryStr.split('|', 1)
+            namePart = namePart.strip()
+            schemaPart = schemaPart.strip()
+        else:
+            namePart, schemaPart = entryStr, ''
+        nameUpper = namePart.upper()
+        nameShort = nameUpper.split('-', 1)[-1] if '-' in nameUpper else nameUpper
+        if nameUpper == labelUpper or nameShort == shortUpper:
+            if schemaPart:
+                return schemaPart.upper()
+            break
+
+    # Legacy derivation: uchdb2 → UCHDBA, lchdb → LCHDBA
+    dsn = shortUpper.lower()
+    if dsn.endswith('2'):
+        return dsn.upper().rstrip('2') + 'A'
+    return dsn.upper() + 'A'
+
+
+def programDatabases(queryType=None):
+    """
+    Ordered list of database labels used by query combos / data dictionary.
+
+    queryType:
+      'internal' — include AQUARIUS + HDBs + public sources
+      'sql'      — HDBs only (Oracle targets)
+      None / other — public-style: HDBs + USGS + PNHYD + GPHYD (no AQUARIUS)
+    """
+    names = []
+    seen = set()
+
+    def add(name):
+        n = (name or '').strip()
+        if n and n not in seen:
+            names.append(n)
+            seen.add(n)
+
+    if queryType == 'internal':
+        add('AQUARIUS')
+
+    for entry in getattr(Config, 'hdbOracleDatabases', ()) or ():
+        add(hdbDatabaseLabel(entry))
+
+    # Fallback if config empty
+    if not any(n.startswith('USBR-') and n not in ('USBR-PNHYD', 'USBR-GPHYD') for n in names):
+        for name in (
+            'USBR-LCHDB', 'USBR-YAOHDB', 'USBR-UCHDB2',
+            'USBR-ECOHDB', 'USBR-LBOHDB', 'USBR-KBOHDB',
+        ):
+            add(name)
+
+    if queryType != 'sql':
+        add('USGS-NWIS')
+        add('USBR-PNHYD')
+        add('USBR-GPHYD')
+
+    return names
+
+
 def loadDatabase(comboBox, queryType=None):
-    """Populate the database combo box with static databases."""
+    """Populate the database combo box with static databases (no |SCHEMA in labels)."""
     if comboBox:
         if Config.debug:
             Logic.logMessage("DEBUG", "Populating cbDatabase")
         comboBox.clear()
-
-        if queryType == 'internal' and queryType != 'sql': 
-            comboBox.addItem('AQUARIUS')
-
-        # Populate database combobox        
-        comboBox.addItem('USBR-LCHDB')
-        comboBox.addItem('USBR-YAOHDB')
-        comboBox.addItem('USBR-UCHDB2')
-        comboBox.addItem('USBR-ECOHDB')
-        comboBox.addItem('USBR-LBOHDB')
-        comboBox.addItem('USBR-KBOHDB')
-
-        if queryType != 'sql':
-            comboBox.addItem('USGS-NWIS')
-            comboBox.addItem('USBR-PNHYD')
-            comboBox.addItem('USBR-GPHYD')
+        for name in programDatabases(queryType=queryType):
+            comboBox.addItem(name)
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"Populated cbDatabase with {comboBox.count()} items")
@@ -1110,6 +1435,7 @@ def loadConfig():
     configPath = getConfigPath()
     defaults = {
         'lastExportPath': '',
+        'lastGraphSavePath': '',
         'debugMode': False,
         'utcOffset': 'UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London',
         'periodOffset': True,
@@ -1118,7 +1444,8 @@ def loadConfig():
         'qaqc': True,
         'rawData': False,
         'lastQuickLook': '',
-        'enableSQL': False
+        # stable = GitHub full releases only; beta = include pre-releases (-rc / -beta)
+        'updateChannel': 'stable',
     }
 
     if os.path.exists(configPath):
@@ -1332,17 +1659,29 @@ def convertConfigToJson():
         Logic.logMessage("DEBUG", "No config.ini found or user.config exists, skipping conversion")
 
 def reloadGlobals():
+    """
+    Refresh runtime flags from user.config.
+
+    Config.retroMode is intentionally NOT updated here. Retro fonts/layouts must
+    only apply at process start (applyStylesAndFonts). Mid-session reloads of
+    retroMode caused Query / tables to partially flip after Options save.
+    """
     settings = loadConfig()
     Config.debug = settings['debugMode']
     Config.utcOffset = settings['utcOffset']
     Config.periodOffset = resolvePeriodOffset(settings)
-    Config.retroMode = settings['retroMode']
     Config.qaqcEnabled = settings['qaqc']
     Config.rawData = settings['rawData']
-    Config.enableSQL = settings['enableSQL']
 
     if Config.debug:
-        Logic.logMessage("DEBUG", f"Globals reloaded from user.config, enableSQL={Config.enableSQL}, periodOffset={Config.periodOffset}, hourTimestampMethod={settings.get('hourTimestampMethod')}")
+        Logic.logMessage(
+            "DEBUG",
+            f"Globals reloaded from user.config, "
+            f"periodOffset={Config.periodOffset}, "
+            f"hourTimestampMethod={settings.get('hourTimestampMethod')}, "
+            f"sessionRetroMode={Config.retroMode} "
+            f"(file retroMode={settings.get('retroMode')} applies on next start)",
+        )
 
 def getConfigDir():
     configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)

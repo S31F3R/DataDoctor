@@ -80,7 +80,7 @@
          </sizepolicy>
         </property>
         <property name="sortingEnabled">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
         <attribute name="horizontalHeaderStretchLastSection">
          <bool>true</bool>
@@ -122,7 +122,7 @@
          </rect>
         </property>
         <property name="toolTip">
-         <string>Reset colum sort</string>
+         <string>Reset column sort to timestamp order</string>
         </property>
         <property name="text">
          <string/>
@@ -148,7 +148,7 @@
          </rect>
         </property>
         <property name="toolTip">
-         <string>Upload changed data (dry-run to documentation/*.csv)</string>
+         <string>Upload edited cells to HDB (MODIFY / DELETE)</string>
         </property>
         <property name="text">
          <string/>
@@ -221,7 +221,7 @@
          </rect>
         </property>
         <property name="toolTip">
-         <string>Information</string>
+         <string>Run SQL query</string>
         </property>
         <property name="text">
          <string/>
@@ -247,7 +247,7 @@
          </rect>
         </property>
         <property name="toolTip">
-         <string>Information</string>
+         <string>Save SQL snippet</string>
         </property>
         <property name="text">
          <string/>
@@ -302,7 +302,7 @@
          </rect>
         </property>
         <property name="toolTip">
-         <string>Information</string>
+         <string>Delete selected SQL snippet</string>
         </property>
         <property name="text">
          <string/>
@@ -352,13 +352,16 @@
       </property>
       <property name="maximumSize">
        <size>
-        <width>320</width>
+        <width>450</width>
         <height>16777215</height>
        </size>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout">
        <item>
         <widget class="QPushButton" name="btnPublicQuery">
+         <property name="toolTip">
+          <string>Public Queries</string>
+         </property>
          <property name="text">
           <string/>
          </property>
@@ -376,12 +379,75 @@
        </item>
        <item>
         <widget class="QPushButton" name="btnInternalQuery">
+         <property name="toolTip">
+          <string>Internal Queries</string>
+         </property>
          <property name="text">
           <string/>
          </property>
          <property name="icon">
           <iconset>
            <normaloff>icons/InternalQuery.png</normaloff>icons/InternalQuery.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnSQL">
+         <property name="toolTip">
+          <string>SQL Query Builder</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/SQL.png</normaloff>icons/SQL.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnGraph">
+         <property name="toolTip">
+          <string>Graph data table</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/Graph.png</normaloff>icons/Graph.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>36</width>
+           <height>36</height>
+          </size>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btnExportCSV">
+         <property name="toolTip">
+          <string>Export to CSV</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset>
+           <normaloff>icons/ExportCSV.png</normaloff>icons/ExportCSV.png</iconset>
          </property>
          <property name="iconSize">
           <size>
@@ -421,16 +487,16 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="btnExportCSV">
+        <widget class="QPushButton" name="btnViewLog">
          <property name="toolTip">
-          <string>Export to CSV</string>
+          <string>View application logs</string>
          </property>
          <property name="text">
           <string/>
          </property>
          <property name="icon">
           <iconset>
-           <normaloff>icons/ExportCSV.png</normaloff>icons/ExportCSV.png</iconset>
+           <normaloff>icons/Notebook.png</normaloff>icons/Notebook.png</iconset>
          </property>
          <property name="iconSize">
           <size>
@@ -442,6 +508,9 @@
        </item>
        <item>
         <widget class="QPushButton" name="btnOptions">
+         <property name="toolTip">
+          <string>Options</string>
+         </property>
          <property name="text">
           <string/>
          </property>
@@ -458,16 +527,16 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="btnViewLog">
+        <widget class="QPushButton" name="btnGoat">
          <property name="toolTip">
-          <string>View application logs</string>
+          <string>FOR EMERGENCIES ONLY!!!</string>
          </property>
          <property name="text">
           <string/>
          </property>
          <property name="icon">
           <iconset>
-           <normaloff>icons/Notebook.png</normaloff>icons/Notebook.png</iconset>
+           <normaloff>icons/Goat.png</normaloff>icons/Goat.png</iconset>
          </property>
          <property name="iconSize">
           <size>
@@ -533,9 +602,7 @@
   <tabstop>btnPublicQuery</tabstop>
   <tabstop>btnInternalQuery</tabstop>
   <tabstop>btnDataDictionary</tabstop>
-  <tabstop>btnExportCSV</tabstop>
   <tabstop>btnOptions</tabstop>
-  <tabstop>btnViewLog</tabstop>
   <tabstop>btnInfo</tabstop>
   <tabstop>btnRefresh</tabstop>
   <tabstop>btnUndo</tabstop>

@@ -7,8 +7,10 @@ import keyring
 import time
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from pathlib import Path
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Tuple, Dict
 from core import Logic, Config
 
 # After a bad password, refuse further connect attempts for this process so we
@@ -22,20 +24,139 @@ authFailureMessage = None
 clientInitLock = threading.Lock()
 clientInitialized = False
 
+# Oracle docs: quoted passwords may not contain double-quote or return/newline.
+# Also reject other control characters (unsafe / non-printable).
+ORACLE_PASSWORD_FORBIDDEN_DISPLAY = (
+    'double quote (")',
+    'newline / carriage return',
+    'other control characters (ASCII < 32)',
+)
+
 
 class OracleAuthError(RuntimeError):
     """Wrong username/password or locked account — do not retry."""
     pass
 
 
+class OraclePasswordExpiredError(OracleAuthError):
+    """Password expired (ORA-28001) — user can change it in Options → USBR."""
+    pass
+
 def clearAuthFailure():
     """Call after the user updates Oracle credentials in Options."""
     global authFailureMessage
     authFailureMessage = None
 
+def _oracleErrorCode(exc) -> Optional[int]:
+    """Extract numeric Oracle error code when present."""
+    try:
+        if hasattr(exc, 'args') and exc.args:
+            err = exc.args[0]
+            code = getattr(err, 'code', None)
+            if code is not None:
+                return int(code)
+    except Exception:
+        pass
+    text = str(exc) if exc is not None else ''
+    m = re.search(r'ORA-(\d+)', text, re.IGNORECASE)
+    if m:
+        try:
+            return int(m.group(1))
+        except ValueError:
+            pass
+    return None
+
+def isPasswordExpiredError(exc) -> bool:
+    """True if Oracle reports password expired (ORA-28001)."""
+    if _oracleErrorCode(exc) == 28001:
+        return True
+    text = (str(exc) if exc is not None else '').upper()
+    return 'ORA-28001' in text or 'PASSWORD HAS EXPIRED' in text or 'PASSWORD EXPIRED' in text
+
+def isUserDoesNotExistError(exc) -> bool:
+    """True for ORA-01918 (user does not exist) — definitive missing account."""
+    if _oracleErrorCode(exc) == 1918:
+        return True
+    text = (str(exc) if exc is not None else '').upper()
+    return 'ORA-01918' in text or ('DOES NOT EXIST' in text and 'USER' in text)
+
+def isLoginAuthError(exc) -> bool:
+    """
+    True for ORA-01017 invalid username/password on connect.
+
+    Oracle does not distinguish wrong password from unknown user. For HDB
+    password change we treat this as 'auth' so the UI can prompt for that
+    database's current password (passwords often differ across HDBs).
+    """
+    if isUserDoesNotExistError(exc):
+        return False
+    code = _oracleErrorCode(exc)
+    if code == 1017:
+        return True
+    text = (str(exc) if exc is not None else '').upper()
+    if 'ORA-01017' in text or 'ORA-1017' in text:
+        return True
+    if 'INVALID USERNAME/PASSWORD' in text:
+        return True
+    if 'USERNAME/PASSWORD' in text and 'INVALID' in text:
+        return True
+    if 'INVALID USERNAME' in text or 'INVALID PASSWORD' in text:
+        return True
+    return False
+
+def isUserMissingError(exc) -> bool:
+    """
+    Legacy helper: login auth failure or definitive missing user.
+    Prefer isLoginAuthError / isUserDoesNotExistError for password-change flow.
+    """
+    return isLoginAuthError(exc) or isUserDoesNotExistError(exc)
+
+def oracleUserIdent(username: str) -> str:
+    """
+    Normalize Oracle username for unquoted SQL identifiers.
+
+    Unquoted Oracle identifiers are stored/matched as UPPERCASE. Quoting the
+    username (e.g. ALTER USER "jsmith") looks for a case-sensitive name and
+    often yields ORA-01918 even when the account exists as JSMITH.
+    """
+    u = (username or '').strip()
+    if not u:
+        raise ValueError('Oracle username is empty')
+    if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_#$]*', u):
+        raise ValueError(
+            'Oracle username has invalid characters for password change '
+            '(use letters, digits, _, #, $ only)'
+        )
+    return u.upper()
+
+def buildAlterUserPasswordSql(username: str, newPassword: str, oldPassword: str) -> str:
+    """
+    Build ALTER USER ... IDENTIFIED BY ... REPLACE ... matching HDB practice.
+
+    Valid form (Oracle docs / Examples.txt):
+      ALTER USER username IDENTIFIED BY "newPassword" REPLACE "oldPassword"
+
+    - Username: unquoted, uppercased (standard Oracle identifier)
+    - Passwords: double-quoted so special characters / case are preserved
+    - Never log the returned string (contains secrets)
+    """
+    userIdent = oracleUserIdent(username)
+    # Forbidden chars already validated on newPassword; still refuse " in either
+    if '"' in (newPassword or '') or '"' in (oldPassword or ''):
+        raise ValueError('Oracle passwords cannot contain double quotes')
+    if '\n' in (newPassword or '') or '\r' in (newPassword or ''):
+        raise ValueError('Oracle passwords cannot contain newlines')
+    if '\n' in (oldPassword or '') or '\r' in (oldPassword or ''):
+        raise ValueError('Oracle passwords cannot contain newlines')
+    return (
+        f'ALTER USER {userIdent} IDENTIFIED BY "{newPassword}" '
+        f'REPLACE "{oldPassword}"'
+    )
 
 def isAuthError(exc) -> bool:
-    """True if this looks like bad credentials / locked account."""
+    """True if this looks like bad credentials / locked account / expired password."""
+    if isPasswordExpiredError(exc):
+        return True
     text = str(exc) if exc is not None else ''
     upper = text.upper()
     # Common Oracle auth codes
@@ -65,6 +186,375 @@ def isAuthError(exc) -> bool:
         pass
     return False
 
+def passwordExpiredMessage() -> str:
+    """User-facing message for ORA-28001 (no secrets)."""
+    return (
+        "Your Oracle/HDB password has expired.\n\n"
+        "You can change it in Options under the USBR tab "
+        "(Oracle username and password).\n\n"
+        "Further connect attempts are blocked this session until "
+        "credentials are updated, to avoid locking the account."
+    )
+
+def genericAuthFailureMessage() -> str:
+    return (
+        "Oracle login failed: wrong username/password or account locked. "
+        "Fix credentials in Options — further connect attempts are blocked "
+        "this session to avoid locking the account."
+    )
+
+def validateOraclePassword(password: str) -> Tuple[bool, str]:
+    """
+    Validate an Oracle password for length and forbidden characters.
+    Returns (ok, errorMessage). errorMessage is empty when ok.
+    Never echoes the password itself.
+    """
+    minLen = int(getattr(Config, 'oraclePasswordMinLength', 12) or 12)
+    maxLen = int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30)
+    if maxLen < minLen:
+        maxLen = minLen
+    forbiddenList = ', '.join(ORACLE_PASSWORD_FORBIDDEN_DISPLAY)
+
+    if password is None:
+        password = ''
+
+    length = len(password)
+    badChars = []
+    for ch in password:
+        if ch == '"':
+            if '"' not in badChars:
+                badChars.append('"')
+        elif ch in ('\n', '\r'):
+            label = 'newline/carriage return'
+            if label not in badChars:
+                badChars.append(label)
+        elif ord(ch) < 32:
+            label = f'control char (ASCII {ord(ch)})'
+            if label not in badChars:
+                badChars.append(label)
+
+    tooShort = length < minLen
+    tooLong = length > maxLen
+    if tooShort or tooLong or badChars:
+        lines = [
+            "Invalid Oracle password.",
+            "",
+            f"Minimum length: {minLen} character(s).",
+            f"Maximum length: {maxLen} character(s).",
+        ]
+        if tooShort or tooLong:
+            lines.append(f"Your password is {length} character(s).")
+        lines.append("")
+        lines.append(f"Characters not allowed: {forbiddenList}.")
+        if badChars:
+            lines.append(f"Found: {', '.join(badChars)}.")
+        return False, '\n'.join(lines)
+
+    return True, ''
+
+def databaseToDsn(dbName: str) -> str:
+    """USBR-LCHDB or USBR-LCHDB|LCHDBA → lchdb (strip optional |SCHEMA)."""
+    s = str(dbName or '').strip()
+    if '|' in s:
+        s = s.split('|', 1)[0].strip()
+    if '-' in s:
+        return s.split('-', 1)[1].lower()
+    return s.lower()
+
+
+def hdbDisplayName(dbName: str) -> str:
+    """Strip |SCHEMA so UI/logs never show query-only schema suffixes."""
+    s = str(dbName or '').strip()
+    if '|' in s:
+        return s.split('|', 1)[0].strip()
+    return s
+
+
+def isAccountLockedError(exc) -> bool:
+    """True for ORA-28000 account locked."""
+    if _oracleErrorCode(exc) == 28000:
+        return True
+    text = (str(exc) if exc is not None else '').upper()
+    return 'ORA-28000' in text or 'ACCOUNT IS LOCKED' in text or 'ACCOUNT LOCKED' in text
+
+def _executeAlterUserPassword(conn, username: str, oldPassword: str, newPassword: str) -> None:
+    """
+    Run ALTER USER ... IDENTIFIED BY "new" REPLACE "old" on an open connection.
+    Never logs the SQL (contains secrets).
+    """
+    sql = buildAlterUserPasswordSql(username, newPassword, oldPassword)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(sql)
+        # DDL usually auto-commits; best-effort commit for non-DDL drivers
+        try:
+            conn.commit()
+        except Exception:
+            pass
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        sql = None
+
+
+def changePasswordOnDsn(
+    dsn: str,
+    username: str,
+    oldPassword: str,
+    newPassword: str,
+    dbLabel: Optional[str] = None,
+) -> Tuple[str, str]:
+    """
+    Change password on one Oracle DSN using the old password to authenticate.
+
+    Primary method (HDB / Examples.txt):
+      ALTER USER username IDENTIFIED BY "newPassword" REPLACE "oldPassword"
+
+    Username is unquoted UPPERCASE; passwords are double-quoted.
+    Fallback: connection.changepassword(old, new).
+    Expired password: connect(..., newpassword=new).
+
+    Returns (status, detail) where status is:
+      'success' — password changed
+      'auth'    — ORA-01017: wrong password for this DB (UI may prompt for another)
+      'locked'  — ORA-28000: account locked (shown to user)
+      'missing' — ORA-01918: user does not exist (silent skip)
+      'error'   — other failure (logged only; not shown as spam to users)
+
+    Does NOT set the global authFailureMessage (per-DB skips must not block others).
+    Never logs password values or the ALTER USER SQL.
+    """
+    label = hdbDisplayName(dbLabel or dsn)
+    ensureOracleClientReady()
+
+    try:
+        userIdent = oracleUserIdent(username)
+    except ValueError as e:
+        return 'error', str(e)
+
+    # Connect as the account (Oracle auth accepts any case; we use original then upper)
+    connectUser = (username or '').strip()
+    conn = None
+    try:
+        try:
+            conn = oracledb.connect(user=connectUser, password=oldPassword, dsn=dsn)
+        except Exception as e:
+            if isPasswordExpiredError(e):
+                # Expired: change as part of connect (newpassword=)
+                try:
+                    conn = oracledb.connect(
+                        user=connectUser,
+                        password=oldPassword,
+                        newpassword=newPassword,
+                        dsn=dsn,
+                    )
+                    Logic.logMessage(
+                        "INFO",
+                        f"Oracle password changed on {label} ({dsn}) for user {userIdent} "
+                        f"(password was expired)",
+                    )
+                    return 'success', ''
+                except Exception as e2:
+                    if isLoginAuthError(e2):
+                        Logic.logMessage(
+                            "INFO",
+                            f"Oracle password change needs per-DB password on {label} "
+                            f"(expired path login failed: {_safeErrorText(e2)})",
+                        )
+                        return 'auth', _safeErrorText(e2)
+                    if isAccountLockedError(e2):
+                        Logic.logMessage(
+                            "INFO",
+                            f"Oracle password change: account locked on {label}",
+                        )
+                        return 'locked', 'Account locked'
+                    if isUserDoesNotExistError(e2):
+                        Logic.logMessage(
+                            "INFO",
+                            f"Oracle password change skipped on {label}: user does not exist",
+                        )
+                        return 'missing', _safeErrorText(e2)
+                    Logic.logMessage(
+                        "ERROR",
+                        f"Oracle password change failed on {label} (expired path): "
+                        f"{_safeErrorText(e2)}",
+                    )
+                    return 'error', _safeErrorText(e2)
+
+            if isLoginAuthError(e):
+                # Wrong password for this DB (or user not present — UI may prompt once)
+                Logic.logMessage(
+                    "INFO",
+                    f"Oracle password change needs per-DB password on {label}: "
+                    f"{_safeErrorText(e)}",
+                )
+                return 'auth', _safeErrorText(e)
+
+            if isAccountLockedError(e):
+                Logic.logMessage(
+                    "INFO",
+                    f"Oracle password change: account locked on {label}",
+                )
+                return 'locked', 'Account locked'
+
+            if isUserDoesNotExistError(e):
+                Logic.logMessage(
+                    "INFO",
+                    f"Oracle password change skipped on {label}: user does not exist",
+                )
+                return 'missing', _safeErrorText(e)
+
+            # Other connect failures (TNS, network, etc.) — log only, no UI spam
+            Logic.logMessage(
+                "ERROR",
+                f"Oracle password change connect failed on {label}: {_safeErrorText(e)}",
+            )
+            return 'error', _safeErrorText(e)
+
+        # Connected — change password via ALTER USER (Examples.txt / Oracle standard)
+        try:
+            try:
+                _executeAlterUserPassword(conn, userIdent, oldPassword, newPassword)
+            except Exception as alterErr:
+                # Fallback to driver API if ALTER USER is blocked/unavailable
+                if hasattr(conn, 'changepassword'):
+                    if Config.debug:
+                        Logic.logMessage(
+                            "DEBUG",
+                            f"Oracle ALTER USER failed on {label}, trying changepassword: "
+                            f"{_safeErrorText(alterErr)}",
+                        )
+                    conn.changepassword(oldPassword, newPassword)
+                else:
+                    raise
+
+            Logic.logMessage(
+                "INFO",
+                f"Oracle password changed successfully on {label} ({dsn}) for user {userIdent}",
+            )
+            return 'success', ''
+        except Exception as e:
+            # Only ORA-01918 is definitive "user does not exist" after a successful login
+            if isUserDoesNotExistError(e):
+                Logic.logMessage(
+                    "INFO",
+                    f"Oracle password change skipped on {label}: user {userIdent} does not exist",
+                )
+                return 'missing', _safeErrorText(e)
+            if isAccountLockedError(e):
+                Logic.logMessage(
+                    "INFO",
+                    f"Oracle password change: account locked on {label} during ALTER",
+                )
+                return 'locked', 'Account locked'
+            Logic.logMessage(
+                "ERROR",
+                f"Oracle password change failed on {label} for user {userIdent}: "
+                f"{_safeErrorText(e)}",
+            )
+            return 'error', _safeErrorText(e)
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        conn = None
+
+def _safeErrorText(exc) -> str:
+    """Stringify an exception without assuming secrets are present."""
+    try:
+        text = str(exc).strip() if exc is not None else 'Unknown error'
+    except Exception:
+        text = 'Unknown error'
+    # Collapse whitespace; cap length for popups
+    text = ' '.join(text.split())
+    if len(text) > 300:
+        text = text[:297] + '...'
+    return text or 'Unknown error'
+
+def changePasswordOnAllHdb(
+    username: str,
+    oldPassword: str,
+    newPassword: str,
+) -> Dict[str, Any]:
+    """
+    Change the Oracle password on every HDB database in parallel (one thread each).
+
+    Returns:
+      {
+        'success':    ['USBR-LCHDB', ...],
+        'errors':     [('USBR-YAOHDB', 'reason'), ...],  # only locked (user-facing)
+        'authFailed': ['USBR-ECOHDB', ...],  # ORA-01017 — UI may prompt per DB
+      }
+    Databases where the account did not exist (ORA-01918) or other non-auth
+    failures (TNS/network) are omitted from the UI summary (logged only).
+    """
+    rawDatabases = list(getattr(Config, 'hdbOracleDatabases', ()) or ())
+    # Normalize to display labels only (strip |SCHEMA)
+    databases = [hdbDisplayName(db) for db in rawDatabases if hdbDisplayName(db)]
+    success: List[str] = []
+    errors: List[Tuple[str, str]] = []
+    authFailed: List[str] = []
+    lock = threading.Lock()
+
+    if not databases:
+        Logic.logMessage("WARN", "changePasswordOnAllHdb: no HDB databases configured")
+        return {'success': success, 'errors': errors, 'authFailed': authFailed}
+
+    Logic.logMessage(
+        "INFO",
+        f"Oracle password change starting for user {username} on {len(databases)} HDB database(s)",
+    )
+
+    def worker(dbName: str):
+        dsn = databaseToDsn(dbName)
+        status, detail = changePasswordOnDsn(
+            dsn=dsn,
+            username=username,
+            oldPassword=oldPassword,
+            newPassword=newPassword,
+            dbLabel=dbName,
+        )
+        with lock:
+            if status == 'success':
+                success.append(dbName)
+            elif status == 'auth':
+                authFailed.append(dbName)
+            elif status == 'locked':
+                # User-facing: locked accounts only (not TNS/network spam)
+                errors.append((dbName, detail or 'Account locked'))
+            # 'missing' / 'error' → intentional silence in UI summary (still in app.log)
+
+    maxWorkers = max(1, len(databases))
+    with ThreadPoolExecutor(max_workers=maxWorkers) as executor:
+        futures = [executor.submit(worker, db) for db in databases]
+        for fut in as_completed(futures):
+            try:
+                fut.result()
+            except Exception as e:
+                Logic.logMessage(
+                    "ERROR",
+                    f"changePasswordOnAllHdb: unexpected worker failure: {_safeErrorText(e)}",
+                )
+
+    # Stable order for UI (config order)
+    order = {name: i for i, name in enumerate(databases)}
+    success.sort(key=lambda n: order.get(n, 999))
+    errors.sort(key=lambda pair: order.get(pair[0], 999))
+    authFailed.sort(key=lambda n: order.get(n, 999))
+
+    Logic.logMessage(
+        "INFO",
+        f"Oracle password change pass finished for user {username}: "
+        f"{len(success)} succeeded, {len(errors)} locked/user-facing error(s), "
+        f"{len(authFailed)} need per-DB password, "
+        f"{len(databases) - len(success) - len(errors) - len(authFailed)} skipped "
+        f"(user not found or non-auth connect error)",
+    )
+    return {'success': success, 'errors': errors, 'authFailed': authFailed}
 
 def pathHasDir(envValue, directory, sep):
     """True if directory already appears as a PATH-style entry."""
@@ -77,7 +567,6 @@ def pathHasDir(envValue, directory, sep):
         if os.path.normcase(os.path.normpath(part)) == dirNorm:
             return True
     return False
-
 
 def ensureClientOnPath(clientDir):
     """Prepend Instant Client to the process library path at most once."""
@@ -118,11 +607,21 @@ def ensureClientOnPath(clientDir):
     if Config.debug:
         Logic.logMessage("DEBUG", f"oracleConnection: Prepended Instant Client to {key} (len={len(candidate)})")
 
-
 def ensureOracleClientReady():
     """
     One-time Instant Client init + TNS_ADMIN. Safe to call from any thread;
     concurrent callers block until the first setup finishes.
+
+    Instant Client priority:
+      1. Packaged oracle/client next to the app (preferred)
+      2. System Instant Client already on PATH / LD_LIBRARY_PATH
+      3. Thin mode (no Instant Client) — last resort
+
+    sqlnet.ora / TNS_ADMIN:
+      - If TNS_ADMIN is already set in the environment, keep it (user/system tnsnames).
+      - Else, if packaged oracle/network/admin exists, point TNS_ADMIN there so the
+        bundled sqlnet.ora is used.
+      - tnsnames.ora path from Options is unchanged (works independently).
     """
     global clientInitialized
     if clientInitialized:
@@ -136,14 +635,6 @@ def ensureOracleClientReady():
         if platform.architecture()[0] != "64bit":
             raise RuntimeError("Only 64-bit platforms supported.")
 
-        clientDirPath = "oracle/client"
-        clientDir = Path(Logic.resourcePath(clientDirPath))
-        if not clientDir.exists():
-            raise FileNotFoundError(
-                f"Oracle Instant Client directory not found: {clientDir}. "
-                "Please download and unzip the Instant Client 23.9 for your platform into oracle/client."
-            )
-
         expectedFiles = {
             "windows": ["oci.dll"],
             "linux": ["libociei.so"],
@@ -152,55 +643,109 @@ def ensureOracleClientReady():
         requiredFiles = expectedFiles.get(system)
         if not requiredFiles:
             raise RuntimeError(f"Unsupported platform: {system}")
-        if Config.debug:
-            Logic.logMessage(
-                "DEBUG",
-                f"oracleConnection.setup: Checking for platform-specific files in {clientDir}: {requiredFiles}",
-            )
-        filesExist = all((clientDir / f).exists() for f in requiredFiles)
-        if not filesExist:
-            raise FileNotFoundError(
-                f"Oracle Instant Client files for {system.capitalize()} not found in {clientDir}. "
-                "Please download and unzip the correct Instant Client 23.9 for your platform into oracle/client."
-            )
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"oracleConnection.setup: Validated Instant Client files for {system}")
 
-        ensureClientOnPath(clientDir)
+        clientDirPath = "oracle/client"
+        clientDir = Path(Logic.resourcePath(clientDirPath))
+        packagedReady = (
+            clientDir.exists()
+            and all((clientDir / f).exists() for f in requiredFiles)
+        )
 
-        try:
-            oracledb.init_oracle_client(lib_dir=str(clientDir))
-        except Exception as e:
-            # Already initialized in this process is fine
-            msg = str(e).lower()
-            if "already been initialized" in msg or "has already been called" in msg:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "oracleConnection.setup: Instant Client already initialized")
-            else:
-                raise
-
-        if Config.debug:
-            Logic.logMessage(
-                "DEBUG",
-                f"oracleConnection.setup: Initialized oracledb with clientDir {clientDir}",
-            )
-
-        # TNS_ADMIN: prefer existing env (user tnsnames), else bundled admin
-        envTns = os.environ.get('TNS_ADMIN')
-        if envTns:
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"oracleConnection.setup: Using env TNS_ADMIN: {envTns} (no copy)")
-        else:
-            resourceAdmin = Logic.resourcePath('oracle/network/admin')
-            os.environ['TNS_ADMIN'] = resourceAdmin
+        if packagedReady:
             if Config.debug:
                 Logic.logMessage(
                     "DEBUG",
-                    f"oracleConnection.setup: Set TNS_ADMIN to program's path: {resourceAdmin} (no copy)",
+                    f"oracleConnection.setup: Using packaged Instant Client at {clientDir}",
+                )
+            ensureClientOnPath(clientDir)
+            try:
+                oracledb.init_oracle_client(lib_dir=str(clientDir))
+            except Exception as e:
+                msg = str(e).lower()
+                if "already been initialized" in msg or "has already been called" in msg:
+                    if Config.debug:
+                        Logic.logMessage(
+                            "DEBUG",
+                            "oracleConnection.setup: Instant Client already initialized",
+                        )
+                else:
+                    raise
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.setup: Initialized oracledb with packaged clientDir {clientDir}",
+                )
+        else:
+            # Packaged client missing — try system Instant Client, then thin mode
+            if clientDir.exists():
+                Logic.logMessage(
+                    "WARN",
+                    f"oracleConnection.setup: Packaged Instant Client incomplete at {clientDir}; "
+                    f"trying system Oracle client",
+                )
+            else:
+                Logic.logMessage(
+                    "WARN",
+                    f"oracleConnection.setup: Packaged Instant Client not found at {clientDir}; "
+                    f"trying system Oracle client",
+                )
+            try:
+                oracledb.init_oracle_client()  # system search path / ORACLE_HOME
+                Logic.logMessage(
+                    "INFO",
+                    "oracleConnection.setup: Using system Instant Client (packaged not available)",
+                )
+            except Exception as e:
+                msg = str(e).lower()
+                if "already been initialized" in msg or "has already been called" in msg:
+                    if Config.debug:
+                        Logic.logMessage(
+                            "DEBUG",
+                            "oracleConnection.setup: Instant Client already initialized (system)",
+                        )
+                else:
+                    # Thin mode — works for many DSNs; TCPS/wallet may still need thick client
+                    Logic.logMessage(
+                        "WARN",
+                        f"oracleConnection.setup: No Instant Client available "
+                        f"({_safeErrorText(e)}); continuing in thin mode",
+                    )
+
+        # TNS_ADMIN / sqlnet.ora: env wins; else prefer packaged network/admin
+        envTns = os.environ.get('TNS_ADMIN')
+        resourceAdmin = Logic.resourcePath('oracle/network/admin')
+        packagedAdminExists = os.path.isdir(resourceAdmin)
+
+        if envTns:
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.setup: Using env TNS_ADMIN: {envTns} "
+                    f"(sqlnet.ora from that directory if present)",
+                )
+        elif packagedAdminExists:
+            os.environ['TNS_ADMIN'] = resourceAdmin
+            sqlnetPath = os.path.join(resourceAdmin, 'sqlnet.ora')
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.setup: Set TNS_ADMIN to packaged path: {resourceAdmin} "
+                    f"(sqlnet.ora present={os.path.isfile(sqlnetPath)})",
+                )
+            else:
+                Logic.logMessage(
+                    "INFO",
+                    f"oracleConnection.setup: Using packaged sqlnet.ora/TNS_ADMIN at {resourceAdmin}",
+                )
+        else:
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    "oracleConnection.setup: No TNS_ADMIN env and no packaged "
+                    "oracle/network/admin — Oracle default name resolution only",
                 )
 
         clientInitialized = True
-
 
 class oracleConnection:
     def __init__(self, dsn: str):
@@ -234,12 +779,15 @@ class oracleConnection:
         except OracleAuthError:
             raise
         except oracledb.Error as e:
-            if isAuthError(e):
-                authFailureMessage = (
-                    "Oracle login failed: wrong username/password or account locked. "
-                    "Fix credentials in Options — further connect attempts are blocked "
-                    "this session to avoid locking the account."
+            if isPasswordExpiredError(e):
+                authFailureMessage = passwordExpiredMessage()
+                Logic.logMessage(
+                    "ERROR",
+                    f"oracleConnection.connect: Password expired for {self.dsn}: {e}",
                 )
+                raise OraclePasswordExpiredError(authFailureMessage) from e
+            if isAuthError(e):
+                authFailureMessage = genericAuthFailureMessage()
                 Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
                 raise OracleAuthError(authFailureMessage) from e
             Logic.logException(f"oracleConnection.connect: Error connecting to Oracle ({self.dsn})", e)
@@ -247,12 +795,15 @@ class oracleConnection:
             password = None
             raise
         except Exception as e:
-            if isAuthError(e):
-                authFailureMessage = (
-                    "Oracle login failed: wrong username/password or account locked. "
-                    "Fix credentials in Options — further connect attempts are blocked "
-                    "this session to avoid locking the account."
+            if isPasswordExpiredError(e):
+                authFailureMessage = passwordExpiredMessage()
+                Logic.logMessage(
+                    "ERROR",
+                    f"oracleConnection.connect: Password expired for {self.dsn}: {e}",
                 )
+                raise OraclePasswordExpiredError(authFailureMessage) from e
+            if isAuthError(e):
+                authFailureMessage = genericAuthFailureMessage()
                 Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
                 raise OracleAuthError(authFailureMessage) from e
             Logic.logException(f"oracleConnection.connect: Unexpected error ({self.dsn})", e)
@@ -417,21 +968,129 @@ class oracleConnection:
             self.reconnect()
             return self.executeCustomQuery(query, params=params, fetchAll=fetchAll)
 
-    def callStoredProcedure(self, procedureName: str, params: Optional[List[Any]] = None) -> List[Any]:
-        """Call an Oracle stored procedure and return output values."""
-        if not self.connection: raise RuntimeError("No active connection. Call connect() first.")
+    def callStoredProcedure(
+        self,
+        procedureName: str,
+        params: Optional[List[Any]] = None,
+        commit: bool = True,
+        paramNames: Optional[List[str]] = None,
+    ) -> List[Any]:
+        """
+        Call an Oracle stored procedure with positional parameters.
+
+        params: values in procedure-definition order (None → NULL).
+        commit: if True, commit after a successful call (needed for DML procedures).
+        paramNames: optional labels for DEBUG logging only.
+        """
+        if not self.connection:
+            raise RuntimeError("No active connection. Call connect() first.")
+
+        paramList = list(params) if params is not None else []
         cursor = self.connection.cursor()
+        startTime = time.time()
 
         try:
-            output = cursor.callproc(procedureName, params or [])
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.callStoredProcedure: Called {procedureName} with params: {params}")
-            return output
+            if Config.debug:
+                if paramNames and len(paramNames) == len(paramList):
+                    paired = ', '.join(
+                        f"{n}={self._formatParamForLog(v)}" for n, v in zip(paramNames, paramList)
+                    )
+                else:
+                    paired = ', '.join(self._formatParamForLog(v) for v in paramList)
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.callStoredProcedure: {procedureName} on {self.dsn} "
+                    f"params=[{paired}]",
+                )
+
+            output = cursor.callproc(procedureName, paramList)
+
+            if commit:
+                self.connection.commit()
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"oracleConnection.callStoredProcedure: committed {procedureName} "
+                        f"on {self.dsn}",
+                    )
+
+            elapsed = time.time() - startTime
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.callStoredProcedure: {procedureName} OK in {elapsed:.3f}s",
+                )
+            return list(output) if output is not None else []
         except oracledb.Error as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.callStoredProcedure: Error calling procedure: {e}")
+            # Best-effort rollback so a failed write does not leave a dirty txn
+            try:
+                if commit and self.connection is not None:
+                    self.connection.rollback()
+            except Exception:
+                pass
+            Logic.logException(
+                f"oracleConnection.callStoredProcedure: {procedureName} failed on {self.dsn}",
+                e,
+            )
+            raise
+        except Exception as e:
+            try:
+                if commit and self.connection is not None:
+                    self.connection.rollback()
+            except Exception:
+                pass
+            Logic.logException(
+                f"oracleConnection.callStoredProcedure: unexpected error calling "
+                f"{procedureName} on {self.dsn}",
+                e,
+            )
             raise
         finally:
-            cursor.close()
-            if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.callStoredProcedure: Cursor closed")
+            try:
+                cursor.close()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _formatParamForLog(value):
+        """Safe short string for DEBUG (no secrets expected in proc params)."""
+        if value is None:
+            return 'NULL'
+        if isinstance(value, datetime):
+            return value.strftime('%Y-%m-%d %H:%M:%S')
+        text = repr(value)
+        if len(text) > 80:
+            return text[:77] + '...'
+        return text
+
+    def callStoredProcedureWithRetry(
+        self,
+        procedureName: str,
+        params: Optional[List[Any]] = None,
+        commit: bool = True,
+        paramNames: Optional[List[str]] = None,
+    ) -> List[Any]:
+        """
+        Call a stored procedure; on lost-connection errors, reconnect once and retry.
+        Used by long-lived worker sessions that reuse one connection across writes.
+        """
+        try:
+            return self.callStoredProcedure(
+                procedureName, params=params, commit=commit, paramNames=paramNames
+            )
+        except Exception as e:
+            if isAuthError(e) or not self.isConnectionError(e):
+                raise
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.callStoredProcedureWithRetry: connection error on "
+                    f"{self.dsn}, reconnecting once: {e}",
+                )
+            self.reconnect()
+            return self.callStoredProcedure(
+                procedureName, params=params, commit=commit, paramNames=paramNames
+            )
 
     def close(self):
         """Close connection and clean up TNS_ADMIN directory."""

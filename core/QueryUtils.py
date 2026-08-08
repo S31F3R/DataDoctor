@@ -1,6 +1,7 @@
 # QueryUtils.py
 
 import numpy as np
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from PyQt6.QtCore import Qt, QCoreApplication
 from PyQt6.QtGui import QColor, QBrush
@@ -37,9 +38,47 @@ def modifyTable(
     if numRows == 0 or numCols == 0:
         return
 
-    dataIds = lookupIds
+    # Full query DataIDs (for seriesResponses / columnMetadata) — NOT dictionary keys.
+    # lookupIds are dict keys (USGS → bare tsid, USBR → SDID); use those only for rounding.
+    dataIds = [item[0] for item in queryItems] if queryItems else list(lookupIds or [])
+    dictKeys = list(lookupIds) if lookupIds is not None else list(dataIds)
     labelsDict = labelsDict or {}
     queryInfos = [f"{item[0]}|{item[1]}|{item[2]}" for item in queryItems]
+    databases = list(databases) if databases else []
+
+    # Per-series rounding rules (same as buildTable) so re-format does not drop DEC(3) etc.
+    dictTable = None
+    dictIndex = None
+    if mainWindow is not None:
+        winDd = getattr(mainWindow, 'winDataDictionary', None)
+        if winDd is not None:
+            dictTable = getattr(winDd, 'mainTable', None)
+        dictIndex = getattr(table, 'dataDictIndex', None)
+
+    def ruleForId(idx_or_id):
+        """
+        Resolve RoundingSpec for overlay/delta columns.
+
+        Full query DataID + database so USGS site-tsid[-param] hits bare
+        time_series_id and applies precisionOverride (DEC(2) over Discharge DEC(3)).
+        """
+        if dictTable is None:
+            return Logic.DEFAULT_ROUNDING_SPEC
+        if isinstance(idx_or_id, int):
+            i = idx_or_id
+            qid = dataIds[i] if i < len(dataIds) else None
+            db = databases[i] if i < len(databases) else None
+        else:
+            qid = idx_or_id
+            db = None
+            if qid in dataIds:
+                i = dataIds.index(qid)
+                db = databases[i] if i < len(databases) else None
+        if not qid:
+            return Logic.DEFAULT_ROUNDING_SPEC
+        return Logic.roundingSpecForDataId(
+            dictTable, qid, dictIndex=dictIndex, database=db
+        )
 
     # --- Extract all cell text once (one grid walk) ---
     def yieldProgress(msg, pct=None):
@@ -74,6 +113,7 @@ def modifyTable(
     finalHeaders = []    # list[str]
     finalRoles = []      # list of list[dict|None] UserRole per cell
     columnMetadata = []
+    finalRules = []      # RoundingSpec per final display column
 
     table.setUpdatesEnabled(False)
     table.blockSignals(True)
@@ -84,20 +124,29 @@ def modifyTable(
         sIdx = pIdx + 1
         primaryVals = np.full(numRows, np.nan)
         secondaryVals = np.full(numRows, np.nan)
+        # Exact string→Decimal deltas (avoids float binary noise / scientific notation)
+        deltaDecimals = [None] * numRows
+        pRule = ruleForId(pIdx)
+        sRule = ruleForId(sIdx)
+        # Deltas: use primary series rule (same units as primary)
+        dRule = pRule
 
         for r in range(numRows):
-            try:
-                if grid[pIdx][r]:
-                    primaryVals[r] = float(grid[pIdx][r])
-            except ValueError:
-                pass
-            try:
-                if grid[sIdx][r]:
-                    secondaryVals[r] = float(grid[sIdx][r])
-            except ValueError:
-                pass
-
-        deltas = computeDeltas(primaryVals, secondaryVals)
+            pText = grid[pIdx][r] if pIdx < len(grid) else ''
+            sText = grid[sIdx][r] if sIdx < len(grid) else ''
+            pDec = parseDecimalText(pText)
+            sDec = parseDecimalText(sText)
+            if pDec is not None:
+                primaryVals[r] = float(pDec)
+            if sDec is not None:
+                secondaryVals[r] = float(sDec)
+            # Delta from already-formatted display strings (buildTable applied
+            # valuePrecision). Matching display text → exact 0 (never -0.00).
+            if pDec is not None and sDec is not None:
+                if str(pText).strip() == str(sText).strip():
+                    deltaDecimals[r] = Decimal(0)
+                else:
+                    deltaDecimals[r] = pDec - sDec
 
         if overlayChecked:
             # Merge secondary into primary column offline
@@ -106,10 +155,10 @@ def modifyTable(
             for r in range(numRows):
                 hasP = np.isfinite(primaryVals[r])
                 hasS = np.isfinite(secondaryVals[r])
-                d = deltas[r]
-                pStr = Logic.valuePrecision(primaryVals[r]) if hasP else ''
-                sStr = Logic.valuePrecision(secondaryVals[r]) if hasS else ''
-                dStr = Logic.valuePrecision(d) if np.isfinite(d) else ''
+                # Prefer Decimal delta from display strings; never use str(float) path
+                pStr = Logic.valuePrecision(primaryVals[r], rule=pRule) if hasP else ''
+                sStr = Logic.valuePrecision(secondaryVals[r], rule=sRule) if hasS else ''
+                dStr = formatDeltaValue(deltaDecimals[r], dRule)
                 roles[r] = {
                     'primaryVal': pStr,
                     'secondaryVal': sStr,
@@ -123,8 +172,22 @@ def modifyTable(
                 mergedText[r] = pStr if hasP else (sStr if hasS else '')
             finalCols.append(mergedText)
             finalRoles.append(roles)
+            finalRules.append(pRule)
             # Header: keep primary header (two-line style)
             finalHeaders.append(headers[pIdx] if pIdx < len(headers) else f"Overlay {pairIndex}")
+
+            def _firstHeaderLine(h):
+                """First non-empty line of a multi-line header (graph legends)."""
+                if not h:
+                    return ''
+                for line in str(h).split('\n'):
+                    line = line.strip()
+                    if line:
+                        return line
+                return str(h).strip()
+
+            pHeaderFirst = _firstHeaderLine(headers[pIdx] if pIdx < len(headers) else '')
+            sHeaderFirst = _firstHeaderLine(headers[sIdx] if sIdx < len(headers) else '')
 
             primaryDb = databases[pairIndex * 2]
             primaryId = dataIds[pairIndex * 2]
@@ -141,15 +204,19 @@ def modifyTable(
                 'queryInfos': [queryInfos[pairIndex * 2], queryInfos[pairIndex * 2 + 1]],
                 'pairIndex': pairIndex,
                 'lookupId': lookupId,
+                # First line of each pair's original header for graph legends
+                'headerFirstLines': [pHeaderFirst, sHeaderFirst],
             })
         else:
-            # Keep both columns as normal
+            # Keep both columns as normal (already formatted in buildTable; keep text)
             finalCols.append(list(grid[pIdx]))
             finalRoles.append([None] * numRows)
             finalHeaders.append(headers[pIdx])
+            finalRules.append(pRule)
             finalCols.append(list(grid[sIdx]))
             finalRoles.append([None] * numRows)
             finalHeaders.append(headers[sIdx])
+            finalRules.append(sRule)
 
             primaryDb = databases[pairIndex * 2]
             primaryId = dataIds[pairIndex * 2]
@@ -177,11 +244,11 @@ def modifyTable(
         if deltaChecked:
             dCol = [''] * numRows
             for r in range(numRows):
-                d = deltas[r]
-                dCol[r] = Logic.valuePrecision(d) if np.isfinite(d) else ''
+                dCol[r] = formatDeltaValue(deltaDecimals[r], dRule)
             finalCols.append(dCol)
             finalRoles.append([None] * numRows)
             finalHeaders.append("Delta")
+            finalRules.append(dRule)
             if not overlayChecked:
                 lookupId = [lookupIdPrimary, lookupIdSecondary]
             columnMetadata.append({
@@ -201,6 +268,7 @@ def modifyTable(
         finalCols.append(list(grid[last]))
         finalRoles.append([None] * numRows)
         finalHeaders.append(headers[last])
+        finalRules.append(ruleForId(last))
         lastDb = databases[-1]
         lastId = dataIds[-1]
         lookupIdLast = labelsDict.get(lastId, lastId) if lastDb == 'AQUARIUS' else lastId
@@ -214,6 +282,7 @@ def modifyTable(
 
     # --- Single rewrite of the table (no removeColumn loop) ---
     outCols = len(finalCols)
+    table.columnRoundingRules = list(finalRules)
     yieldProgress(f"Overlay/delta: writing {outCols} columns × {numRows} rows...", 97)
 
     # Preserve vertical header timestamps
@@ -231,6 +300,12 @@ def modifyTable(
     )
     if timestamps and any(timestamps):
         table.setVerticalHeaderLabels(timestamps)
+        tsAlign = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        table.verticalHeader().setDefaultAlignment(tsAlign)
+        for r in range(len(timestamps)):
+            tsItem = table.verticalHeaderItem(r)
+            if tsItem is not None:
+                tsItem.setTextAlignment(tsAlign)
 
     align = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
     yieldEvery = 200 if numRows * outCols > 200000 else 500
@@ -309,9 +384,7 @@ def modifyTable(
 
 
 def processDelta(primaryVals, secondaryVals):
-    deltas = np.subtract(primaryVals, secondaryVals)
-    deltas[~ (np.isfinite(primaryVals) & np.isfinite(secondaryVals))] = np.nan
-    return deltas
+    return computeDeltas(primaryVals, secondaryVals)
 
 
 def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, queryInfos, pairIndex):
@@ -319,21 +392,21 @@ def processOverlay(table, pIdx, sIdx, deltas, numRows, dataIds, databases, query
     for r in range(numRows):
         item = table.item(r, pIdx)
         if item:
-            try:
-                primaryVal = float(item.text()) if item.text() else np.nan
-            except ValueError:
-                primaryVal = np.nan
+            pText = item.text().strip() if item.text() else ''
             sItem = table.item(r, sIdx)
-            try:
-                secondaryVal = float(sItem.text()) if sItem and sItem.text() else np.nan
-            except ValueError:
-                secondaryVal = np.nan
-            hasP = np.isfinite(primaryVal)
-            hasS = np.isfinite(secondaryVal)
-            d = deltas[r]
-            pStr = Logic.valuePrecision(primaryVal) if hasP else ''
-            sStr = Logic.valuePrecision(secondaryVal) if hasS else ''
-            dStr = Logic.valuePrecision(d) if np.isfinite(d) else ''
+            sText = sItem.text().strip() if sItem and sItem.text() else ''
+            pDec = parseDecimalText(pText)
+            sDec = parseDecimalText(sText)
+            hasP = pDec is not None
+            hasS = sDec is not None
+            pStr = Logic.valuePrecision(pText) if hasP else ''
+            sStr = Logic.valuePrecision(sText) if hasS else ''
+            dStr = (
+                formatDeltaValue(pDec - sDec)
+                if hasP and hasS
+                else ''
+            )
+            # Legacy path — prefer main modifyTable rewrite which has per-series rules
             item.setData(Qt.ItemDataRole.UserRole, {
                 'primaryVal': pStr,
                 'secondaryVal': sStr,
@@ -468,13 +541,23 @@ def applyUsbrRbaseFallbackColors(table, mainWindow, progressDialog=None):
             if not tsItem:
                 continue
             tsStr = tsItem.text()
-            try:
-                tsDate = datetime.strptime(tsStr, '%m/%d/%y %H:%M:00')
-                matchKey = tsDate.strftime('%Y-%m-%d %H:%M:%S')
-            except ValueError:
+            from core.Query import parseDisplayTimestamp, periodStart
+            tsDate = parseDisplayTimestamp(tsStr)
+            if tsDate is None:
                 continue
+            matchKey = tsDate.strftime('%Y-%m-%d %H:%M:%S')
 
             rowMeta = byEnd.get(matchKey) or byStart.get(matchKey)
+            if not rowMeta:
+                # Coarser display intervals: match any meta row in the same calendar day
+                for key, meta in list(byEnd.items()) + list(byStart.items()):
+                    try:
+                        rowDt = datetime.strptime(key, '%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        continue
+                    if periodStart(rowDt, 'DAY') == periodStart(tsDate, 'DAY'):
+                        rowMeta = meta
+                        break
             if not rowMeta:
                 continue
             intervalVal = (rowMeta.get('Interval Value') or '').strip()
@@ -502,9 +585,77 @@ def applyUsbrRbaseFallbackColors(table, mainWindow, progressDialog=None):
         Logic.logMessage("DEBUG", "applyUsbrRbaseFallbackColors: finished pass")
 
 
+def parseDecimalText(text):
+    """
+    Parse a cell string to Decimal without float binary noise.
+    Returns None for blank / non-numeric.
+    """
+    if text is None:
+        return None
+    s = str(text).strip().replace(',', '')
+    if not s:
+        return None
+    try:
+        return Decimal(s)
+    except (InvalidOperation, ValueError, ArithmeticError):
+        return None
+
+
+def formatDeltaValue(deltaDec, rule=None):
+    """
+    Format a primary−secondary delta for the table / overlay UserRole.
+
+    Uses Decimal math + valuePrecision so raw mode never shows scientific
+    notation (e.g. 1e-12) for tiny residual differences.
+
+    Signed zeros from rounding (-0.00, -0) are normalized to unsigned 0 /
+    0.00 so tiny negative residuals never display a minus on a zero.
+    """
+    if deltaDec is None:
+        return ''
+    try:
+        if not isinstance(deltaDec, Decimal):
+            deltaDec = Decimal(str(deltaDec))
+    except (InvalidOperation, ValueError, ArithmeticError):
+        return ''
+    if deltaDec.is_nan() or deltaDec.is_infinite():
+        return ''
+    # Exact zero (including Decimal('-0'))
+    if deltaDec == 0:
+        return Logic.valuePrecision(0, rule=rule)
+    # Pass through valuePrecision (raw → formatRawNumber fixed-point; else DEC/SIG)
+    # Use string form so _toDecimal / float path does not reintroduce binary noise.
+    formatted = Logic.valuePrecision(format(deltaDec, 'f'), rule=rule)
+    return normalizeSignedZeroText(formatted)
+
+
+def normalizeSignedZeroText(text):
+    """Turn '-0', '-0.0', '-0.00' into unsigned zero with the same decimals."""
+    if text is None:
+        return ''
+    s = str(text).strip()
+    if not s.startswith('-'):
+        return s
+    body = s[1:]
+    if not body:
+        return s
+    # Only digits and at most one dot
+    if body.replace('.', '', 1).isdigit() and body.replace('.', '').strip('0') == '':
+        return body
+    return s
+
+
 def computeDeltas(primaryVals, secondaryVals):
+    """
+    Float/numpy delta array (legacy helpers / tests).
+    Prefer Decimal path in modifyTable for display strings.
+    """
     deltas = np.subtract(primaryVals, secondaryVals)
     deltas[~ (np.isfinite(primaryVals) & np.isfinite(secondaryVals))] = np.nan
+    # Collapse pure float noise to 0 so residual 1e-15 does not color as mismatch
+    with np.errstate(invalid='ignore'):
+        noise = np.isfinite(deltas) & (np.abs(deltas) < 1e-12)
+        deltas[noise] = 0.0
     return deltas
 
 
@@ -517,7 +668,10 @@ def addDeltaColumn(table, insertIdx, deltas):
 
     for r in range(numRows):
         d = deltas[r]
-        dStr = Logic.valuePrecision(d) if np.isfinite(d) else ''
+        if np.isfinite(d):
+            dStr = formatDeltaValue(Decimal(str(d)))
+        else:
+            dStr = ''
         item = QTableWidgetItem(dStr)
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
         item.setForeground(Config.systemTextColor)

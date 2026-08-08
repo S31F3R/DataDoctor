@@ -1,14 +1,95 @@
 # uiDetails.py - Details window for displaying cell metadata or overlay info
 
-from PyQt6.QtWidgets import QWidget, QTableWidgetItem, QAbstractItemView, QTabWidget, QVBoxLayout, QTableWidget, QSizePolicy
-from PyQt6.QtGui import QIcon
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QWidget, QTableWidgetItem, QAbstractItemView, QTabWidget, QVBoxLayout,
+    QTableWidget, QSizePolicy, QApplication, QMenu,
+)
+from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
+from PyQt6.QtCore import Qt, QTimer, QSize, QObject, QEvent
 from PyQt6 import uic
 from datetime import datetime
 from core import Logic, Config
 
 # Cap visible metadata rows; beyond this, show a themed vertical scrollbar
 maxVisibleMetaRows = 16
+# Qt QWIDGETSIZE_MAX
+maxWidgetSize = 16777215
+
+
+class detailsTableKeyFilter(QObject):
+    """Ctrl+C copies selected metadata cells (TSV). Paste not supported (read-only)."""
+
+    def __init__(self, detailsWindow):
+        super().__init__(detailsWindow)
+        self.detailsWindow = detailsWindow
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            mods = event.modifiers()
+            ctrl = bool(mods & Qt.KeyboardModifier.ControlModifier) or bool(
+                mods & Qt.KeyboardModifier.MetaModifier
+            )
+            if ctrl and key == Qt.Key.Key_C:
+                if self.detailsWindow.copyActiveTableSelection():
+                    return True
+        return super().eventFilter(obj, event)
+
+
+class CurrentPageTabWidget(QTabWidget):
+    """
+    Default QTabWidget sizeHint is the MAX of every page — that is why switching
+    from a wide Aquarius tab to a narrow USBR tab left the window stuck wide.
+
+    sizeHint / minimumSizeHint follow the *current* page (and its table) only.
+    """
+
+    def sizeHint(self):
+        return self._currentContentHint()
+
+    def minimumSizeHint(self):
+        return self._currentContentHint()
+
+    def _currentContentHint(self):
+        bar = self.tabBar()
+        barH = bar.sizeHint().height() if bar else 24
+        barW = bar.sizeHint().width() if bar else 0
+        page = self.currentWidget()
+        if page is None:
+            return QSize(max(280, barW + 16), barH + 80)
+
+        table = page.findChild(QTableWidget)
+        if table is not None:
+            # Measure without permanently leaving stretch off
+            header = table.horizontalHeader()
+            prevStretch = header.stretchLastSection()
+            header.setStretchLastSection(False)
+            header.setMinimumSectionSize(0)
+            table.resizeColumnsToContents()
+            table.resizeRowsToContents()
+            header.setStretchLastSection(prevStretch)
+
+            rowCount = table.rowCount()
+            visible = min(rowCount, maxVisibleMetaRows) if rowCount else 0
+            needsScroll = rowCount > maxVisibleMetaRows
+            colsW = sum(table.columnWidth(i) for i in range(table.columnCount()))
+            rowsH = sum(table.rowHeight(i) for i in range(visible)) if visible else 0
+            tw = (
+                colsW
+                + table.frameWidth() * 2
+                + 24
+                + (table.verticalScrollBar().sizeHint().width() + 4 if needsScroll else 0)
+            )
+            th = (
+                rowsH
+                + header.height()
+                + table.frameWidth() * 2
+                + 8
+            )
+            return QSize(max(tw, barW + 16, 200), th + barH + 8)
+
+        ph = page.sizeHint()
+        return QSize(max(ph.width(), barW + 16, 200), ph.height() + barH + 8)
 
 
 class uiDetails(QWidget):
@@ -26,17 +107,38 @@ class uiDetails(QWidget):
         # Set icon
         self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/Info.png')))
         
+        # Title must stay a single compact line — never expand into huge empty band
+        if hasattr(self, 'lblTitle') and self.lblTitle is not None:
+            self.lblTitle.setSizePolicy(
+                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed
+            )
+            self.lblTitle.setWordWrap(False)
+            self.lblTitle.setMaximumHeight(36)
+            self.lblTitle.setMinimumHeight(0)
+
         # Initialize table with no rows yet (column count set dynamically in populate)
         self.configureMetaTable(self.detailsTable, twoColumn=True)
+        self._detailsKeyFilter = detailsTableKeyFilter(self)
+        # Window-level Ctrl+C (works even when focus is on title/tabs)
+        self._copyShortcut = QShortcut(QKeySequence.StandardKey.Copy, self)
+        self._copyShortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+        self._copyShortcut.activated.connect(self.copyActiveTableSelection)
         
         # Zero main layout margins for single-panel view
         layout = self.layout()
 
         if layout:
-            layout.setContentsMargins(4, 0, 4, 0)
+            layout.setContentsMargins(4, 2, 4, 4)
+            layout.setSpacing(2)
+            layout.setSizeConstraint(layout.SizeConstraint.SetNoConstraint)
+            # Stretch only the content row (table / tabs), not the title
+            if layout.count() >= 2:
+                layout.setStretch(0, 0)
+                layout.setStretch(1, 1)
         
         # Connect tab change for resize if tabWidget created later
-        if hasattr(self, 'tabWidget') and self.tabWidget:
+        # NOTE: empty QTabWidget is falsy in PyQt6 — use is not None
+        if getattr(self, 'tabWidget', None) is not None:
             self.tabWidget.currentChanged.connect(self.resizeToCurrentTab)
         
         if Config.debug:
@@ -46,13 +148,112 @@ class uiDetails(QWidget):
         """Apply shared details-table settings and a fixed column layout."""
         table.setSortingEnabled(True)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        # Cell-level selection so Copy can take one cell or a multi-cell range
+        # (SelectRows made every click highlight the whole line and copy both columns).
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         table.verticalHeader().setVisible(False)
+        # Expanding + stretch last section fills the client area (no dead right pad)
         table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        # Vertical policy set in sizeWindowToTable based on row count
         self.clampTableColumns(table, twoColumn=twoColumn)
         table.horizontalHeader().setStretchLastSection(True)
+        # Copy: Ctrl+C + right-click menu (read-only tables)
+        if not getattr(table, '_detailsCopyWired', False):
+            table._detailsCopyWired = True
+            table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            table.customContextMenuRequested.connect(
+                lambda pos, t=table: self.showMetaTableContextMenu(t, pos)
+            )
+            if getattr(self, '_detailsKeyFilter', None) is not None:
+                table.installEventFilter(self._detailsKeyFilter)
+                table.viewport().installEventFilter(self._detailsKeyFilter)
+
+    def activeMetaTable(self):
+        """Table currently showing metadata (tab page table or main detailsTable)."""
+        if (
+            getattr(self, 'tabWidget', None) is not None
+            and self.tabWidget.isVisible()
+        ):
+            page = self.tabWidget.currentWidget()
+            if page is not None:
+                tabTable = page.findChild(QTableWidget)
+                if tabTable is not None:
+                    return tabTable
+        return getattr(self, 'detailsTable', None)
+
+    def copyActiveTableSelection(self):
+        """Copy selected rows/cells from the active metadata table as TSV."""
+        table = self.activeMetaTable()
+        if table is None:
+            return False
+        return self.copyMetaTableSelection(table)
+
+    def copyMetaTableSelection(self, table):
+        """
+        Copy selected cells from a details table to the clipboard (TSV).
+
+        Uses the rectangular bounds of the selection (Excel-like). A single
+        clicked cell copies only that cell; multi-cell ranges copy as a grid.
+        """
+        if table is None:
+            return False
+
+        indexes = table.selectedIndexes()
+        if not indexes:
+            current = table.currentIndex()
+            if current is None or not current.isValid():
+                return False
+            indexes = [current]
+
+        rows = [i.row() for i in indexes]
+        cols = [i.column() for i in indexes]
+        minR, maxR = min(rows), max(rows)
+        minC, maxC = min(cols), max(cols)
+
+        lines = []
+        for row in range(minR, maxR + 1):
+            cells = []
+            for col in range(minC, maxC + 1):
+                item = table.item(row, col)
+                text = item.text() if item is not None and item.text() else ''
+                text = text.replace('\t', ' ').replace('\r', ' ').replace('\n', ' ')
+                cells.append(text)
+            lines.append('\t'.join(cells))
+        text = '\n'.join(lines)
+        if not text.strip():
+            return False
+        QApplication.clipboard().setText(text)
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"uiDetails.copyMetaTableSelection: "
+                f"{maxR - minR + 1}x{maxC - minC + 1} → clipboard ({len(text)} chars)",
+            )
+        return True
+
+    def showMetaTableContextMenu(self, table, pos):
+        """Right-click → Copy (no paste; tables are read-only)."""
+        if table is None:
+            return
+        index = table.indexAt(pos)
+        if index.isValid():
+            # If the right-clicked cell is outside the current multi-selection,
+            # select only that cell so Copy targets the intended cell.
+            sel = table.selectionModel()
+            if sel is not None and not sel.isSelected(index):
+                table.clearSelection()
+                table.setCurrentIndex(index)
+                sel.select(index, sel.SelectionFlag.ClearAndSelect)
+
+        menu = QMenu(table)
+        copyAction = menu.addAction("Copy")
+        copyAction.setShortcut(QKeySequence.StandardKey.Copy)
+        hasContent = table.rowCount() > 0
+        copyAction.setEnabled(hasContent)
+        action = menu.exec(table.viewport().mapToGlobal(pos))
+        if action == copyAction:
+            self.copyMetaTableSelection(table)
 
     def clampTableColumns(self, table, twoColumn=True):
         """Force 2- or 4-column layout so ghost columns cannot bleed across tabs."""
@@ -65,14 +266,18 @@ class uiDetails(QWidget):
                 table.setColumnCount(4)
             table.setHorizontalHeaderLabels(["Metadata Type", "Details", "Start Time", "End Time"])
 
-    def sizeWindowToTable(self, table, extraHeight=0, minWidthExtra=0):
+    def _measureTable(self, table):
         """
-        Size the window to content, capped at maxVisibleMetaRows.
-        Extra rows get a vertical scrollbar (app stylesheet themes it).
+        Content size of a details table (stretch off while measuring).
+        Returns (contentWidth, contentHeight, needsScroll).
         """
-        if table is None:
-            return
-
+        header = table.horizontalHeader()
+        prevStretch = header.stretchLastSection()
+        header.setStretchLastSection(False)
+        header.setMinimumSectionSize(0)
+        for c in range(table.columnCount()):
+            # Reset so resizeColumnsToContents is not stuck on a prior wide measure
+            table.setColumnWidth(c, 10)
         table.resizeColumnsToContents()
         table.resizeRowsToContents()
 
@@ -85,71 +290,149 @@ class uiDetails(QWidget):
         else:
             table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        # Lock column count so Qt setItem never leaves a ghost extra column
-        expectedCols = table.columnCount()
-        if expectedCols not in (2, 4):
-            expectedCols = 2
-            table.setColumnCount(2)
-
         contentWidth = (
             sum(table.columnWidth(i) for i in range(table.columnCount()))
-            + table.verticalHeader().width()
             + table.frameWidth() * 2
-            + 30
-            + minWidthExtra
+            + 28
         )
         if needsScroll:
-            contentWidth += table.verticalScrollBar().sizeHint().width() + 8
-
-        if hasattr(self, 'tabWidget') and self.tabWidget and self.tabWidget.isVisible():
-            tabBarWidth = self.tabWidget.tabBar().sizeHint().width() + 50
-            contentWidth = max(contentWidth, tabBarWidth)
+            contentWidth += table.verticalScrollBar().sizeHint().width() + 6
 
         rowsHeight = sum(table.rowHeight(i) for i in range(visibleRows)) if visibleRows else 0
-        height = (
+        contentHeight = (
             rowsHeight
-            + table.horizontalHeader().height()
-            + self.lblTitle.height()
+            + header.height()
             + table.frameWidth() * 2
-            + 30
-            + extraHeight
+            + 8
         )
-        self.resize(max(contentWidth, 280), max(height, 120))
+        # Restore stretch so columns fill the window (no empty strip on the right)
+        header.setStretchLastSection(prevStretch if prevStretch else True)
+        return contentWidth, contentHeight, needsScroll
+
+    def sizeWindowToTable(self, table, extraHeight=0, minWidthExtra=0):
+        """
+        Size the window to content, capped at maxVisibleMetaRows.
+        Extra rows get a vertical scrollbar (app stylesheet themes it).
+
+        Shrinks when switching from a wide tab (Aquarius 4-col) to a narrow one
+        (USBR 2-col). Does not use setFixedSize (that left a huge empty title band).
+        """
+        if table is None:
+            return
+
+        # Unlock any prior fixed/max constraints from older sizing code
+        self.setMinimumSize(0, 0)
+        self.setMaximumSize(maxWidgetSize, maxWidgetSize)
+
+        contentWidth, contentHeight, needsScroll = self._measureTable(table)
+        contentWidth += minWidthExtra
+
+        if (
+            getattr(self, 'tabWidget', None) is not None
+            and self.tabWidget.isVisible()
+        ):
+            tabBar = self.tabWidget.tabBar()
+            # Only need enough width for tab *labels* of the bar, not max page size
+            tabBarWidth = (tabBar.sizeHint().width() + 16) if tabBar else 0
+            contentWidth = max(contentWidth, tabBarWidth)
+
+        titleH = 22
+        if hasattr(self, 'lblTitle') and self.lblTitle is not None:
+            # Use sizeHint, not current height (current height can be inflated)
+            # Width must include the title so long series labels are not clipped
+            self.lblTitle.setWordWrap(False)
+            titleHint = self.lblTitle.sizeHint()
+            titleH = max(titleHint.height(), 18)
+            # Font metrics are more reliable than sizeHint width for QLabel
+            try:
+                from PyQt6.QtGui import QFontMetrics
+                fm = QFontMetrics(self.lblTitle.font())
+                titleW = fm.horizontalAdvance(self.lblTitle.text() or '') + 24
+            except Exception:
+                titleW = max(titleHint.width(), 0) + 24
+            contentWidth = max(contentWidth, titleW)
+            self.lblTitle.setMaximumHeight(titleH + 8)
+            self.lblTitle.setMinimumHeight(0)
+
+        # Frame / margins / spacing
+        chrome = 16
+        targetW = max(int(contentWidth) + 8, 280)
+        targetH = max(int(contentHeight + titleH + extraHeight + chrome), 120)
+
+        # Cap max to target so layout min-size from other tabs cannot block shrink,
+        # then clear max after the geometry is applied.
+        self.setMaximumSize(targetW, targetH)
+        self.resize(targetW, targetH)
+        QApplication.processEvents()
+        # Keep user free to grow; size stays until next tab switch
+        self.setMaximumSize(maxWidgetSize, maxWidgetSize)
+        # Re-apply size once more after max unlock (some styles re-expand once)
+        if self.width() > targetW + 4 or self.height() > targetH + 4:
+            self.resize(targetW, targetH)
 
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
-                f"sizeWindowToTable: rows={rowCount}, visible={visibleRows}, "
-                f"scroll={needsScroll}, size={self.width()}x{self.height()}"
+                f"sizeWindowToTable: rows={table.rowCount()}, scroll={needsScroll}, "
+                f"size={self.width()}x{self.height()} (target {targetW}x{targetH})"
             )
 
     def resizeToCurrentTab(self, index):
         """Resize window to fit current tab's content (max 16 rows + scrollbar)."""
-        if not hasattr(self, 'tabWidget') or not self.tabWidget:
+        if getattr(self, 'tabWidget', None) is None:
             return
         
         currentTab = self.tabWidget.widget(index)
-        if not currentTab:
+        if currentTab is None:
             return
         
         tabTable = currentTab.findChild(QTableWidget)
-        if not tabTable:
+        if tabTable is None:
             return
 
         # Re-assert column layout for this tab (prevents bleed across tab switches)
         colCount = tabTable.columnCount()
-        if colCount > 2 and tabTable.horizontalHeaderItem(0) and tabTable.horizontalHeaderItem(0).text() == "Type":
-            # 2-col table that grew a ghost column — shrink back
+        header0 = tabTable.horizontalHeaderItem(0)
+        if colCount > 2 and header0 is not None and header0.text() == "Type":
             tabTable.setColumnCount(2)
             tabTable.setHorizontalHeaderLabels(["Type", "Value"])
         elif colCount == 2:
             tabTable.setHorizontalHeaderLabels(["Type", "Value"])
+        elif colCount >= 4:
+            tabTable.setHorizontalHeaderLabels(
+                ["Metadata Type", "Details", "Start Time", "End Time"]
+            )
 
-        extra = self.tabWidget.tabBar().height() + 20
+        extra = 0
+        if self.tabWidget.tabBar() is not None:
+            extra = self.tabWidget.tabBar().sizeHint().height() + 12
         self.sizeWindowToTable(tabTable, extraHeight=extra)
 
+        # One deferred pass after Qt finishes showing the new page
+        QTimer.singleShot(0, lambda idx=index: self._deferredResizeTab(idx))
+
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Resized to current tab {index}: {self.width()}x{self.height()}")
+            Logic.logMessage(
+                "DEBUG",
+                f"Resized to current tab {index}: {self.width()}x{self.height()}",
+            )
+
+    def _deferredResizeTab(self, index):
+        """Second measure after the tab page is fully shown."""
+        if getattr(self, 'tabWidget', None) is None:
+            return
+        if self.tabWidget.currentIndex() != index:
+            return
+        currentTab = self.tabWidget.widget(index)
+        if currentTab is None:
+            return
+        tabTable = currentTab.findChild(QTableWidget)
+        if tabTable is None:
+            return
+        extra = 0
+        if self.tabWidget.tabBar() is not None:
+            extra = self.tabWidget.tabBar().sizeHint().height() + 12
+        self.sizeWindowToTable(tabTable, extraHeight=extra)
 
     def populateDetails(self, queryType, seriesLabel, timestampStr, response, interval=None, multiTypes=None, responsesList=None, intervalsList=None):
         """
@@ -188,24 +471,41 @@ class uiDetails(QWidget):
 
             # If multiTypes provided (e.g., for overlay cell), use tabs
             if multiTypes and len(multiTypes) > 1:
-                # Create QTabWidget if not exists
-                if not hasattr(self, 'tabWidget') or not self.tabWidget:
-                    self.tabWidget = QTabWidget(self)
-                    layout = self.layout() # Assuming QVBoxLayout or similar from .ui
-
+                # Create current-page-sized tab widget if not exists (or replace plain QTabWidget)
+                # Empty QTabWidget is falsy — never use bare `if self.tabWidget`
+                existingTabs = getattr(self, 'tabWidget', None)
+                needNewTabs = (
+                    existingTabs is None
+                    or not isinstance(existingTabs, CurrentPageTabWidget)
+                )
+                if needNewTabs:
+                    layout = self.layout()
+                    if existingTabs is not None and layout is not None:
+                        layout.removeWidget(existingTabs)
+                        existingTabs.deleteLater()
+                    self.tabWidget = CurrentPageTabWidget(self)
+                    self.tabWidget.setSizePolicy(
+                        QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+                    )
                     if layout:
                         layout.addWidget(self.tabWidget)
-                    self.tabWidget.currentChanged.connect(self.resizeToCurrentTab) # Connect here if created
+                        # Title stretch 0, tabs stretch 1
+                        if layout.count() >= 2:
+                            layout.setStretch(0, 0)
+                            layout.setStretch(layout.count() - 1, 1)
+                    self.tabWidget.currentChanged.connect(self.resizeToCurrentTab)
 
-                self.detailsTable.hide() # Hide original table, use per-tab tables
+                self.detailsTable.hide()  # Hide original table, use per-tab tables
+                self.detailsTable.setMaximumHeight(0)  # prevent hidden table from eating layout space
                 self.tabWidget.show()
+                self.tabWidget.setMaximumHeight(maxWidgetSize)
 
                 # Clear existing tabs (delete old page widgets so tables don't leak)
                 while self.tabWidget.count() > 0:
-                    old = self.tabWidget.widget(0)
+                    oldPage = self.tabWidget.widget(0)
                     self.tabWidget.removeTab(0)
-                    if old is not None:
-                        old.deleteLater()
+                    if oldPage is not None:
+                        oldPage.deleteLater()
 
                 # Add tabs in order (Overlay first, then DBs)
                 for i, t in enumerate(multiTypes):
@@ -213,21 +513,27 @@ class uiDetails(QWidget):
                     normT = t.split('-')[0] if '-' in t else t
                     tabResp = responsesList[i] if responsesList and i < len(responsesList) else {}
                     tabIntvl = intervalsList[i] if intervalsList and i < len(intervalsList) else 'HOUR'
-                    tabWidget = QWidget()
-                    tabLayout = QVBoxLayout(tabWidget)
-                    tabLayout.setContentsMargins(0, 0, 0, 0) # Zero margins to remove gaps
-                    tabTable = QTableWidget(tabWidget) # New table per tab
+                    page = QWidget()
+                    tabLayout = QVBoxLayout(page)
+                    tabLayout.setContentsMargins(0, 0, 0, 0)
+                    tabLayout.setSpacing(0)
+                    tabTable = QTableWidget(page)
                     # USBR/USGS/overlay = 2 cols; Aquarius (and unknown) = 4 cols
                     twoCol = normT in ("overlay", "USBR", "USGS")
                     self.configureMetaTable(tabTable, twoColumn=twoCol)
 
                     # Populate per type
                     if normT == 'overlay':
-                        self.populateOverlay(timestampStr, tabResp, table=tabTable) # Pass custom table
+                        self.populateOverlay(timestampStr, tabResp, table=tabTable)
                     elif normT in metadataHandlers:
-                        metadataHandlers[normT](timestampStr, tabResp, interval=tabIntvl, table=tabTable) # Pass custom table and interval
+                        metadataHandlers[normT](
+                            timestampStr, tabResp, interval=tabIntvl, table=tabTable
+                        )
                     else:
-                        Logic.logMessage("WARN", f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab")
+                        Logic.logMessage(
+                            "WARN",
+                            f"Unknown type {t} (normalized {normT}) in multiTypes - Skipped tab",
+                        )
                         continue
 
                     # Clamp ghost columns after populate (Qt setItem can grow columnCount)
@@ -239,25 +545,34 @@ class uiDetails(QWidget):
                         tabName = t.upper() + " Details"
                     else:
                         tabName = t.capitalize() + " Details"
-                    if i > 0: # For DB tabs
+                    if i > 0:  # For DB tabs
                         if len(multiTypes) > 2 and multiTypes[1] == multiTypes[2]:
-                            tabName = t.upper() + (" (Primary)" if i == 1 else " (Secondary)") + " Details"
-                    self.tabWidget.addTab(tabWidget, tabName)
+                            tabName = (
+                                t.upper()
+                                + (" (Primary)" if i == 1 else " (Secondary)")
+                                + " Details"
+                            )
+                    self.tabWidget.addTab(page, tabName)
 
                 if self.tabWidget.count() == 0:
                     if Config.debug:
                         Logic.logMessage("DEBUG", "populateDetails: No tabs created for multiTypes")
 
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes")
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"populateDetails: Created {self.tabWidget.count()} tabs for multiTypes",
+                    )
 
-                # Initial resize to first tab
+                self.tabWidget.setCurrentIndex(0)
                 self.resizeToCurrentTab(0)
             else:
                 # Single-type: Use original table (no tabs)
-                if hasattr(self, 'tabWidget') and self.tabWidget:
+                if getattr(self, 'tabWidget', None) is not None:
                     self.tabWidget.hide()
-                    self.detailsTable.show()
+                    self.tabWidget.setMaximumHeight(0)
+                self.detailsTable.setMaximumHeight(maxWidgetSize)
+                self.detailsTable.show()
 
                 if queryType == "overlay":
                     self.populateOverlay(timestampStr, response)
@@ -277,6 +592,7 @@ class uiDetails(QWidget):
                 self.clampTableColumns(self.detailsTable, twoColumn=(queryType in twoColTypes))
                 self.detailsTable.setMinimumHeight(0)
                 self.sizeWindowToTable(self.detailsTable)
+                QTimer.singleShot(0, lambda: self.sizeWindowToTable(self.detailsTable))
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Populated {self.detailsTable.rowCount()} rows (or tabs)")
@@ -450,29 +766,80 @@ class uiDetails(QWidget):
                         lambda item: f"Text: {item.get('NoteText', 'N/A')}", table=table)
         
     def populateUSBR(self, timestampStr, response, interval, table=None):
-        """Internal method to populate for USBR metadata (list of merged dicts)."""
+        """
+        USBR metadata (list of merged R_* dicts), or MRID no-meta sentinel.
+
+        MRID / model queries return response = {'kind': 'mrid', 'mrid': ..., 'sdid': ...}
+        — same UX as USGS legacy methodIDs: menu works, note + empty tags.
+        """
         if table is None:
             table = self.detailsTable
+
+        # MRID (model) path: values exist in the table; HDB model tables have no R-style meta
+        if isinstance(response, dict) and (response.get('kind') or '').lower() == 'mrid':
+            self.addRow(
+                "Note",
+                "Metadata not available for MRID (model) queries",
+                table=table,
+            )
+            mrid = response.get('mrid') or ''
+            sdid = response.get('sdid') or ''
+            if sdid:
+                self.addRow("SDID", str(sdid), table=table)
+            if mrid:
+                self.addRow("Model Run ID", str(mrid), table=table)
+            tags = [
+                'Interval', 'Start Date/Time', 'End Date/Time', 'Date/Time Loaded',
+                'Interval Value', 'Base Value', 'Validation', 'Overwrite Flag', 'Method',
+                'Agency Name', 'Collection System', 'Loading Application', 'Computation',
+                'Computation ID', 'Data Flags',
+            ]
+            for tag in tags:
+                self.addRow(tag, "", table=table)
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"populateUSBR: MRID no-metadata shown (sdid={sdid!r} mrid={mrid!r})",
+                )
+            return
+
         if not isinstance(response, list):
             Logic.logMessage("WARN", f"Invalid response for USBR: expected list, got {type(response).__name__}")
             return
         
-        # Convert timestampStr ('mm/dd/yy HH:MM:00') to match query format ('YYYY-MM-DD HH24:MI:SS')
+        # Convert display timestamp (hour/day/month/year forms) to Oracle meta key
+        from core.Query import parseDisplayTimestamp, periodStart
         try:
-            tsDate = datetime.strptime(timestampStr, '%m/%d/%y %H:%M:00')
+            tsDate = parseDisplayTimestamp(timestampStr)
+            if tsDate is None:
+                raise ValueError(f'unparseable timestamp {timestampStr!r}')
+            # Meta rows use full Y-m-d H:M:S; match on period for coarser intervals
             matchKey = tsDate.strftime('%Y-%m-%d %H:%M:%S')
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Converted timestampStr {timestampStr} to matchKey {matchKey}")
-        except ValueError as e:
+        except (ValueError, TypeError) as e:
             Logic.logMessage("ERROR", f"Failed to convert timestampStr {timestampStr}: {e}")
             return
         
         # Determine match field based on periodOffset (for HOUR)
         matchField = 'End Date/Time' if interval == 'HOUR' and Config.periodOffset else 'Start Date/Time'
         
-        # Filter row by exact match on matchField
+        # Filter row by exact match, else same interval period (daily/monthly/yearly headers)
         matchingRow = next((row for row in response if row.get(matchField) == matchKey), None)
+        if matchingRow is None and interval and str(interval).upper() in (
+            'DAY', 'MONTH', 'YEAR', 'WATER YEAR'
+        ):
+            targetPeriod = periodStart(tsDate, interval)
+            for row in response:
+                raw = row.get(matchField) or ''
+                try:
+                    rowDt = datetime.strptime(str(raw), '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    continue
+                if periodStart(rowDt, interval) == targetPeriod:
+                    matchingRow = row
+                    break
         
         if not matchingRow:
             Logic.logMessage("WARN", f"No matching metadata for {matchKey} in USBR response")
@@ -561,13 +928,34 @@ class uiDetails(QWidget):
             seriesMeta = response.get("seriesMeta") or {}
             points = response.get("points") or []
 
-            # Legacy numeric methodID path: keep menu usable, show blanks
-            if kind == "legacy" or (not seriesMeta and not points and kind != "ogc"):
+            # True legacy = numeric methodID waterservices path only.
+            # kind "missing" / empty = lookup failed (do not call that "legacy").
+            if kind == "legacy":
                 self.addRow("Note", "Metadata not available for legacy USGS method IDs", table=table)
                 for tag in seriesTags + pointTags:
                     self.addRow(tag, "", table=table)
                 if Config.debug:
-                    Logic.logMessage("DEBUG", "populateUSGS: legacy/blank metadata shown")
+                    Logic.logMessage("DEBUG", "populateUSGS: legacy numeric methodID note shown")
+                return
+
+            if kind in ("missing", "") and not seriesMeta and not points:
+                self.addRow(
+                    "Note",
+                    "No USGS metadata stored for this series (query used time_series_id? "
+                    "re-run query if details were empty after a code change)",
+                    table=table,
+                )
+                for tag in seriesTags + pointTags:
+                    self.addRow(tag, "", table=table)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "populateUSGS: missing/blank series response")
+                return
+
+            # OGC with empty meta/points still show tags (may fill blanks)
+            if kind not in ("ogc", "legacy", "missing", "") and not seriesMeta and not points:
+                self.addRow("Note", "No USGS metadata available", table=table)
+                for tag in seriesTags + pointTags:
+                    self.addRow(tag, "", table=table)
                 return
 
             # Match point by table vertical-header timestamp
@@ -667,7 +1055,10 @@ class uiDetails(QWidget):
             dtStr = dtStr[:-3] + dtStr[-2:]
 
         # Try formats
-        formats = ['%m/%d/%y %H:%M:00', '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S']
+        formats = [
+            '%m/%d/%y %H:%M:00', '%m/%d/%y %H:%M:%S', '%m/%d/%y', '%m/%y', '%Y',
+            '%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S',
+        ]
 
         for fmt in formats:
             try:

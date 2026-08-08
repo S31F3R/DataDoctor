@@ -210,19 +210,57 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                     dateTime = dateTime - timedelta(hours=12)
                 elif amPm == 'PM' and hour < 12:
                     dateTime = dateTime + timedelta(hours=12)
-                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+                formattedTs = Query.formatTimestamp(dateTime, interval)
                 outputData.append(f'{formattedTs},{value}')
             resultDict[SDID] = outputData
     if not resultDict:
         Logic.logMessage("WARN", "No data after processing all batches.")
     return resultDict
 
-def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
+def isDbLinkError(exc):
+    """True if this looks like a failed Oracle database link (not auth)."""
+    if exc is None:
+        return False
+    try:
+        if Oracle.isAuthError(exc):
+            return False
+    except Exception:
+        pass
+    text = str(exc).upper() if exc is not None else ''
+    # Common link / remote-access failures
+    markers = (
+        'ORA-02019',  # connection description for remote database not found
+        'ORA-02068',  # following severe error from...
+        'ORA-02063',  # preceding line from...
+        'ORA-02085',  # database link ... connects to ...
+        'ORA-12154',  # TNS could not resolve (sometimes via link)
+        'ORA-12514',
+        'ORA-12541',
+        'ORA-12545',
+        'DATABASE LINK',
+        'DBLINK',
+    )
+    return any(m in text for m in markers)
+
+
+def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', forceDirect=False):
+    """
+    Read HDB data. When querying a non-primary DB, uses database link @dsn
+    from the primary connection. If the link fails, retries with a direct
+    connection to the target DSN (forceDirect).
+    """
     global primaryDsn
     if Config.debug:
-        Logic.logMessage("DEBUG", f"USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}")
+        Logic.logMessage(
+            "DEBUG",
+            f"USBR.sqlRead called with svr: {svr}, SDIDs: {SDIDs}, interval: {interval}, "
+            f"start: {startDate}, end: {endDate}, mrid: {mrid}, table: {table}, "
+            f"forceDirect={forceDirect}",
+        )
 
     # Parse svr to short lower if full format
+    if '|' in str(svr):
+        svr = str(svr).split('|', 1)[0].strip()
     if '-' in svr:
         svr = svr.split('-')[1].lower()
 
@@ -231,9 +269,23 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         primaryDsn = svr
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"Set primaryDsn to first svr: {primaryDsn}")         
-    dsn = primaryDsn
-    schema = primaryDsn.upper().rstrip('2') + 'A' if primaryDsn.endswith('2') else primaryDsn.upper() + 'A'
+            Logic.logMessage("DEBUG", f"Set primaryDsn to first svr: {primaryDsn}")
+
+    # Schema from Config.hdbOracleDatabases (|SCHEMA) when present; else legacy derivation
+    from core.Utils import hdbSchemaForDatabase
+    targetSchema = hdbSchemaForDatabase(f'USBR-{svr.upper()}')
+
+    # Direct connect to target when forced or when this IS the primary
+    useDirect = forceDirect or (svr == primaryDsn)
+    if useDirect:
+        dsn = svr
+        link = ''
+        # Maps live on the same DB we're reading
+        schema = targetSchema
+    else:
+        dsn = primaryDsn
+        link = f'@{svr}'
+        schema = hdbSchemaForDatabase(f'USBR-{primaryDsn.upper()}')
 
     # Map interval to table suffix (consistent with apiRead)
     intervalMap = {
@@ -248,10 +300,6 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     }
 
     tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
-
-    # Derive target schema and link from svr
-    targetSchema = svr.upper().rstrip('2') + 'A' if svr.endswith('2') else svr.upper() + 'A'
-    link = f'@{svr}' if svr != primaryDsn else ''
 
     # Table names
     baseTable = f'{targetSchema}.r_base{link}'  # Always r_base for metadata
@@ -304,15 +352,24 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     if Config.debug:
         Logic.logMessage("DEBUG", f"Generated {len(subRanges)} sub-ranges")
 
-    # Fetch maps outside threads using a single connection
-    mapConn = Oracle.oracleConnection(dsn)
-    mapConn.connect()
-    agenMap = fetchAgenMap(mapConn, schema)
-    collectionMap = fetchCollectionMap(mapConn, schema)
-    loadingMap = fetchLoadingMap(mapConn, schema)
-    methodMap = fetchMethodMap(mapConn, schema)
-    computationMap = fetchComputationMap(mapConn, targetSchema, link)
-    mapConn.close()
+    # R path needs agency/method/etc. name maps for Show details.
+    # M / MRID path is values-only — no r_base join, no flag columns, no maps
+    # (same idea as USGS legacy methodIDs: details menu works, metadata blocked).
+    isMrid = table == 'M' and str(mrid) not in ('', '0', 'None')
+    agenMap = {}
+    collectionMap = {}
+    loadingMap = {}
+    methodMap = {}
+    computationMap = {}
+    if not isMrid:
+        mapConn = Oracle.oracleConnection(dsn)
+        mapConn.connect()
+        agenMap = fetchAgenMap(mapConn, schema)
+        collectionMap = fetchCollectionMap(mapConn, schema)
+        loadingMap = fetchLoadingMap(mapConn, schema)
+        methodMap = fetchMethodMap(mapConn, schema)
+        computationMap = fetchComputationMap(mapConn, targetSchema, link)
+        mapConn.close()
 
     # Determine timeCol for BETWEEN and matching
     if interval == 'HOUR' and Config.periodOffset:
@@ -322,8 +379,25 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         timeCol = 'start_date_time'
         timeAlias = 'START_DATE_TIME'
 
-    # Interval query template (for single SDID)
-    dataQuery = f"""
+    # Interval query template (for single SDID).
+    # M_* tables lack R_* metadata columns (ORA-00904 DERIVATION_FLAGS etc.).
+    # Values only + model_run_id filter; rawResponse is a no-meta sentinel.
+    if isMrid:
+        dataQuery = f"""
+        SELECT 
+          site_datatype_id AS SDID, 
+          TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
+          TO_CHAR(start_date_time, 'YYYY-MM-DD HH24:MI:SS') AS START_DATE_TIME,
+          value
+        FROM {dataTable}
+        WHERE site_datatype_id = :1
+          AND {timeCol} BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
+          AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS')
+          AND model_run_id = :4
+        ORDER BY {timeCol} ASC
+        """
+    else:
+        dataQuery = f"""
         SELECT 
           site_datatype_id AS SDID, 
           TO_CHAR(end_date_time, 'YYYY-MM-DD HH24:MI:SS') AS END_DATE_TIME,
@@ -339,10 +413,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
           AND {timeCol} BETWEEN TO_DATE(:2, 'YYYY-MM-DD HH24:MI:SS') 
           AND TO_DATE(:3, 'YYYY-MM-DD HH24:MI:SS')
         ORDER BY {timeCol} ASC
-    """
-
-    if table == 'M' and mrid != '0':
-        dataQuery = dataQuery.replace('ORDER BY', f"AND model_run_id = :4\nORDER BY")
+        """
 
     # Base query template (metadata, only for 'R', single SDID)
     metaQuery = None
@@ -392,7 +463,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
 
         # Data params
         dataParams = [SDID, subStartStr, subEndStr]
-        if table == 'M' and mrid != '0':
+        if isMrid:
             dataParams.append(mrid)
 
         if Config.debug:
@@ -402,6 +473,44 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             )
         # Reuse session across tasks; retry once if the network dropped the connection
         dataResults = oracleConn.executeCustomQueryWithRetry(dataQuery, params=dataParams)
+
+        # --- MRID / model: values only, no metadata list ---
+        if isMrid:
+            outputData = []
+            for row in dataResults or []:
+                timeKey = row.get(timeAlias)
+                value = row.get('VALUE')
+                if value is None or not timeKey:
+                    continue
+                try:
+                    dateTime = datetime.strptime(str(timeKey), '%Y-%m-%d %H:%M:%S')
+                    formattedTs = Query.formatTimestamp(dateTime, interval)
+                    outputData.append(f'{formattedTs},{value}')
+                except ValueError as e:
+                    Logic.logMessage(
+                        "WARN",
+                        f"sqlRead thread {threadId}: Invalid timeKey skipped for "
+                        f"SDID {SDID}: {timeKey} ({e})",
+                    )
+            # Sentinel for Show details (mirrors USGS legacy "no metadata" UX)
+            resultQueue.put((
+                SDID,
+                {
+                    'data': outputData,
+                    'rawResponse': {
+                        'kind': 'mrid',
+                        'mrid': str(mrid),
+                        'sdid': str(SDID),
+                    },
+                },
+            ))
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"sqlRead thread {threadId}: MRID values-only "
+                    f"{len(outputData)} points for SDID {SDID} mrid={mrid}",
+                )
+            return
 
         # Group interval data by timeKey
         dataByTime = {row[timeAlias]: row for row in dataResults}
@@ -437,10 +546,10 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             if value is None:
                 continue  # Skip if no value
 
-            # Format timestamp from timeKey
+            # Format timestamp from timeKey (interval-aware display: day/month/year)
             try:
                 dateTime = datetime.strptime(timeKey, '%Y-%m-%d %H:%M:%S')
-                formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+                formattedTs = Query.formatTimestamp(dateTime, interval)
                 valStr = str(value) if value is not None else ''
                 outputData.append(f'{formattedTs},{valStr}')
             except ValueError as e:
@@ -580,16 +689,36 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     for t in threads:
         t.join()
 
-    # Collect results
-    resultDict = defaultdict(lambda: {'data': [], 'rawResponse': []})
+    # Collect results. R path: rawResponse is a list of meta rows (extend).
+    # MRID path: rawResponse is a single dict sentinel (kind=mrid) — assign, never extend.
+    resultDict = defaultdict(lambda: {'data': [], 'rawResponse': [] if not isMrid else None})
 
     while not resultQueue.empty():
         SDID, partial = resultQueue.get()
         SDIDStr = str(SDID)
-        resultDict[SDIDStr]['data'].extend(partial['data'])
-        resultDict[SDIDStr]['rawResponse'].extend(partial['rawResponse'])
+        resultDict[SDIDStr]['data'].extend(partial.get('data') or [])
+        raw = partial.get('rawResponse')
+        if isinstance(raw, dict):
+            resultDict[SDIDStr]['rawResponse'] = raw
+        elif isinstance(raw, list):
+            existing = resultDict[SDIDStr]['rawResponse']
+            if not isinstance(existing, list):
+                resultDict[SDIDStr]['rawResponse'] = list(raw)
+            else:
+                existing.extend(raw)
 
     if workerErrors and not resultDict:
+        # Link failed entirely → retry with direct connection to target DSN
+        if link and not forceDirect and any(isDbLinkError(e) for e in workerErrors):
+            Logic.logMessage(
+                "WARN",
+                f"sqlRead: database link to {svr} failed; retrying with direct connection "
+                f"(no @{svr})",
+            )
+            return sqlRead(
+                svr, SDIDs, startDate, endDate, interval,
+                mrid=mrid, table=table, forceDirect=True,
+            )
         # Nothing succeeded — surface the first worker failure (e.g. client setup)
         raise workerErrors[0]
     if workerErrors and Config.debug:
@@ -598,11 +727,42 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
             f"sqlRead: {len(workerErrors)} worker task(s) failed; continuing with partial results "
             f"for {len(resultDict)} SDIDs",
         )
+    # Partial results with link errors: still try direct for empty SDIDs once
+    if (
+        link
+        and not forceDirect
+        and workerErrors
+        and any(isDbLinkError(e) for e in workerErrors)
+        and any(str(s) not in resultDict for s in SDIDs)
+    ):
+        Logic.logMessage(
+            "WARN",
+            f"sqlRead: partial link failure for {svr}; retrying missing SDIDs via direct connect",
+        )
+        missing = [s for s in SDIDs if str(s) not in resultDict]
+        try:
+            directPartial = sqlRead(
+                svr, missing, startDate, endDate, interval,
+                mrid=mrid, table=table, forceDirect=True,
+            )
+            if isinstance(directPartial, dict):
+                resultDict.update(directPartial)
+        except Exception as e:
+            Logic.logException("sqlRead: direct fallback for missing SDIDs failed", e)
 
-    # Sort per SDID
+    # Sort per SDID (R meta is a list of row dicts; MRID rawResponse is a kind=mrid sentinel dict)
     for SDIDStr in resultDict:
-        resultDict[SDIDStr]['data'].sort(key=lambda x: datetime.strptime(x.split(',')[0], '%m/%d/%y %H:%M:00'))
-        resultDict[SDIDStr]['rawResponse'].sort(key=lambda m: datetime.strptime(m['Start Date/Time'], '%Y-%m-%d %H:%M:%S'))
+        resultDict[SDIDStr]['data'].sort(
+            key=lambda x: Query.parseDisplayTimestamp(x.split(',')[0]) or datetime.min
+        )
+        raw = resultDict[SDIDStr].get('rawResponse')
+        if isinstance(raw, list):
+            resultDict[SDIDStr]['rawResponse'].sort(
+                key=lambda m: datetime.strptime(
+                    m.get('Start Date/Time') or '1900-01-01 00:00:00',
+                    '%Y-%m-%d %H:%M:%S',
+                )
+            )
 
     # Apply gapCheck
     timestamps = Query.buildTimestamps(startDate, endDate, interval)
@@ -611,7 +771,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         SDIDStr = str(SDID)
 
         if SDIDStr in resultDict:
-            resultDict[SDIDStr]['data'] = Query.gapCheck(timestamps, resultDict[SDIDStr]['data'], SDIDStr)
+            resultDict[SDIDStr]['data'] = Query.gapCheck(
+                timestamps, resultDict[SDIDStr]['data'], SDIDStr, interval=interval
+            )
             
             if Config.debug: 
                 Logic.logMessage("DEBUG", f"sqlRead: Post-gapCheck {len(resultDict[SDIDStr]['data'])} rows for SDID {SDID}")

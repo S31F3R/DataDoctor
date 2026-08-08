@@ -1,12 +1,12 @@
 # uiAbout.py
 
 import os
-from PyQt6.QtWidgets import QDialog, QLabel, QTextBrowser, QPushButton
-from PyQt6.QtCore import Qt, QUrl, QSize
+from PyQt6.QtWidgets import QDialog, QLabel, QTextBrowser, QPushButton, QMessageBox
+from PyQt6.QtCore import Qt, QUrl, QSize, QObject, QEvent
 from PyQt6.QtGui import QPixmap, QFont, QIcon
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import uic
-from core import Logic, Utils, Config
+from core import Logic, Utils, Config, Version
 
 class uiAbout(QDialog):
     """About dialog: Retro PNG bg with transparent info overlay and looping music."""
@@ -38,8 +38,8 @@ class uiAbout(QDialog):
         self.textInfo.setFont(retroFontObj)
         
         infoList = [
-            ('Version', '3.0.0'),
-            ('GitHub', 'https://github.com/S31F3R/DataDoctor'),
+            ('Version', Version.displayVersion()),
+            ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
             ('Author', 'S31F3R'),
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
@@ -101,10 +101,7 @@ class uiAbout(QDialog):
             self.mediaPlayer.stop()
 
     def setupSecretButton(self):
-        """
-        Tiny easter-egg control — The Net (1995) π backdoor icon, bottom-right
-        (same corner as the movie). Hook action up later.
-        """
+        """Tiny corner control — The Net (1995) π backdoor icon, bottom-right."""
         if not self.buttonSecret:
             return
         # Stay above the background art; bottom-right like Angela's screen
@@ -119,23 +116,35 @@ class uiAbout(QDialog):
             "QPushButton:hover { background: rgba(255, 255, 255, 25); border-radius: 2px; }"
             "QPushButton:pressed { background: rgba(255, 255, 255, 40); }"
         )
-        # Clean 48x48 π glyph (same asset that worked as Secret.png before).
-        # ui/icons/pi.jpg is the full The Net still for reference — do NOT scale that
-        # as the button icon (looks like blank / 80s TV static when shrunk).
+        # Clean 48x48 π glyph for The Net easter egg (bottom-right corner).
         iconPath = Logic.resourcePath('ui/icons/pi.png')
-        if not os.path.exists(iconPath):
-            iconPath = Logic.resourcePath('ui/icons/Secret.png')
-        self.buttonSecret.setIcon(QIcon(iconPath))
+        if os.path.exists(iconPath):
+            self.buttonSecret.setIcon(QIcon(iconPath))
         # Movie pi is small and quiet in the corner
         self.buttonSecret.setIconSize(QSize(16, 16))
-        # No-op for now — wire secret behavior when you're ready
         self.buttonSecret.clicked.connect(self.buttonSecretPressed)
 
     def buttonSecretPressed(self):
-        """Placeholder for the secret action (attach later)."""
-        if hasattr(Logic, 'logMessage'):
-            Logic.logMessage("DEBUG", "buttonSecretPressed: secret button clicked (no action wired yet)")
-    
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle(" ")
+        dlg.setText("Are you worthy?")
+        dlg.setIcon(QMessageBox.Icon.Question)
+        dlg.setStandardButtons(QMessageBox.StandardButton.NoButton)
+        noBtn = dlg.addButton("NO", QMessageBox.ButtonRole.RejectRole)
+        dlg.setDefaultButton(noBtn)
+        dlg.setEscapeButton(noBtn)
+
+        filterObj = _WorthyKeyFilter(dlg)
+        dlg.installEventFilter(filterObj)
+        # Catch keys even when a child has focus
+        for child in dlg.findChildren(QObject):
+            try:
+                child.installEventFilter(filterObj)
+            except Exception:
+                pass
+
+        dlg.exec()
+
     def showEvent(self, event):        
         Logic.logMessage("WARN", f"uiAbout showEvent")
         Utils.centerWindowToParent(self)
@@ -145,3 +154,95 @@ class uiAbout(QDialog):
     def closeEvent(self, event):
         self.stopMusic()
         super().closeEvent(event)
+
+
+class _WorthyKeyFilter(QObject):
+    """Key sequence gate for the worthy dialog. Opaque on purpose."""
+
+    def __init__(self, dialog):
+        super().__init__(dialog)
+        self._dialog = dialog
+        self._buf = []
+        # Arrow form + letter tail; WASD form is accepted via remaps below
+        self._need = [
+            Qt.Key.Key_Up, Qt.Key.Key_Up,
+            Qt.Key.Key_Down, Qt.Key.Key_Down,
+            Qt.Key.Key_Left, Qt.Key.Key_Right,
+            Qt.Key.Key_Left, Qt.Key.Key_Right,
+            Qt.Key.Key_B, Qt.Key.Key_A,
+        ]
+        self._done = False
+
+    def _mapKey(self, key, text):
+        # WASD ↔ arrows; B/A letters (any case)
+        if key in (Qt.Key.Key_W,):
+            return Qt.Key.Key_Up
+        if key in (Qt.Key.Key_S,):
+            return Qt.Key.Key_Down
+        if key in (Qt.Key.Key_A,):
+            # Ambiguous: A is both left (WASD) and the final letter.
+            # Prefer letter A when we are already past the directional prefix.
+            if len(self._buf) >= 8:
+                return Qt.Key.Key_A
+            return Qt.Key.Key_Left
+        if key in (Qt.Key.Key_D,):
+            return Qt.Key.Key_Right
+        if key in (Qt.Key.Key_B,):
+            return Qt.Key.Key_B
+        if key in (
+            Qt.Key.Key_Up, Qt.Key.Key_Down,
+            Qt.Key.Key_Left, Qt.Key.Key_Right,
+        ):
+            return key
+        # Typed character fallback (e.g. some layouts)
+        ch = (text or '').lower()
+        if ch == 'w':
+            return Qt.Key.Key_Up
+        if ch == 's':
+            return Qt.Key.Key_Down
+        if ch == 'a':
+            if len(self._buf) >= 8:
+                return Qt.Key.Key_A
+            return Qt.Key.Key_Left
+        if ch == 'd':
+            return Qt.Key.Key_Right
+        if ch == 'b':
+            return Qt.Key.Key_B
+        return None
+
+    def eventFilter(self, obj, event):
+        if self._done or event.type() != QEvent.Type.KeyPress:
+            return super().eventFilter(obj, event)
+
+        key = event.key()
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if self._buf == self._need:
+                self._done = True
+                self._dialog.done(1)
+                QMessageBox.information(self._dialog.parent() or self._dialog, " ", "Enter")
+                return True
+            # Wrong sequence + Enter: reset and stay on dialog
+            self._buf = []
+            return True
+
+        mapped = self._mapKey(key, event.text())
+        if mapped is None:
+            # Ignore modifiers / unrelated keys without full reset (shift on BA)
+            if key in (
+                Qt.Key.Key_Shift, Qt.Key.Key_Control, Qt.Key.Key_Alt,
+                Qt.Key.Key_Meta, Qt.Key.Key_CapsLock,
+            ):
+                return False
+            self._buf = []
+            return False
+
+        expected = self._need[len(self._buf)] if len(self._buf) < len(self._need) else None
+        if expected is not None and mapped == expected:
+            self._buf.append(mapped)
+        else:
+            # Restart if this key could begin a new attempt
+            if mapped == self._need[0]:
+                self._buf = [mapped]
+            else:
+                self._buf = []
+        return True

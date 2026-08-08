@@ -61,6 +61,267 @@ def resourcePath(relativePath):
     Config.appRoot = basePath
     return os.path.normpath(os.path.join(basePath, relativePath))
 
+
+def _aquariusCertSearchDirs():
+    """
+    Candidate certs/ folder paths (never created here — only listed if they already exist).
+
+    Users often drop certs next to the launcher zip root, under Project Files/,
+    or in the app config dir — not only resourcePath('certs').
+    """
+    dirs = []
+    appRoot = getattr(Config, 'appRoot', '') or ''
+    try:
+        dirs.append(resourcePath('certs'))
+    except Exception:
+        pass
+    for base in (
+        appRoot,
+        os.path.dirname(appRoot) if appRoot else '',
+        os.getcwd(),
+        os.path.dirname(os.getcwd()),
+    ):
+        if base:
+            dirs.append(os.path.join(os.path.abspath(base), 'certs'))
+    try:
+        dirs.append(os.path.join(Utils.getConfigDir(), 'certs'))
+    except Exception:
+        pass
+    # De-dupe while preserving order
+    seen = set()
+    out = []
+    for d in dirs:
+        if not d:
+            continue
+        norm = os.path.normpath(d)
+        key = os.path.normcase(norm)
+        if key not in seen:
+            seen.add(key)
+            out.append(norm)
+    return out
+
+
+def _writeAquariusPem(pemPath, data, binary=False):
+    """
+    Write PEM bytes/text into an existing directory only.
+    Never creates parent folders (avoids random empty certs/ dirs).
+    """
+    try:
+        parent = os.path.dirname(pemPath)
+        if parent and not os.path.isdir(parent):
+            logMessage(
+                "WARN",
+                f"ensureAquariusPem: refuse to create parent for {pemPath}",
+            )
+            return False
+        if binary:
+            with open(pemPath, 'wb') as out:
+                out.write(data)
+        else:
+            with open(pemPath, 'w', encoding='ascii') as out:
+                out.write(data if isinstance(data, str) else data.decode('ascii', errors='replace'))
+        return os.path.isfile(pemPath) and os.path.getsize(pemPath) > 0
+    except Exception as e:
+        logException(f"ensureAquariusPem: write {pemPath} failed", e)
+        return False
+
+
+def _removeConvertedCertSource(src):
+    """Delete .cer/.crt/.pfx/.p12 after successful conversion so a new drop overwrites cleanly."""
+    try:
+        if src and os.path.isfile(src):
+            os.remove(src)
+            logMessage("INFO", f"ensureAquariusPem: removed converted source {src}")
+    except Exception as e:
+        logException(f"ensureAquariusPem: could not remove source {src}", e)
+
+
+def _cerToPemText(raw):
+    """Convert .cer/.crt bytes (PEM or DER) to PEM text."""
+    import base64
+    if not raw:
+        return None
+    if b'-----BEGIN' in raw:
+        return raw.decode('utf-8', errors='replace')
+    # DER → PEM CERTIFICATE
+    b64 = base64.encodebytes(raw).decode('ascii')
+    body = ''.join(b64.splitlines())
+    lines = ['-----BEGIN CERTIFICATE-----']
+    for i in range(0, len(body), 64):
+        lines.append(body[i:i + 64])
+    lines.append('-----END CERTIFICATE-----')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def ensureAquariusPem():
+    """
+    Ensure aquarius.pem exists for requests SSL verify.
+
+    Never creates a certs/ folder. Only works inside folders that already exist
+    and already contain cert material (.pem / .cer / .crt only — not .pfx).
+
+    Search order (existing dirs only):
+      resourcePath('certs'), appRoot/certs, parent-of-appRoot/certs (launcher),
+      cwd/certs, parent-of-cwd/certs, user config certs/
+
+    Accepts:
+      - aquarius.pem / any .pem
+      - any .cer / .crt  (e.g. cert.cer) → converted to aquarius.pem next to source
+
+    After a successful .cer/.crt conversion the source file is removed so a later
+    drop cleanly replaces the pem. If conversion is required but fails (stale pem
+    older than a new source), returns None so Aquarius can fall back to system
+    trust / unverified rather than risk a bad cert.
+    """
+    import shutil
+
+    searchDirs = _aquariusCertSearchDirs()
+    existingDirs = [d for d in searchDirs if os.path.isdir(d)]
+    logMessage(
+        "INFO",
+        "ensureAquariusPem: candidates="
+        + ", ".join(searchDirs)
+        + " | existing="
+        + (", ".join(existingDirs) if existingDirs else "(none)"),
+    )
+
+    # Collect files only from dirs that already exist — never mkdir
+    entries = []
+    for d in existingDirs:
+        try:
+            for f in os.listdir(d):
+                path = os.path.join(d, f)
+                if os.path.isfile(path):
+                    entries.append(path)
+        except Exception as e:
+            logException(f"ensureAquariusPem: list {d} failed", e)
+
+    if not entries:
+        logMessage(
+            "WARN",
+            "ensureAquariusPem: no cert files found. "
+            "Place cert.cer or aquarius.pem in an existing project certs/ folder "
+            "(the app will not create certs/ for you).",
+        )
+        return None
+
+    basenames = [os.path.basename(p) for p in entries]
+    logMessage("INFO", f"ensureAquariusPem: found files: {basenames}")
+
+    ignoredPfx = [
+        os.path.basename(p) for p in entries
+        if p.lower().endswith(('.pfx', '.p12'))
+    ]
+    if ignoredPfx:
+        logMessage(
+            "WARN",
+            f"ensureAquariusPem: ignoring .pfx/.p12 (not supported): {ignoredPfx}. "
+            "Export as .cer or .pem instead.",
+        )
+
+    def pemOutPath(src):
+        """Always write aquarius.pem next to the source file (same existing folder)."""
+        return os.path.join(os.path.dirname(src), 'aquarius.pem')
+
+    def existingPemPaths():
+        found = []
+        for d in existingDirs:
+            candidate = os.path.join(d, 'aquarius.pem')
+            if os.path.isfile(candidate) and os.path.getsize(candidate) > 0:
+                found.append(candidate)
+        for p in entries:
+            if p.lower().endswith('.pem') and 'aquarius' in os.path.basename(p).lower():
+                if os.path.getsize(p) > 0 and p not in found:
+                    found.append(p)
+        return found
+
+    cerFiles = [p for p in entries if p.lower().endswith(('.cer', '.crt'))]
+    # Prefer names containing aquarius, then cert, then alphabetical
+    def cerSortKey(p):
+        name = os.path.basename(p).lower()
+        if 'aquarius' in name:
+            return (0, name)
+        if name.startswith('cert'):
+            return (1, name)
+        return (2, name)
+    cerFiles.sort(key=cerSortKey)
+
+    otherPems = [
+        p for p in entries
+        if p.lower().endswith('.pem') and os.path.basename(p).lower() != 'aquarius.pem'
+    ]
+    otherPems.sort(
+        key=lambda p: (0 if 'aquarius' in os.path.basename(p).lower() else 1, p.lower())
+    )
+
+    convertible = cerFiles + otherPems
+    existing = existingPemPaths()
+    newestSourceMtime = 0.0
+    for src in convertible:
+        try:
+            newestSourceMtime = max(newestSourceMtime, os.path.getmtime(src))
+        except Exception:
+            pass
+
+    # Use existing aquarius.pem only if it is at least as new as any source cert
+    if existing and newestSourceMtime <= 0:
+        logMessage("INFO", f"ensureAquariusPem: using existing {existing[0]}")
+        return existing[0]
+    if existing:
+        try:
+            pemMtime = max(os.path.getmtime(p) for p in existing)
+        except Exception:
+            pemMtime = 0.0
+        if newestSourceMtime <= pemMtime + 1.0:  # 1s tolerance
+            logMessage("INFO", f"ensureAquariusPem: using existing {existing[0]}")
+            return existing[0]
+        logMessage(
+            "INFO",
+            "ensureAquariusPem: source cert newer than aquarius.pem — reconverting",
+        )
+
+    # Copy other .pem → aquarius.pem (keep original .pem; user may want it)
+    for src in otherPems:
+        pemPath = pemOutPath(src)
+        try:
+            shutil.copy2(src, pemPath)
+            logMessage("INFO", f"ensureAquariusPem: copied {src} → {pemPath}")
+            return pemPath
+        except Exception as e:
+            logException(f"ensureAquariusPem: copy {src} failed", e)
+
+    # .cer / .crt (any name, e.g. cert.cer) → aquarius.pem; remove source on success
+    for src in cerFiles:
+        try:
+            with open(src, 'rb') as f:
+                raw = f.read()
+            pemText = _cerToPemText(raw)
+            if not pemText:
+                logMessage("WARN", f"ensureAquariusPem: empty or unreadable {src}")
+                continue
+            pemPath = pemOutPath(src)
+            if _writeAquariusPem(pemPath, pemText, binary=False):
+                logMessage("INFO", f"ensureAquariusPem: converted {src} → {pemPath}")
+                _removeConvertedCertSource(src)
+                return pemPath
+        except Exception as e:
+            logException(f"ensureAquariusPem: convert cer {src} failed", e)
+
+    # Stale pem + failed reconvert: do not use the old cert (fall back to system / unverified)
+    if convertible:
+        logMessage(
+            "WARN",
+            "ensureAquariusPem: conversion failed; not using stale aquarius.pem "
+            "(Aquarius will try system trust, then unverified)",
+        )
+        return None
+    if existing:
+        logMessage("INFO", f"ensureAquariusPem: using existing {existing[0]}")
+        return existing[0]
+    logMessage("WARN", "ensureAquariusPem: could not build aquarius.pem from certs/")
+    return None
+
 def initLogging():
     global loggingInitialized, logNotifier
 
@@ -487,6 +748,9 @@ def installExceptionHooks(showDialog=True):
 
 def buildDataDictionary(table, columns=None, whereClause=None):
     table.clear()
+    # Keep schema current before any SELECT * / column list
+    ensureDataDictionarySchema()
+    loadAquariusRoundingSpecs()
     dbPath = resourcePath('core/bunker.db')
 
     try:
@@ -503,6 +767,16 @@ def buildDataDictionary(table, columns=None, whereClause=None):
             if not rows:
                 if Config.debug:
                     logMessage("DEBUG", "dataDictionary table empty")
+                # Still set headers when empty so editor shows new columns
+                if columns is not None:
+                    headers = list(columns)
+                else:
+                    cur.execute('PRAGMA table_info(dataDictionary)')
+                    headers = [r[1] for r in cur.fetchall()]
+                table.setColumnCount(len(headers))
+                for c, header in enumerate(headers):
+                    table.setHorizontalHeaderItem(c, QTableWidgetItem(header.strip()))
+                table.setRowCount(0)
                 return
             headers = [desc[0] for desc in cur.description]
             table.setColumnCount(len(headers))
@@ -624,26 +898,84 @@ def convertLegacyQuickLooks():
             except Exception as e:                
                 logMessage("ERROR", f"convertLegacyQuickLooks: Failed to convert {txtPath}: {e}")
 
-def saveQuickLook(textQuickLookName, listQueryList):
+def saveQuickLook(textQuickLookName, listQueryList, displayDelta=False, overlayPairs=False):
+    """
+    Save query list + optional UI metadata to quickLook JSON.
+
+    Format (v2 object):
+      {
+        "queries": ["dataID|interval|database", ...],
+        "displayDelta": true/false,
+        "overlayPairs": true/false
+      }
+
+    Legacy plain-array files still load; new saves always write the object form.
+    """
     name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
 
     if not name:
         if Config.debug:
             logMessage("WARN", "Empty quick look name—skipped.")
         return
-    data = [listQueryList.item(x).text() for x in range(listQueryList.count())]
+    queries = [listQueryList.item(x).text() for x in range(listQueryList.count())]
+    payload = {
+        'queries': queries,
+        'displayDelta': bool(displayDelta),
+        'overlayPairs': bool(overlayPairs),
+    }
     quicklookPath = os.path.join(Utils.getQuickLookDir(), f'{name}.json')
     os.makedirs(os.path.dirname(quicklookPath), exist_ok=True)
 
     try:
         with open(quicklookPath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
+            json.dump(payload, f, indent=4)
         if Config.debug:
-            logMessage("DEBUG", "saveQuickLook: Saved Quick Look to {}".format(quicklookPath))
+            logMessage(
+                "DEBUG",
+                "saveQuickLook: Saved Quick Look to {} "
+                "(displayDelta={}, overlayPairs={})".format(
+                    quicklookPath, displayDelta, overlayPairs
+                ),
+            )
     except Exception as e:        
         logMessage("ERROR", "saveQuickLook: Failed to save Quick Look to {}: {}".format(quicklookPath, e))
 
-def loadQuickLook(cbQuickLook, listQueryList):
+
+def _parseQuickLookPayload(data):
+    """
+    Normalize loaded JSON/txt content into (queryStrings, metaDict).
+
+    metaDict keys: displayDelta, overlayPairs (bools).
+    Missing keys default to False so legacy files uncheck the boxes.
+    """
+    meta = {'displayDelta': False, 'overlayPairs': False}
+    if isinstance(data, dict):
+        queries = data.get('queries')
+        if queries is None:
+            # Allow accidental {"items": [...]} etc.
+            queries = data.get('items') or data.get('queryList') or []
+        if not isinstance(queries, list):
+            queries = []
+        if 'displayDelta' in data:
+            meta['displayDelta'] = bool(data.get('displayDelta'))
+        # Accept both overlayPairs and overlay (older experiments)
+        if 'overlayPairs' in data:
+            meta['overlayPairs'] = bool(data.get('overlayPairs'))
+        elif 'overlay' in data:
+            meta['overlayPairs'] = bool(data.get('overlay'))
+        return queries, meta
+    if isinstance(data, list):
+        # Legacy plain array — no metadata stored → checkboxes off
+        return data, meta
+    return [], meta
+
+
+def loadQuickLook(cbQuickLook, listQueryList, chkbDelta=None, chkbOverlay=None):
+    """
+    Load quick look into listQueryList. Always restore Display Deltas /
+    Overlay Pairs checkboxes when those widgets are passed: saved True/False,
+    or False when the file has no metadata (legacy array JSON).
+    """
     quickLookName = cbQuickLook.currentText()
 
     if not quickLookName:
@@ -669,27 +1001,31 @@ def loadQuickLook(cbQuickLook, listQueryList):
         quickLookPath = exampleTxtPath
     
     if not quickLookPath:        
-        logMessage("DEWARNBUG", "Quick look '{}' not found.".format(quickLookName))
+        logMessage("WARN", "Quick look '{}' not found.".format(quickLookName))
         return
     
     try:
         if quickLookPath.endswith('.json'):
             with open(quickLookPath, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+                raw = json.load(f)
         else: # .txt
             with open(quickLookPath, 'r', encoding='utf-8-sig') as f:
                 content = f.read().strip()
             if content:
                 if ',' in content:
                     # Legacy comma-separated format
-                    data = content.split(',')
+                    raw = content.split(',')
                 else:
                     # New line-separated format
-                    data = content.splitlines()
+                    raw = content.splitlines()
             else:
-                data = []
+                raw = []
+
+        data, meta = _parseQuickLookPayload(raw)
         
         for itemText in data:
+            if not isinstance(itemText, str):
+                continue
             itemText = itemText.strip()
             if not itemText:
                 continue
@@ -709,13 +1045,30 @@ def loadQuickLook(cbQuickLook, listQueryList):
 
                 if Config.debug:
                     logMessage("DEBUG", "loadQuickLook: Added item {}".format(f'{dataID}|{interval}|{database}'))
+
+        # Always set checkboxes from meta (defaults False for legacy / missing keys)
+        if chkbDelta is not None:
+            chkbDelta.setChecked(bool(meta.get('displayDelta')))
+        if chkbOverlay is not None:
+            chkbOverlay.setChecked(bool(meta.get('overlayPairs')))
         
         if Config.debug:
-            logMessage("DEBUG", "loadQuickLook: Loaded '{}' with {} items".format(quickLookName, listQueryList.count()))
+            logMessage(
+                "DEBUG",
+                "loadQuickLook: Loaded '{}' with {} items "
+                "(displayDelta={}, overlayPairs={})".format(
+                    quickLookName,
+                    listQueryList.count(),
+                    meta.get('displayDelta'),
+                    meta.get('overlayPairs'),
+                ),
+            )
         
         # If loaded from user .txt, convert to .json and delete .txt
         if quickLookPath == userTxtPath:
-            saveQuickLook(quickLookName, listQueryList)
+            deltaVal = bool(chkbDelta.isChecked()) if chkbDelta is not None else False
+            overlayVal = bool(chkbOverlay.isChecked()) if chkbOverlay is not None else False
+            saveQuickLook(quickLookName, listQueryList, displayDelta=deltaVal, overlayPairs=overlayVal)
             os.remove(userTxtPath)
             if Config.debug:
                 logMessage("DEBUG", f"loadQuickLook: Converted legacy {userTxtPath} to .json and deleted .txt")
@@ -858,6 +1211,9 @@ def formatRawNumber(value):
         return ''
     if v == float('inf') or v == float('-inf'):
         return str(v)
+    # True zero (including -0.0) → plain 0
+    if v == 0.0:
+        return '0'
     # Shortest round-trip first (avoids 123.450000000000003 noise)
     s = format(v, '.15g')
     if 'e' in s.lower():
@@ -865,14 +1221,391 @@ def formatRawNumber(value):
         s = format(v, '.15f')
         if '.' in s:
             s = s.rstrip('0').rstrip('.')
-    if s in ('', '-0'):
+    if s in ('', '-0', '-0.0'):
         s = '0'
     return s
 
-def valuePrecision(value):
-    """Format value to 2 decimals if |v|<1000, 1 if 1000-9999, 0 if >=10000.
 
-    Raw mode: full precision in fixed-point (never scientific notation).
+# ---------------------------------------------------------------------------
+# Aquarius value-precision rules (valuePrecision.json → bunker.db + formatting)
+# ---------------------------------------------------------------------------
+
+# Identifier → RoundingSpec (e.g. "Discharge" → "DEC(3)"); loaded once
+_aquariusRoundingById = None
+_aquariusIdentifierList = None
+
+# Default when combo blank / no override / identifier has no RoundingSpec
+DEFAULT_ROUNDING_SPEC = 'DEC(2)'
+
+# Aquarius RoundingSpec: DEC(n) | SIG(n) | SIG(n,m)
+_roundingSpecRe = re.compile(
+    r'^\s*(DEC|SIG)\s*\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\)\s*$',
+    re.IGNORECASE,
+)
+
+# dataType keyword → Aquarius Identifier for seed defaults
+_FLOW_KEYWORDS = ('flow', 'cfs', 'diversion')
+_STAGE_KEYWORDS = ('stage', 'gage height', 'level')
+
+
+def loadAquariusRoundingSpecs(forceReload=False):
+    """
+    Load core/valuePrecision.json (falls back to documentation/ for older installs).
+    Returns (identifierList, identifier → RoundingSpec|None).
+    Identifiers without RoundingSpec still appear in the combobox.
+    """
+    global _aquariusRoundingById, _aquariusIdentifierList
+    if _aquariusRoundingById is not None and not forceReload:
+        return _aquariusIdentifierList, _aquariusRoundingById
+
+    byId = {}
+    ordered = []
+    path = resourcePath('core/valuePrecision.json')
+    if not os.path.isfile(path):
+        # Legacy location (pre-move from documentation/)
+        legacy = resourcePath('documentation/valuePrecision.json')
+        if os.path.isfile(legacy):
+            path = legacy
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+        params = payload.get('Parameters') if isinstance(payload, dict) else None
+        if not isinstance(params, list):
+            logMessage('WARN', f'loadAquariusRoundingSpecs: no Parameters list in {path}')
+            params = []
+        for p in params:
+            if not isinstance(p, dict):
+                continue
+            ident = (p.get('Identifier') or '').strip()
+            if not ident:
+                continue
+            ordered.append(ident)
+            spec = p.get('RoundingSpec')
+            byId[ident] = (str(spec).strip() if spec else None)
+        if Config.debug:
+            withSpec = sum(1 for v in byId.values() if v)
+            logMessage(
+                'DEBUG',
+                f'loadAquariusRoundingSpecs: {len(ordered)} identifiers, {withSpec} with RoundingSpec',
+            )
+    except Exception as e:
+        logException(f'loadAquariusRoundingSpecs failed ({path})', e)
+
+    _aquariusRoundingById = byId
+    _aquariusIdentifierList = ordered
+    return ordered, byId
+
+
+def aquariusIdentifierList():
+    """Sorted-for-display list of Aquarius parameter Identifiers for the combobox."""
+    ordered, _ = loadAquariusRoundingSpecs()
+    # Keep API order but present alphabetically in UI for scanability
+    return sorted(ordered, key=lambda s: s.lower())
+
+
+def seedValuePrecisionFromDataType(dataType):
+    """
+    Map HDB/dataType text → Aquarius Identifier for bunker seed.
+    flow/cfs/diversion → Discharge; stage/gage height/level → Stage; else blank.
+    """
+    if not dataType:
+        return None
+    d = str(dataType).lower()
+    if any(k in d for k in _FLOW_KEYWORDS):
+        return 'Discharge'
+    if any(k in d for k in _STAGE_KEYWORDS):
+        return 'Stage'
+    return None
+
+
+def normalizeRoundingSpec(spec):
+    """Return canonical 'DEC(n)' / 'SIG(n)' / 'SIG(n,m)' or None if invalid/empty."""
+    if spec is None:
+        return None
+    s = str(spec).strip()
+    if not s:
+        return None
+    m = _roundingSpecRe.match(s)
+    if not m:
+        return None
+    kind = m.group(1).upper()
+    a = int(m.group(2))
+    b = m.group(3)
+    if b is not None:
+        return f'{kind}({a},{int(b)})'
+    return f'{kind}({a})'
+
+
+def resolveRoundingSpec(identifier=None, override=None):
+    """
+    Effective RoundingSpec for a dictionary row.
+    precedence: precisionOverride → valuePrecision Identifier's Aquarius spec → DEC(2).
+    Blank identifier / unknown Identifier with no spec → DEC(2).
+    """
+    normOverride = normalizeRoundingSpec(override)
+    if normOverride:
+        return normOverride
+
+    ident = (identifier or '').strip()
+    if ident:
+        _, byId = loadAquariusRoundingSpecs()
+        # Case-insensitive Identifier match
+        spec = byId.get(ident)
+        if spec is None:
+            for k, v in byId.items():
+                if k.lower() == ident.lower():
+                    spec = v
+                    break
+        norm = normalizeRoundingSpec(spec) if spec else None
+        if norm:
+            return norm
+    return DEFAULT_ROUNDING_SPEC
+
+
+def _dictTableColIndex(table, name):
+    """Case-insensitive header index; -1 if missing (no WARN log)."""
+    if table is None or not name:
+        return -1
+    nameLower = name.strip().lower()
+    for c in range(table.columnCount()):
+        header = table.horizontalHeaderItem(c)
+        if header and header.text().strip().lower() == nameLower:
+            return c
+    return -1
+
+
+def roundingSpecFromDictionaryRow(dataDictionaryTable, rowIndex):
+    """
+    Read valuePrecision + precisionOverride from a data-dictionary table row.
+
+    Precedence is enforced in resolveRoundingSpec:
+      precisionOverride → valuePrecision Identifier (e.g. Discharge→DEC(3)) → DEC(2)
+
+    So a miss that never finds this row falls back to DEC(2), while a hit on
+    Discharge *without* reading override would incorrectly show DEC(3).
+    """
+    if dataDictionaryTable is None or rowIndex is None or rowIndex < 0:
+        return DEFAULT_ROUNDING_SPEC
+
+    vpCol = _dictTableColIndex(dataDictionaryTable, 'valuePrecision')
+    poCol = _dictTableColIndex(dataDictionaryTable, 'precisionOverride')
+
+    identifier = ''
+    override = ''
+    if vpCol >= 0:
+        it = dataDictionaryTable.item(rowIndex, vpCol)
+        identifier = it.text().strip() if it and it.text() else ''
+        # Combobox may leave "Identifier  [DEC(n)]" display text — strip for lookup
+        if '  [' in identifier:
+            identifier = identifier.split('  [', 1)[0].strip()
+    if poCol >= 0:
+        it = dataDictionaryTable.item(rowIndex, poCol)
+        override = it.text().strip() if it and it.text() else ''
+    spec = resolveRoundingSpec(identifier=identifier, override=override)
+    if Config.debug and (identifier or override):
+        logMessage(
+            "DEBUG",
+            f"roundingSpecFromDictionaryRow: row={rowIndex} "
+            f"identifier={identifier!r} override={override!r} → {spec}",
+        )
+    return spec
+
+
+def roundingSpecForDataId(dataDictionaryTable, dataId, dictIndex=None, database=None):
+    """
+    Resolve RoundingSpec for a query series via the in-memory data dictionary.
+
+    dataId may be a full query DataID (e.g. USGS site-tsid-param). We try multiple
+    keys so multi-part USGS IDs still hit bare time_series_id dictionary rows and
+    pick up precisionOverride (without this, Discharge alone → DEC(3) while override
+    DEC(2) is ignored because the row was never found / wrong key).
+    """
+    if dataDictionaryTable is None or not dataId:
+        return DEFAULT_ROUNDING_SPEC
+
+    raw = str(dataId).strip()
+    candidates = []
+
+    def addCand(k):
+        if k is None:
+            return
+        s = str(k).strip()
+        if s and s not in candidates:
+            candidates.append(s)
+
+    addCand(raw)
+    try:
+        from core.Query import (
+            getDataDictionaryItem,
+            buildDataDictionaryIndex,
+            dictionaryLookupKey,
+            usgsDictionaryDataId,
+        )
+        if dictIndex is None:
+            dictIndex = buildDataDictionaryIndex(dataDictionaryTable)
+        addCand(dictionaryLookupKey(raw, database))
+        addCand(usgsDictionaryDataId(raw))
+        # Also try preferred bare key lowercased
+        for c in list(candidates):
+            addCand(c.lower())
+
+        row = -1
+        matchedKey = None
+        for key in candidates:
+            row = getDataDictionaryItem(dataDictionaryTable, key, idIndex=dictIndex)
+            if row >= 0:
+                matchedKey = key
+                break
+
+        if Config.debug:
+            logMessage(
+                "DEBUG",
+                f"roundingSpecForDataId: queryDataId={raw!r} db={database!r} "
+                f"candidates={candidates!r} matchedKey={matchedKey!r} row={row}",
+            )
+        return roundingSpecFromDictionaryRow(dataDictionaryTable, row)
+    except Exception as e:
+        if Config.debug:
+            logMessage("DEBUG", f"roundingSpecForDataId: Query helpers failed: {e}")
+
+    # Fallback if Query import fails (should not happen in-app)
+    if dictIndex is None:
+        dictIndex = {}
+        idCol = _dictTableColIndex(dataDictionaryTable, 'dataID')
+        if idCol >= 0:
+            for r in range(dataDictionaryTable.rowCount()):
+                it = dataDictionaryTable.item(r, idCol)
+                if it:
+                    key = it.text().strip()
+                    if key and key not in dictIndex:
+                        dictIndex[key] = r
+
+    target = raw
+    row = dictIndex.get(target, -1)
+    if row < 0 and target:
+        row = dictIndex.get(target.lower(), -1)
+    if row < 0:
+        idCol = _dictTableColIndex(dataDictionaryTable, 'dataID')
+        if idCol >= 0:
+            tlow = target.lower()
+            for r in range(dataDictionaryTable.rowCount()):
+                it = dataDictionaryTable.item(r, idCol)
+                if it and it.text().strip().lower() == tlow:
+                    row = r
+                    break
+    return roundingSpecFromDictionaryRow(dataDictionaryTable, row)
+
+
+def _toDecimal(value):
+    """
+    Convert input to Decimal without float binary noise when possible.
+    Prefer raw strings (table/API text); fall back to str(float).
+    """
+    from decimal import Decimal, InvalidOperation
+    if value is None:
+        raise InvalidOperation('None')
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, str):
+        s = value.strip().replace(',', '')
+        if not s:
+            raise InvalidOperation('empty')
+        return Decimal(s)
+    if isinstance(value, (int,)):
+        return Decimal(value)
+    # float or numpy scalar — str() can still be ugly; use short round-trip
+    return Decimal(format(float(value), '.15g'))
+
+
+def applyRoundingSpec(value, spec=None):
+    """
+    Apply a RoundingSpec string to a numeric value (bankers / half-even).
+    Invalid/empty spec → DEC(2). Returns formatted string.
+
+    DEC(n): n decimal places, ROUND_HALF_EVEN
+    SIG(n): n significant figures, ROUND_HALF_EVEN
+    SIG(n,m): n significant figures; m = minimum decimal places in display
+    """
+    from decimal import Decimal, ROUND_HALF_EVEN, InvalidOperation
+    from math import log10, floor
+
+    try:
+        d = _toDecimal(value)
+    except (ValueError, TypeError, InvalidOperation, ArithmeticError):
+        return value if value is not None else ''
+
+    if d.is_nan():
+        return ''
+    if d.is_infinite():
+        return str(d)
+
+    norm = normalizeRoundingSpec(spec) or DEFAULT_ROUNDING_SPEC
+    m = _roundingSpecRe.match(norm)
+    if not m:
+        norm = DEFAULT_ROUNDING_SPEC
+        m = _roundingSpecRe.match(norm)
+
+    kind = m.group(1).upper()
+    a = int(m.group(2))
+    b = m.group(3)
+
+    if kind == 'DEC':
+        n = max(0, a)
+        quant = Decimal('1') if n == 0 else Decimal('1').scaleb(-n)
+        rounded = d.quantize(quant, rounding=ROUND_HALF_EVEN)
+        # Avoid Decimal signed-zero display ("-0.00") after rounding tiny negatives
+        if rounded == 0:
+            return f'{0:.{n}f}'
+        return f'{rounded:.{n}f}'
+
+    # SIG(n) / SIG(n,m)
+    sig = max(1, a)
+    if d == 0:
+        minDec = max(0, int(b)) if b is not None else 0
+        return f'{0:.{minDec}f}' if minDec else '0'
+
+    # Round to sig significant figures via quantize on scientific magnitude
+    # order = floor(log10(|d|)); decimals = sig - 1 - order
+    absD = abs(d)
+    order = int(floor(log10(float(absD))))
+    decimals = sig - 1 - order
+    quant = Decimal('1').scaleb(-decimals) if decimals != 0 else Decimal('1')
+    # For large numbers decimals is negative → quantize to tens/hundreds
+    if decimals < 0:
+        # quantize with 1e|decimals| as unit
+        unit = Decimal('1').scaleb(-decimals)  # e.g. decimals=-2 → 100
+        rounded = (d / unit).to_integral_value(rounding=ROUND_HALF_EVEN) * unit
+    else:
+        rounded = d.quantize(quant, rounding=ROUND_HALF_EVEN)
+
+    if b is not None:
+        minDec = max(0, int(b))
+        if rounded == 0:
+            return f'{0:.{minDec}f}'
+        order2 = int(floor(log10(float(abs(rounded))))) if rounded != 0 else 0
+        dispDec = max(minDec, sig - 1 - order2, 0)
+        return f'{rounded:.{dispDec}f}'
+
+    # Display with just enough fractional digits for `sig` figures
+    if rounded == 0:
+        return '0'
+    order2 = int(floor(log10(float(abs(rounded))))) if rounded != 0 else 0
+    dispDec = max(0, sig - 1 - order2)
+    if dispDec == 0:
+        return f'{int(rounded)}' if rounded == rounded.to_integral_value() else f'{rounded:.0f}'
+    return f'{rounded:.{dispDec}f}'
+
+
+def valuePrecision(value, rule=None, identifier=None, override=None):
+    """
+    Format a cell value for display.
+
+    rule: explicit RoundingSpec (DEC/SIG). If omitted, built from
+    identifier (Aquarius param name) + override (precisionOverride text).
+    Blank everything → DEC(2).
+
+    Raw mode: full precision fixed-point (never scientific notation).
+    Rounding uses bankers rounding (round half to even) via Python round().
     """
     try:
         v = float(value)
@@ -881,12 +1614,164 @@ def valuePrecision(value):
 
     if Config.rawData:
         return formatRawNumber(v)
-    if abs(v) < 1000:
-        return '%.2f' % v
-    elif abs(v) < 10000:
-        return '%.1f' % v
+
+    if rule is not None and str(rule).strip():
+        spec = normalizeRoundingSpec(rule) or resolveRoundingSpec(identifier, override)
     else:
-        return '%.0f' % v
+        spec = resolveRoundingSpec(identifier=identifier, override=override)
+    return applyRoundingSpec(v, spec)
+
+
+def ensureDataDictionarySchema():
+    """
+    Ensure bunker.db dataDictionary has valuePrecision + precisionOverride
+    immediately after datatype. Seeds valuePrecision from dataType keywords once
+    for new columns (existing non-empty values are left alone).
+    """
+    dbPath = resourcePath('core/bunker.db')
+    if not os.path.isfile(dbPath):
+        logMessage('ERROR', f'ensureDataDictionarySchema: missing {dbPath}')
+        return False
+
+    targetOrder = [
+        'dataID', 'siteID', 'database', 'siteName', 'commonName', 'datatype',
+        'valuePrecision', 'precisionOverride',
+        'expectedMin', 'expectedMax', 'cuttoffMin', 'cutoffMax', 'rateOfChange',
+    ]
+
+    try:
+        with sqlite3.connect(dbPath) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='dataDictionary'"
+            )
+            if not cur.fetchone():
+                logMessage('ERROR', 'ensureDataDictionarySchema: dataDictionary table missing')
+                return False
+
+            cur.execute('PRAGMA table_info(dataDictionary)')
+            info = cur.fetchall()
+            colNames = [row[1] for row in info]
+            colLower = {c.lower(): c for c in colNames}
+
+            hasVp = 'valueprecision' in colLower
+            hasPo = 'precisionoverride' in colLower
+
+            if hasVp and hasPo:
+                # Already present — verify order is correct enough (vp/po after datatype)
+                # If order wrong, rebuild once.
+                lowerList = [c.lower() for c in colNames]
+                try:
+                    iDt = lowerList.index('datatype')
+                    iVp = lowerList.index('valueprecision')
+                    iPo = lowerList.index('precisionoverride')
+                    orderOk = iDt < iVp < iPo
+                except ValueError:
+                    orderOk = False
+                if orderOk:
+                    if Config.debug:
+                        logMessage('DEBUG', 'ensureDataDictionarySchema: schema already OK')
+                    return True
+
+            # Rebuild table with correct column order (SQLite cannot insert mid-table)
+            logMessage(
+                'INFO',
+                'ensureDataDictionarySchema: migrating dataDictionary '
+                f'(had valuePrecision={hasVp}, precisionOverride={hasPo})',
+            )
+
+            # Map existing columns case-insensitively
+            def pick(rowDict, *names):
+                for n in names:
+                    if n in rowDict:
+                        return rowDict[n]
+                    for k, v in rowDict.items():
+                        if k.lower() == n.lower():
+                            return v
+                return None
+
+            cur.execute('SELECT * FROM dataDictionary')
+            oldRows = cur.fetchall()
+            oldHeaders = [d[0] for d in cur.description]
+
+            newRows = []
+            for old in oldRows:
+                rd = dict(zip(oldHeaders, old))
+                dataType = pick(rd, 'datatype', 'dataType')
+                existingVp = pick(rd, 'valuePrecision', 'valueprecision')
+                existingPo = pick(rd, 'precisionOverride', 'precisionoverride')
+                # Seed only when column was missing or value empty
+                if existingVp is not None and str(existingVp).strip():
+                    vp = str(existingVp).strip()
+                else:
+                    vp = seedValuePrecisionFromDataType(dataType)
+                if existingPo is not None and str(existingPo).strip():
+                    po = str(existingPo).strip()
+                else:
+                    po = None
+
+                newRows.append((
+                    pick(rd, 'dataID', 'dataid'),
+                    pick(rd, 'siteID', 'siteid'),
+                    pick(rd, 'database'),
+                    pick(rd, 'siteName', 'sitename'),
+                    pick(rd, 'commonName', 'commonname'),
+                    dataType,
+                    vp,
+                    po,
+                    pick(rd, 'expectedMin', 'expectedmin'),
+                    pick(rd, 'expectedMax', 'expectedmax'),
+                    pick(rd, 'cuttoffMin', 'cuttoffmin', 'cutoffMin'),
+                    pick(rd, 'cutoffMax', 'cutoffmax'),
+                    pick(rd, 'rateOfChange', 'rateofchange'),
+                ))
+
+            cur.execute('DROP TABLE IF EXISTS dataDictionary_migrating')
+            cur.execute(
+                '''
+                CREATE TABLE dataDictionary_migrating (
+                    dataID TEXT,
+                    siteID TEXT,
+                    database TEXT,
+                    siteName TEXT,
+                    commonName TEXT,
+                    datatype TEXT,
+                    valuePrecision TEXT,
+                    precisionOverride TEXT,
+                    expectedMin REAL,
+                    expectedMax REAL,
+                    cuttoffMin REAL,
+                    cutoffMax REAL,
+                    rateOfChange REAL
+                )
+                '''
+            )
+            cur.executemany(
+                '''
+                INSERT INTO dataDictionary_migrating (
+                    dataID, siteID, database, siteName, commonName, datatype,
+                    valuePrecision, precisionOverride,
+                    expectedMin, expectedMax, cuttoffMin, cutoffMax, rateOfChange
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ''',
+                newRows,
+            )
+            cur.execute('DROP TABLE dataDictionary')
+            cur.execute('ALTER TABLE dataDictionary_migrating RENAME TO dataDictionary')
+            conn.commit()
+
+            # Counts for log
+            seededDischarge = sum(1 for r in newRows if r[6] == 'Discharge')
+            seededStage = sum(1 for r in newRows if r[6] == 'Stage')
+            logMessage(
+                'INFO',
+                f'ensureDataDictionarySchema: migrated {len(newRows)} rows '
+                f'(Discharge={seededDischarge}, Stage={seededStage})',
+            )
+            return True
+    except Exception as e:
+        logException('ensureDataDictionarySchema failed', e)
+        return False
 
 def cleanShutdown():
     pool = QThreadPool.globalInstance()

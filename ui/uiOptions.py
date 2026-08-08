@@ -4,11 +4,134 @@ import os
 import sys
 import json
 import keyring
-from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox, QPushButton, QTabWidget, QMessageBox, QWidget
-from PyQt6.QtCore import QTimer, QEvent
+from PyQt6.QtWidgets import (
+    QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox,
+    QPushButton, QTabWidget, QMessageBox, QWidget, QVBoxLayout, QLabel,
+)
+from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal, Qt
 from PyQt6.QtGui import QIcon
 from PyQt6 import uic
 from core import Logic, Utils, Config
+
+# Keyring cold-start is slow (Secret Service / Windows Credential Manager).
+# Cache after first read so Options opens fast after warm-up.
+_CRED_KEYS = (
+    "aqServer", "aqUser", "aqPassword",
+    "usgsApiKey", "oracleUser", "oraclePassword",
+)
+_credCache = None  # dict[str, str] | None
+
+
+def loadKeyringCredentials(force=False):
+    """Return credential dict; first call (or force=True) hits keyring."""
+    global _credCache
+    if _credCache is not None and not force:
+        return dict(_credCache)
+    out = {}
+    for key in _CRED_KEYS:
+        try:
+            out[key] = keyring.get_password("DataDoctor", key) or ""
+        except Exception as e:
+            Logic.logMessage("ERROR", f"keyring get_password({key}) failed: {e}")
+            out[key] = ""
+    _credCache = dict(out)
+    return out
+
+
+def updateKeyringCache(key, value):
+    """Keep cache in sync after a successful keyring set_password."""
+    global _credCache
+    if _credCache is None:
+        _credCache = {k: "" for k in _CRED_KEYS}
+    _credCache[key] = value if value is not None else ""
+
+
+def warmKeyringCache():
+    """Background-friendly warm so first Options open is not cold."""
+    try:
+        loadKeyringCredentials(force=True)
+        if Config.debug:
+            Logic.logMessage("DEBUG", "warmKeyringCache: credential cache ready")
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"warmKeyringCache failed: {e}")
+
+
+class hdbPasswordChangeSignals(QObject):
+    """Signals for background multi-DB HDB password change."""
+    finished = pyqtSignal(object)  # first-pass result dict
+    singleFinished = pyqtSignal(str, str, str)  # dbName, status, detail
+
+
+class hdbPasswordChangeWorker(QRunnable):
+    """
+    Run changePasswordOnAllHdb off the UI thread (first parallel pass).
+    Passwords are held only for this run and never logged.
+    """
+    def __init__(self, username, oldPassword, newPassword, signals):
+        super().__init__()
+        self.username = username
+        self.oldPassword = oldPassword
+        self.newPassword = newPassword
+        self.signals = signals
+
+    def run(self):
+        result = {'success': [], 'errors': [], 'authFailed': []}
+        try:
+            from core.Oracle import changePasswordOnAllHdb
+            result = changePasswordOnAllHdb(
+                username=self.username,
+                oldPassword=self.oldPassword,
+                newPassword=self.newPassword,
+            )
+        except Exception as e:
+            Logic.logException("hdbPasswordChangeWorker failed", e)
+            result = {
+                'success': [],
+                'errors': [('(all databases)', str(e))],
+                'authFailed': [],
+            }
+        finally:
+            self.oldPassword = None
+            self.newPassword = None
+        try:
+            self.signals.finished.emit(result)
+        except Exception:
+            pass
+
+
+class hdbSinglePasswordChangeWorker(QRunnable):
+    """Retry password change on one HDB database (after user supplies per-DB old password)."""
+    def __init__(self, dbName, username, oldPassword, newPassword, signals):
+        super().__init__()
+        self.dbName = dbName
+        self.username = username
+        self.oldPassword = oldPassword
+        self.newPassword = newPassword
+        self.signals = signals
+
+    def run(self):
+        status, detail = 'error', 'Unknown error'
+        try:
+            from core.Oracle import changePasswordOnDsn, databaseToDsn
+            status, detail = changePasswordOnDsn(
+                dsn=databaseToDsn(self.dbName),
+                username=self.username,
+                oldPassword=self.oldPassword,
+                newPassword=self.newPassword,
+                dbLabel=self.dbName,
+            )
+        except Exception as e:
+            Logic.logException(f"hdbSinglePasswordChangeWorker failed for {self.dbName}", e)
+            status, detail = 'error', str(e)
+        finally:
+            self.oldPassword = None
+            self.newPassword = None
+        try:
+            self.signals.singleFinished.emit(self.dbName, status, detail or '')
+        except Exception:
+            pass
+
 
 class uiOptions(QDialog):
     """Options editor: Stores database connection information and application settings."""
@@ -16,62 +139,22 @@ class uiOptions(QDialog):
         super().__init__(parent=winMain)
         uic.loadUi(Logic.resourcePath('ui/winOptions.ui'), self)
         self.winMain = winMain
+        self._passwordChangeSignals = None  # keep alive while worker runs
 
         # Define controls
         self.cbUTCOffset = self.findChild(QComboBox, 'cbUTCOffset')
         self.qleAQServer = self.findChild(QLineEdit, 'qleAQServer')
         self.qleAQUser = self.findChild(QLineEdit, 'qleAQUser')
+        # Faded format hint when blank (cursor still starts at front on focus)
+        if self.qleAQServer is not None:
+            self.qleAQServer.setPlaceholderText("https://yourserverlink.com")
 
-        # Replace qleAQPassword with customPasswordEdit
-        oldAQPassword = self.findChild(QLineEdit, 'qleAQPassword')
-
-        if oldAQPassword:
-            parent = oldAQPassword.parent()
-            layout = parent.layout() if parent else None
-
-            if layout:
-                index = layout.indexOf(oldAQPassword)
-
-                if index != -1:
-                    self.qleAQPassword = Utils.customPasswordEdit(parent)
-                    self.qleAQPassword.setObjectName('qleAQPassword')
-                    self.qleAQPassword.setPlaceholderText(oldAQPassword.placeholderText())
-                    self.qleAQPassword.setMaxLength(oldAQPassword.maxLength())
-                    self.qleAQPassword.setAlignment(oldAQPassword.alignment())
-                    self.qleAQPassword.setStyleSheet(oldAQPassword.styleSheet())
-                    self.qleAQPassword.setEnabled(oldAQPassword.isEnabled())
-                    layout.replaceWidget(oldAQPassword, self.qleAQPassword)
-                    oldAQPassword.deleteLater()
-
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", "Replaced qleAQPassword with customPasswordEdit using layout")
-                else:
-                    if Config.debug:
-                        Logic.logMessage("WARN", "No index for qleAQPassword in layout, using geometry fallback")
-            else:
-                if Config.debug:
-                    Logic.logMessage("WARN", "No layout for qleAQPassword parent, using geometry fallback")
-
-            if not layout or index == -1:
-                geom = oldAQPassword.geometry()
-                self.qleAQPassword = Utils.customPasswordEdit(parent)
-                self.qleAQPassword.setObjectName('qleAQPassword')
-                self.qleAQPassword.setPlaceholderText(oldAQPassword.placeholderText())
-                self.qleAQPassword.setMaxLength(oldAQPassword.maxLength())
-                self.qleAQPassword.setAlignment(oldAQPassword.alignment())
-                self.qleAQPassword.setStyleSheet(oldAQPassword.styleSheet())
-                self.qleAQPassword.setEnabled(oldAQPassword.isEnabled())
-                self.qleAQPassword.setGeometry(geom)
-                oldAQPassword.hide()
-                oldAQPassword.deleteLater()
-                self.qleAQPassword.show()
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Replaced qleAQPassword with customPasswordEdit at geometry {geom.x()},{geom.y()},{geom.width()},{geom.height()}")
-        else:
-            if Config.debug:
-                Logic.logMessage("ERROR", "qleAQPassword not found, cannot replace")
-
+        # Options tabs use absolute geometry (no layouts). Swap plain QLineEdits
+        # for customPasswordEdit in place — geometry path is expected, not an error.
+        self.qleAQPassword = self._replaceWithPasswordEdit(
+            'qleAQPassword',
+            maxLength=None,
+        )
         self.qleTNSNames = self.findChild(QLineEdit, 'qleTNSNames')
         self.rbBOP = self.findChild(QRadioButton, 'rbBOP')
         self.rbEOP = self.findChild(QRadioButton, 'rbEOP')
@@ -80,112 +163,20 @@ class uiOptions(QDialog):
         self.chkbQAQC = self.findChild(QCheckBox, 'chkbQAQC')
         self.chkbRawData = self.findChild(QCheckBox, 'chkbRawData')
         self.chkbDebug = self.findChild(QCheckBox, 'chkbDebug')
+        self.chkbBetaUpdates = self.findChild(QCheckBox, 'chkbBetaUpdates')
         self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
         self.btnShowPassword = self.findChild(QPushButton, 'btnShowPassword')
         self.btnShowOraclePassword = self.findChild(QPushButton, 'btnShowOraclePassword')
         self.qleOracleUser = self.findChild(QLineEdit, 'qleOracleUser')
 
-        # Replace qleOraclePassword with customPasswordEdit
-        oldOraclePassword = self.findChild(QLineEdit, 'qleOraclePassword')
-
-        if oldOraclePassword:
-            parent = oldOraclePassword.parent()
-            layout = parent.layout() if parent else None
-
-            if layout:
-                index = layout.indexOf(oldOraclePassword)
-
-                if index != -1:
-                    self.qleOraclePassword = Utils.customPasswordEdit(parent)
-                    self.qleOraclePassword.setObjectName('qleOraclePassword')
-                    self.qleOraclePassword.setPlaceholderText(oldOraclePassword.placeholderText())
-                    self.qleOraclePassword.setMaxLength(oldOraclePassword.maxLength())
-                    self.qleOraclePassword.setAlignment(oldOraclePassword.alignment())
-                    self.qleOraclePassword.setStyleSheet(oldOraclePassword.styleSheet())
-                    self.qleOraclePassword.setEnabled(oldOraclePassword.isEnabled())
-                    layout.replaceWidget(oldOraclePassword, self.qleOraclePassword)
-                    oldOraclePassword.deleteLater()
-
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", "Replaced qleOraclePassword with customPasswordEdit using layout")
-                else:
-                    if Config.debug:
-                        Logic.logMessage("WARN", "No index for qleOraclePassword in layout, using geometry fallback")
-            else:
-                if Config.debug:
-                    Logic.logMessage("WARN", "No layout for qleOraclePassword parent, using geometry fallback")
-
-            if not layout or index == -1:
-                geom = oldOraclePassword.geometry()
-                self.qleOraclePassword = Utils.customPasswordEdit(parent)
-                self.qleOraclePassword.setObjectName('qleOraclePassword')
-                self.qleOraclePassword.setPlaceholderText(oldOraclePassword.placeholderText())
-                self.qleOraclePassword.setMaxLength(oldOraclePassword.maxLength())
-                self.qleOraclePassword.setAlignment(oldOraclePassword.alignment())
-                self.qleOraclePassword.setStyleSheet(oldOraclePassword.styleSheet())
-                self.qleOraclePassword.setEnabled(oldOraclePassword.isEnabled())
-                self.qleOraclePassword.setGeometry(geom)
-                oldOraclePassword.hide()
-                oldOraclePassword.deleteLater()
-                self.qleOraclePassword.show()
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Replaced qleOraclePassword with customPasswordEdit at geometry {geom.x()},{geom.y()},{geom.width()},{geom.height()}")
-        else:
-            if Config.debug:
-                Logic.logMessage("ERROR", "qleOraclePassword not found, cannot replace")
-
-        self.chkbEnableSQL = self.findChild(QCheckBox, 'chkbEnableSQL')
-
-        # Replace qleUSGSAPIKey with customPasswordEdit
-        oldUSGSAPIKey = self.findChild(QLineEdit, 'qleUSGSAPIKey')
-
-        if oldUSGSAPIKey:
-            parent = oldUSGSAPIKey.parent()
-            layout = parent.layout() if parent else None
-
-            if layout:
-                index = layout.indexOf(oldUSGSAPIKey)
-
-                if index != -1:
-                    self.qleUSGSAPIKey = Utils.customPasswordEdit(parent)
-                    self.qleUSGSAPIKey.setObjectName('qleUSGSAPIKey')
-                    self.qleUSGSAPIKey.setPlaceholderText(oldUSGSAPIKey.placeholderText())
-                    self.qleUSGSAPIKey.setMaxLength(oldUSGSAPIKey.maxLength())
-                    self.qleUSGSAPIKey.setAlignment(oldUSGSAPIKey.alignment())
-                    self.qleUSGSAPIKey.setStyleSheet(oldUSGSAPIKey.styleSheet())
-                    self.qleUSGSAPIKey.setEnabled(oldUSGSAPIKey.isEnabled())
-                    layout.replaceWidget(oldUSGSAPIKey, self.qleUSGSAPIKey)
-                    oldUSGSAPIKey.deleteLater()
-
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", "Replaced qleUSGSAPIKey with customPasswordEdit using layout")
-                else:
-                    if Config.debug:
-                        Logic.logMessage("WARN", "No index for qleUSGSAPIKey in layout, using geometry fallback")
-            else:
-                if Config.debug:
-                    Logic.logMessage("WARN", "No layout for qleUSGSAPIKey parent, using geometry fallback")
-
-            if not layout or index == -1:
-                geom = oldUSGSAPIKey.geometry()
-                self.qleUSGSAPIKey = Utils.customPasswordEdit(parent)
-                self.qleUSGSAPIKey.setObjectName('qleUSGSAPIKey')
-                self.qleUSGSAPIKey.setPlaceholderText(oldUSGSAPIKey.placeholderText())
-                self.qleUSGSAPIKey.setMaxLength(oldUSGSAPIKey.maxLength())
-                self.qleUSGSAPIKey.setAlignment(oldUSGSAPIKey.alignment())
-                self.qleUSGSAPIKey.setStyleSheet(oldUSGSAPIKey.styleSheet())
-                self.qleUSGSAPIKey.setEnabled(oldUSGSAPIKey.isEnabled())
-                self.qleUSGSAPIKey.setGeometry(geom)
-                oldUSGSAPIKey.hide()
-                oldUSGSAPIKey.deleteLater()
-                self.qleUSGSAPIKey.show()
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Replaced qleUSGSAPIKey with customPasswordEdit at geometry {geom.x()},{geom.y()},{geom.width()},{geom.height()}")
-        else:
-            if Config.debug:
-                Logic.logMessage("ERROR", "qleUSGSAPIKey not found, cannot replace")
+        self.qleOraclePassword = self._replaceWithPasswordEdit(
+            'qleOraclePassword',
+            maxLength=int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30),
+        )
+        self.qleUSGSAPIKey = self._replaceWithPasswordEdit(
+            'qleUSGSAPIKey',
+            maxLength=None,
+        )
 
         self.btnShowUSGSKey = self.findChild(QPushButton, 'btnShowUSGSKey')
 
@@ -194,7 +185,12 @@ class uiOptions(QDialog):
         Utils.buttonStyle(self.btnShowUSGSKey, None, None)
         Utils.buttonStyle(self.btnShowOraclePassword, None, None)
 
-        # Create events
+        # Create events — own the Save path so validation can cancel close
+        # (winOptions.ui also connects accepted → accept; disconnect that first)
+        try:
+            self.btnbOptions.accepted.disconnect()
+        except TypeError:
+            pass
         self.btnbOptions.accepted.connect(self.onSavePressed)
         self.btnShowPassword.clicked.connect(self.togglePasswordVisibility)
         self.btnShowUSGSKey.clicked.connect(self.toggleUSGSKeyVisibility)
@@ -241,8 +237,150 @@ class uiOptions(QDialog):
         self.cbUTCOffset.addItem("UTC+14:00 | Kiritimati")
         self.cbUTCOffset.setCurrentIndex(14)
 
+        # Tab order + focus first control when switching tabs
+        self.setupOptionsTabOrder()
+        if self.tabWidget is not None:
+            self.tabWidget.currentChanged.connect(self.onOptionsTabChanged)
+
         if Config.debug:
             Logic.logMessage("DEBUG", "uiOptions initialized")
+
+    def _replaceWithPasswordEdit(self, objectName, maxLength=None):
+        """
+        Swap a plain QLineEdit from the .ui for customPasswordEdit.
+
+        winOptions tabs use absolute geometry (no layout on the parent page), so
+        the geometry path is normal — not a warning.
+        """
+        old = self.findChild(QLineEdit, objectName)
+        if old is None:
+            if Config.debug:
+                Logic.logMessage("ERROR", f"{objectName} not found, cannot replace")
+            return None
+
+        parent = old.parent()
+        geom = old.geometry()
+        newEdit = Utils.customPasswordEdit(parent)
+        newEdit.setObjectName(objectName)
+        newEdit.setPlaceholderText(old.placeholderText())
+        if maxLength is not None:
+            newEdit.setMaxLength(int(maxLength))
+        else:
+            newEdit.setMaxLength(old.maxLength())
+        newEdit.setAlignment(old.alignment())
+        newEdit.setStyleSheet(old.styleSheet())
+        newEdit.setEnabled(old.isEnabled())
+
+        layout = parent.layout() if parent is not None else None
+        if layout is not None:
+            index = layout.indexOf(old)
+            if index != -1:
+                layout.replaceWidget(old, newEdit)
+                old.deleteLater()
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Replaced {objectName} via layout")
+                return newEdit
+
+        # Expected path for geometry-based Options tabs
+        newEdit.setGeometry(geom)
+        old.hide()
+        old.deleteLater()
+        newEdit.show()
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"Replaced {objectName} at geometry "
+                f"{geom.x()},{geom.y()},{geom.width()}x{geom.height()}",
+            )
+        return newEdit
+
+    def setupOptionsTabOrder(self):
+        """
+        Explicit Tab key order per page (top → bottom).
+        Geometry-based UI files often leave z-order wrong for keyboard navigation.
+        """
+        # General
+        chain = [
+            self.cbUTCOffset,
+            self.chkbRawData,
+            self.chkbQAQC,
+            self.chkbRetroMode,
+            self.chkbDebug,
+            self.chkbBetaUpdates,
+        ]
+        for a, b in zip(chain, chain[1:]):
+            if a is not None and b is not None:
+                self.setTabOrder(a, b)
+
+        # Aquarius
+        aq = [
+            self.qleAQServer,
+            self.qleAQUser,
+            getattr(self, 'qleAQPassword', None),
+            self.btnShowPassword,
+        ]
+        for a, b in zip(aq, aq[1:]):
+            if a is not None and b is not None:
+                self.setTabOrder(a, b)
+
+        # USGS
+        usgs = [
+            getattr(self, 'qleUSGSAPIKey', None),
+            self.btnShowUSGSKey,
+        ]
+        for a, b in zip(usgs, usgs[1:]):
+            if a is not None and b is not None:
+                self.setTabOrder(a, b)
+
+        # USBR
+        usbr = [
+            self.rbBOP,
+            self.rbEOP,
+            self.qleTNSNames,
+            self.qleOracleUser,
+            getattr(self, 'qleOraclePassword', None),
+            self.btnShowOraclePassword,
+        ]
+        for a, b in zip(usbr, usbr[1:]):
+            if a is not None and b is not None:
+                self.setTabOrder(a, b)
+
+    def firstFocusWidgetForTab(self, index):
+        """First interactive control on the given Options tab."""
+        # Prefer named first field per tab; fall back to tab page children
+        byIndex = {
+            0: self.cbUTCOffset,
+            1: self.qleAQServer,
+            2: getattr(self, 'qleUSGSAPIKey', None),
+            3: self.rbBOP,
+        }
+        w = byIndex.get(index)
+        if w is not None and w.isEnabled() and w.isVisible():
+            return w
+        if self.tabWidget is None:
+            return None
+        page = self.tabWidget.widget(index)
+        if page is None:
+            return None
+        from PyQt6.QtWidgets import QAbstractButton, QComboBox, QLineEdit, QAbstractSpinBox
+        for child in page.findChildren(QWidget):
+            if not child.isEnabled() or not child.isVisible():
+                continue
+            if isinstance(child, (QLineEdit, QComboBox, QAbstractSpinBox, QAbstractButton)):
+                # Skip pure labels masquerading as empty checkboxes if any
+                if child.focusPolicy() == Qt.FocusPolicy.NoFocus:
+                    continue
+                return child
+        return None
+
+    def onOptionsTabChanged(self, index):
+        """When user clicks a tab, put the cursor on the first field."""
+        def focusFirst():
+            w = self.firstFocusWidgetForTab(index)
+            if w is not None:
+                w.setFocus(Qt.FocusReason.TabFocusReason)
+        # Defer until the page is shown (layout ready)
+        QTimer.singleShot(0, focusFirst)
 
     def showEvent(self, event):
         if Config.debug:
@@ -256,6 +394,8 @@ class uiOptions(QDialog):
         self.tabWidget.setCurrentIndex(0)
         # Always start with secrets masked when the dialog opens
         self.maskSensitiveFields()
+        # Cursor on first General control
+        self.onOptionsTabChanged(0)
 
         if Config.debug:
             Logic.logMessage("DEBUG", "uiOptions showEvent")
@@ -368,10 +508,14 @@ class uiOptions(QDialog):
 
         if Config.debug:
             Logic.logMessage("DEBUG", "Set chkbDebug to: {}".format(self.chkbDebug.isChecked()))
-        self.chkbEnableSQL.setChecked(bool(config.get('enableSQL', False)))
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", "Set chkbEnableSQL to: {}".format(self.chkbEnableSQL.isChecked()))
+        if self.chkbBetaUpdates is not None:
+            channel = (config.get('updateChannel') or 'stable').strip().lower()
+            self.chkbBetaUpdates.setChecked(channel in ('beta', 'pre', 'prerelease', 'rc'))
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"Set chkbBetaUpdates to: {self.chkbBetaUpdates.isChecked()} (channel={channel})",
+                )
         tnsPath = config.get('tnsNamesLocation', '')
 
         if tnsPath.startswith(Config.appRoot):
@@ -396,15 +540,18 @@ class uiOptions(QDialog):
         if Config.debug:
             Logic.logMessage("DEBUG", "Set hourTimestampMethod to: {}".format(hourMethod))
         try:
-            self.qleAQServer.setText(keyring.get_password("DataDoctor", "aqServer") or "")
-            self.qleAQUser.setText(keyring.get_password("DataDoctor", "aqUser") or "")
-            self.qleAQPassword.setText(keyring.get_password("DataDoctor", "aqPassword") or "")
-            self.qleUSGSAPIKey.setText(keyring.get_password("DataDoctor", "usgsApiKey") or "")
-            self.qleOracleUser.setText(keyring.get_password("DataDoctor", "oracleUser") or "")
-            self.qleOraclePassword.setText(keyring.get_password("DataDoctor", "oraclePassword") or "")
+            creds = loadKeyringCredentials(force=False)
+            self.qleAQServer.setText(creds.get("aqServer") or "")
+            self.qleAQUser.setText(creds.get("aqUser") or "")
+            self.qleAQPassword.setText(creds.get("aqPassword") or "")
+            self.qleUSGSAPIKey.setText(creds.get("usgsApiKey") or "")
+            self.qleOracleUser.setText(creds.get("oracleUser") or "")
+            self.qleOraclePassword.setText(creds.get("oraclePassword") or "")
 
             if Config.debug:
-                Logic.logMessage("DEBUG", "Successfully loaded keyring credentials")
+                Logic.logMessage("DEBUG", "Successfully loaded keyring credentials (cached={})".format(
+                    _credCache is not None
+                ))
         except Exception as e:
             Logic.logMessage("ERROR", "Failed to load keyring credentials: {}. Using empty strings".format(e))
 
@@ -418,6 +565,46 @@ class uiOptions(QDialog):
             Logic.logMessage("DEBUG", "Settings loaded")
 
     def onSavePressed(self):
+        # --- Capture prior Oracle credentials before keyring overwrite ---
+        try:
+            priorOracleUser = keyring.get_password("DataDoctor", "oracleUser") or ""
+            priorOraclePassword = keyring.get_password("DataDoctor", "oraclePassword") or ""
+        except Exception as e:
+            priorOracleUser = ""
+            priorOraclePassword = ""
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"onSavePressed: could not read prior Oracle keyring values: {e}")
+
+        newOracleUser = (self.qleOracleUser.text() or "").strip()
+        newOraclePassword = self.qleOraclePassword.text() or ""
+        priorUserStripped = (priorOracleUser or "").strip()
+
+        # Validate new/changed Oracle password (chars + min length) before any save
+        passwordBeingSetOrChanged = bool(newOraclePassword) and (
+            newOraclePassword != priorOraclePassword
+        )
+        if passwordBeingSetOrChanged:
+            try:
+                from core.Oracle import validateOraclePassword
+                ok, errMsg = validateOraclePassword(newOraclePassword)
+            except Exception as e:
+                ok, errMsg = False, f"Could not validate Oracle password: {e}"
+            if not ok:
+                QMessageBox.warning(self, "Invalid Oracle Password", errMsg)
+                return  # keep Options open; do not save
+
+        # Password-only change on existing account → push to all HDB databases.
+        # Skip when username changed, or when user/password were previously blank
+        # (first-time credential entry is local keyring only, not a multi-DB alter).
+        hdbPasswordChangeRequested = (
+            bool(priorUserStripped)
+            and bool(priorOraclePassword)
+            and bool(newOracleUser)
+            and newOracleUser == priorUserStripped
+            and bool(newOraclePassword)
+            and newOraclePassword != priorOraclePassword
+        )
+
         configPath = Utils.getConfigPath()
         config = {}
 
@@ -430,21 +617,24 @@ class uiOptions(QDialog):
             except Exception as e:
                 Logic.logMessage("ERROR", "Failed to load user.config for save: {}".format(e))
         previousRetro = config.get('retroMode', True)
-        previousEnableSQL = config.get('enableSQL', False)
         newRetro = self.chkbRetroMode.isChecked()
-        newEnableSQL = self.chkbEnableSQL.isChecked()
         tnsPath = self.qleTNSNames.text()
 
         if '%AppRoot%' in tnsPath:
             tnsPath = tnsPath.replace('%AppRoot%', Config.appRoot)
         hourMethod = 'EOP' if self.rbEOP.isChecked() else 'BOP'
+        # Drop legacy enableSQL — SQL tab is toggled via btnSQL on the main window
+        config.pop('enableSQL', None)
+        updateChannel = 'stable'
+        if self.chkbBetaUpdates is not None and self.chkbBetaUpdates.isChecked():
+            updateChannel = 'beta'
         config.update({
             'utcOffset': self.cbUTCOffset.currentText(),
             'retroMode': newRetro,
             'qaqc': self.chkbQAQC.isChecked(),
             'rawData': self.chkbRawData.isChecked(),
             'debugMode': self.chkbDebug.isChecked(),
-            'enableSQL': newEnableSQL,
+            'updateChannel': updateChannel,
             'tnsNamesLocation': tnsPath,
             'hourTimestampMethod': hourMethod,
             # Keep periodOffset in sync: EOP = True (end-of-period), BOP = False
@@ -455,57 +645,63 @@ class uiOptions(QDialog):
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(config, configFile, indent=2)
         if Config.debug:
-            Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}, qaqc: {}, rawData: {}, enableSQL: {}".format(newRetro, self.chkbQAQC.isChecked(), self.chkbRawData.isChecked(), newEnableSQL))
+            Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}, qaqc: {}, rawData: {}".format(newRetro, self.chkbQAQC.isChecked(), self.chkbRawData.isChecked()))
+        # Reload non-visual globals only. Config.retroMode stays at the session
+        # value for the whole process — fonts/layouts apply only at next start.
+        sessionRetro = bool(Config.retroMode)
         Utils.reloadGlobals()
+        Config.retroMode = sessionRetro
 
         if newRetro != previousRetro:
-            reply = QMessageBox.question(
-                self, "Retro Mode Change",
-                "Restart DataDoctor for the retro mode change to take effect?\nOK to restart now, Cancel to revert to previous setting.",
-                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
-            )
-
-            if reply == QMessageBox.StandardButton.Ok:
-                python = sys.executable
-                os.execl(python, python, *sys.argv)
+            # Never partially apply retro mid-session (Query showEvent, table
+            # metrics, button ABS layouts all read Config.retroMode live).
+            # Windows auto-restart has been unreliable — always ask for manual
+            # restart. Linux may still offer auto-restart.
+            import sys
+            if sys.platform == 'win32':
+                QMessageBox.information(
+                    self,
+                    "Restart Required",
+                    "Retro mode setting was saved.\n\n"
+                    "Please close and reopen DataDoctor for the change to take effect.\n"
+                    "Nothing will look different until you restart.",
+                )
             else:
-                self.chkbRetroMode.setChecked(previousRetro)
-                config['retroMode'] = previousRetro
-
-                with open(configPath, 'w', encoding='utf-8') as configFile:
-                    json.dump(config, configFile, indent=2)
-                Utils.reloadGlobals()
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "Reverted retro mode to {}".format(previousRetro))
-
-        # Dynamically show/hide SQL tab if enableSQL changed
-        if newEnableSQL != previousEnableSQL:
-            sqlTab = getattr(self.winMain, 'tabSQL', None) or self.winMain.findChild(QWidget, 'tabSQL')
-            if sqlTab:
-                self.winMain.tabSQL = sqlTab
-                if newEnableSQL:
-                    sqlIndex = self.winMain.tabWidget.indexOf(sqlTab)
-                    if sqlIndex == -1:
-                        insertIndex = 1 if self.winMain.tabWidget.indexOf(self.winMain.tabMain) != -1 else 0
-                        self.winMain.tabWidget.insertTab(insertIndex, sqlTab, self.winMain.sqlTitle)
-                        self.winMain.refreshSqlTab()
-                        if Config.debug:
-                            Logic.logMessage("DEBUG", f"Added tabSQL at index {insertIndex} after enableSQL change and refreshed")
+                reply = QMessageBox.question(
+                    self, "Retro Mode Change",
+                    "Restart DataDoctor for the retro mode change to take effect?\n"
+                    "OK to restart now, Cancel to keep the previous setting on disk.",
+                    QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+                )
+                if reply == QMessageBox.StandardButton.Ok:
+                    restarted = Utils.restartApplication()
+                    if not restarted:
+                        Config.retroMode = sessionRetro
+                        QMessageBox.warning(
+                            self,
+                            "Restart Failed",
+                            "Could not restart DataDoctor automatically.\n\n"
+                            "Please close and reopen the program for retro mode to apply.\n"
+                            "Your retro mode setting was saved.",
+                        )
                 else:
-                    sqlIndex = self.winMain.tabWidget.indexOf(sqlTab)
-                    if sqlIndex != -1:
-                        self.winMain.tabWidget.removeTab(sqlIndex)
-                        if Config.debug:
-                            Logic.logMessage("DEBUG", "Removed tabSQL after enableSQL change")
+                    # Revert file only; session visuals never left sessionRetro
+                    self.chkbRetroMode.setChecked(previousRetro)
+                    config['retroMode'] = previousRetro
+                    with open(configPath, 'w', encoding='utf-8') as configFile:
+                        json.dump(config, configFile, indent=2)
+                    Utils.reloadGlobals()
+                    Config.retroMode = sessionRetro
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "Reverted retro mode to {}".format(previousRetro))
 
         credentials = [
             ("aqServer", self.qleAQServer.text()),
             ("aqUser", self.qleAQUser.text()),
             ("aqPassword", self.qleAQPassword.text()),
             ("usgsApiKey", self.qleUSGSAPIKey.text()),
-            ("oracleUser", self.qleOracleUser.text()),
-            ("oraclePassword", self.qleOraclePassword.text())
+            ("oracleUser", newOracleUser if newOracleUser else self.qleOracleUser.text()),
+            ("oraclePassword", newOraclePassword)
         ]
 
         oracleCredsUpdated = False
@@ -513,6 +709,7 @@ class uiOptions(QDialog):
             if value and isinstance(value, str) and value.strip():
                 try:
                     keyring.set_password("DataDoctor", key, value)
+                    updateKeyringCache(key, value)
                     if key in ("oracleUser", "oraclePassword"):
                         oracleCredsUpdated = True
 
@@ -535,3 +732,428 @@ class uiOptions(QDialog):
             except Exception as e:
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"clearAuthFailure skipped: {e}")
+
+        # Multi-DB HDB password update (parallel); uses prior password to authenticate
+        if hdbPasswordChangeRequested:
+            reply = QMessageBox.question(
+                self,
+                "Update HDB Password",
+                "Oracle password update detected.\n\n"
+                "Update this password on all USBR HDB databases?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self._startHdbPasswordChange(
+                    username=newOracleUser,
+                    oldPassword=priorOraclePassword,
+                    newPassword=newOraclePassword,
+                )
+            else:
+                Logic.logMessage(
+                    "INFO",
+                    "HDB password change declined by user "
+                    "(local Options credentials were still saved)",
+                )
+
+        # Close Options (we disconnected the UI auto-accept)
+        super().accept()
+
+    def _startHdbPasswordChange(self, username, oldPassword, newPassword):
+        """
+        Kick off HDB password updates:
+          1) Parallel pass with Options-stored old password
+          2) For each DB with wrong password, sequential masked prompt + retry
+          3) Final summary (revert local password only if none succeeded)
+        """
+        winMain = self.winMain
+        optionsDialog = self  # reused dialog instance (hidden after accept)
+        parent = winMain if winMain is not None else self
+        signals = hdbPasswordChangeSignals(parent)
+        if winMain is not None:
+            winMain._hdbPasswordChangeSignals = signals
+        else:
+            self._passwordChangeSignals = signals
+
+        state = {
+            'parent': parent,
+            'optionsDialog': optionsDialog,
+            'winMain': winMain,
+            'signals': signals,
+            'username': username,
+            'newPassword': newPassword,
+            'storedOldPassword': oldPassword,
+            'success': [],
+            'errors': [],
+            'skipped': [],  # user Cancel/Skip on per-DB password prompt
+            'authQueue': [],
+        }
+
+        def onFirstPassFinished(result):
+            try:
+                state['success'] = list((result or {}).get('success') or [])
+                state['errors'] = list((result or {}).get('errors') or [])
+                authFailed = list((result or {}).get('authFailed') or [])
+                # Config order for stable sequential prompts
+                # Order by display name (strip |SCHEMA from config entries)
+                rawOrder = list(getattr(Config, 'hdbOracleDatabases', ()) or ())
+                order = {}
+                for i, entry in enumerate(rawOrder):
+                    name = str(entry).split('|', 1)[0].strip() if entry else ''
+                    if name:
+                        order[name] = i
+                authFailed.sort(key=lambda n: order.get(n, 999))
+                state['authQueue'] = authFailed
+                # success / errors already use display names from Oracle layer
+                state['success'] = [str(s).split('|', 1)[0].strip() for s in state['success']]
+                state['errors'] = [
+                    (str(pair[0]).split('|', 1)[0].strip(), pair[1])
+                    if isinstance(pair, (list, tuple)) and len(pair) >= 2
+                    else pair
+                    for pair in state['errors']
+                ]
+                Logic.logMessage(
+                    "INFO",
+                    f"HDB password first pass: {len(state['success'])} ok, "
+                    f"{len(state['errors'])} locked/user-facing error(s), "
+                    f"{len(state['authQueue'])} need per-DB password",
+                )
+                uiOptions._processHdbAuthQueue(state)
+            except Exception as e:
+                Logic.logException("HDB password change first-pass handler failed", e)
+                uiOptions._finalizeHdbPasswordChange(state)
+
+        signals.finished.connect(onFirstPassFinished)
+        worker = hdbPasswordChangeWorker(username, oldPassword, newPassword, signals)
+        Logic.logMessage(
+            "INFO",
+            f"Starting HDB password change for user {username} on all USBR databases",
+        )
+        QThreadPool.globalInstance().start(worker)
+
+    @staticmethod
+    def _processHdbAuthQueue(state):
+        """
+        Sequentially prompt for each DB that rejected the stored old password,
+        then retry that DB alone. One popup at a time.
+        """
+        parent = state['parent']
+        queue = state.get('authQueue') or []
+
+        if not queue:
+            uiOptions._finalizeHdbPasswordChange(state)
+            return
+
+        dbName = queue.pop(0)
+        state['authQueue'] = queue
+        username = state.get('username') or ''
+
+        dbOldPassword = uiOptions._promptDbOldPassword(parent, dbName, username)
+        if not dbOldPassword:
+            # Cancel / Skip / empty: leave this DB alone and continue the queue
+            Logic.logMessage(
+                "INFO",
+                f"HDB password prompt skipped for {dbName} (user cancel or empty)",
+            )
+            skipped = state.setdefault('skipped', [])
+            if dbName not in skipped:
+                skipped.append(dbName)
+            uiOptions._processHdbAuthQueue(state)
+            return
+
+        signals = state['signals']
+        # Disconnect previous single-finished handlers to avoid stacking
+        try:
+            signals.singleFinished.disconnect()
+        except TypeError:
+            pass
+
+        def onSingleFinished(doneDb, status, detail):
+            try:
+                if status == 'success':
+                    if doneDb not in state['success']:
+                        state['success'].append(doneDb)
+                    Logic.logMessage(
+                        "INFO",
+                        f"HDB password changed on {doneDb} after per-DB password prompt",
+                    )
+                elif status == 'auth':
+                    # Still wrong after user entry — report, do not re-prompt forever
+                    state['errors'].append(
+                        (doneDb, detail or 'Wrong password for this database')
+                    )
+                    Logic.logMessage(
+                        "INFO",
+                        f"HDB password still wrong on {doneDb} after per-DB prompt",
+                    )
+                elif status == 'missing':
+                    # Definitive missing user — silent (do not list)
+                    Logic.logMessage(
+                        "INFO",
+                        f"HDB password change skipped on {doneDb}: user not found",
+                    )
+                elif status == 'locked':
+                    state['errors'].append((doneDb, detail or 'Account locked'))
+                else:
+                    # Non-auth / non-locked failures: log only (avoid UI spam)
+                    Logic.logMessage(
+                        "ERROR",
+                        f"HDB password change failed on {doneDb} (not shown in UI): "
+                        f"{detail or status}",
+                    )
+            except Exception as e:
+                Logic.logException(f"HDB single-retry handler failed for {doneDb}", e)
+                state['errors'].append((doneDb, str(e)))
+            finally:
+                # Next DB in queue (or finalize)
+                uiOptions._processHdbAuthQueue(state)
+
+        signals.singleFinished.connect(onSingleFinished)
+        worker = hdbSinglePasswordChangeWorker(
+            dbName=dbName,
+            username=username,
+            oldPassword=dbOldPassword,
+            newPassword=state['newPassword'],
+            signals=signals,
+        )
+        dbOldPassword = None  # drop local ref; worker holds until run ends
+        QThreadPool.globalInstance().start(worker)
+
+    @staticmethod
+    def _promptDbOldPassword(parent, dbName, username):
+        """
+        Modal masked password prompt for one HDB database.
+        Returns the password string, or None if cancelled / Skip / empty.
+        Cancel skips this database and continues with any remaining HDBs.
+        Never logs the password.
+        """
+        maxLen = int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30)
+        dialog = QDialog(parent)
+        dialog.setWindowTitle("HDB Current Password")
+        dialog.setModal(True)
+        layout = QVBoxLayout(dialog)
+
+        label = QLabel(
+            f"Could not change the password on <b>{dbName}</b>.<br><br>"
+            f"The password currently saved in Options does not work on this database "
+            f"(passwords often differ across HDBs).<br><br>"
+            f"Enter the <b>current</b> password for user <b>{username}</b> on "
+            f"<b>{dbName}</b>.<br><br>"
+            f"Click <b>Skip</b> to leave this database unchanged and continue.",
+            dialog,
+        )
+        label.setWordWrap(True)
+        label.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(label)
+
+        pwdEdit = QLineEdit(dialog)
+        pwdEdit.setEchoMode(QLineEdit.EchoMode.Password)
+        pwdEdit.setMaxLength(maxLen)
+        pwdEdit.setPlaceholderText("Current password for this database")
+        layout.addWidget(pwdEdit)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=dialog,
+        )
+        # Cancel = Skip this DB (do not abort remaining prompts)
+        cancelBtn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancelBtn is not None:
+            cancelBtn.setText("Skip")
+            cancelBtn.setToolTip("Skip this database and continue with the rest")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        pwdEdit.setFocus()
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return None
+        text = pwdEdit.text() or ''
+        pwdEdit.clear()
+        if not text:
+            return None
+        return text
+
+    @staticmethod
+    def _finalizeHdbPasswordChange(state):
+        """Apply revert if needed, show summary, clear secrets from state."""
+        parent = state.get('parent')
+        optionsDialog = state.get('optionsDialog')
+        winMain = state.get('winMain')
+        storedOld = state.get('storedOldPassword')
+        success = list(state.get('success') or [])
+        errors = list(state.get('errors') or [])
+        skipped = list(state.get('skipped') or [])
+
+        # Stable order for display (strip |SCHEMA from config keys)
+        order = {}
+        for i, entry in enumerate(getattr(Config, 'hdbOracleDatabases', ()) or ()):
+            name = str(entry).split('|', 1)[0].strip() if entry else ''
+            if name:
+                order[name] = i
+        success.sort(key=lambda n: order.get(n, 999))
+        errors.sort(key=lambda pair: order.get(pair[0] if isinstance(pair, (list, tuple)) else str(pair), 999))
+        skipped.sort(key=lambda n: order.get(n, 999))
+
+        result = {'success': success, 'errors': errors, 'skipped': skipped}
+        reverted = False
+        try:
+            if not success and storedOld is not None:
+                reverted = uiOptions._revertOraclePassword(optionsDialog, storedOld)
+            uiOptions._showHdbPasswordChangeResults(
+                parent, result, passwordReverted=reverted
+            )
+        except Exception as e:
+            Logic.logException("HDB password change finalize failed", e)
+        finally:
+            # Drop secrets
+            state['newPassword'] = None
+            state['storedOldPassword'] = None
+            if winMain is not None:
+                winMain._hdbPasswordChangeSignals = None
+            try:
+                sig = state.get('signals')
+                if sig is not None:
+                    try:
+                        sig.finished.disconnect()
+                    except TypeError:
+                        pass
+                    try:
+                        sig.singleFinished.disconnect()
+                    except TypeError:
+                        pass
+            except Exception:
+                pass
+
+    @staticmethod
+    def _revertOraclePassword(optionsDialog, oldPassword):
+        """
+        Restore the previous Oracle password in keyring and winOptions field.
+        Called when no HDB database accepted the new password.
+        Returns True if keyring was restored. Never logs the password.
+        """
+        restored = False
+        try:
+            if oldPassword is not None and str(oldPassword) != '':
+                keyring.set_password("DataDoctor", "oraclePassword", oldPassword)
+                updateKeyringCache("oraclePassword", oldPassword)
+                restored = True
+                Logic.logMessage(
+                    "INFO",
+                    "HDB password change failed on all databases; "
+                    "restored previous Oracle password in Options/keyring",
+                )
+        except Exception as e:
+            Logic.logMessage(
+                "ERROR",
+                f"Failed to restore previous Oracle password to keyring: {e}",
+            )
+
+        # Put old value back into the Options password field (dialog is reused)
+        try:
+            field = None
+            if optionsDialog is not None:
+                field = getattr(optionsDialog, 'qleOraclePassword', None)
+            if field is None:
+                # Fallback: main window's stored Options instance
+                winMain = getattr(optionsDialog, 'winMain', None) if optionsDialog else None
+                if winMain is not None:
+                    opts = getattr(winMain, 'winOptions', None)
+                    if opts is not None:
+                        field = getattr(opts, 'qleOraclePassword', None)
+            if field is not None and oldPassword is not None:
+                field.setText(oldPassword)
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        "Restored previous Oracle password into qleOraclePassword",
+                    )
+        except Exception as e:
+            Logic.logMessage(
+                "ERROR",
+                f"Failed to restore Oracle password field in Options: {e}",
+            )
+
+        # Allow reconnect with restored credentials
+        if restored:
+            try:
+                from core.Oracle import clearAuthFailure
+                clearAuthFailure()
+            except Exception:
+                pass
+
+        return restored
+
+    @staticmethod
+    def _showHdbPasswordChangeResults(parent, result, passwordReverted=False):
+        """Popup summarizing which DBs changed, skipped, or errored (not missing users)."""
+        success = list((result or {}).get('success') or [])
+        errors = list((result or {}).get('errors') or [])
+        skipped = list((result or {}).get('skipped') or [])
+
+        if not success and not errors and not skipped:
+            # Nothing changed and nothing reported (all silent missing, or no targets)
+            Logic.logMessage(
+                "INFO",
+                "HDB password change: no databases updated",
+            )
+            revertNote = (
+                "\n\nYour previous password was restored in Options."
+                if passwordReverted
+                else "\n\nCould not restore the previous password automatically; "
+                     "re-enter it in Options → USBR if needed."
+            )
+            QMessageBox.information(
+                parent,
+                "HDB Password Update",
+                "Password change finished.\n\n"
+                "No databases were updated "
+                "(account not found on any HDB, or none were reachable)."
+                + revertNote,
+            )
+            return
+
+        lines = ["HDB password update finished.", ""]
+        if success:
+            lines.append("Password changed on:")
+            for db in success:
+                lines.append(f"  • {db}")
+            lines.append("")
+        if skipped:
+            lines.append("Skipped (left unchanged):")
+            for db in skipped:
+                lines.append(f"  • {db}")
+            lines.append("")
+        if errors:
+            lines.append("Not updated:")
+            for item in errors:
+                if isinstance(item, (list, tuple)) and len(item) >= 2:
+                    db, msg = item[0], item[1]
+                else:
+                    db, msg = str(item), ''
+                if msg:
+                    lines.append(f"  • {db}: {msg}")
+                else:
+                    lines.append(f"  • {db}")
+
+        # Zero success after prompts/retries — local password was reverted
+        if not success and passwordReverted:
+            lines.append("")
+            lines.append("No databases accepted the new password.")
+            lines.append("Your previous password was restored in Options.")
+
+        # INFO summary without secrets
+        Logic.logMessage(
+            "INFO",
+            "HDB password change results: changed on [{}]; skipped [{}]; errors on [{}]{}".format(
+                ', '.join(success) if success else 'none',
+                ', '.join(skipped) if skipped else 'none',
+                ', '.join(
+                    (e[0] if isinstance(e, (list, tuple)) and e else str(e))
+                    for e in errors
+                ) if errors else 'none',
+                '; local password reverted' if (not success and passwordReverted) else '',
+            ),
+        )
+
+        QMessageBox.information(parent, "HDB Password Update", '\n'.join(lines).rstrip())

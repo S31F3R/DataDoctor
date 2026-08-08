@@ -55,6 +55,13 @@ temp/
 tmp/
 documentation/*.grok
 
+# Local update downloads (launcher / AppImage / dev)
+Update/
+
+
 # Oracle client
 oracle/client
 oracle/client/*
+
+# Certs
+certs/*

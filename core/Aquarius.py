@@ -7,10 +7,10 @@ import os
 import threading
 import queue
 from datetime import datetime, timedelta
-from core import Logic, Config
+from core import Logic, Config, Query
 
-queryLimit = 500 # Configurable max points per API call
-maxThreads = 15 # Configurable max number of threads
+queryLimit = 30000 # Configurable max points per API call
+maxThreads = 50 # Configurable max number of threads
 
 def apiRead(dataIDs, startDate, endDate, interval):
     if Config.debug:
@@ -64,16 +64,21 @@ def apiRead(dataIDs, startDate, endDate, interval):
         Logic.logMessage("ERROR", "Missing Aquarius credentials.")
         return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
 
-    # Authenticate session with fallback for SSL verification
+    # Authenticate session with fallback for SSL verification.
+    # Accepts .pem, or auto-converts .cer / .crt / .pfx / .p12 in certs/ → aquarius.pem
     authData = {'Username': user, 'EncryptedPassword': password}
-    certPath = Logic.resourcePath('certs/aquarius.pem')
+    certPath = Logic.ensureAquariusPem()
     verifyMode = True
 
     for attempt in ['system', 'customCert', 'unverified']:
         try:
-            if attempt == 'customCert' and not os.path.exists(certPath):
+            if attempt == 'customCert' and (not certPath or not os.path.exists(certPath)):
                 if Config.debug:
-                    Logic.logMessage("DEBUG", "No certificate found at '{}', skipping to unverified.".format(certPath))
+                    Logic.logMessage(
+                        "DEBUG",
+                        "No Aquarius certificate found in any existing certs/ folder "
+                        "(.pem / .cer); skipping customCert.",
+                    )
                 continue
             verifyMode = certPath if attempt == 'customCert' else False if attempt == 'unverified' else True
             authResponse = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=authData, verify=verifyMode)
@@ -82,7 +87,12 @@ def apiRead(dataIDs, startDate, endDate, interval):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Authentication succeeded with verify={verifyMode}")
             if attempt == 'unverified' and Config.debug:
-                Logic.logMessage("WARN", "SSL verification disabled due to cert issues. Add 'aquarius.pem' to 'certs' folder or system trust store for secure connection.")
+                Logic.logMessage(
+                    "WARN",
+                    "SSL verification disabled due to cert issues. "
+                    "Place aquarius.pem or .cer in an existing certs/ folder "
+                    "(app will not create one) or system trust store for secure connection.",
+                )
             break
         except requests.exceptions.SSLError as e:
             if Config.debug:
@@ -185,7 +195,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
             parseDate = date.split('T')
             parseDate[1] = parseDate[1].split('.')[0]
             dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}')
-            formattedTs = dateTime.strftime('%m/%d/%y %H:%M:00')
+            formattedTs = Query.formatTimestamp(dateTime, interval)
             value = point['Value'].get('Numeric', None)
 
             if value is not None:
@@ -233,7 +243,9 @@ def apiRead(dataIDs, startDate, endDate, interval):
         else:
             result[uid] = data
     for uid in result:
-        result[uid]['data'].sort(key=lambda x: datetime.strptime(x.split(',')[0], '%m/%d/%y %H:%M:00'))
+        result[uid]['data'].sort(
+            key=lambda x: Query.parseDisplayTimestamp(x.split(',')[0]) or datetime.min
+        )
     if Config.debug:
         Logic.logMessage("DEBUG", f"Combined results from {numTasks} tasks with {len(result)} UIDs")
     for uid in dataIDs:

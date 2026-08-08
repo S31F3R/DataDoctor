@@ -3,83 +3,159 @@ TEST FILE — currently being worked / needing retest
 Workflow:
   - To Do List.txt = backlog only
   - This file = in-progress / Seifer tests here
-  - PASS → mark [x] here (stay off To Do)
+  - PASS → mark [x] here (stay off To Do); Grok may clean confirmed [x] items
   - FAIL → note here; Grok re-fixes
+  - Grok may commit any non-documentation/ paths; documentation/ commits stay with Seifer
+    (README.md and other non-docs paths are fair game)
 
-
-Need retest (this pass)
+Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Logging: full Python tracebacks + Qt (QT_LOGGING_RULES) in app.log / Log Viewer
+[ ] Refresh bumps end time to now (unless historical > 2h)
    Steps:
-     a. Trigger a handled error path (or force one) → ERROR line in Log Viewer
-        includes full Traceback body attached to that record.
-     b. With debug ON, open Log Viewer — existing CRITICAL uncaught / ERROR
-        logException records keep multi-line traces.
-     c. QT_LOGGING_RULES: launch with e.g.
-          QT_LOGGING_RULES="*.warning=true" python DataDoctor.py
-        (or any category you care about). Qt warnings should appear as
-        "Qt [category]: message @ file:line" in app.log and Log Viewer.
-     d. Optional: Python warnings (UserWarning etc.) show as
-        "Python warning: ..." in the same log.
-   Notes: Logic.installQtMessageHandler, enableWarningCapture, unraisablehook;
-          logException already wrote traces — now also unraisable + warnings.
+     a. Run a recent query (end near current time, e.g. Prev Day → Current or custom end ≈ now).
+     b. Wait a few minutes → Refresh → end extends to "now"; new points appear if available.
+     c. Run a historical range whose end is more than 2 hours in the past.
+     d. Refresh → start/end stay the same (does not jump end to current clock).
+   Notes: threshold is 2 hours before now; lastEndDate is updated when end is bumped.
 
-[x] USGS interval combo: no intervals past DAY when USGS-NWIS selected
+[ ] HDB password change UI only shows useful outcomes
    Steps:
-     a. Open Public or Internal Query.
-     b. Select USGS-NWIS → cbInterval shows HOUR, INSTANT:1/15/60, DAY only
-        (no MONTH, YEAR, WATER YEAR).
-     c. With MONTH selected on a non-USGS DB, switch to USGS-NWIS → selection
-        falls back to DAY.
-     d. Switch to any other database (or blank) → full interval list returns;
-        previous valid selection kept when still in the list.
-   Notes: ui/uiQuery.py populateIntervalCombo / updateIntervalForDatabase
+     a. Change Oracle password in Options → USBR (user that exists on some HDBs).
+     b. Popup lists successes; wrong-password DBs get per-DB prompt; locked accounts listed.
+     c. Missing users and TNS/network noise stay out of the popup (still in app.log).
+     d. On per-DB wrong-password prompt: Cancel is labeled Skip — skips that DB and
+        continues remaining HDBs (listed under "Skipped" in summary, not as errors).
+   Notes: status 'locked' shown; 'error'/'missing' silent in UI.
+   Fix: Cancel → Skip continues queue; skipped DBs separate from errors.
 
-[x] Fonts/layout: Noto default ↔ retro toggle (Linux then Windows)
+[ ] HDB database-link failure → direct connect fallback
    Steps:
-     a. Retro ON + restart: Refresh/Undo at (56,10)/(106,10); QAQC at 259; Query info icons;
-        Add Query/Query Data 7pt; headers part1 blank part2; table no QSS width pad.
-     b. Retro OFF + restart: Noto positions (default map), 10pt UI, header minHeight cleared,
-        Overlay/BOP/EOP back to .ui coords (150 / 210 / 350).
-     c. Log Viewer always LAST tab.
-     d. Windows: same a–c; Refresh/Undo y=8 only in default (PLATFORM_LAYOUT_Y_NUDGE).
+     a. Internal multi-DB query where primary uses @link to another HDB.
+     b. If link fails (ORA-02019 etc.), retry by connecting to the target DSN directly.
+     c. Query still returns data when direct path works.
+   Notes: USBR.sqlRead detects link errors and re-runs without link.
 
-[x] Log Viewer tab
+[ ] Mac package script
    Steps:
-     a. Click Log (notebook) button on main toolbar.
-     b. Expect Log Viewer tab opens; entries from app.log + app.log.1..N loaded.
-     c. Newest entry at top; multi-line errors keep traceback with the ERROR line.
-     d. Colors: ERROR/CRITICAL red, WARN orange, INFO blue, DEBUG gray.
-     e. Close tab with X; button opens it again and reloads logs.
-   Notes: Logic.loadAllAppLogEntries; pteLog colored insert.
+     a. From project root: python scripts/packageMac.py --skip-venv
+     b. dist/DataDoctor-macOS-YYYYMMDD.zip contains Data Doctor.command + Project Files/
+        + Update/ + applyUpdate.sh
+     c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
+     d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
+[ ] Python zip + applyUpdate (first pass)
+   Steps:
+     a. python scripts/packagePython.py → dist/DataDoctor-Python-YYYYMMDD.zip
+     b. Zip has DataDoctor.py (no .pyw), README.txt, core/ (with bunker.db), ui/,
+        quickLook/, certs/, oracle/, requirements.txt — no scripts/, no temp/
+     c. Full package (Windows/Mac) includes empty Update/ and applyUpdate.cmd / .sh
+     d. On a test install: drop Python zip into Update/, run applyUpdate → code refreshes,
+        bunker merges via install's updateBunker, pip runs; zip removed; app still starts.
+   Notes: raw Python tree only; launcher-side applyUpdate does merge/pip.
 
-Oracle speed decision (keep C)
---------------------------------------------------------------------------------
-[x] Keep connection reuse (C); do NOT re-add batch SDIDs (A).
-    Why A can be slower even if fewer round-trips:
-      - Larger result sets / more bytes over WAN per query
-      - IN-list plans can be worse than equality on (SDID, time) indexes
-      - Extra Python split/group work
-      - After C, connect cost is already gone — day queries gain little from A
-      - Oracle result/plan cache can favor repeated single-SDID shapes
-    2-year: C left HDB ~30s behind Aquarius — good enough.
+[ ] Update check works with no GitHub releases yet
+   Steps:
+     a. Start app with network; no popup (silent — nothing published yet is OK).
+     b. About shows version from core/Version.py (currently 3.0.0).
+     c. Options → General: "Beta updates" checkbox off by default; save persists updateChannel.
+
+[ ] Update check after a real release (when you publish one)
+   Steps:
+     a. Bump Version.VERSION lower than a published tag OR publish a higher tag with assets:
+        - Launcher: DataDoctor-Python.zip (or *python*.zip)
+        - AppImage: DataDoctor-x86_64.AppImage (or zip containing it)
+     b. Stable channel ignores Pre-release tags; Beta channel includes them (-rc / -beta).
+     c. Prompt → Download → file lands in Update/ next to install / AppImage.
+     d. Launcher: close + applyUpdate. AppImage: Quit and apply (or applyAppImageUpdate.sh).
 
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] USGS-NWIS intervals: no HOUR; default INSTANT:15
+[x] Options password fields: no layout WARN spam
+[x] Graph opens with Zoom tool active
+[x] Graph save remembers last folder
+[x] Context menu Graph + selection window
+[x] Aquarius Server Link placeholder
+[x] Goat stress-relief button plays scream
+[x] About π button — worthy gate
+[x] SQL Query Builder opens with zero tabs open
+[x] Graph middle-mouse pan + range clamp
+[x] Windows first-load icon (retest / improve-only)
+[x] Graph hover tooltip stable at top edge (no frame jump)
+[x] Graph arrow keys pan the view
+[x] Graph series legend click-to-toggle (☑/☐) + rescale
+[x] Column header highlight — all selected columns
+[x] Graph overlay legends use header first-line labels
+[x] Quick Look missing delta/overlay meta → checkboxes unchecked
+[x] Prev Day / Prev Week times refresh on open, load quick look, and Query
+[x] Windows package script layout (WinZip flat view was a false alarm)
+[x] commonName-datatype header (no spaces around dash)
+[x] Log Viewer button toggles tab (open / close)
+[x] Graph: system dark/light colors + blank title + hover tooltip + table timestamps
+[x] Graph toolbar button tooltips
+[x] Query list: Insert Above / Insert Below
+[x] Clear Query List unchecks Deltas and Overlay
+[x] btnSQL toggles SQL Query Builder tab
+[x] Query list double-click edit allows interval (and database) change
+[x] Data dictionary headers use "commonName - datatype" for all DBs (pre-space-strip)
+[x] Unused About easter-egg icons cleaned up
+[x] SQL + Graph button tooltips and hover/pressed icons
+[x] Graph button plots Data Query table into Graph tab
+[x] Detach / Attach for Graph and Log Viewer tabs only
+[x] USGS dataDictionary lookup (bunker PVLC — precisionOverride DEC(2))
+[x] Data Dictionary Ctrl+S / Save button (combobox commit + executemany)
+[x] Data Dictionary combo column widths (sizeFromContents + scrollbar)
+[x] Cell-level Copy (Details + Data Dictionary; SelectItems)
+[x] AppImage tool path under scripts/appimagetool/
+[x] Data Dictionary database column is a dropdown
+[x] Options tab focus + tab order
+[x] App icons layout
+[x] Linux AppImage packager script (+ oracledb getpass fix)
+[x] MRID internal query (values only; no metadata)
+[x] Windows package + bunker merge scripts
+[x] Clipboard copy/paste (Excel-like) — main data table
+[x] Delta columns skip normal QAQC coloring
+[x] UCHDB2 schema UCHDBA via config
+[x] Aquarius certs: no random certs/ folders + convert cleanup (.cer/.pem only; no .pfx)
+[x] Timestamps centered in vertical header column
+[x] Smarter query dates for DAY+ intervals
+[x] USGS DataID: optional parameter + Site-Parameter lookup (resolveUsgsDataId / picker)
+[x] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
+[x] Details window resizes down when switching tabs
+[x] Packaged Oracle preferred; system fallback
+[x] winMain tooltips (simplified labels)
+[x] Header size no longer changes when clicking a cell
+[x] Overlay secondary-only → auto edit for upload
+[x] USGS public query: Show details on right-click
+[x] valuePrecision.json lives under core/
+[x] valuePrecision + precisionOverride (bunker.db + formatting)
+[x] Logging: full Python tracebacks + Qt in app.log / Log Viewer
+[x] USGS interval combo: no intervals past DAY when USGS-NWIS selected
+[x] Fonts/layout: Noto default ↔ retro toggle (Linux then Windows)
+[x] Log Viewer tab
+[x] Keep connection reuse (C); do NOT re-add batch SDIDs (A)
 [x] Option C connection reuse
 [x] V1 large table build + overlay
 [x] PATH Instant Client env limit
 [x] Prior bug-smash cluster
+[x] HDB MODIFY_R_BASE / DELETE_R_BASE write path
+[x] Delete key multi-clear
+[x] Delta never shows signed zero (-0.00)
+[x] Aquarius-only query: Show details on right-click
+[x] Details window title not clipped
+[x] Retro mode: session frozen until full restart
+[x] Header: single-click highlight; double-click sort
+[x] Windows taskbar icon (AppUserModelID + window icon)
+[x] User config + quickLooks load from profile again
+[x] Options first open after startup is snappy
 
-
-Deferred
+Deferred / known
 --------------------------------------------------------------------------------
-[!] Windows taskbar via VB launcher
-[!] USGS monthly/yearly
-[!] Retro restart Windows
-[!] Windows text/font (code done — needs Windows retest)
+[!] USGS monthly/yearly (OGC has no products)
 [!] Aquarius daily 2300 TZ
-[!] Features: plots, search/filter on log tab later, goat, formatting rules, git/readme
+[!] Features still backlog: advanced plot tool / quick-look plots, git/readme,
+    dataDictionary non-destructive bulk update, expanded Options tree
+[!] Windows first-load icon — improve-only
+[!] AppImage applyUpdate path not wired the same as launcher packages yet
