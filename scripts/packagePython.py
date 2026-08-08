@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 """
-Build a raw Python runtime zip for DataDoctor (no launcher, no .venv).
+Build a raw Python runtime zip for DataDoctor (no launcher, no .venv, no apply scripts).
 
-Contents (run/extract as the app root, or apply into Project Files/ via applyUpdate):
+Contents = what you need to run the app with a local Python:
   DataDoctor.py
   requirements.txt
   README.txt
-  core/          (live bunker.db; also temp/bunker.db as merge source for applyUpdate)
+  LICENSE          (if present)
+  core/            (includes bunker.db)
   ui/
-  quickLook/     (stock snippets; apply does not delete user-added files)
-  certs/         (optional Aquarius certs — place aquarius.pem / .cer here)
-  oracle/        (optional Instant Client / network admin; client/ skipped if huge)
-  scripts/updateBunker.py
+  quickLook/
+  certs/           (optional Aquarius certs — folder always present)
+  oracle/          (optional network admin / Instant Client; client/ skipped by default)
 
-Typical uses:
-  - Drop into an existing launcher install's Update/ folder → run applyUpdate
-  - Manual/raw install: unzip, venv + pip, run DataDoctor.py
+Update / bunker-merge tooling lives on the *launcher* install side (applyUpdate,
+updateBunker), not in this zip.
 
 Run from project root:
   python scripts/packagePython.py
@@ -61,7 +60,7 @@ def copyTree(src: Path, dst: Path, ignoreNames=None):
 
 def ensureDirInZip(stage: Path, rel: str, readmeText: str | None = None):
     """
-    Guarantee an empty-or-present folder is represented in the zip.
+    Guarantee a folder is represented in the zip.
     Zip has no empty dirs; write a small README when the folder has no files.
     """
     d = stage / rel
@@ -107,13 +106,13 @@ def main() -> int:
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
 
-    # App trees
+    # App trees (bunker.db ships inside core/ as normal)
     for name in ("core", "ui", "quickLook"):
         src = root / name
         if src.exists():
             copyTree(src, stage / name, ignoreNames={'.git', '__pycache__'})
 
-    # oracle: network/admin config always useful; Instant Client is optional/huge
+    # oracle: network/admin always useful; Instant Client optional/huge
     oracleSrc = root / "oracle"
     if oracleSrc.exists():
         ignore = {'.git', '__pycache__'}
@@ -130,7 +129,7 @@ def main() -> int:
         "sqlnet.ora may live under oracle/network/admin/.\n",
     )
 
-    # certs: user drops Aquarius .pem / .cer here (app does not create this folder)
+    # certs: user drops Aquarius .pem / .cer here
     certsSrc = root / "certs"
     if certsSrc.exists():
         copyTree(certsSrc, stage / "certs", ignoreNames={'.git', '__pycache__'})
@@ -152,35 +151,20 @@ def main() -> int:
     if licenseSrc.is_file():
         shutil.copy2(licenseSrc, stage / "LICENSE")
 
-    # Bunker as merge source for applyUpdate (live DB is core/bunker.db)
-    bunker = root / "core" / "bunker.db"
-    if bunker.is_file():
-        (stage / "temp").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(bunker, stage / "temp" / "bunker.db")
-
-    updateBunker = root / "launcher" / "Project Files" / "scripts" / "updateBunker.py"
-    if not updateBunker.is_file():
-        updateBunker = root / "scripts" / "updateBunker.py"
-    if updateBunker.is_file():
-        (stage / "scripts").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(updateBunker, stage / "scripts" / "updateBunker.py")
-
     readme = f"""DataDoctor — Python package
 Built: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-This zip is the raw app tree (no launcher, no .venv).
+Raw app tree only (no launcher, no .venv, no update scripts).
 
 LAYOUT
 ------
-  DataDoctor.py       Main entry
+  DataDoctor.py
   requirements.txt
-  core/               App code + bunker.db
+  core/          (includes bunker.db)
   ui/
   quickLook/
-  certs/              Optional Aquarius certs (aquarius.pem / .cer)
-  oracle/             Optional Oracle network admin / Instant Client
-  temp/bunker.db      Packaged dictionary for merge (applyUpdate only)
-  scripts/            updateBunker helper
+  certs/         Optional Aquarius certs (aquarius.pem / .cer)
+  oracle/        Optional Oracle network admin / Instant Client
 
 MANUAL INSTALL
 --------------
@@ -189,12 +173,11 @@ MANUAL INSTALL
 3) .venv/bin/pip install -r requirements.txt   (Windows: .venv\\Scripts\\pip ...)
 4) .venv/bin/python DataDoctor.py
 
-UPDATE AN EXISTING LAUNCHER INSTALL
---------------------------------------
-1) Close Data Doctor.
-2) Drop this zip into the install's Update/ folder.
-3) Run applyUpdate.cmd / applyUpdate.sh (or python applyUpdate.py).
-4) Restart Data Doctor.
+UPDATING A LAUNCHER INSTALL
+---------------------------
+Launcher packages ship applyUpdate + updateBunker. Drop this zip into that
+install's Update/ folder and run applyUpdate there — merge/pip are handled
+on the launcher side, not by anything inside this zip.
 """
     (stage / "README.txt").write_text(readme.strip() + "\n", encoding="utf-8")
 
@@ -209,7 +192,7 @@ UPDATE AN EXISTING LAUNCHER INSTALL
 
     sizeKiB = outZip.stat().st_size // 1024
     print(f"Wrote {outZip} ({sizeKiB} KiB)")
-    print("Use: drop into <install>/Update/ then applyUpdate, or unzip for a raw Python run.")
+    print("Raw Python tree only. Launcher installs apply this via Update/ + applyUpdate.")
 
     if not args.keepBuild and stage.exists():
         shutil.rmtree(stage, ignore_errors=True)

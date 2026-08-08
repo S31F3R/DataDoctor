@@ -172,14 +172,14 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
                 shutil.copy2(src, projectFiles / name)
                 print(f"Updated {name}")
 
-        # Trees (do not overwrite live bunker.db here)
+        # Trees (do not overwrite live bunker.db here — merge uses packaged core/bunker.db)
+        # Raw Python zips have no scripts/; launcher install keeps its own apply/update tools.
         treeNames = (
             "ui",
             "core",
             "quickLook",
             "certs",
             "oracle",
-            "scripts",
         )
         for tree in treeNames:
             src = payload / tree
@@ -195,16 +195,15 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
         py = resolvePython(projectFiles)
         print(f"Using Python: {py}")
 
-        # Bunker merge
-        packagedBunker = payload / "temp" / "bunker.db"
-        if not packagedBunker.is_file():
-            packagedBunker = payload / "core" / "bunker.db"
+        # Bunker merge: packaged DB is core/bunker.db in the raw Python zip.
+        # Merge helper lives on the *install* (Project Files/scripts/updateBunker.py).
+        packagedBunker = payload / "core" / "bunker.db"
         if packagedBunker.is_file():
             rc = runBunkerMerge(py, projectFiles, packagedBunker)
             if rc != 0:
                 print(f"WARN: bunker merge exited {rc}", file=sys.stderr)
         else:
-            print("No packaged bunker.db in update — skipped dictionary merge")
+            print("No packaged core/bunker.db in zip — skipped dictionary merge")
 
         # Dependencies
         req = projectFiles / "requirements.txt"
