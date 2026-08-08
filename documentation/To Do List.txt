@@ -2,18 +2,7 @@
 (none — see documentation/test.txt for in-progress / retest items)
 
 ####### FUTURE TASKS #######
--Expand update flow (in progress foundation — see test.txt "Python zip + applyUpdate")
-    -Done so far: scripts/packagePython.py (raw Python runtime zip), scripts/applyUpdate.py;
-     Windows/Mac packages include Update/ drop folder + applyUpdate.cmd / applyUpdate.sh
-    -Still open:
-        -AppImage / Linux full-package apply path
-        -Optional auto-detect update on startup (prompt user?)
-        -Decide whether packaged quickLook overwrites same-named user files only (current)
-          vs never touching quickLook on update
-        -Version check / refuse downgrade?
--Expand update flow later notes (original):
-    -Launcher install once; later drop raw Python zip into Update/, run apply script
-    -Includes bunker.db merge + requirements.txt install + cleanup zip
+(none)
 
 ####### CURRENT BUGS #######
 (none — handled items moved to documentation/test.txt)
@@ -51,6 +40,8 @@
 -Update readme
 -Need documentation on different installers and pre req, maybe add in wiki or readme
 -Provide links to stuff like requesting USGS API key, Reclamation website, USGS data browser, and documention on how to find USGS information to create dataID
+-Document GitHub Releases: asset names (DataDoctor-Python.zip, DataDoctor-x86_64.AppImage),
+  tag = vMAJOR.MINOR.PATCH or vX.Y.Z-rc.N, check Pre-release for beta
 
 ####### WORKFLOW (for Grok / Seifer) #######
 -To Do List = backlog only (not currently being worked)

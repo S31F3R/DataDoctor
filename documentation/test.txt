@@ -11,6 +11,14 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
+[ ] Refresh bumps end time to now (unless historical > 2h)
+   Steps:
+     a. Run a recent query (end near current time, e.g. Prev Day → Current or custom end ≈ now).
+     b. Wait a few minutes → Refresh → end extends to "now"; new points appear if available.
+     c. Run a historical range whose end is more than 2 hours in the past.
+     d. Refresh → start/end stay the same (does not jump end to current clock).
+   Notes: threshold is 2 hours before now; lastEndDate is updated when end is bumped.
+
 [ ] HDB password change UI only shows useful outcomes
    Steps:
      a. Change Oracle password in Options → USBR (user that exists on some HDBs).
@@ -36,19 +44,6 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[x] USGS-NWIS intervals: no HOUR; default INSTANT:15
-   Steps:
-     a. Public or Internal Query → database USGS-NWIS.
-     b. Interval list has INSTANT:15, INSTANT:1, INSTANT:60, DAY only (no HOUR / MONTH / YEAR).
-     c. INSTANT:15 is selected by default (or when previous interval was HOUR).
-     d. User can switch to DAY / other instants. Non-USGS DBs still show full list including HOUR.
-
-[x] Options password fields: no layout WARN spam
-   Steps:
-     a. Open Options with debug on.
-     b. Log does NOT show "No layout for qleAQPassword/qleOraclePassword/qleUSGSAPIKey".
-     c. AQ password, Oracle password, USGS API key still mask/reveal via eye buttons.
-
 [ ] Python zip + applyUpdate (first pass)
    Steps:
      a. python scripts/packagePython.py → dist/DataDoctor-Python-YYYYMMDD.zip
@@ -59,10 +54,26 @@ Current Tests
         bunker merges via install's updateBunker, pip runs; zip removed; app still starts.
    Notes: raw Python tree only; launcher-side applyUpdate does merge/pip.
 
+[ ] Update check works with no GitHub releases yet
+   Steps:
+     a. Start app with network; no popup (silent — nothing published yet is OK).
+     b. About shows version from core/Version.py (currently 3.0.0).
+     c. Options → General: "Beta updates" checkbox off by default; save persists updateChannel.
+
+[ ] Update check after a real release (when you publish one)
+   Steps:
+     a. Bump Version.VERSION lower than a published tag OR publish a higher tag with assets:
+        - Launcher: DataDoctor-Python.zip (or *python*.zip)
+        - AppImage: DataDoctor-x86_64.AppImage (or zip containing it)
+     b. Stable channel ignores Pre-release tags; Beta channel includes them (-rc / -beta).
+     c. Prompt → Download → file lands in Update/ next to install / AppImage.
+     d. Launcher: close + applyUpdate. AppImage: Quit and apply (or applyAppImageUpdate.sh).
 
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] USGS-NWIS intervals: no HOUR; default INSTANT:15
+[x] Options password fields: no layout WARN spam
 [x] Graph opens with Zoom tool active
 [x] Graph save remembers last folder
 [x] Context menu Graph + selection window
