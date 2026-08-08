@@ -288,6 +288,9 @@
        <height>32</height>
       </rect>
      </property>
+     <property name="placeholderText">
+      <string>https://yourserverlink.com</string>
+     </property>
     </widget>
    </widget>
    <widget class="QWidget" name="tabUSGS">

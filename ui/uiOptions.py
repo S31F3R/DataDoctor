@@ -145,6 +145,9 @@ class uiOptions(QDialog):
         self.cbUTCOffset = self.findChild(QComboBox, 'cbUTCOffset')
         self.qleAQServer = self.findChild(QLineEdit, 'qleAQServer')
         self.qleAQUser = self.findChild(QLineEdit, 'qleAQUser')
+        # Faded format hint when blank (cursor still starts at front on focus)
+        if self.qleAQServer is not None:
+            self.qleAQServer.setPlaceholderText("https://yourserverlink.com")
 
         # Replace qleAQPassword with customPasswordEdit
         oldAQPassword = self.findChild(QLineEdit, 'qleAQPassword')
