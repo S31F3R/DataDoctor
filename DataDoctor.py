@@ -4,7 +4,7 @@ import sys
 import os
 import csv
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QTableWidgetItem,
                              QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
                              QVBoxLayout, QHBoxLayout, QSplitter, QLabel, QAbstractItemView)
@@ -940,6 +940,42 @@ class uiMain(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", "btnInfoPressed: Opened about dialog")
 
+    def _parseQueryDate(self, value):
+        """Normalize lastStartDate / lastEndDate to datetime, or None."""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.replace(second=0, microsecond=0)
+        s = str(value).strip()
+        if not s:
+            return None
+        for fmt in ('%Y-%m-%d %H:%M', '%Y-%m-%d %H:%M:%S', '%m/%d/%y %H:%M:00', '%m/%d/%y %H:%M'):
+            try:
+                return datetime.strptime(s, fmt)
+            except ValueError:
+                continue
+        try:
+            return datetime.fromisoformat(s.replace('T', ' ').split('.')[0])
+        except Exception:
+            return None
+
+    def refreshEndDateForQuery(self, lastEndDate, now=None):
+        """
+        On Refresh: pull end time up to *now* so new data is included.
+
+        Exception — historical / older ranges: if the stored end is more than
+        2 hours before now, leave it alone (do not jump a past period to "now").
+        """
+        now = now or datetime.now().replace(second=0, microsecond=0)
+        endDt = self._parseQueryDate(lastEndDate)
+        if endDt is None:
+            return now
+        # Older range (end more than 2 hours ago) → keep original end
+        if now - endDt > timedelta(hours=2):
+            return endDt
+        # Recent / live range → extend end to the moment Refresh was hit
+        return now if endDt <= now else endDt
+
     def btnRefreshPressed(self):
         try:
             if self.lastQueryType and self.lastQueryItems:
@@ -952,11 +988,22 @@ class uiMain(QMainWindow):
                 deltaChecked = getattr(Config, 'lastDeltaChecked', False)
                 overlayChecked = getattr(Config, 'lastOverlayChecked', False)
 
+                startDate = self.lastStartDate
+                endDate = self.refreshEndDateForQuery(self.lastEndDate)
+                # Remember bumped end so the next Refresh keeps extending live series
+                self.lastEndDate = endDate
+
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"btnRefreshPressed: Refreshing with deltaChecked={deltaChecked}, overlayChecked={overlayChecked}")
-                Query.executeQuery(self, self.lastQueryItems, self.lastStartDate, self.lastEndDate,
-                                self.lastQueryType == 'internal', self.winDataDictionary.mainTable,
-                                deltaChecked=deltaChecked, overlayChecked=overlayChecked)
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"btnRefreshPressed: Refreshing start={startDate}, end={endDate}, "
+                        f"deltaChecked={deltaChecked}, overlayChecked={overlayChecked}",
+                    )
+                Query.executeQuery(
+                    self, self.lastQueryItems, startDate, endDate,
+                    self.lastQueryType == 'internal', self.winDataDictionary.mainTable,
+                    deltaChecked=deltaChecked, overlayChecked=overlayChecked,
+                )
                 if Config.debug:
                     Logic.logMessage("DEBUG", "btnRefreshPressed: Refreshed query with last parameters")
             else:
