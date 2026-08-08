@@ -2,18 +2,20 @@
 """
 Build a raw Python runtime zip for DataDoctor (no launcher, no .venv).
 
-Contents are the app files you point Python at under Project Files/:
-  DataDoctor.py / DataDoctor.pyw
+Contents (run/extract as the app root, or apply into Project Files/ via applyUpdate):
+  DataDoctor.py
   requirements.txt
-  core/          (bunker.db also under temp/ as merge source for applyUpdate)
+  README.txt
+  core/          (live bunker.db; also temp/bunker.db as merge source for applyUpdate)
   ui/
   quickLook/     (stock snippets; apply does not delete user-added files)
-  VERSION.txt
-  scripts/updateBunker.py  (optional merge helper)
+  certs/         (optional Aquarius certs — place aquarius.pem / .cer here)
+  oracle/        (optional Instant Client / network admin; client/ skipped if huge)
+  scripts/updateBunker.py
 
 Typical uses:
   - Drop into an existing launcher install's Update/ folder → run applyUpdate
-  - Manual/raw install: unzip and run with a local Python 3.13 + venv
+  - Manual/raw install: unzip, venv + pip, run DataDoctor.py
 
 Run from project root:
   python scripts/packagePython.py
@@ -57,6 +59,18 @@ def copyTree(src: Path, dst: Path, ignoreNames=None):
             shutil.copy2(rootPath / fileName, outDir / fileName)
 
 
+def ensureDirInZip(stage: Path, rel: str, readmeText: str | None = None):
+    """
+    Guarantee an empty-or-present folder is represented in the zip.
+    Zip has no empty dirs; write a small README when the folder has no files.
+    """
+    d = stage / rel
+    d.mkdir(parents=True, exist_ok=True)
+    hasFiles = any(p.is_file() for p in d.rglob('*'))
+    if not hasFiles and readmeText:
+        (d / "README.txt").write_text(readmeText.strip() + "\n", encoding="utf-8")
+
+
 def main() -> int:
     root = projectRoot()
     parser = argparse.ArgumentParser(
@@ -73,6 +87,12 @@ def main() -> int:
         action="store_true",
         help="Keep staging directory under dist/",
     )
+    parser.add_argument(
+        "--include-oracle-client",
+        dest="includeOracleClient",
+        action="store_true",
+        help="Include oracle/client if present (large / platform-specific)",
+    )
     args = parser.parse_args()
 
     if not (root / "DataDoctor.py").is_file():
@@ -87,21 +107,52 @@ def main() -> int:
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
 
-    # Payload root = contents that land under Project Files/
+    # App trees
     for name in ("core", "ui", "quickLook"):
         src = root / name
         if src.exists():
-            copyTree(src, stage / name, ignoreNames={'.git', '__pycache__', 'client'})
+            copyTree(src, stage / name, ignoreNames={'.git', '__pycache__'})
+
+    # oracle: network/admin config always useful; Instant Client is optional/huge
+    oracleSrc = root / "oracle"
+    if oracleSrc.exists():
+        ignore = {'.git', '__pycache__'}
+        if not args.includeOracleClient:
+            ignore.add('client')
+        copyTree(oracleSrc, stage / "oracle", ignoreNames=ignore)
+        if not args.includeOracleClient and (oracleSrc / "client").exists():
+            print("NOTE: oracle/client skipped (use --include-oracle-client to bundle)")
+    ensureDirInZip(
+        stage,
+        "oracle",
+        "Optional Oracle Instant Client / network config.\n"
+        "Place Instant Client under oracle/client if needed, or set TNS_ADMIN.\n"
+        "sqlnet.ora may live under oracle/network/admin/.\n",
+    )
+
+    # certs: user drops Aquarius .pem / .cer here (app does not create this folder)
+    certsSrc = root / "certs"
+    if certsSrc.exists():
+        copyTree(certsSrc, stage / "certs", ignoreNames={'.git', '__pycache__'})
+    ensureDirInZip(
+        stage,
+        "certs",
+        "Optional Aquarius TLS certificates.\n"
+        "Place aquarius.pem or a .cer/.crt here. .pfx is not supported.\n"
+        "The app never creates this folder — keep it next to the app root.\n",
+    )
 
     shutil.copy2(root / "DataDoctor.py", stage / "DataDoctor.py")
-    # Windows launcher expects .pyw name in some installs — include both
-    shutil.copy2(root / "DataDoctor.py", stage / "DataDoctor.pyw")
 
     req = root / "requirements.txt"
     if req.is_file():
         shutil.copy2(req, stage / "requirements.txt")
 
-    # Bunker as merge source (applyUpdate uses temp/ for updateBunker)
+    licenseSrc = root / "LICENSE"
+    if licenseSrc.is_file():
+        shutil.copy2(licenseSrc, stage / "LICENSE")
+
+    # Bunker as merge source for applyUpdate (live DB is core/bunker.db)
     bunker = root / "core" / "bunker.db"
     if bunker.is_file():
         (stage / "temp").mkdir(parents=True, exist_ok=True)
@@ -114,14 +165,38 @@ def main() -> int:
         (stage / "scripts").mkdir(parents=True, exist_ok=True)
         shutil.copy2(updateBunker, stage / "scripts" / "updateBunker.py")
 
-    versionText = (
-        f"DataDoctor Python package\n"
-        f"Built: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-        f"Raw runtime tree (no launcher / venv).\n"
-        f"Update path: drop into install Update/ and run applyUpdate.\n"
-        f"Manual path: unzip, create a venv, pip install -r requirements.txt, run DataDoctor.py.\n"
-    )
-    (stage / "VERSION.txt").write_text(versionText, encoding="utf-8")
+    readme = f"""DataDoctor — Python package
+Built: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+This zip is the raw app tree (no launcher, no .venv).
+
+LAYOUT
+------
+  DataDoctor.py       Main entry
+  requirements.txt
+  core/               App code + bunker.db
+  ui/
+  quickLook/
+  certs/              Optional Aquarius certs (aquarius.pem / .cer)
+  oracle/             Optional Oracle network admin / Instant Client
+  temp/bunker.db      Packaged dictionary for merge (applyUpdate only)
+  scripts/            updateBunker helper
+
+MANUAL INSTALL
+--------------
+1) Unzip somewhere writable.
+2) python3 -m venv .venv
+3) .venv/bin/pip install -r requirements.txt   (Windows: .venv\\Scripts\\pip ...)
+4) .venv/bin/python DataDoctor.py
+
+UPDATE AN EXISTING LAUNCHER INSTALL
+--------------------------------------
+1) Close Data Doctor.
+2) Drop this zip into the install's Update/ folder.
+3) Run applyUpdate.cmd / applyUpdate.sh (or python applyUpdate.py).
+4) Restart Data Doctor.
+"""
+    (stage / "README.txt").write_text(readme.strip() + "\n", encoding="utf-8")
 
     if outZip.exists():
         outZip.unlink()

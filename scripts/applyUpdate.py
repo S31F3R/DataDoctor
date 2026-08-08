@@ -165,30 +165,32 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
             if len(kids) == 1:
                 payload = kids[0]
 
-        # App code
-        for name in ("DataDoctor.py", "DataDoctor.pyw", "requirements.txt", "VERSION.txt"):
+        # App entry + docs (no .pyw — that is Windows package only)
+        for name in ("DataDoctor.py", "requirements.txt", "README.txt", "LICENSE"):
             src = payload / name
             if src.is_file():
                 shutil.copy2(src, projectFiles / name)
                 print(f"Updated {name}")
 
         # Trees (do not overwrite live bunker.db here)
-        if (payload / "ui").is_dir():
-            copyTreeMerge(payload / "ui", projectFiles / "ui")
-            print("Updated ui/")
-        if (payload / "core").is_dir():
-            copyTreeMerge(
-                payload / "core",
-                projectFiles / "core",
-                skipNames={"bunker.db"},
-            )
-            print("Updated core/ (bunker.db skipped — merge path)")
-        if (payload / "quickLook").is_dir():
-            copyTreeMerge(payload / "quickLook", projectFiles / "quickLook")
-            print("Updated quickLook/ (merged by name)")
-        if (payload / "scripts").is_dir():
-            copyTreeMerge(payload / "scripts", projectFiles / "scripts")
-            print("Updated scripts/")
+        treeNames = (
+            "ui",
+            "core",
+            "quickLook",
+            "certs",
+            "oracle",
+            "scripts",
+        )
+        for tree in treeNames:
+            src = payload / tree
+            if not src.is_dir():
+                continue
+            if tree == "core":
+                copyTreeMerge(src, projectFiles / tree, skipNames={"bunker.db"})
+                print("Updated core/ (bunker.db skipped — merge path)")
+            else:
+                copyTreeMerge(src, projectFiles / tree)
+                print(f"Updated {tree}/")
 
         py = resolvePython(projectFiles)
         print(f"Using Python: {py}")
