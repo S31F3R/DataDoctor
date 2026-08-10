@@ -23,7 +23,7 @@ Current Tests
    Notes: Root cause was matplotlib widgetlock held by Zoom mode blocking pick_event.
          Fix: legend hit-test on button_press + cancel toolbar drag when clicking legend.
 
-[ ] Windows package: no root updateBunker.cmd; applyUpdate merges bunker
+[x] Windows package: no root updateBunker.cmd; applyUpdate merges bunker
    Steps:
      a. python scripts/packageWindows.py --skip-venv
      b. Unzip dist/DataDoctor-Windows-*.zip → confirm NO updateBunker.cmd at zip root.
@@ -35,7 +35,7 @@ Current Tests
    Notes: applyUpdate.py already called runBunkerMerge; packaging no longer ships
          root updateBunker.cmd. Dictionary-only still: python Project Files/scripts/updateBunker.py
 
-[ ] Graph always shows data-point markers (dots)
+[x] Graph always shows data-point markers (dots)
    Steps:
      a. Query a dense series (e.g. Hoover elev, many points) → Graph.
      b. Confirm circular markers along the line (not just hover hit-targets).
@@ -43,7 +43,7 @@ Current Tests
         regular dots (markevery thins them so the line stays readable).
      d. Hover still shows tooltips near points.
 
-[ ] Graph Y-axis keeps absolute values when zoomed (no offset scale)
+[x] Graph Y-axis keeps absolute values when zoomed (no offset scale)
    Steps:
      a. Graph Hoover (or any ~1040 elevation) so full-range Y is ~1040.2–1041.0.
      b. Zoom into a small vertical band.
@@ -51,7 +51,7 @@ Current Tests
         scale with a hidden +1.04e3 offset.
      d. Dual-Y (right axis) same rule if present.
 
-[ ] Fresh graph pan at full range has no visual "adjust"/resize
+[x] Fresh graph pan at full range has no visual "adjust"/resize
    Steps:
      a. Open a fresh graph (home / full data range).
      b. Middle-mouse pan or arrow-key pan → view should not jump/re-layout;
@@ -59,7 +59,7 @@ Current Tests
      c. Toolbar pan at full range should snap back without a frame-layout resize.
      d. After zoom-in, pan still clamps to data ends without overshooting.
 
-[ ] Refresh bumps end time to now (unless historical > 2h)
+[x] Refresh bumps end time to now (unless historical > 2h)
    Steps:
      a. Run a recent query (end near current time, e.g. Prev Day → Current or custom end ≈ now).
      b. Wait a few minutes → Refresh → end extends to "now"; new points appear if available.
@@ -92,7 +92,7 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[ ] Python zip + applyUpdate (first pass)
+[x] Python zip + applyUpdate (first pass)
    Steps:
      a. python scripts/packagePython.py → dist/DataDoctor-Python-YYYYMMDD.zip
      b. Zip has DataDoctor.py (no .pyw), README.txt, core/ (with bunker.db), ui/,
