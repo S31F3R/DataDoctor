@@ -23,6 +23,42 @@ Current Tests
    Notes: Root cause was matplotlib widgetlock held by Zoom mode blocking pick_event.
          Fix: legend hit-test on button_press + cancel toolbar drag when clicking legend.
 
+[ ] Windows package: no root updateBunker.cmd; applyUpdate merges bunker
+   Steps:
+     a. python scripts/packageWindows.py --skip-venv
+     b. Unzip dist/DataDoctor-Windows-*.zip → confirm NO updateBunker.cmd at zip root.
+     c. Confirm applyUpdate.cmd exists; Project Files/scripts/ has applyUpdate.py +
+        updateBunker.py; Update/ folder present.
+     d. On a test install: drop DataDoctor-Python-*.zip into Update/, run applyUpdate.cmd
+        → code refreshes; bunker merge runs (logs updateBunker / merge); pip runs;
+        zip removed; app still starts.
+   Notes: applyUpdate.py already called runBunkerMerge; packaging no longer ships
+         root updateBunker.cmd. Dictionary-only still: python Project Files/scripts/updateBunker.py
+
+[ ] Graph always shows data-point markers (dots)
+   Steps:
+     a. Query a dense series (e.g. Hoover elev, many points) → Graph.
+     b. Confirm circular markers along the line (not just hover hit-targets).
+     c. Sparse series (≤~250 pts) should mark every point; denser series still show
+        regular dots (markevery thins them so the line stays readable).
+     d. Hover still shows tooltips near points.
+
+[ ] Graph Y-axis keeps absolute values when zoomed (no offset scale)
+   Steps:
+     a. Graph Hoover (or any ~1040 elevation) so full-range Y is ~1040.2–1041.0.
+     b. Zoom into a small vertical band.
+     c. Tick labels must still read as ~1040.x elevations — NOT a shifted 0.4–0.8
+        scale with a hidden +1.04e3 offset.
+     d. Dual-Y (right axis) same rule if present.
+
+[ ] Fresh graph pan at full range has no visual "adjust"/resize
+   Steps:
+     a. Open a fresh graph (home / full data range).
+     b. Middle-mouse pan or arrow-key pan → view should not jump/re-layout;
+        fully zoomed-out pan is a quiet no-op.
+     c. Toolbar pan at full range should snap back without a frame-layout resize.
+     d. After zoom-in, pan still clamps to data ends without overshooting.
+
 [ ] Refresh bumps end time to now (unless historical > 2h)
    Steps:
      a. Run a recent query (end near current time, e.g. Prev Day → Current or custom end ≈ now).
