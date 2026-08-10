@@ -5,7 +5,11 @@
 (none)
 
 ####### CURRENT BUGS #######
-(none — handled items moved to documentation/test.txt)
+-Package windows script is copying over a updateBunker.cmd to project root. This isn't needed with the way applyUpdate.cmd works
+    -Validate updateBunker does happen when applyUpdate.cmd is ran. If not, make sure it does. the updateBunker.cmd code would or should most likely be in applyUpdate.py
+-The graph used to have dots for the data points but now it does not. I can still hoover around the area a point is supposed to be to get the tooltip. Need to get the points back so it's easier to find
+-In the graph I'm using data from Hoover dam. The full range of what I'm graphing shows 1040.2 to 1041.0. When I zoom in, the graph no longer shows thoes elevations. Instead of shows a different scale of 0.4 to 0.8. This makes it look like it's no longer an elevation. Zoomed in numbers should never visibably be less than the range
+-On a fresh graph, if I try to pan, the pan limiting code visually makes the whole graph "adjust", like the code forced it to resize again. Need to not have this visual adjust happen
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
