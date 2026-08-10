@@ -11,6 +11,18 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
+[x] Graph legend ☑/☐ toggle works while Zoom is default-on
+   Steps:
+     a. Query data with 2+ series → Graph. Confirm Zoom tool is active (default).
+     b. Click a legend checkbox/label (☑ Name) → that series hides; mark becomes ☐;
+        axes rescale to remaining visible series.
+     c. Click the same entry again → series returns (☑); axes rescale.
+     d. Click a different series while Zoom is still active → only that series toggles
+        (no zoom rubberband stuck on the legend).
+     e. Drag-zoom on the plot area still works (legend clicks must not break zoom).
+   Notes: Root cause was matplotlib widgetlock held by Zoom mode blocking pick_event.
+         Fix: legend hit-test on button_press + cancel toolbar drag when clicking legend.
+
 [ ] Refresh bumps end time to now (unless historical > 2h)
    Steps:
      a. Run a recent query (end near current time, e.g. Prev Day → Current or custom end ≈ now).
