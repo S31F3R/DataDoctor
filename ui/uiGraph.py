@@ -1002,8 +1002,36 @@ class GraphPanel(QWidget):
         except Exception:
             self._xDataLim = self._yDataLim = self._y2DataLim = None
 
+    @staticmethod
+    def _disableAxisOffset(ax):
+        """
+        Force plain absolute tick labels on Y (and plain X when numeric).
+
+        Matplotlib's default ScalarFormatter subtracts a common offset when the
+        zoomed span is small relative to magnitude (e.g. elev 1040.2–1041.0
+        becomes tick labels 0.2–1.0 with +1.04e3). Elevations / stage values
+        must stay absolute so zoom never looks like a different quantity.
+        """
+        if ax is None:
+            return
+        try:
+            ax.ticklabel_format(axis='y', useOffset=False, style='plain')
+        except Exception:
+            try:
+                fmt = ax.yaxis.get_major_formatter()
+                if hasattr(fmt, 'set_useOffset'):
+                    fmt.set_useOffset(False)
+                if hasattr(fmt, 'set_scientific'):
+                    fmt.set_scientific(False)
+            except Exception:
+                pass
+
     def _clampAxis(self, ax, getLim, setLim, dataLim):
-        """Keep a view window inside dataLim (allow zoom-in; block pan past ends)."""
+        """Keep a view window inside dataLim (allow zoom-in; block pan past ends).
+
+        Only calls setLim when limits actually change so a no-op pan at full
+        range does not redraw / re-layout the figure (visual "adjust").
+        """
         if ax is None or dataLim is None:
             return
         d0, d1 = dataLim
@@ -1021,16 +1049,22 @@ class GraphPanel(QWidget):
         viewSpan = v1 - v0
         if not np.isfinite(viewSpan) or viewSpan <= 0:
             return
-        if viewSpan >= dataSpan:
-            setLim(d0, d1)
+        # Relative tolerance: avoid float noise triggering a redraw
+        tol = max(abs(dataSpan) * 1e-12, 1e-15)
+        if viewSpan >= dataSpan - tol:
+            # Already at (or past) full range — only snap if we truly drifted
+            if abs(v0 - d0) > tol or abs(v1 - d1) > tol:
+                setLim(d0, d1)
             return
-        if v0 < d0:
-            v0 = d0
-            v1 = d0 + viewSpan
-        if v1 > d1:
-            v1 = d1
-            v0 = d1 - viewSpan
-        setLim(v0, v1)
+        new0, new1 = v0, v1
+        if new0 < d0 - tol:
+            new0 = d0
+            new1 = d0 + viewSpan
+        if new1 > d1 + tol:
+            new1 = d1
+            new0 = d1 - viewSpan
+        if abs(new0 - v0) > tol or abs(new1 - v1) > tol:
+            setLim(new0, new1)
 
     def _clampView(self):
         """Constrain pan to the original timeseries / data range."""
@@ -1130,13 +1164,26 @@ class GraphPanel(QWidget):
                 mask = np.isfinite(x) & np.isfinite(y)
                 if not np.any(mask):
                     continue
+                # Always show point markers so hover targets are visible.
+                # Dense series use markevery so the line stays readable.
+                nPts = int(mask.sum())
+                if nPts <= 250:
+                    markEvery = 1
+                    markerSize = 3.5
+                elif nPts <= 1500:
+                    markEvery = max(1, nPts // 250)
+                    markerSize = 3.0
+                else:
+                    markEvery = max(1, nPts // 200)
+                    markerSize = 2.5
                 (line,) = axTarget.plot(
                     x[mask], y[mask],
                     label=label,
                     color=color,
                     linewidth=1.4,
-                    marker='o' if mask.sum() <= 80 else None,
-                    markersize=3,
+                    marker='o',
+                    markersize=markerSize,
+                    markevery=markEvery,
                     picker=5,
                 )
                 self._lineData.append({
@@ -1170,6 +1217,11 @@ class GraphPanel(QWidget):
             ax.set_xlabel('Timestamp')
         else:
             ax.set_xlabel('Row')
+
+        # Keep absolute Y values when zoomed (no 0.4–0.8 offset of 1040.x elev)
+        self._disableAxisOffset(ax)
+        if self._ax2 is not None:
+            self._disableAxisOffset(self._ax2)
 
         ax.set_title('')
 
@@ -1292,6 +1344,33 @@ class GraphPanel(QWidget):
             return
         self._onHover(event)
 
+    def _panLimitsClamped(self, cur0, cur1, dataLim, delta):
+        """Return (new0, new1, changed) after applying delta and clamping to dataLim."""
+        if dataLim is None:
+            return cur0 + delta, cur1 + delta, abs(delta) > 0
+        d0, d1 = dataLim
+        if d1 < d0:
+            d0, d1 = d1, d0
+        dataSpan = d1 - d0
+        viewSpan = cur1 - cur0
+        if viewSpan < 0:
+            cur0, cur1 = cur1, cur0
+            viewSpan = -viewSpan
+        tol = max(abs(dataSpan) * 1e-12, 1e-15) if np.isfinite(dataSpan) else 1e-15
+        # Fully zoomed out: pan is a no-op (avoids snap-back redraw / "resize")
+        if np.isfinite(dataSpan) and viewSpan >= dataSpan - tol:
+            return cur0, cur1, False
+        new0 = cur0 + delta
+        new1 = cur1 + delta
+        if new0 < d0:
+            new0 = d0
+            new1 = d0 + viewSpan
+        if new1 > d1:
+            new1 = d1
+            new0 = d1 - viewSpan
+        changed = abs(new0 - cur0) > tol or abs(new1 - cur1) > tol
+        return new0, new1, changed
+
     def _handleMiddlePan(self, event):
         """Pan axes by middle-mouse drag, clamped to data range."""
         if self._ax is None or self.canvas is None or self._midPan is None:
@@ -1308,19 +1387,29 @@ class GraphPanel(QWidget):
             dy = float(p0[1] - p1[1])
             x0, x1 = self._ax.get_xlim()
             y0, y1 = self._ax.get_ylim()
-            self._ax.set_xlim(x0 + dx, x1 + dx)
-            self._ax.set_ylim(y0 + dy, y1 + dy)
-            if self._ax2 is not None:
+            nx0, nx1, xCh = self._panLimitsClamped(x0, x1, self._xDataLim, dx)
+            ny0, ny1, yCh = self._panLimitsClamped(y0, y1, self._yDataLim, dy)
+            changed = xCh or yCh
+            if xCh:
+                self._ax.set_xlim(nx0, nx1)
+            if yCh:
+                self._ax.set_ylim(ny0, ny1)
+            if self._ax2 is not None and yCh:
                 y20, y21 = self._ax2.get_ylim()
                 span1 = (y1 - y0) if (y1 - y0) != 0 else 1.0
                 span2 = y21 - y20
                 dy2 = dy * (span2 / span1) if span1 else 0.0
-                self._ax2.set_ylim(y20 + dy2, y21 + dy2)
+                n20, n21, y2Ch = self._panLimitsClamped(
+                    y20, y21, self._y2DataLim, dy2
+                )
+                if y2Ch:
+                    self._ax2.set_ylim(n20, n21)
+                changed = changed or y2Ch
         except Exception:
             return
-        self._clampView()
         self._midPan = (curPx, curPy)
-        self.canvas.draw_idle()
+        if changed:
+            self.canvas.draw_idle()
 
     def _handleArrowPan(self, qtKey):
         """
@@ -1338,27 +1427,51 @@ class GraphPanel(QWidget):
             return False
         dx = (x1 - x0) * frac
         dy = (y1 - y0) * frac
+        changed = False
 
         if key == Qt.Key.Key_Left:
-            self._ax.set_xlim(x0 - dx, x1 - dx)
+            nx0, nx1, ch = self._panLimitsClamped(x0, x1, self._xDataLim, -dx)
+            if ch:
+                self._ax.set_xlim(nx0, nx1)
+                changed = True
         elif key == Qt.Key.Key_Right:
-            self._ax.set_xlim(x0 + dx, x1 + dx)
+            nx0, nx1, ch = self._panLimitsClamped(x0, x1, self._xDataLim, dx)
+            if ch:
+                self._ax.set_xlim(nx0, nx1)
+                changed = True
         elif key == Qt.Key.Key_Up:
-            self._ax.set_ylim(y0 + dy, y1 + dy)
+            ny0, ny1, ch = self._panLimitsClamped(y0, y1, self._yDataLim, dy)
+            if ch:
+                self._ax.set_ylim(ny0, ny1)
+                changed = True
             if self._ax2 is not None:
                 y20, y21 = self._ax2.get_ylim()
                 dy2 = (y21 - y20) * frac
-                self._ax2.set_ylim(y20 + dy2, y21 + dy2)
+                n20, n21, y2Ch = self._panLimitsClamped(
+                    y20, y21, self._y2DataLim, dy2
+                )
+                if y2Ch:
+                    self._ax2.set_ylim(n20, n21)
+                    changed = True
         elif key == Qt.Key.Key_Down:
-            self._ax.set_ylim(y0 - dy, y1 - dy)
+            ny0, ny1, ch = self._panLimitsClamped(y0, y1, self._yDataLim, -dy)
+            if ch:
+                self._ax.set_ylim(ny0, ny1)
+                changed = True
             if self._ax2 is not None:
                 y20, y21 = self._ax2.get_ylim()
                 dy2 = (y21 - y20) * frac
-                self._ax2.set_ylim(y20 - dy2, y21 - dy2)
+                n20, n21, y2Ch = self._panLimitsClamped(
+                    y20, y21, self._y2DataLim, -dy2
+                )
+                if y2Ch:
+                    self._ax2.set_ylim(n20, n21)
+                    changed = True
         else:
             return False
 
-        self._clampView()
+        if not changed:
+            return True  # consumed key; nothing to redraw
         try:
             if self.toolbar is not None:
                 self.toolbar.push_current()

@@ -4,20 +4,25 @@ Build a Windows distribution zip for DataDoctor.
 
 Zip layout (launcher is the zip root):
   Data Doctor.exe          (from launcher/)
-  updateBunker.cmd
+  applyUpdate.cmd          (full update: code + bunker merge + pip)
   README.txt               (generated each run)
-  UPDATE.txt               (how to merge bunker.db)
+  UPDATE.txt               (how to apply updates / merge dictionary)
   LICENSE
   python-3.13.x-amd64.exe  (if present under launcher/)
+  Update/                  (drop DataDoctor-Python-*.zip here)
   Project Files/
     DataDoctor.pyw
     core/                  (live bunker.db stays here for the user)
     ui/
     quickLook/
     oracle/
-    scripts/updateBunker.py
+    scripts/applyUpdate.py
+    scripts/updateBunker.py  (called by applyUpdate; also usable alone)
     temp/bunker.db         (packaged dictionary for merge — do not overwrite live)
     .venv/                 (if present)
+
+Note: root updateBunker.cmd is intentionally NOT packaged — applyUpdate.cmd
+merges bunker.db. Dictionary-only merges use Project Files/scripts/updateBunker.py.
 
 Run from project root:
   python scripts/packageWindows.py
@@ -107,10 +112,12 @@ FIRST RUN
 UPDATING AN EXISTING INSTALL
 ----------------------------
 See UPDATE.txt next to this file. Short version:
-  - Copy new files over your install
-  - Do NOT overwrite your live Project Files\\core\\bunker.db with the zip's
-    core copy if you have local dictionary edits — use updateBunker.cmd instead
-  - Packaged dictionary for merge: Project Files\\temp\\bunker.db
+  - Prefer: drop a DataDoctor-Python-*.zip into Update\\ and run applyUpdate.cmd
+    (refreshes code, merges dictionary, runs pip)
+  - Do NOT overwrite your live Project Files\\core\\bunker.db with a zip's
+    core copy if you have local dictionary edits
+  - Dictionary-only merge (from a full package's temp bunker):
+      python "Project Files\\scripts\\updateBunker.py"
 
 AQUARIUS CERTIFICATES
 ---------------------
@@ -151,13 +158,15 @@ When you install a new *full* package over an existing copy, your live data
 dictionary is Project Files\\core\\bunker.db. The package also ships a fresh
 dictionary at Project Files\\temp\\bunker.db (merge source).
 
-1) Close DataDoctor.
-2) Double-click updateBunker.cmd
-3) The script backs up live bunker.db, merges rows, never deletes yours.
+Full updates already merge via applyUpdate.cmd. For dictionary-only:
 
-Manual:
-  python "Project Files\\scripts\\updateBunker.py" --packaged "Project Files\\temp\\bunker.db" --user "Project Files\\core\\bunker.db"
-  python "Project Files\\scripts\\updateBunker.py" --dry-run
+1) Close DataDoctor.
+2) From the install root:
+     python "Project Files\\scripts\\updateBunker.py"
+   Or with explicit paths:
+     python "Project Files\\scripts\\updateBunker.py" --packaged "Project Files\\temp\\bunker.db" --user "Project Files\\core\\bunker.db"
+     python "Project Files\\scripts\\updateBunker.py" --dry-run
+3) The script backs up live bunker.db, merges rows, never deletes yours.
 """
     (stage / "UPDATE.txt").write_text(text.strip() + "\n", encoding="utf-8")
 
@@ -193,11 +202,12 @@ def main():
     stage.mkdir(parents=True)
 
     # 1) Everything under launcher → zip root
-    #    Skip nested Project Files content we rebuild below (except we re-add scripts)
+    #    Skip nested Project Files content we rebuild below (except we re-add scripts).
+    #    updateBunker.cmd is NOT shipped — applyUpdate.cmd handles bunker merge.
     copyTree(
         launcher,
         stage,
-        ignoreNames={'.git', 'src', '__pycache__'},
+        ignoreNames={'.git', 'src', '__pycache__', 'updateBunker.cmd'},
     )
 
     # 2) LICENSE at zip root
@@ -309,15 +319,14 @@ def main():
         )
 
     writeRootCmd(
-        "updateBunker.cmd",
-        "Project Files\\scripts\\updateBunker.py",
-        "Merge packaged Project Files\\temp\\bunker.db into live core\\bunker.db",
-    )
-    writeRootCmd(
         "applyUpdate.cmd",
         "Project Files\\scripts\\applyUpdate.py",
-        "Apply newest zip in Update\\ to this install",
+        "Apply newest zip in Update\\ (code refresh + bunker merge + pip)",
     )
+    # Ensure no leftover root updateBunker.cmd (legacy launcher copy / old stages)
+    legacyBunkerCmd = stage / "updateBunker.cmd"
+    if legacyBunkerCmd.is_file():
+        legacyBunkerCmd.unlink()
 
     # README + UPDATE (generated every run so installer version notes stay current)
     installerName = None

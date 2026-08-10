@@ -12,8 +12,11 @@ Rules (per To Do List):
 Typical Windows layout after packageWindows.py:
   <install>/Project Files/temp/bunker.db   ← packaged merge source
   <install>/Project Files/core/bunker.db   ← live user dictionary (destination)
-  <install>/updateBunker.cmd               ← runs this script
   <install>/Project Files/scripts/updateBunker.py
+  <install>/applyUpdate.cmd                ← full update (calls this for bunker merge)
+
+Full app updates run this automatically via applyUpdate.cmd / applyUpdate.py.
+Dictionary-only merges can invoke this script directly.
 
 After a successful merge (not dry-run), Project Files/temp/ is removed.
 

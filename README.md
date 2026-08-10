@@ -25,11 +25,13 @@ Or add the cert to your system trust store.
 
 - Windows zip: `python scripts/packageWindows.py` (launcher as zip root, app under `Project Files/`, `DataDoctor.pyw`)
   - Generates `README.txt` and `UPDATE.txt` each run
+  - Full update: drop `DataDoctor-Python-*.zip` in `Update/`, run `applyUpdate.cmd`
+    (code refresh + bunker merge via `Project Files/scripts/updateBunker.py` + pip)
   - Packaged dictionary for merge: `Project Files/temp/bunker.db`
   - Live user dictionary: `Project Files/core/bunker.db`
   - Copies `DataDoctor.ico` next to `DataDoctor.pyw` for the Windows taskbar icon
   - Optional: `--skip-venv` to omit Project Files\\.venv
-- Merge: `updateBunker.cmd` → `Project Files/scripts/updateBunker.py` (then removes `temp/`)
+- Dictionary-only merge (optional): `python "Project Files/scripts/updateBunker.py"`
 - Linux AppImage (true `.AppImage` only — no zip/tar from this script):
   `python scripts/packageAppImage.py`
   - Host-native: build on the same arch/glibc you intend to ship (x86_64, aarch64, …)
