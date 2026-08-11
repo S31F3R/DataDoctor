@@ -365,7 +365,7 @@ def buildApp(root: Path, outApp: Path, workPath: Path) -> int:
         if srcPath.exists():
             args.extend(["--add-data", f"{srcPath}{sep}{dest}"])
 
-    for package in ("oracledb", "cryptography", "keyring", "matplotlib"):
+    for package in ("oracledb", "cryptography", "keyring", "matplotlib", "pygame"):
         args.extend(["--collect-all", package])
 
     for mod in (

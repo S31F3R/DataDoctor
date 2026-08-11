@@ -1,11 +1,11 @@
 ####### CURRENT TASKS #######
-(none — see documentation/test.txt for in-progress / retest items)
+(none)
 
 ####### FUTURE TASKS #######
 (none)
 
 ####### CURRENT BUGS #######
-(none — handled items moved to documentation/test.txt)
+(none)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
@@ -49,6 +49,8 @@
 -When Seifer confirms a test item: mark [x] in test.txt (and leave off this list)
 -If a test fails: keep in test.txt with notes; do not put back on To Do until abandoned
 -Clean up test.txt after confirmed [x] items (standard workflow): drop long steps for [x] into a short Confirmed list; keep retest items detailed
--Commits: Grok may commit freely on all paths EXCEPT documentation/
-    - documentation/ (To Do List, test.txt, notes, API docs, etc.) → Seifer only
-    - Everything else is allowed (code, scripts, ui, README.md, requirements, sounds, icons, …)
+-Documentation: Grok may edit documentation/ as part of normal workflow (To Do, test.txt, notes, etc.)
+-Commits:
+    - Grok may auto-commit code paths (ui, core, scripts, README, requirements, sounds, icons, …)
+    - Grok must NOT auto-commit documentation/ — Seifer commits those
+    - secret.grok is gitignored; never commit it

@@ -7,7 +7,7 @@ import os
 import re
 from datetime import datetime
 import numpy as np
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPalette, QCursor
 from PyQt6.QtWidgets import (
     QApplication, QVBoxLayout, QWidget, QSizePolicy, QLabel, QToolTip,
@@ -558,13 +558,15 @@ class GraphPanel(QWidget):
         self._useDatetime = False
         self._theme = 'light'
         self._lastTipKey = None
-        # Map legend artist id → entry index for pick events
-        self._legendPickMap = {}
         # Full data extents (with padding) — pan stays inside these
         self._xDataLim = None
         self._yDataLim = None
         self._y2DataLim = None
         self._clamping = False
+        self._updatingMarkers = False
+        self._autoscalingY = False
+        self._autoscaleYPending = False
+        self._lastXLim = None
         # Middle-mouse pan state: (last xdata, last ydata) in axes coords
         self._midPan = None
 
@@ -574,10 +576,12 @@ class GraphPanel(QWidget):
         except Exception:
             pass
         self._lastTipKey = None
-        self._legendPickMap = {}
         self._xDataLim = None
         self._yDataLim = None
         self._y2DataLim = None
+        self._lastXLim = None
+        self._autoscaleYPending = False
+        self._autoscalingY = False
         self._midPan = None
         if self.canvas is not None:
             for cid in (
@@ -724,6 +728,9 @@ class GraphPanel(QWidget):
         """
         In-plot legend (same spot as before). Click an entry to toggle that
         series; labels use ☑/☐ so it still feels like checkboxes without a side panel.
+
+        Toggles are handled in button_press (not pick_event): zoom/pan mode holds
+        canvas.widgetlock, which blocks Figure.pick and would silence legend clicks.
         """
         if self._ax is None or not self._lineData:
             self._legend = None
@@ -764,45 +771,152 @@ class GraphPanel(QWidget):
             except Exception:
                 pass
 
-        # Make legend lines + text pickable → toggle series
-        self._legendPickMap = {}
+        # Keep legend proxy lines always drawn (dimmed when series is off)
         try:
-            legLines = legend.get_lines()
-            legTexts = legend.get_texts()
-            for i, (legLine, legText) in enumerate(zip(legLines, legTexts)):
-                if i >= len(self._lineData):
-                    break
-                legLine.set_picker(8)
-                legText.set_picker(8)
-                self._legendPickMap[id(legLine)] = i
-                self._legendPickMap[id(legText)] = i
-                # Keep legend proxy always visible (dim when series off)
+            for legLine in legend.get_lines():
                 legLine.set_visible(True)
-        except Exception as e:
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"_buildInteractiveLegend pick setup: {e}")
+        except Exception:
+            pass
 
         self._legend = legend
 
-    def _onLegendPick(self, event):
-        """Toggle series visibility when a legend line or label is clicked."""
-        artist = getattr(event, 'artist', None)
-        if artist is None:
-            return
-        idx = self._legendPickMap.get(id(artist))
+    def _legendRenderer(self):
+        """Best-effort renderer for window-extent hit tests."""
+        if self.canvas is None:
+            return None
+        try:
+            return self.canvas.get_renderer()
+        except Exception:
+            return None
+
+    def _isOverLegend(self, event):
+        """True if the mouse event is inside the legend frame (display coords)."""
+        if self._legend is None or event is None:
+            return False
+        if event.x is None or event.y is None:
+            return False
+        try:
+            bbox = self._legend.get_window_extent(self._legendRenderer())
+            pad = 3.0
+            # Cast to plain bool — bbox coords are often numpy scalars
+            return bool(
+                bbox.x0 - pad <= event.x <= bbox.x1 + pad
+                and bbox.y0 - pad <= event.y <= bbox.y1 + pad
+            )
+        except Exception:
+            return False
+
+    def _legendHitIndex(self, event):
+        """
+        Series index if (event.x, event.y) hits a legend row (line sample or label).
+        None if not over a row (still may be over legend frame — see _isOverLegend).
+        """
+        if self._legend is None or event is None:
+            return None
+        if event.x is None or event.y is None:
+            return None
+        if not self._isOverLegend(event):
+            return None
+        renderer = self._legendRenderer()
+        try:
+            texts = self._legend.get_texts()
+            lines = self._legend.get_lines()
+            for i, text in enumerate(texts):
+                if i >= len(self._lineData):
+                    break
+                try:
+                    tb = text.get_window_extent(renderer)
+                except Exception:
+                    continue
+                # Extend left to cover the colored line sample next to the label
+                x0 = tb.x0 - 30.0
+                if i < len(lines):
+                    try:
+                        lb = lines[i].get_window_extent(renderer)
+                        x0 = min(x0, lb.x0 - 4.0)
+                    except Exception:
+                        pass
+                y0, y1 = tb.y0 - 3.0, tb.y1 + 3.0
+                x1 = tb.x1 + 6.0
+                if x0 <= event.x <= x1 and y0 <= event.y <= y1:
+                    return i
+        except Exception as e:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"_legendHitIndex: {e}")
+        return None
+
+    def _toggleSeriesAt(self, idx):
+        """Toggle visibility of series at _lineData index; refresh legend + axes.
+
+        Keep the current X zoom (do not home the view). Refit Y only to remaining
+        visible series still in the current X window.
+        """
         if idx is None or idx < 0 or idx >= len(self._lineData):
-            return
+            return False
         entry = self._lineData[idx]
         line = entry.get('line')
         if line is None:
-            return
+            return False
         visible = not line.get_visible()
         line.set_visible(visible)
         entry['visible'] = visible
         self._refreshLegendAppearance()
-        self._rescaleToVisible()
+        # Do not call _rescaleToVisible() — that resets X to full series range.
+        self._autoscaleYToXView()
         if self.canvas is not None:
             self.canvas.draw_idle()
+        return True
+
+    def _cancelToolbarInteraction(self):
+        """
+        Abort zoom rubberband / pan that the toolbar already started on this click.
+        Needed because the toolbar's button_press runs before ours (registered first).
+        """
+        tb = self.toolbar
+        if tb is None or self.canvas is None:
+            return
+        try:
+            zinfo = getattr(tb, '_zoom_info', None)
+            if zinfo is not None:
+                try:
+                    cid = getattr(zinfo, 'cid', None)
+                    if cid is not None:
+                        self.canvas.mpl_disconnect(cid)
+                except Exception:
+                    pass
+                try:
+                    tb.remove_rubberband()
+                except Exception:
+                    pass
+                tb._zoom_info = None
+
+            pinfo = getattr(tb, '_pan_info', None)
+            if pinfo is not None:
+                try:
+                    cid = getattr(pinfo, 'cid', None)
+                    if cid is not None:
+                        self.canvas.mpl_disconnect(cid)
+                except Exception:
+                    pass
+                try:
+                    for ax in getattr(pinfo, 'axes', ()) or ():
+                        try:
+                            ax.end_pan()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                # Restore toolbar's normal motion handler (release_pan does this)
+                try:
+                    tb._id_drag = self.canvas.mpl_connect(
+                        'motion_notify_event', tb.mouse_move
+                    )
+                except Exception:
+                    pass
+                tb._pan_info = None
+        except Exception as e:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"_cancelToolbarInteraction: {e}")
 
     def _refreshLegendAppearance(self):
         """Update ☑/☐ marks and dim legend proxies for hidden series."""
@@ -824,6 +938,24 @@ class GraphPanel(QWidget):
                     legLines[i].set_alpha(alpha)
         except Exception:
             pass
+
+    @staticmethod
+    def _padLimits(valsList):
+        """Min/max of concatenated arrays with 5% padding; None if empty."""
+        if not valsList:
+            return None
+        cat = np.concatenate(valsList)
+        if cat.size == 0:
+            return None
+        lo = float(np.nanmin(cat))
+        hi = float(np.nanmax(cat))
+        if not np.isfinite(lo) or not np.isfinite(hi):
+            return None
+        if lo == hi:
+            pad = abs(lo) * 0.05 if lo != 0 else 1.0
+            return lo - pad, hi + pad
+        span = hi - lo
+        return lo - span * 0.05, hi + span * 0.05
 
     def _rescaleToVisible(self):
         """
@@ -852,32 +984,21 @@ class GraphPanel(QWidget):
             else:
                 leftYs.append(ys[finite])
 
-        def _padLimits(valsList):
-            if not valsList:
-                return None
-            cat = np.concatenate(valsList)
-            if cat.size == 0:
-                return None
-            lo = float(np.nanmin(cat))
-            hi = float(np.nanmax(cat))
-            if not np.isfinite(lo) or not np.isfinite(hi):
-                return None
-            if lo == hi:
-                pad = abs(lo) * 0.05 if lo != 0 else 1.0
-                return lo - pad, hi + pad
-            span = hi - lo
-            return lo - span * 0.05, hi + span * 0.05
-
-        xLim = _padLimits(allXs)
+        xLim = self._padLimits(allXs)
         if xLim is not None:
             self._ax.set_xlim(xLim)
-        yLim = _padLimits(leftYs)
+        yLim = self._padLimits(leftYs)
         if yLim is not None:
             self._ax.set_ylim(yLim)
         if self._ax2 is not None:
-            y2 = _padLimits(rightYs)
+            y2 = self._padLimits(rightYs)
             if y2 is not None:
                 self._ax2.set_ylim(y2)
+
+        try:
+            self._lastXLim = tuple(self._ax.get_xlim())
+        except Exception:
+            self._lastXLim = None
 
         self._clampView()
         try:
@@ -885,6 +1006,101 @@ class GraphPanel(QWidget):
                 self.toolbar.push_current()
         except Exception:
             pass
+
+    def _autoscaleYToXView(self):
+        """
+        Fit Y axes to points whose X falls in the current xlim.
+
+        Zoom / horizontal pan only change X; Y then matches on-screen data so a
+        far-away outlier (e.g. -99999) no longer skews scale when it is off-screen.
+        """
+        if self._ax is None or not self._lineData or self._autoscalingY:
+            return False
+        try:
+            x0, x1 = self._ax.get_xlim()
+        except Exception:
+            return False
+        if x1 < x0:
+            x0, x1 = x1, x0
+
+        leftYs = []
+        rightYs = []
+        for entry in self._lineData:
+            line = entry.get('line')
+            if line is None or not line.get_visible():
+                continue
+            xs = entry.get('xs')
+            ys = entry.get('ys')
+            if xs is None or ys is None or len(ys) == 0:
+                continue
+            xs = np.asarray(xs, dtype=float)
+            ys = np.asarray(ys, dtype=float)
+            if xs.size != ys.size:
+                continue
+            finite = np.isfinite(xs) & np.isfinite(ys)
+            inView = finite & (xs >= x0) & (xs <= x1)
+            if not np.any(inView):
+                continue
+            if line.axes is self._ax2 and self._ax2 is not None:
+                rightYs.append(ys[inView])
+            else:
+                leftYs.append(ys[inView])
+
+        yLim = self._padLimits(leftYs)
+        y2Lim = self._padLimits(rightYs) if self._ax2 is not None else None
+        if yLim is None and y2Lim is None:
+            return False
+
+        self._autoscalingY = True
+        changed = False
+        try:
+            if yLim is not None:
+                try:
+                    cur = tuple(self._ax.get_ylim())
+                except Exception:
+                    cur = None
+                if cur is None or abs(cur[0] - yLim[0]) > 1e-12 or abs(cur[1] - yLim[1]) > 1e-12:
+                    self._ax.set_ylim(yLim)
+                    self._disableAxisOffset(self._ax)
+                    changed = True
+            if self._ax2 is not None and y2Lim is not None:
+                try:
+                    cur2 = tuple(self._ax2.get_ylim())
+                except Exception:
+                    cur2 = None
+                if cur2 is None or abs(cur2[0] - y2Lim[0]) > 1e-12 or abs(cur2[1] - y2Lim[1]) > 1e-12:
+                    self._ax2.set_ylim(y2Lim)
+                    self._disableAxisOffset(self._ax2)
+                    changed = True
+        finally:
+            self._autoscalingY = False
+
+        if changed and self.canvas is not None:
+            try:
+                self.canvas.draw_idle()
+            except Exception:
+                pass
+        return changed
+
+    def _scheduleAutoscaleY(self):
+        """
+        Run Y-fit after the current event finishes.
+
+        Matplotlib zoom sets xlim then ylim from the rubberband; if we autoscale
+        Y during xlim_changed, the subsequent set_ylim would undo it. Defer so
+        we always win after both limits are applied.
+        """
+        if self._autoscaleYPending:
+            return
+        self._autoscaleYPending = True
+
+        def _run():
+            self._autoscaleYPending = False
+            if self._ax is None or self._autoscalingY or self._clamping:
+                return
+            self._autoscaleYToXView()
+
+        QTimer.singleShot(0, _run)
 
     def _storeDataLimits(self):
         """Capture padded data extents after initial plot (pan boundary)."""
@@ -900,8 +1116,36 @@ class GraphPanel(QWidget):
         except Exception:
             self._xDataLim = self._yDataLim = self._y2DataLim = None
 
+    @staticmethod
+    def _disableAxisOffset(ax):
+        """
+        Force plain absolute tick labels on Y (and plain X when numeric).
+
+        Matplotlib's default ScalarFormatter subtracts a common offset when the
+        zoomed span is small relative to magnitude (e.g. elev 1040.2–1041.0
+        becomes tick labels 0.2–1.0 with +1.04e3). Elevations / stage values
+        must stay absolute so zoom never looks like a different quantity.
+        """
+        if ax is None:
+            return
+        try:
+            ax.ticklabel_format(axis='y', useOffset=False, style='plain')
+        except Exception:
+            try:
+                fmt = ax.yaxis.get_major_formatter()
+                if hasattr(fmt, 'set_useOffset'):
+                    fmt.set_useOffset(False)
+                if hasattr(fmt, 'set_scientific'):
+                    fmt.set_scientific(False)
+            except Exception:
+                pass
+
     def _clampAxis(self, ax, getLim, setLim, dataLim):
-        """Keep a view window inside dataLim (allow zoom-in; block pan past ends)."""
+        """Keep a view window inside dataLim (allow zoom-in; block pan past ends).
+
+        Only calls setLim when limits actually change so a no-op pan at full
+        range does not redraw / re-layout the figure (visual "adjust").
+        """
         if ax is None or dataLim is None:
             return
         d0, d1 = dataLim
@@ -919,16 +1163,22 @@ class GraphPanel(QWidget):
         viewSpan = v1 - v0
         if not np.isfinite(viewSpan) or viewSpan <= 0:
             return
-        if viewSpan >= dataSpan:
-            setLim(d0, d1)
+        # Relative tolerance: avoid float noise triggering a redraw
+        tol = max(abs(dataSpan) * 1e-12, 1e-15)
+        if viewSpan >= dataSpan - tol:
+            # Already at (or past) full range — only snap if we truly drifted
+            if abs(v0 - d0) > tol or abs(v1 - d1) > tol:
+                setLim(d0, d1)
             return
-        if v0 < d0:
-            v0 = d0
-            v1 = d0 + viewSpan
-        if v1 > d1:
-            v1 = d1
-            v0 = d1 - viewSpan
-        setLim(v0, v1)
+        new0, new1 = v0, v1
+        if new0 < d0 - tol:
+            new0 = d0
+            new1 = d0 + viewSpan
+        if new1 > d1 + tol:
+            new1 = d1
+            new0 = d1 - viewSpan
+        if abs(new0 - v0) > tol or abs(new1 - v1) > tol:
+            setLim(new0, new1)
 
     def _clampView(self):
         """Constrain pan to the original timeseries / data range."""
@@ -1028,13 +1278,20 @@ class GraphPanel(QWidget):
                 mask = np.isfinite(x) & np.isfinite(y)
                 if not np.any(mask):
                     continue
+                # Always show point markers. Density is view-aware (see
+                # _refreshMarkerDensity): zoomed-in 1-min data marks every point;
+                # full-range dense series thin so the line stays readable.
+                nPts = int(mask.sum())
+                markEvery = self._markerEveryForCount(nPts)
+                markerSize = self._markerSizeForCount(nPts)
                 (line,) = axTarget.plot(
                     x[mask], y[mask],
                     label=label,
                     color=color,
                     linewidth=1.4,
-                    marker='o' if mask.sum() <= 80 else None,
-                    markersize=3,
+                    marker='o',
+                    markersize=markerSize,
+                    markevery=markEvery,
                     picker=5,
                 )
                 self._lineData.append({
@@ -1069,6 +1326,11 @@ class GraphPanel(QWidget):
         else:
             ax.set_xlabel('Row')
 
+        # Keep absolute Y values when zoomed (no 0.4–0.8 offset of 1040.x elev)
+        self._disableAxisOffset(ax)
+        if self._ax2 is not None:
+            self._disableAxisOffset(self._ax2)
+
         ax.set_title('')
 
         gridColor = '#666666' if theme in ('dark', 'retro') else None
@@ -1083,10 +1345,17 @@ class GraphPanel(QWidget):
         # Capture home extents before any pan (used as clamp bounds)
         self.canvas.draw()
         self._storeDataLimits()
+        try:
+            self._lastXLim = tuple(self._ax.get_xlim())
+        except Exception:
+            self._lastXLim = None
+        # Initial full-range marker density; updates again on zoom/pan
+        self._refreshMarkerDensity(draw=False)
 
         self._hoverCid = self.canvas.mpl_connect('motion_notify_event', self._onMotion)
         self._keyCid = self.canvas.mpl_connect('key_press_event', self._onKeyPress)
-        self._pickCid = self.canvas.mpl_connect('pick_event', self._onLegendPick)
+        # Legend toggles use button_press (not pick_event): zoom/pan holds widgetlock
+        # which disables Figure.pick, so pick_event never fires while Zoom is default-on.
         self._pressCid = self.canvas.mpl_connect('button_press_event', self._onButtonPress)
         self._releaseCid = self.canvas.mpl_connect('button_release_event', self._onButtonRelease)
         # Clamp toolbar pan/zoom navigation as well
@@ -1134,15 +1403,124 @@ class GraphPanel(QWidget):
         if qtKey is not None:
             self._handleArrowPan(qtKey)
 
+    def _markerEveryForCount(self, nPts):
+        """How often to place a marker for nPts points in the current view."""
+        nPts = int(nPts or 0)
+        if nPts <= 5000:
+            return 1
+        if nPts <= 30000:
+            return max(1, nPts // 4000)
+        return max(1, nPts // 3000)
+
+    def _markerSizeForCount(self, nPts):
+        nPts = int(nPts or 0)
+        if nPts <= 1000:
+            return 3.5
+        if nPts <= 5000:
+            return 2.8
+        if nPts <= 30000:
+            return 2.2
+        return 1.8
+
+    def _refreshMarkerDensity(self, draw=True):
+        """
+        Recompute markevery from points visible in the current X range.
+
+        Full-year 1-minute series thins when zoomed out; zooming into a day
+        marks every minute instead of looking randomly sparse.
+        """
+        if self._updatingMarkers or self._ax is None or not self._lineData:
+            return False
+        try:
+            x0, x1 = self._ax.get_xlim()
+        except Exception:
+            return False
+        if x1 < x0:
+            x0, x1 = x1, x0
+
+        self._updatingMarkers = True
+        changed = False
+        try:
+            for entry in self._lineData:
+                line = entry.get('line')
+                xs = entry.get('xs')
+                if line is None or xs is None:
+                    continue
+                xs = np.asarray(xs, dtype=float)
+                if xs.size == 0:
+                    continue
+                inView = np.isfinite(xs) & (xs >= x0) & (xs <= x1)
+                nVis = int(np.count_nonzero(inView))
+                if nVis <= 0:
+                    me = self._markerEveryForCount(xs.size)
+                    idxs = np.arange(0, xs.size, me, dtype=int)
+                else:
+                    me = self._markerEveryForCount(nVis)
+                    idxs = np.flatnonzero(inView)[::me]
+                markEvery = idxs.tolist() if idxs.size else None
+                try:
+                    prev = line.get_markevery()
+                except Exception:
+                    prev = object()
+                if markEvery != prev:
+                    try:
+                        line.set_markevery(markEvery)
+                        line.set_markersize(self._markerSizeForCount(nVis or xs.size))
+                        changed = True
+                    except Exception as e:
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"_refreshMarkerDensity set: {e}")
+        finally:
+            self._updatingMarkers = False
+
+        if changed and draw and self.canvas is not None:
+            try:
+                self.canvas.draw_idle()
+            except Exception:
+                pass
+        return changed
+
     def _onAxisLimitsChanged(self, ax):
-        """Keep toolbar pan/zoom from leaving the timeseries range."""
-        if self._clamping:
+        """Keep toolbar pan/zoom from leaving the timeseries range; refresh markers."""
+        if self._clamping or self._updatingMarkers or self._autoscalingY:
             return
         self._clampView()
+        # When X moves (zoom / horizontal pan), refit Y to points still in view so
+        # off-screen outliers (e.g. -99999) no longer dominate the scale.
+        try:
+            curX = tuple(self._ax.get_xlim()) if self._ax is not None else None
+        except Exception:
+            curX = None
+        if curX is not None and curX != self._lastXLim:
+            self._lastXLim = curX
+            self._scheduleAutoscaleY()
+        self._refreshMarkerDensity(draw=True)
 
     def _onButtonPress(self, event):
-        """Middle mouse button starts free pan (no toolbar mode needed)."""
-        if event is None or event.button != 2 or event.inaxes is None:
+        """
+        Left-click: toggle series via legend rows (works while Zoom/Pan is active).
+        Middle-click: free pan without needing toolbar pan mode.
+        """
+        if event is None:
+            return
+
+        # Legend show/hide — must not rely on pick_event (blocked by widgetlock in zoom)
+        if event.button == 1:
+            idx = self._legendHitIndex(event)
+            if idx is not None:
+                self._toggleSeriesAt(idx)
+                self._cancelToolbarInteraction()
+                try:
+                    QToolTip.hideText()
+                except Exception:
+                    pass
+                return
+            # Click on legend frame/title: don't start a zoom rubberband there
+            if self._isOverLegend(event):
+                self._cancelToolbarInteraction()
+                return
+
+        if event.button != 2 or event.inaxes is None:
             return
         # Store display pixels so pan stays stable after limit changes
         self._midPan = (float(event.x), float(event.y))
@@ -1167,6 +1545,33 @@ class GraphPanel(QWidget):
             return
         self._onHover(event)
 
+    def _panLimitsClamped(self, cur0, cur1, dataLim, delta):
+        """Return (new0, new1, changed) after applying delta and clamping to dataLim."""
+        if dataLim is None:
+            return cur0 + delta, cur1 + delta, abs(delta) > 0
+        d0, d1 = dataLim
+        if d1 < d0:
+            d0, d1 = d1, d0
+        dataSpan = d1 - d0
+        viewSpan = cur1 - cur0
+        if viewSpan < 0:
+            cur0, cur1 = cur1, cur0
+            viewSpan = -viewSpan
+        tol = max(abs(dataSpan) * 1e-12, 1e-15) if np.isfinite(dataSpan) else 1e-15
+        # Fully zoomed out: pan is a no-op (avoids snap-back redraw / "resize")
+        if np.isfinite(dataSpan) and viewSpan >= dataSpan - tol:
+            return cur0, cur1, False
+        new0 = cur0 + delta
+        new1 = cur1 + delta
+        if new0 < d0:
+            new0 = d0
+            new1 = d0 + viewSpan
+        if new1 > d1:
+            new1 = d1
+            new0 = d1 - viewSpan
+        changed = abs(new0 - cur0) > tol or abs(new1 - cur1) > tol
+        return new0, new1, changed
+
     def _handleMiddlePan(self, event):
         """Pan axes by middle-mouse drag, clamped to data range."""
         if self._ax is None or self.canvas is None or self._midPan is None:
@@ -1183,19 +1588,29 @@ class GraphPanel(QWidget):
             dy = float(p0[1] - p1[1])
             x0, x1 = self._ax.get_xlim()
             y0, y1 = self._ax.get_ylim()
-            self._ax.set_xlim(x0 + dx, x1 + dx)
-            self._ax.set_ylim(y0 + dy, y1 + dy)
-            if self._ax2 is not None:
+            nx0, nx1, xCh = self._panLimitsClamped(x0, x1, self._xDataLim, dx)
+            ny0, ny1, yCh = self._panLimitsClamped(y0, y1, self._yDataLim, dy)
+            changed = xCh or yCh
+            if xCh:
+                self._ax.set_xlim(nx0, nx1)
+            if yCh:
+                self._ax.set_ylim(ny0, ny1)
+            if self._ax2 is not None and yCh:
                 y20, y21 = self._ax2.get_ylim()
                 span1 = (y1 - y0) if (y1 - y0) != 0 else 1.0
                 span2 = y21 - y20
                 dy2 = dy * (span2 / span1) if span1 else 0.0
-                self._ax2.set_ylim(y20 + dy2, y21 + dy2)
+                n20, n21, y2Ch = self._panLimitsClamped(
+                    y20, y21, self._y2DataLim, dy2
+                )
+                if y2Ch:
+                    self._ax2.set_ylim(n20, n21)
+                changed = changed or y2Ch
         except Exception:
             return
-        self._clampView()
         self._midPan = (curPx, curPy)
-        self.canvas.draw_idle()
+        if changed:
+            self.canvas.draw_idle()
 
     def _handleArrowPan(self, qtKey):
         """
@@ -1213,27 +1628,51 @@ class GraphPanel(QWidget):
             return False
         dx = (x1 - x0) * frac
         dy = (y1 - y0) * frac
+        changed = False
 
         if key == Qt.Key.Key_Left:
-            self._ax.set_xlim(x0 - dx, x1 - dx)
+            nx0, nx1, ch = self._panLimitsClamped(x0, x1, self._xDataLim, -dx)
+            if ch:
+                self._ax.set_xlim(nx0, nx1)
+                changed = True
         elif key == Qt.Key.Key_Right:
-            self._ax.set_xlim(x0 + dx, x1 + dx)
+            nx0, nx1, ch = self._panLimitsClamped(x0, x1, self._xDataLim, dx)
+            if ch:
+                self._ax.set_xlim(nx0, nx1)
+                changed = True
         elif key == Qt.Key.Key_Up:
-            self._ax.set_ylim(y0 + dy, y1 + dy)
+            ny0, ny1, ch = self._panLimitsClamped(y0, y1, self._yDataLim, dy)
+            if ch:
+                self._ax.set_ylim(ny0, ny1)
+                changed = True
             if self._ax2 is not None:
                 y20, y21 = self._ax2.get_ylim()
                 dy2 = (y21 - y20) * frac
-                self._ax2.set_ylim(y20 + dy2, y21 + dy2)
+                n20, n21, y2Ch = self._panLimitsClamped(
+                    y20, y21, self._y2DataLim, dy2
+                )
+                if y2Ch:
+                    self._ax2.set_ylim(n20, n21)
+                    changed = True
         elif key == Qt.Key.Key_Down:
-            self._ax.set_ylim(y0 - dy, y1 - dy)
+            ny0, ny1, ch = self._panLimitsClamped(y0, y1, self._yDataLim, -dy)
+            if ch:
+                self._ax.set_ylim(ny0, ny1)
+                changed = True
             if self._ax2 is not None:
                 y20, y21 = self._ax2.get_ylim()
                 dy2 = (y21 - y20) * frac
-                self._ax2.set_ylim(y20 - dy2, y21 - dy2)
+                n20, n21, y2Ch = self._panLimitsClamped(
+                    y20, y21, self._y2DataLim, -dy2
+                )
+                if y2Ch:
+                    self._ax2.set_ylim(n20, n21)
+                    changed = True
         else:
             return False
 
-        self._clampView()
+        if not changed:
+            return True  # consumed key; nothing to redraw
         try:
             if self.toolbar is not None:
                 self.toolbar.push_current()

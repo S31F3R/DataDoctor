@@ -256,7 +256,7 @@ def pyinstallerSpecArgs(root: Path, distPath: Path, workPath: Path) -> list:
     # always trace: getpass, secrets, ssl, … Missing getpass → AppImage crash on
     # first Oracle import. Same class of issue as oracle/python-oracledb#31.
     # --collect-all pulls package data + binaries; hidden-imports cover stdlib.
-    for package in ("oracledb", "cryptography", "keyring", "matplotlib"):
+    for package in ("oracledb", "cryptography", "keyring", "matplotlib", "pygame"):
         args.extend(["--collect-all", package])
 
     for mod in (

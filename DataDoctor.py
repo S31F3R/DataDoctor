@@ -1069,8 +1069,13 @@ class uiMain(QMainWindow):
                     action.triggered.connect(lambda: self.showHeaderDetails("headerOverlay", meta))
 
             graphAction = menu.addAction("Graph")
+            # Multi-column selection: graph all selected columns (include the
+            # right-clicked header). Old code passed only [c], so Graph on the
+            # first/last selected header ignored the rest of the highlight.
             graphAction.triggered.connect(
-                lambda checked=False, c=col: self.graphTableSelection(columns=[c])
+                lambda checked=False, c=col: self.graphTableSelection(
+                    columns=self._columnsForHeaderGraph(c)
+                )
             )
 
             if menu.actions():
@@ -1084,6 +1089,29 @@ class uiMain(QMainWindow):
                 )
         except Exception as e:
             Logic.logException("showHeaderContextMenu failed", e)
+
+    def _columnsForHeaderGraph(self, clickedCol):
+        """
+        Columns to graph from a header right-click Graph action.
+
+        Uses the current table multi-selection and always includes the clicked
+        header column. Empty selection → just the clicked column.
+        """
+        cols = set()
+        table = self.mainTable
+        if table is not None:
+            try:
+                for idx in table.selectedIndexes():
+                    cols.add(idx.column())
+                for r in table.selectedRanges():
+                    for c in range(r.leftColumn(), r.rightColumn() + 1):
+                        cols.add(c)
+            except Exception as e:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"_columnsForHeaderGraph selection: {e}")
+        if clickedCol is not None and clickedCol >= 0:
+            cols.add(clickedCol)
+        return sorted(cols)
 
     def showHeaderDetails(self, queryType, meta):
         """Open uiDetails for header metadata."""

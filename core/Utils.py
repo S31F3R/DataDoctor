@@ -61,7 +61,7 @@ controlLayouts = {
         'chkbQAQC': (156, 90, 21, 22),
         'chkbRetroMode': (88, 120, 21, 22),
         'chkbDebug': (96, 150, 21, 22),
-        'chkbBetaUpdates': (220, 180, 21, 22),
+        'chkbBetaUpdates': (100, 180, 21, 22),      # match winOptions.ui non-retro (after "Beta updates:")
         'rbBOP': (210, 0, 141, 22),                 # .ui
         'rbEOP': (350, 0, 131, 22),                 # .ui
         # winQuery
@@ -79,7 +79,7 @@ controlLayouts = {
         'chkbQAQC': (261, 88, 21, 22),              # was 259; RESPONSE +2 x
         'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
         'chkbDebug': (130, 149, 21, 22),
-        'chkbBetaUpdates': (300, 179, 21, 22),
+        'chkbBetaUpdates': (150, 179, 21, 22),      # Press Start wider "Beta updates:" (-20 x)
         'rbBOP': (193, 0, 141, 22),                 # was 199; -6 x
         'rbEOP': (350, 0, 131, 22),
         'btnDataIdInfo': (406, 5, 31, 20),

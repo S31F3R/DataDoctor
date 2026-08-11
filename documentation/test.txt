@@ -11,14 +11,6 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Refresh bumps end time to now (unless historical > 2h)
-   Steps:
-     a. Run a recent query (end near current time, e.g. Prev Day → Current or custom end ≈ now).
-     b. Wait a few minutes → Refresh → end extends to "now"; new points appear if available.
-     c. Run a historical range whose end is more than 2 hours in the past.
-     d. Refresh → start/end stay the same (does not jump end to current clock).
-   Notes: threshold is 2 hours before now; lastEndDate is updated when end is bumped.
-
 [ ] HDB password change UI only shows useful outcomes
    Steps:
      a. Change Oracle password in Options → USBR (user that exists on some HDBs).
@@ -44,16 +36,6 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[ ] Python zip + applyUpdate (first pass)
-   Steps:
-     a. python scripts/packagePython.py → dist/DataDoctor-Python-YYYYMMDD.zip
-     b. Zip has DataDoctor.py (no .pyw), README.txt, core/ (with bunker.db), ui/,
-        quickLook/, certs/, oracle/, requirements.txt — no scripts/, no temp/
-     c. Full package (Windows/Mac) includes empty Update/ and applyUpdate.cmd / .sh
-     d. On a test install: drop Python zip into Update/, run applyUpdate → code refreshes,
-        bunker merges via install's updateBunker, pip runs; zip removed; app still starts.
-   Notes: raw Python tree only; launcher-side applyUpdate does merge/pip.
-
 [ ] Update check works with no GitHub releases yet
    Steps:
      a. Start app with network; no popup (silent — nothing published yet is OK).
@@ -69,9 +51,43 @@ Current Tests
      c. Prompt → Download → file lands in Update/ next to install / AppImage.
      d. Launcher: close + applyUpdate. AppImage: Quit and apply (or applyAppImageUpdate.sh).
 
+[x] Graph Y-scale fits data in current X view (outlier off-screen)
+   Steps:
+     a. Graph a series that includes a bad outlier (e.g. -99999) plus normal values.
+        Full view Y may still span the outlier (expected).
+     b. Zoom into a time window that does NOT include the outlier (1-min data is fine).
+        Expect: Y rescales to the points still on screen (tight around real values).
+     c. Zoom / Home back to full range → Y includes the outlier again.
+     d. Horizontal pan into / out of the outlier window → Y refits each time.
+     e. Vertical arrow pan (↑/↓) still works without fighting the auto Y fit.
+     f. Dual-axis graphs: each Y axis fits its own series in the X window.
+   Notes: -99999 (or any far outlier) was keeping full-series Y after X zoom.
+   Fix: on xlim change, deferred _autoscaleYToXView fits Y to in-view points.
+
+[x] Graph legend toggle keeps current X zoom
+Steps:
+   a. Graph 2+ series. Zoom into a time window (not full range).
+   b. Click a legend ☑ to hide that series.
+      Expect: X zoom stays put (same time window); hidden line disappears.
+   c. Click ☐ to show it again — still same X zoom.
+   d. Y may refit to remaining visible series in the current window (OK).
+   e. Home still returns to full range.
+Notes: _toggleSeriesAt used to call _rescaleToVisible() which reset X to full data.
+Fix: keep X; only _autoscaleYToXView for remaining series.
+
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Header Graph uses full multi-column selection (not just click col)
+[x] Graph markers dense when zoomed (1-minute data)
+[x] Beta updates checkbox (UI-owned, code wire-up only)
+[x] Graph legend ☑/☐ toggle works while Zoom is default-on
+[x] Windows package: no root updateBunker.cmd; applyUpdate merges bunker
+[x] Graph always shows data-point markers (dots)
+[x] Graph Y-axis keeps absolute values when zoomed (no offset scale)
+[x] Fresh graph pan at full range has no visual "adjust"/resize
+[x] Refresh bumps end time to now (unless historical > 2h)
+[x] Python zip + applyUpdate (first pass)
 [x] USGS-NWIS intervals: no HOUR; default INSTANT:15
 [x] Options password fields: no layout WARN spam
 [x] Graph opens with Zoom tool active
