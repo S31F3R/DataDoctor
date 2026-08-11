@@ -5,14 +5,7 @@
 (none)
 
 ####### CURRENT BUGS #######
--Highlight 2 collumns with overlay (don't think overlay matters for this) right click and graph, only first column comes up if right clicked on that and select graph. If right clicking on second column, that gets included also
-    -Graph button works properly, same as right clicking on 2nd column. It's just right clicking on the first in the selection does the rest get ignored
-    -On overlay, the bug will show the primary and secondary in the first column. If right clicking on 2nd column, all 4 get graphed
-    -Bug exists if right clicking on last column header. Only graphs all properly if right clicking on a cell in last column
--I graphed 1 minute data, the data points didn't shwo up every minute and the lines were blockly, almost like stairs. Not sure if this is a limitation of the graph tool but graphing day, months, even a years worth of 1 minute data will be something done in the tool. Need to figure out how to make this work and look normal
-    -The block look was due to rounding so that's no longer an issue, the data points are. It's random when a data point shows up
--Just noticed the Beta updates (pre-release/RC) in the options, nice touch! Let me add this in the UI on my side, so remove the creation of that from the code
-    -I need to validate it's not already in the .ui first. If it is, I need to tweak it to line it up like the others and validate it lines up in Retro mode
+(none — active items moved to documentation/test.txt for retest)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look

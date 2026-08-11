@@ -11,61 +11,38 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[x] Graph legend ☑/☐ toggle works while Zoom is default-on
+[ ] Header Graph uses full multi-column selection (not just click col)
    Steps:
-     a. Query data with 2+ series → Graph. Confirm Zoom tool is active (default).
-     b. Click a legend checkbox/label (☑ Name) → that series hides; mark becomes ☐;
-        axes rescale to remaining visible series.
-     c. Click the same entry again → series returns (☑); axes rescale.
-     d. Click a different series while Zoom is still active → only that series toggles
-        (no zoom rubberband stuck on the legend).
-     e. Drag-zoom on the plot area still works (legend clicks must not break zoom).
-   Notes: Root cause was matplotlib widgetlock held by Zoom mode blocking pick_event.
-         Fix: legend hit-test on button_press + cancel toolbar drag when clicking legend.
+     a. Query 2+ normal columns (or overlay pair). Highlight both columns.
+     b. Right-click the FIRST selected column HEADER → Graph.
+        Expect: both columns graphed (overlay → primary+secondary for each).
+     c. Same with right-click on the LAST selected column HEADER → Graph.
+        Expect: same full selection (all series).
+     d. Right-click a CELL in the first column → Graph still graphs full highlight.
+     e. Graph toolbar button still matches multi-select (unchanged).
+     f. Right-click a header with nothing selected → only that one column graphs.
+   Notes: showHeaderContextMenu used to pass columns=[clicked] only.
 
-[x] Windows package: no root updateBunker.cmd; applyUpdate merges bunker
+[ ] Graph markers dense when zoomed (1-minute data)
    Steps:
-     a. python scripts/packageWindows.py --skip-venv
-     b. Unzip dist/DataDoctor-Windows-*.zip → confirm NO updateBunker.cmd at zip root.
-     c. Confirm applyUpdate.cmd exists; Project Files/scripts/ has applyUpdate.py +
-        updateBunker.py; Update/ folder present.
-     d. On a test install: drop DataDoctor-Python-*.zip into Update/, run applyUpdate.cmd
-        → code refreshes; bunker merge runs (logs updateBunker / merge); pip runs;
-        zip removed; app still starts.
-   Notes: applyUpdate.py already called runBunkerMerge; packaging no longer ships
-         root updateBunker.cmd. Dictionary-only still: python Project Files/scripts/updateBunker.py
+     a. Graph ~1 day of 1-minute data → markers should appear on (nearly) every point.
+     b. Graph a long range of 1-minute data (month/year) at full view → markers thin
+        for readability (not random-looking gaps on the full line only).
+     c. Zoom into a short window (hours/day) on that long series → markers densify
+        so points show on each minute (or every point in view when ≤~5000).
+     d. Zoom back out → markers thin again; line still continuous.
+     e. Hover tooltips still work near points.
+   Notes: markevery is now view-aware via _refreshMarkerDensity on xlim change.
+         Stair-step look was already fixed (rounding).
 
-[x] Graph always shows data-point markers (dots)
+[x] Beta updates checkbox (UI-owned, code wire-up only)
    Steps:
-     a. Query a dense series (e.g. Hoover elev, many points) → Graph.
-     b. Confirm circular markers along the line (not just hover hit-targets).
-     c. Sparse series (≤~250 pts) should mark every point; denser series still show
-        regular dots (markevery thins them so the line stays readable).
-     d. Hover still shows tooltips near points.
-
-[x] Graph Y-axis keeps absolute values when zoomed (no offset scale)
-   Steps:
-     a. Graph Hoover (or any ~1040 elevation) so full-range Y is ~1040.2–1041.0.
-     b. Zoom into a small vertical band.
-     c. Tick labels must still read as ~1040.x elevations — NOT a shifted 0.4–0.8
-        scale with a hidden +1.04e3 offset.
-     d. Dual-Y (right axis) same rule if present.
-
-[x] Fresh graph pan at full range has no visual "adjust"/resize
-   Steps:
-     a. Open a fresh graph (home / full data range).
-     b. Middle-mouse pan or arrow-key pan → view should not jump/re-layout;
-        fully zoomed-out pan is a quiet no-op.
-     c. Toolbar pan at full range should snap back without a frame-layout resize.
-     d. After zoom-in, pan still clamps to data ends without overshooting.
-
-[x] Refresh bumps end time to now (unless historical > 2h)
-   Steps:
-     a. Run a recent query (end near current time, e.g. Prev Day → Current or custom end ≈ now).
-     b. Wait a few minutes → Refresh → end extends to "now"; new points appear if available.
-     c. Run a historical range whose end is more than 2 hours in the past.
-     d. Refresh → start/end stay the same (does not jump end to current clock).
-   Notes: threshold is 2 hours before now; lastEndDate is updated when end is bumped.
+     a. Options → General: "Beta updates:" row sits under Debug like other toggles.
+     b. Checkbox lines up after the label (default Noto and Retro).
+     c. Off by default; save → user.config updateChannel=stable|beta persists.
+     d. Tooltip explains pre-release / RC behavior.
+   Notes: Already in winOptions.ui (lblBetaUpdates + chkbBetaUpdates). No runtime
+         widget creation. Label shortened to "Beta updates:"; controlLayouts aligned.
 
 [ ] HDB password change UI only shows useful outcomes
    Steps:
@@ -92,16 +69,6 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[x] Python zip + applyUpdate (first pass)
-   Steps:
-     a. python scripts/packagePython.py → dist/DataDoctor-Python-YYYYMMDD.zip
-     b. Zip has DataDoctor.py (no .pyw), README.txt, core/ (with bunker.db), ui/,
-        quickLook/, certs/, oracle/, requirements.txt — no scripts/, no temp/
-     c. Full package (Windows/Mac) includes empty Update/ and applyUpdate.cmd / .sh
-     d. On a test install: drop Python zip into Update/, run applyUpdate → code refreshes,
-        bunker merges via install's updateBunker, pip runs; zip removed; app still starts.
-   Notes: raw Python tree only; launcher-side applyUpdate does merge/pip.
-
 [ ] Update check works with no GitHub releases yet
    Steps:
      a. Start app with network; no popup (silent — nothing published yet is OK).
@@ -120,6 +87,13 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Graph legend ☑/☐ toggle works while Zoom is default-on
+[x] Windows package: no root updateBunker.cmd; applyUpdate merges bunker
+[x] Graph always shows data-point markers (dots)
+[x] Graph Y-axis keeps absolute values when zoomed (no offset scale)
+[x] Fresh graph pan at full range has no visual "adjust"/resize
+[x] Refresh bumps end time to now (unless historical > 2h)
+[x] Python zip + applyUpdate (first pass)
 [x] USGS-NWIS intervals: no HOUR; default INSTANT:15
 [x] Options password fields: no layout WARN spam
 [x] Graph opens with Zoom tool active
