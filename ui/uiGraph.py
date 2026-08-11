@@ -7,7 +7,7 @@ import os
 import re
 from datetime import datetime
 import numpy as np
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QPalette, QCursor
 from PyQt6.QtWidgets import (
     QApplication, QVBoxLayout, QWidget, QSizePolicy, QLabel, QToolTip,
@@ -564,6 +564,9 @@ class GraphPanel(QWidget):
         self._y2DataLim = None
         self._clamping = False
         self._updatingMarkers = False
+        self._autoscalingY = False
+        self._autoscaleYPending = False
+        self._lastXLim = None
         # Middle-mouse pan state: (last xdata, last ydata) in axes coords
         self._midPan = None
 
@@ -576,6 +579,9 @@ class GraphPanel(QWidget):
         self._xDataLim = None
         self._yDataLim = None
         self._y2DataLim = None
+        self._lastXLim = None
+        self._autoscaleYPending = False
+        self._autoscalingY = False
         self._midPan = None
         if self.canvas is not None:
             for cid in (
@@ -928,6 +934,24 @@ class GraphPanel(QWidget):
         except Exception:
             pass
 
+    @staticmethod
+    def _padLimits(valsList):
+        """Min/max of concatenated arrays with 5% padding; None if empty."""
+        if not valsList:
+            return None
+        cat = np.concatenate(valsList)
+        if cat.size == 0:
+            return None
+        lo = float(np.nanmin(cat))
+        hi = float(np.nanmax(cat))
+        if not np.isfinite(lo) or not np.isfinite(hi):
+            return None
+        if lo == hi:
+            pad = abs(lo) * 0.05 if lo != 0 else 1.0
+            return lo - pad, hi + pad
+        span = hi - lo
+        return lo - span * 0.05, hi + span * 0.05
+
     def _rescaleToVisible(self):
         """
         Rescale Y (and shared X) from currently visible series.
@@ -955,32 +979,21 @@ class GraphPanel(QWidget):
             else:
                 leftYs.append(ys[finite])
 
-        def _padLimits(valsList):
-            if not valsList:
-                return None
-            cat = np.concatenate(valsList)
-            if cat.size == 0:
-                return None
-            lo = float(np.nanmin(cat))
-            hi = float(np.nanmax(cat))
-            if not np.isfinite(lo) or not np.isfinite(hi):
-                return None
-            if lo == hi:
-                pad = abs(lo) * 0.05 if lo != 0 else 1.0
-                return lo - pad, hi + pad
-            span = hi - lo
-            return lo - span * 0.05, hi + span * 0.05
-
-        xLim = _padLimits(allXs)
+        xLim = self._padLimits(allXs)
         if xLim is not None:
             self._ax.set_xlim(xLim)
-        yLim = _padLimits(leftYs)
+        yLim = self._padLimits(leftYs)
         if yLim is not None:
             self._ax.set_ylim(yLim)
         if self._ax2 is not None:
-            y2 = _padLimits(rightYs)
+            y2 = self._padLimits(rightYs)
             if y2 is not None:
                 self._ax2.set_ylim(y2)
+
+        try:
+            self._lastXLim = tuple(self._ax.get_xlim())
+        except Exception:
+            self._lastXLim = None
 
         self._clampView()
         try:
@@ -988,6 +1001,101 @@ class GraphPanel(QWidget):
                 self.toolbar.push_current()
         except Exception:
             pass
+
+    def _autoscaleYToXView(self):
+        """
+        Fit Y axes to points whose X falls in the current xlim.
+
+        Zoom / horizontal pan only change X; Y then matches on-screen data so a
+        far-away outlier (e.g. -99999) no longer skews scale when it is off-screen.
+        """
+        if self._ax is None or not self._lineData or self._autoscalingY:
+            return False
+        try:
+            x0, x1 = self._ax.get_xlim()
+        except Exception:
+            return False
+        if x1 < x0:
+            x0, x1 = x1, x0
+
+        leftYs = []
+        rightYs = []
+        for entry in self._lineData:
+            line = entry.get('line')
+            if line is None or not line.get_visible():
+                continue
+            xs = entry.get('xs')
+            ys = entry.get('ys')
+            if xs is None or ys is None or len(ys) == 0:
+                continue
+            xs = np.asarray(xs, dtype=float)
+            ys = np.asarray(ys, dtype=float)
+            if xs.size != ys.size:
+                continue
+            finite = np.isfinite(xs) & np.isfinite(ys)
+            inView = finite & (xs >= x0) & (xs <= x1)
+            if not np.any(inView):
+                continue
+            if line.axes is self._ax2 and self._ax2 is not None:
+                rightYs.append(ys[inView])
+            else:
+                leftYs.append(ys[inView])
+
+        yLim = self._padLimits(leftYs)
+        y2Lim = self._padLimits(rightYs) if self._ax2 is not None else None
+        if yLim is None and y2Lim is None:
+            return False
+
+        self._autoscalingY = True
+        changed = False
+        try:
+            if yLim is not None:
+                try:
+                    cur = tuple(self._ax.get_ylim())
+                except Exception:
+                    cur = None
+                if cur is None or abs(cur[0] - yLim[0]) > 1e-12 or abs(cur[1] - yLim[1]) > 1e-12:
+                    self._ax.set_ylim(yLim)
+                    self._disableAxisOffset(self._ax)
+                    changed = True
+            if self._ax2 is not None and y2Lim is not None:
+                try:
+                    cur2 = tuple(self._ax2.get_ylim())
+                except Exception:
+                    cur2 = None
+                if cur2 is None or abs(cur2[0] - y2Lim[0]) > 1e-12 or abs(cur2[1] - y2Lim[1]) > 1e-12:
+                    self._ax2.set_ylim(y2Lim)
+                    self._disableAxisOffset(self._ax2)
+                    changed = True
+        finally:
+            self._autoscalingY = False
+
+        if changed and self.canvas is not None:
+            try:
+                self.canvas.draw_idle()
+            except Exception:
+                pass
+        return changed
+
+    def _scheduleAutoscaleY(self):
+        """
+        Run Y-fit after the current event finishes.
+
+        Matplotlib zoom sets xlim then ylim from the rubberband; if we autoscale
+        Y during xlim_changed, the subsequent set_ylim would undo it. Defer so
+        we always win after both limits are applied.
+        """
+        if self._autoscaleYPending:
+            return
+        self._autoscaleYPending = True
+
+        def _run():
+            self._autoscaleYPending = False
+            if self._ax is None or self._autoscalingY or self._clamping:
+                return
+            self._autoscaleYToXView()
+
+        QTimer.singleShot(0, _run)
 
     def _storeDataLimits(self):
         """Capture padded data extents after initial plot (pan boundary)."""
@@ -1232,6 +1340,10 @@ class GraphPanel(QWidget):
         # Capture home extents before any pan (used as clamp bounds)
         self.canvas.draw()
         self._storeDataLimits()
+        try:
+            self._lastXLim = tuple(self._ax.get_xlim())
+        except Exception:
+            self._lastXLim = None
         # Initial full-range marker density; updates again on zoom/pan
         self._refreshMarkerDensity(draw=False)
 
@@ -1365,9 +1477,18 @@ class GraphPanel(QWidget):
 
     def _onAxisLimitsChanged(self, ax):
         """Keep toolbar pan/zoom from leaving the timeseries range; refresh markers."""
-        if self._clamping or self._updatingMarkers:
+        if self._clamping or self._updatingMarkers or self._autoscalingY:
             return
         self._clampView()
+        # When X moves (zoom / horizontal pan), refit Y to points still in view so
+        # off-screen outliers (e.g. -99999) no longer dominate the scale.
+        try:
+            curX = tuple(self._ax.get_xlim()) if self._ax is not None else None
+        except Exception:
+            curX = None
+        if curX is not None and curX != self._lastXLim:
+            self._lastXLim = curX
+            self._scheduleAutoscaleY()
         self._refreshMarkerDensity(draw=True)
 
     def _onButtonPress(self, event):
