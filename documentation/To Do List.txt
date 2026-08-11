@@ -5,7 +5,7 @@
 (none)
 
 ####### CURRENT BUGS #######
-(none — active items moved to documentation/test.txt for retest)
+(none)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look

@@ -11,39 +11,6 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Header Graph uses full multi-column selection (not just click col)
-   Steps:
-     a. Query 2+ normal columns (or overlay pair). Highlight both columns.
-     b. Right-click the FIRST selected column HEADER → Graph.
-        Expect: both columns graphed (overlay → primary+secondary for each).
-     c. Same with right-click on the LAST selected column HEADER → Graph.
-        Expect: same full selection (all series).
-     d. Right-click a CELL in the first column → Graph still graphs full highlight.
-     e. Graph toolbar button still matches multi-select (unchanged).
-     f. Right-click a header with nothing selected → only that one column graphs.
-   Notes: showHeaderContextMenu used to pass columns=[clicked] only.
-
-[ ] Graph markers dense when zoomed (1-minute data)
-   Steps:
-     a. Graph ~1 day of 1-minute data → markers should appear on (nearly) every point.
-     b. Graph a long range of 1-minute data (month/year) at full view → markers thin
-        for readability (not random-looking gaps on the full line only).
-     c. Zoom into a short window (hours/day) on that long series → markers densify
-        so points show on each minute (or every point in view when ≤~5000).
-     d. Zoom back out → markers thin again; line still continuous.
-     e. Hover tooltips still work near points.
-   Notes: markevery is now view-aware via _refreshMarkerDensity on xlim change.
-         Stair-step look was already fixed (rounding).
-
-[x] Beta updates checkbox (UI-owned, code wire-up only)
-   Steps:
-     a. Options → General: "Beta updates:" row sits under Debug like other toggles.
-     b. Checkbox lines up after the label (default Noto and Retro).
-     c. Off by default; save → user.config updateChannel=stable|beta persists.
-     d. Tooltip explains pre-release / RC behavior.
-   Notes: Already in winOptions.ui (lblBetaUpdates + chkbBetaUpdates). No runtime
-         widget creation. Label shortened to "Beta updates:"; controlLayouts aligned.
-
 [ ] HDB password change UI only shows useful outcomes
    Steps:
      a. Change Oracle password in Options → USBR (user that exists on some HDBs).
@@ -84,9 +51,25 @@ Current Tests
      c. Prompt → Download → file lands in Update/ next to install / AppImage.
      d. Launcher: close + applyUpdate. AppImage: Quit and apply (or applyAppImageUpdate.sh).
 
+[ ] Graph Y-scale fits data in current X view (outlier off-screen)
+   Steps:
+     a. Graph a series that includes a bad outlier (e.g. -99999) plus normal values.
+        Full view Y may still span the outlier (expected).
+     b. Zoom into a time window that does NOT include the outlier (1-min data is fine).
+        Expect: Y rescales to the points still on screen (tight around real values).
+     c. Zoom / Home back to full range → Y includes the outlier again.
+     d. Horizontal pan into / out of the outlier window → Y refits each time.
+     e. Vertical arrow pan (↑/↓) still works without fighting the auto Y fit.
+     f. Dual-axis graphs: each Y axis fits its own series in the X window.
+   Notes: -99999 (or any far outlier) was keeping full-series Y after X zoom.
+   Fix: on xlim change, deferred _autoscaleYToXView fits Y to in-view points.
+
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Header Graph uses full multi-column selection (not just click col)
+[x] Graph markers dense when zoomed (1-minute data)
+[x] Beta updates checkbox (UI-owned, code wire-up only)
 [x] Graph legend ☑/☐ toggle works while Zoom is default-on
 [x] Windows package: no root updateBunker.cmd; applyUpdate merges bunker
 [x] Graph always shows data-point markers (dots)
