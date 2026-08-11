@@ -846,7 +846,11 @@ class GraphPanel(QWidget):
         return None
 
     def _toggleSeriesAt(self, idx):
-        """Toggle visibility of series at _lineData index; refresh legend + axes."""
+        """Toggle visibility of series at _lineData index; refresh legend + axes.
+
+        Keep the current X zoom (do not home the view). Refit Y only to remaining
+        visible series still in the current X window.
+        """
         if idx is None or idx < 0 or idx >= len(self._lineData):
             return False
         entry = self._lineData[idx]
@@ -857,7 +861,8 @@ class GraphPanel(QWidget):
         line.set_visible(visible)
         entry['visible'] = visible
         self._refreshLegendAppearance()
-        self._rescaleToVisible()
+        # Do not call _rescaleToVisible() — that resets X to full series range.
+        self._autoscaleYToXView()
         if self.canvas is not None:
             self.canvas.draw_idle()
         return True
