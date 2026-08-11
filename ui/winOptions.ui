@@ -189,13 +189,16 @@
       </rect>
      </property>
      <property name="text">
-      <string>Beta updates (pre-release / RC):</string>
+      <string>Beta updates:</string>
+     </property>
+     <property name="toolTip">
+      <string>When checked, update checks include GitHub pre-releases (beta / RC). Off = stable only.</string>
      </property>
     </widget>
     <widget class="QCheckBox" name="chkbBetaUpdates">
      <property name="geometry">
       <rect>
-       <x>220</x>
+       <x>108</x>
        <y>180</y>
        <width>21</width>
        <height>22</height>

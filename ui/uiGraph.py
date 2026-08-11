@@ -563,6 +563,7 @@ class GraphPanel(QWidget):
         self._yDataLim = None
         self._y2DataLim = None
         self._clamping = False
+        self._updatingMarkers = False
         # Middle-mouse pan state: (last xdata, last ydata) in axes coords
         self._midPan = None
 
@@ -1164,18 +1165,12 @@ class GraphPanel(QWidget):
                 mask = np.isfinite(x) & np.isfinite(y)
                 if not np.any(mask):
                     continue
-                # Always show point markers so hover targets are visible.
-                # Dense series use markevery so the line stays readable.
+                # Always show point markers. Density is view-aware (see
+                # _refreshMarkerDensity): zoomed-in 1-min data marks every point;
+                # full-range dense series thin so the line stays readable.
                 nPts = int(mask.sum())
-                if nPts <= 250:
-                    markEvery = 1
-                    markerSize = 3.5
-                elif nPts <= 1500:
-                    markEvery = max(1, nPts // 250)
-                    markerSize = 3.0
-                else:
-                    markEvery = max(1, nPts // 200)
-                    markerSize = 2.5
+                markEvery = self._markerEveryForCount(nPts)
+                markerSize = self._markerSizeForCount(nPts)
                 (line,) = axTarget.plot(
                     x[mask], y[mask],
                     label=label,
@@ -1237,6 +1232,8 @@ class GraphPanel(QWidget):
         # Capture home extents before any pan (used as clamp bounds)
         self.canvas.draw()
         self._storeDataLimits()
+        # Initial full-range marker density; updates again on zoom/pan
+        self._refreshMarkerDensity(draw=False)
 
         self._hoverCid = self.canvas.mpl_connect('motion_notify_event', self._onMotion)
         self._keyCid = self.canvas.mpl_connect('key_press_event', self._onKeyPress)
@@ -1289,11 +1286,89 @@ class GraphPanel(QWidget):
         if qtKey is not None:
             self._handleArrowPan(qtKey)
 
+    def _markerEveryForCount(self, nPts):
+        """How often to place a marker for nPts points in the current view."""
+        nPts = int(nPts or 0)
+        if nPts <= 5000:
+            return 1
+        if nPts <= 30000:
+            return max(1, nPts // 4000)
+        return max(1, nPts // 3000)
+
+    def _markerSizeForCount(self, nPts):
+        nPts = int(nPts or 0)
+        if nPts <= 1000:
+            return 3.5
+        if nPts <= 5000:
+            return 2.8
+        if nPts <= 30000:
+            return 2.2
+        return 1.8
+
+    def _refreshMarkerDensity(self, draw=True):
+        """
+        Recompute markevery from points visible in the current X range.
+
+        Full-year 1-minute series thins when zoomed out; zooming into a day
+        marks every minute instead of looking randomly sparse.
+        """
+        if self._updatingMarkers or self._ax is None or not self._lineData:
+            return False
+        try:
+            x0, x1 = self._ax.get_xlim()
+        except Exception:
+            return False
+        if x1 < x0:
+            x0, x1 = x1, x0
+
+        self._updatingMarkers = True
+        changed = False
+        try:
+            for entry in self._lineData:
+                line = entry.get('line')
+                xs = entry.get('xs')
+                if line is None or xs is None:
+                    continue
+                xs = np.asarray(xs, dtype=float)
+                if xs.size == 0:
+                    continue
+                inView = np.isfinite(xs) & (xs >= x0) & (xs <= x1)
+                nVis = int(np.count_nonzero(inView))
+                if nVis <= 0:
+                    me = self._markerEveryForCount(xs.size)
+                    idxs = np.arange(0, xs.size, me, dtype=int)
+                else:
+                    me = self._markerEveryForCount(nVis)
+                    idxs = np.flatnonzero(inView)[::me]
+                markEvery = idxs.tolist() if idxs.size else None
+                try:
+                    prev = line.get_markevery()
+                except Exception:
+                    prev = object()
+                if markEvery != prev:
+                    try:
+                        line.set_markevery(markEvery)
+                        line.set_markersize(self._markerSizeForCount(nVis or xs.size))
+                        changed = True
+                    except Exception as e:
+                        if Config.debug:
+                            Logic.logMessage("DEBUG", f"_refreshMarkerDensity set: {e}")
+        finally:
+            self._updatingMarkers = False
+
+        if changed and draw and self.canvas is not None:
+            try:
+                self.canvas.draw_idle()
+            except Exception:
+                pass
+        return changed
+
     def _onAxisLimitsChanged(self, ax):
-        """Keep toolbar pan/zoom from leaving the timeseries range."""
-        if self._clamping:
+        """Keep toolbar pan/zoom from leaving the timeseries range; refresh markers."""
+        if self._clamping or self._updatingMarkers:
             return
         self._clampView()
+        self._refreshMarkerDensity(draw=True)
 
     def _onButtonPress(self, event):
         """
