@@ -51,7 +51,7 @@ Current Tests
      c. Prompt → Download → file lands in Update/ next to install / AppImage.
      d. Launcher: close + applyUpdate. AppImage: Quit and apply (or applyAppImageUpdate.sh).
 
-[ ] Graph Y-scale fits data in current X view (outlier off-screen)
+[x] Graph Y-scale fits data in current X view (outlier off-screen)
    Steps:
      a. Graph a series that includes a bad outlier (e.g. -99999) plus normal values.
         Full view Y may still span the outlier (expected).
@@ -63,6 +63,17 @@ Current Tests
      f. Dual-axis graphs: each Y axis fits its own series in the X window.
    Notes: -99999 (or any far outlier) was keeping full-series Y after X zoom.
    Fix: on xlim change, deferred _autoscaleYToXView fits Y to in-view points.
+
+[x] Graph legend toggle keeps current X zoom
+Steps:
+   a. Graph 2+ series. Zoom into a time window (not full range).
+   b. Click a legend ☑ to hide that series.
+      Expect: X zoom stays put (same time window); hidden line disappears.
+   c. Click ☐ to show it again — still same X zoom.
+   d. Y may refit to remaining visible series in the current window (OK).
+   e. Home still returns to full range.
+Notes: _toggleSeriesAt used to call _rescaleToVisible() which reset X to full data.
+Fix: keep X; only _autoscaleYToXView for remaining series.
 
 
 Confirmed
