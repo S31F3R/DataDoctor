@@ -102,10 +102,11 @@ class uiAbout(QDialog):
         self._cabBackdrop = None
         self._playLabel = None
         self._splashBg = None
-        self._splashRpo = None
-        self._splashRpoFx = None
+        self._splashCredits = None
+        self._splashCreditsFx = None
         self._splashAnim = None
         self._splashHoldTimer = None
+        self._splashCreditTimer = None
         self._gameTimer = None
         self._session = None
         self._pendingEntry = None
@@ -314,22 +315,22 @@ class uiAbout(QDialog):
         bg.hide()
         self._splashBg = bg
 
-        # Shared splash: only READY PLAYER ONE (no per-title line)
-        rpo = QLabel(self)
-        rpo.setObjectName("splashRpo")
-        rpo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        rpo.setGeometry(40, 200, 820, 60)
-        rpo.setText("READY PLAYER ONE")
-        rpo.setStyleSheet(
+        # Shared splash: CREDITS 0 → CREDITS 1 (no per-title line)
+        credits = QLabel(self)
+        credits.setObjectName("splashCredits")
+        credits.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        credits.setGeometry(40, 200, 820, 60)
+        credits.setText("CREDITS 0")
+        credits.setStyleSheet(
             f"color: #66ffff; background: transparent; "
             f"font-family: '{fam}'; font-size: {pt + 3}pt;"
         )
-        fx = QGraphicsOpacityEffect(rpo)
+        fx = QGraphicsOpacityEffect(credits)
         fx.setOpacity(0.0)
-        rpo.setGraphicsEffect(fx)
-        rpo.hide()
-        self._splashRpo = rpo
-        self._splashRpoFx = fx
+        credits.setGraphicsEffect(fx)
+        credits.hide()
+        self._splashCredits = credits
+        self._splashCreditsFx = fx
 
         self._gameTimer = QTimer(self)
         self._gameTimer.setInterval(16)
@@ -338,6 +339,10 @@ class uiAbout(QDialog):
         self._splashHoldTimer = QTimer(self)
         self._splashHoldTimer.setSingleShot(True)
         self._splashHoldTimer.timeout.connect(self._onSplashHoldDone)
+
+        self._splashCreditTimer = QTimer(self)
+        self._splashCreditTimer.setSingleShot(True)
+        self._splashCreditTimer.timeout.connect(self._onSplashCreditInsert)
 
     def eventFilter(self, obj, event):
         if (
@@ -505,14 +510,16 @@ class uiAbout(QDialog):
         self._startSplash(entry)
 
     def _startSplash(self, entry):
-        """Shared intro: fade READY PLAYER ONE only, hold, then play."""
+        """Shared intro: fade CREDITS 0, flip to CREDITS 1, hold, then play."""
         self._stopEmbeddedSession()
         self._pendingEntry = entry
         self._splashMode = True
         self._playMode = False
-        if self._splashRpoFx is not None:
-            self._splashRpoFx.setOpacity(0.0)
-        for w in (self._splashBg, self._splashRpo):
+        if self._splashCredits is not None:
+            self._splashCredits.setText("CREDITS 0")
+        if self._splashCreditsFx is not None:
+            self._splashCreditsFx.setOpacity(0.0)
+        for w in (self._splashBg, self._splashCredits):
             if w is not None:
                 w.show()
                 w.raise_()
@@ -524,8 +531,10 @@ class uiAbout(QDialog):
             self._splashAnim = None
         if self._splashHoldTimer is not None:
             self._splashHoldTimer.stop()
-        if self._splashRpoFx is not None:
-            anim = QPropertyAnimation(self._splashRpoFx, b"opacity", self)
+        if self._splashCreditTimer is not None:
+            self._splashCreditTimer.stop()
+        if self._splashCreditsFx is not None:
+            anim = QPropertyAnimation(self._splashCreditsFx, b"opacity", self)
             anim.setDuration(1600)
             anim.setStartValue(0.0)
             anim.setEndValue(1.0)
@@ -539,8 +548,31 @@ class uiAbout(QDialog):
     def _onSplashFadeDone(self):
         if not self._splashMode:
             return
+        if self._splashCreditTimer is not None:
+            self._splashCreditTimer.start(700)
+        else:
+            self._onSplashCreditInsert()
+
+    def _onSplashCreditInsert(self):
+        if not self._splashMode:
+            return
+        if self._splashCredits is not None:
+            self._splashCredits.setText("CREDITS 1")
+        self._playCreditTone()
         if self._splashHoldTimer is not None:
-            self._splashHoldTimer.start(2000)
+            self._splashHoldTimer.start(1500)
+
+    def _playCreditTone(self):
+        if pygame is None:
+            return
+        try:
+            if pygame.mixer.get_init() is None:
+                pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
+            snd = _synthTone(1180, 80, 0.28)
+            if snd is not None:
+                snd.play()
+        except Exception:
+            pass
 
     def _onSplashHoldDone(self):
         if not self._splashMode:
@@ -562,11 +594,15 @@ class uiAbout(QDialog):
             self._splashAnim = None
         if self._splashHoldTimer is not None:
             self._splashHoldTimer.stop()
-        for w in (self._splashBg, self._splashRpo):
+        if self._splashCreditTimer is not None:
+            self._splashCreditTimer.stop()
+        for w in (self._splashBg, self._splashCredits):
             if w is not None:
                 w.hide()
-        if self._splashRpoFx is not None:
-            self._splashRpoFx.setOpacity(0.0)
+        if self._splashCredits is not None:
+            self._splashCredits.setText("CREDITS 0")
+        if self._splashCreditsFx is not None:
+            self._splashCreditsFx.setOpacity(0.0)
 
     def _beginEmbeddedSession(self, entry):
         self._pendingEntry = None
@@ -644,9 +680,11 @@ class uiAbout(QDialog):
                 self._returnToCatalog()
                 return
             if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
-                if self._splashRpoFx is not None and self._splashRpoFx.opacity() >= 0.99:
+                if self._splashCreditsFx is not None and self._splashCreditsFx.opacity() >= 0.99:
                     if self._splashHoldTimer is not None:
                         self._splashHoldTimer.stop()
+                    if self._splashCreditTimer is not None:
+                        self._splashCreditTimer.stop()
                     self._onSplashHoldDone()
                 return
         if self._playMode:
