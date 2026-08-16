@@ -843,24 +843,31 @@ if pygame is not None:
         except Exception:
             return None
 
-    class _ToneBox:
+    class _Sfx:
         def __init__(self):
             self.ok = False
             self.sounds = {}
             try:
                 if pygame.mixer.get_init() is None:
-                    pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
-                self.sounds = {
-                    "flip": _synthTone(220, 40, 0.3),
-                    "bump": _synthTone(480, 70, 0.35),
-                    "wall": _synthTone(160, 30, 0.2),
-                    "score": _synthTone(660, 90, 0.3),
-                    "drain": _synthTone(90, 280, 0.4),
-                    "launch": _synthTone(320, 120, 0.35),
+                    pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+                names = {
+                    "shoot": "c0.wav",
+                    "boomE": "c1.wav",
+                    "boomP": "c2.wav",
+                    "hit": "c3.wav",
+                    "ufo": "c4.wav",
+                    "life": "c5.wav",
+                    "clear": "c6.wav",
+                    "over": "c7.wav",
                 }
+                for key, fn in names.items():
+                    path = Logic.resourcePath(f"ui/fx/{fn}")
+                    if path and os.path.isfile(path):
+                        self.sounds[key] = pygame.mixer.Sound(path)
                 self.ok = True
             except Exception:
                 self.ok = False
+            self._ufoCh = None
 
         def play(self, name):
             if not self.ok:
@@ -873,12 +880,111 @@ if pygame is not None:
             except Exception:
                 pass
 
-    class _CabinetPb:
-        """Original cyberpunk pinball — embedded in About (no extra window)."""
+        def startUfo(self):
+            if not self.ok:
+                return
+            snd = self.sounds.get("ufo")
+            if snd is None:
+                return
+            try:
+                self.stopUfo()
+                self._ufoCh = snd.play()
+            except Exception:
+                self._ufoCh = None
 
-        def __init__(self, host, markKey="pb"):
+        def stopUfo(self):
+            ch = self._ufoCh
+            self._ufoCh = None
+            if ch is None:
+                return
+            try:
+                ch.stop()
+            except Exception:
+                pass
+
+    def _fxPath(name):
+        try:
+            return Logic.resourcePath(f"ui/fx/{name}")
+        except Exception:
+            return ""
+
+    def _ensureDisplay():
+        """Offscreen format only — never open a visible pygame window."""
+        try:
+            hidden = getattr(pygame, "HIDDEN", None)
+            if hidden is None:
+                return
+            if not pygame.display.get_init():
+                pygame.display.init()
+            if pygame.display.get_surface() is None:
+                pygame.display.set_mode((1, 1), hidden)
+        except Exception:
+            pass
+
+    def _loadSurf(name):
+        path = _fxPath(name)
+        if not path or not os.path.isfile(path):
+            return None
+        try:
+            img = pygame.image.load(path)
+        except Exception:
+            return None
+        try:
+            return img.convert_alpha()
+        except Exception:
+            try:
+                return img.convert()
+            except Exception:
+                return img
+
+    def _fitSurf(img, maxW, maxH):
+        if img is None:
+            return None
+        iw, ih = img.get_size()
+        if iw < 1 or ih < 1:
+            return img
+        s = min(maxW / float(iw), maxH / float(ih))
+        nw = max(1, int(round(iw * s)))
+        nh = max(1, int(round(ih * s)))
+        if (nw, nh) == (iw, ih):
+            return img
+        try:
+            return pygame.transform.smoothscale(img, (nw, nh))
+        except Exception:
+            return pygame.transform.scale(img, (nw, nh))
+
+    def _coverSurf(img, tw, th):
+        if img is None:
+            return None
+        iw, ih = img.get_size()
+        s = max(tw / float(iw), th / float(ih))
+        nw = max(1, int(round(iw * s)))
+        nh = max(1, int(round(ih * s)))
+        try:
+            scaled = pygame.transform.smoothscale(img, (nw, nh))
+        except Exception:
+            scaled = pygame.transform.scale(img, (nw, nh))
+        x = (nw - tw) // 2
+        y = (nh - th) // 2
+        surf = pygame.Surface((tw, th)).convert()
+        surf.blit(scaled, (-x, -y))
+        return surf
+
+    class _CabinetSh:
+        """Original space-defense sessions (formation + dive variants)."""
+
+        _EXP = {
+            "player": ("b8.png", "b9.png"),
+            "e2": ("b8.png", "b9.png"),
+            "e1": ("b10.png", "b11.png"),
+            "e3": ("b12.png", "b13.png"),
+            "ufo": ("b14.png", "b15.png"),
+        }
+
+        def __init__(self, host, markKey="ab", mode="ab"):
             self.host = host
             self._markKey = markKey
+            self.mode = mode  # "ab" formation-march; "ls" inbound/dive
             self.running = True
             try:
                 if not pygame.get_init():
@@ -889,11 +995,7 @@ if pygame is not None:
                 pygame.font.init()
             except Exception:
                 pass
-            try:
-                if pygame.mixer.get_init() is None:
-                    pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
-            except Exception:
-                pass
+            _ensureDisplay()
 
             self.screen = pygame.Surface((W, H))
             fontPath = None
@@ -903,102 +1005,84 @@ if pygame is not None:
                 fontPath = None
             if fontPath and os.path.isfile(fontPath):
                 try:
-                    self.font = pygame.font.Font(fontPath, 12)
-                    self.bigFont = pygame.font.Font(fontPath, 18)
+                    self.font = pygame.font.Font(fontPath, 10)
+                    self.bigFont = pygame.font.Font(fontPath, 16)
                 except Exception:
-                    self.font = pygame.font.Font(None, 28)
-                    self.bigFont = pygame.font.Font(None, 44)
+                    self.font = pygame.font.Font(None, 22)
+                    self.bigFont = pygame.font.Font(None, 36)
             else:
-                self.font = pygame.font.Font(None, 28)
-                self.bigFont = pygame.font.Font(None, 44)
+                self.font = pygame.font.Font(None, 22)
+                self.bigFont = pygame.font.Font(None, 36)
 
-            self.tableImg = None
-            self.ballImg = None
-            self.flipImg = None
-            try:
-                tpath = Logic.resourcePath("ui/fx/a0.png")
-                bpath = Logic.resourcePath("ui/fx/a1.png")
-                fpath = Logic.resourcePath("ui/fx/a2.png")
-                if os.path.isfile(tpath):
-                    self.tableImg = pygame.image.load(tpath).convert()
-                    if self.tableImg.get_size() != (W, H):
-                        self.tableImg = pygame.transform.smoothscale(self.tableImg, (W, H))
-                if os.path.isfile(bpath):
-                    self.ballImg = pygame.image.load(bpath).convert_alpha()
-                if os.path.isfile(fpath):
-                    self.flipImg = pygame.image.load(fpath).convert_alpha()
-            except Exception:
-                pass
+            self.bg = _coverSurf(_loadSurf("b0.png"), W, H)
+            self.stars = _loadSurf("b23.png")
+            if self.stars is not None and self.stars.get_size() != (W, H):
+                try:
+                    self.stars = pygame.transform.scale(self.stars, (W, H))
+                except Exception:
+                    pass
+            self.playerImg = _fitSurf(_loadSurf("b1.png"), 52, 70)
+            self.pBullet = _fitSurf(_loadSurf("b2.png"), 7, 18)
+            self.eImg = {
+                1: _fitSurf(_loadSurf("b3.png"), 34, 32),
+                2: _fitSurf(_loadSurf("b4.png"), 36, 34),
+                3: _fitSurf(_loadSurf("b5.png"), 30, 40),
+            }
+            self.eIdle = {
+                1: _fitSurf(_loadSurf("b18.png"), 34, 32),
+                2: _fitSurf(_loadSurf("b19.png"), 36, 34),
+                3: _fitSurf(_loadSurf("b20.png"), 30, 40),
+            }
+            self.eBullet = _fitSurf(_loadSurf("b6.png"), 7, 18)
+            self.barrierSrc = _fitSurf(_loadSurf("b7.png"), 108, 42)
+            self.ufoImg = _fitSurf(_loadSurf("b16.png"), 52, 36)
+            self.lifeImg = _fitSurf(_loadSurf("b17.png"), 16, 16)
+            self.muzzle = [
+                _fitSurf(_loadSurf("b21.png"), 18, 18),
+                _fitSurf(_loadSurf("b22.png"), 20, 20),
+            ]
+            self.expFrames = {}
+            for key, pair in self._EXP.items():
+                frames = []
+                for fn in pair:
+                    frames.append(_fitSurf(_loadSurf(fn), 40, 40))
+                self.expFrames[key] = frames
 
-            self.audio = _ToneBox()
+            self.audio = _Sfx()
             self.highScore = _readMark(self._markKey)
-            self.state = "MENU"  # MENU, PLAYING, PAUSED, GAME_OVER
+            self.state = "MENU"
             self.score = 0
-            self.ballsLeft = 3
+            self.lives = 3
+            self.wave = 1
+            self.extraAwarded = False
+            self.starOff = 0.0
+            self.idleT = 0.0
+            self.idleFrame = 0
+            self.flashT = 0.0
+            self.invuln = 0.0
             self.message = ""
-            self.messageTimer = 0.0
+            self.messageT = 0.0
+            self.title = "ALIEN BLASTER" if mode == "ab" else "LAST STAND"
 
-            # Physics layout (tuned for 900x479 art)
-            self.ballR = 9
-            self.gravity = 520.0
-            self.damping = 0.999
-            self.maxSpeed = 780.0
-
-            # Flippers: pivot positions near drain
-            self.leftPivot = Vector2(310, 420)
-            self.rightPivot = Vector2(590, 420)
-            self.flipLen = 78
-            self.flipRestL = math.radians(28)
-            self.flipUpL = math.radians(-28)
-            self.flipRestR = math.radians(152)
-            self.flipUpR = math.radians(208)
-            self.leftAng = self.flipRestL
-            self.rightAng = self.flipRestR
-            self.leftAngPrev = self.leftAng
-            self.rightAngPrev = self.rightAng
-            self.flipSpeed = 14.0
-
-            # Bumpers (approx glowing circles on art)
-            self.bumpers = [
-                {"pos": Vector2(340, 170), "r": 28, "pts": 100, "flash": 0.0},
-                {"pos": Vector2(450, 130), "r": 30, "pts": 150, "flash": 0.0},
-                {"pos": Vector2(560, 170), "r": 28, "pts": 100, "flash": 0.0},
-                {"pos": Vector2(450, 230), "r": 22, "pts": 200, "flash": 0.0},
-            ]
-
-            # Static segments: outer walls + sling-ish rails
-            self.segments = [
-                # left wall
-                (Vector2(70, 30), Vector2(70, 400)),
-                # right inner (gap at top lets ball leave plunger into field)
-                (Vector2(800, 100), Vector2(800, 360)),
-                # top
-                (Vector2(70, 30), Vector2(800, 30)),
-                # plunger lane walls
-                (Vector2(820, 40), Vector2(820, 430)),
-                (Vector2(875, 40), Vector2(875, 450)),
-                (Vector2(820, 40), Vector2(875, 40)),
-                # lane roof open toward field (angled entry)
-                (Vector2(800, 100), Vector2(820, 70)),
-                # bottom left / right floors flanking drain
-                (Vector2(70, 400), Vector2(280, 450)),
-                (Vector2(620, 450), Vector2(800, 400)),
-                # upper curve suggestions
-                (Vector2(100, 80), Vector2(200, 50)),
-                (Vector2(700, 50), Vector2(780, 90)),
-            ]
-
-            self.drainRect = pygame.Rect(360, 445, 180, 40)
-            self.plungerX = 847
-            self.plungerYMin = 120
-            self.plungerYMax = 420
-            self.plungerPower = 0.0
-            self.charging = False
-
-            self.ball = Vector2(self.plungerX, 380)
-            self.vel = Vector2(0, 0)
-            self.onPlunger = True
-            self.combo = 0
+            self.playerX = W * 0.5
+            self.playerY = 428.0
+            self.playerDead = False
+            self.dieWait = 0.0
+            self.pShots = []
+            self.eShots = []
+            self.enemies = []
+            self.barriers = []
+            self.fx = []
+            self.ufo = None
+            self.ufoTimer = 18.0
+            self.formDx = 1
+            self.formStepT = 0.0
+            self.formInterval = 0.55
+            self.eShootT = 0.0
+            self.diveT = 0.0
+            self.inboundLeft = 0
+            self.maxPShots = 1 if mode == "ab" else 2
+            self.playerSpeed = 260.0
 
         def loadHigh(self):
             return _readMark(self._markKey)
@@ -1006,182 +1090,222 @@ if pygame is not None:
         def saveHigh(self):
             _writeMark(self._markKey, self.highScore)
 
-        def resetBall(self):
-            self.ball = Vector2(self.plungerX, 380)
-            self.vel = Vector2(0, 0)
-            self.onPlunger = True
-            self.plungerPower = 0.0
-            self.charging = False
-            self.combo = 0
+        def playS(self, name):
+            self.audio.play(name)
+
+        def _playerSize(self):
+            if self.playerImg is not None:
+                return self.playerImg.get_size()
+            return (48, 64)
+
+        def _etypeSize(self, kind):
+            img = self.eImg.get(kind)
+            if img is not None:
+                return img.get_size()
+            return (32, 32)
 
         def beginPlay(self):
             self.score = 0
-            self.ballsLeft = 3
+            self.lives = 3
+            self.wave = 1
+            self.extraAwarded = False
             self.highScore = self.loadHigh()
-            self.resetBall()
+            self.playerX = W * 0.5
+            self.playerY = 428.0
+            self.playerDead = False
+            self.dieWait = 0.0
+            self.invuln = 0.0
+            self.pShots = []
+            self.eShots = []
+            self.fx = []
+            self.ufo = None
+            self.audio.stopUfo()
+            self.ufoTimer = 16.0 + random.random() * 8.0
             self.state = "PLAYING"
             self.message = ""
-            self.messageTimer = 0.0
+            self.messageT = 0.0
+            self._setupWave()
 
-        def flipperTip(self, pivot, ang):
-            return pivot + Vector2(math.cos(ang), math.sin(ang)) * self.flipLen
+        def _setupWave(self):
+            self.pShots = []
+            self.eShots = []
+            self.enemies = []
+            self.formDx = 1
+            self.formStepT = 0.0
+            self.formInterval = max(0.12, 0.56 - (self.wave - 1) * 0.05)
+            self.eShootT = 0.8
+            self.diveT = 1.6
+            cols, rows = 8, 4
+            gapX, gapY = 78, 38
+            originX = 86.0
+            originY = 58.0
+            kinds = [3, 2, 1, 1]
+            delay = 0.0
+            for r in range(rows):
+                kind = kinds[r]
+                for c in range(cols):
+                    slotX = originX + c * gapX
+                    slotY = originY + r * gapY
+                    if self.mode == "ls":
+                        side = -1 if (c + r) % 2 == 0 else 1
+                        startX = -40 if side < 0 else W + 40
+                        startY = 30 + r * 18 + random.random() * 20
+                        st = "IN"
+                        delay += 0.09
+                    else:
+                        startX, startY = slotX, slotY
+                        st = "FORM"
+                    self.enemies.append({
+                        "kind": kind,
+                        "x": startX,
+                        "y": startY,
+                        "slotX": slotX,
+                        "slotY": slotY,
+                        "st": st,
+                        "t": -delay if self.mode == "ls" else 0.0,
+                        "phase": random.random() * 6.28,
+                        "shot": False,
+                    })
+            self.inboundLeft = sum(1 for e in self.enemies if e["st"] == "IN")
+            self.barriers = []
+            if self.mode == "ab" and self.barrierSrc is not None:
+                bw, bh = self.barrierSrc.get_size()
+                for i, bx in enumerate((118, 304, 490, 676)):
+                    surf = self.barrierSrc.copy()
+                    self.barriers.append({
+                        "x": bx,
+                        "y": 366,
+                        "surf": surf,
+                        "mask": pygame.mask.from_surface(surf),
+                        "w": bw,
+                        "h": bh,
+                    })
 
-        def _segBounce(self, a, b, elasticity=0.85, flipVel=None):
-            """Bounce ball off segment a-b if intersecting."""
-            ab = b - a
-            abLen2 = ab.length_squared()
-            if abLen2 < 1e-6:
-                return False
-            t = max(0.0, min(1.0, (self.ball - a).dot(ab) / abLen2))
-            closest = a + ab * t
-            delta = self.ball - closest
-            dist = delta.length()
-            if dist >= self.ballR or dist < 1e-6:
-                return False
-            n = delta / dist
-            # push out
-            self.ball = closest + n * (self.ballR + 0.5)
-            vn = self.vel.dot(n)
-            if vn < 0:
-                self.vel -= n * (1.0 + elasticity) * vn
-            if flipVel is not None:
-                self.vel += flipVel * 0.55
-            speed = self.vel.length()
-            if speed > self.maxSpeed:
-                self.vel.scale_to_length(self.maxSpeed)
-            return True
-
-        def _circleBounce(self, center, radius, pts):
-            delta = self.ball - center
-            dist = delta.length()
-            minD = radius + self.ballR
-            if dist >= minD or dist < 1e-6:
-                return False
-            n = delta / dist
-            self.ball = center + n * (minD + 0.5)
-            vn = self.vel.dot(n)
-            if vn < 0:
-                self.vel -= n * 1.9 * vn
-            # kick outward
-            self.vel += n * 120
-            if self.vel.length() > self.maxSpeed:
-                self.vel.scale_to_length(self.maxSpeed)
-            self.score += pts
-            self.combo += 1
+        def _addScore(self, n):
+            self.score += int(n)
             if self.score > self.highScore:
                 self.highScore = self.score
                 self.saveHigh()
-            self.audio.play("bump")
-            return True
+            if (not self.extraAwarded) and self.score >= 1500:
+                self.extraAwarded = True
+                self.lives += 1
+                self.playS("life")
+                self.message = "EXTRA LIFE"
+                self.messageT = 1.4
 
-        def updateFlippers(self, dt, keys):
-            self.leftAngPrev = self.leftAng
-            self.rightAngPrev = self.rightAng
-            leftWant = self.flipUpL if keys.get("left") else self.flipRestL
-            rightWant = self.flipUpR if keys.get("right") else self.flipRestR
-            self.leftAng += (leftWant - self.leftAng) * min(1.0, self.flipSpeed * dt)
-            self.rightAng += (rightWant - self.rightAng) * min(1.0, self.flipSpeed * dt)
+        def _spawnFx(self, kind, x, y):
+            frames = self.expFrames.get(kind) or self.expFrames.get("e1") or []
+            self.fx.append({"x": x, "y": y, "frames": frames, "i": 0, "t": 0.0})
 
-        def flipperAngularVel(self, ang, angPrev, dt):
-            if dt <= 1e-6:
-                return 0.0
-            return (ang - angPrev) / dt
+        def _playerRect(self):
+            pw, ph = self._playerSize()
+            return (self.playerX - pw * 0.5, self.playerY - ph * 0.5, pw, ph)
 
-        def update(self, dt, keys):
-            if self.state != "PLAYING":
+        def _enemyRect(self, e):
+            ew, eh = self._etypeSize(e["kind"])
+            return (e["x"] - ew * 0.5, e["y"] - eh * 0.5, ew, eh)
+
+        def _overlap(self, a, b):
+            return a[0] < b[0] + b[2] and a[0] + a[2] > b[0] and a[1] < b[1] + b[3] and a[1] + a[3] > b[1]
+
+        def _firePlayer(self):
+            if self.playerDead or self.state != "PLAYING":
                 return
-            if self.messageTimer > 0:
-                self.messageTimer -= dt
-
-            self.updateFlippers(dt, keys)
-
-            # Plunger charge / launch
-            if self.onPlunger:
-                if keys.get("down") or keys.get("up"):
-                    # up/down or we'll also use space via pulses separately
-                    self.charging = True
-                    self.plungerPower = min(1.0, self.plungerPower + dt * 1.2)
-                    self.ball.y = self.plungerYMax - self.plungerPower * (self.plungerYMax - self.plungerYMin) * 0.35
+            if len(self.pShots) >= self.maxPShots:
                 return
+            pw, ph = self._playerSize()
+            self.pShots.append({
+                "x": self.playerX,
+                "y": self.playerY - ph * 0.5,
+            })
+            self.flashT = 0.08
+            self.playS("shoot")
 
-            # Gravity
-            self.vel.y += self.gravity * dt
-            self.vel *= self.damping
-            self.ball += self.vel * dt
-
-            # Walls
-            hitWall = False
-            for a, b in self.segments:
-                if self._segBounce(a, b, 0.8):
-                    hitWall = True
-            if hitWall:
-                self.audio.play("wall")
-
-            # Flippers as segments with angular kick
-            for pivot, ang, angPrev, rest in (
-                (self.leftPivot, self.leftAng, self.leftAngPrev, self.flipRestL),
-                (self.rightPivot, self.rightAng, self.rightAngPrev, self.flipRestR),
-            ):
-                tip = self.flipperTip(pivot, ang)
-                w = self.flipperAngularVel(ang, angPrev, dt)
-                # tangential direction at contact approx tip motion
-                tang = Vector2(-math.sin(ang), math.cos(ang)) * (w * self.flipLen)
-                if self._segBounce(pivot, tip, 0.55, flipVel=tang if abs(w) > 0.5 else Vector2(0, 0)):
-                    if abs(w) > 1.0:
-                        self.audio.play("flip")
-                        self.score += 10
-
-            # Bumpers
-            for b in self.bumpers:
-                if b["flash"] > 0:
-                    b["flash"] -= dt
-                if self._circleBounce(b["pos"], b["r"], b["pts"]):
-                    b["flash"] = 0.12
-
-            # Keep in bounds soft
-            if self.ball.x < 50:
-                self.ball.x = 50
-                self.vel.x = abs(self.vel.x) * 0.7
-            if self.ball.x > 890:
-                self.ball.x = 890
-                self.vel.x = -abs(self.vel.x) * 0.7
-            if self.ball.y < 20:
-                self.ball.y = 20
-                self.vel.y = abs(self.vel.y) * 0.7
-
-            # Drain
-            if self.ball.y > 470 or (
-                self.drainRect.collidepoint(int(self.ball.x), int(self.ball.y)) and self.ball.y > 440
-            ):
-                self.audio.play("drain")
-                self.ballsLeft -= 1
-                if self.score > self.highScore:
-                    self.highScore = self.score
-                    self.saveHigh()
-                if self.ballsLeft <= 0:
-                    self.state = "GAME_OVER"
-                    self.saveHigh()
-                else:
-                    self.resetBall()
-                    self.message = f"BALL {4 - self.ballsLeft}"
-                    self.messageTimer = 1.5
-
-        def launch(self):
-            if not self.onPlunger:
+        def _killPlayer(self):
+            if self.playerDead or self.invuln > 0:
                 return
-            power = max(0.25, self.plungerPower)
-            self.onPlunger = False
-            self.charging = False
-            # Shoot up the lane, then into the upper field
-            self.ball = Vector2(self.plungerX, 90)
-            self.vel = Vector2(-180 - 220 * power, -280 - 360 * power)
-            self.plungerPower = 0.0
-            self.audio.play("launch")
+            self.playerDead = True
+            self.dieWait = 1.35
+            self._spawnFx("player", self.playerX, self.playerY)
+            self.playS("boomP")
+            self.audio.stopUfo()
+            self.lives -= 1
+            self.pShots = []
+            if self.lives <= 0:
+                self.saveHigh()
+
+        def _nextLifeOrOver(self):
+            if self.lives <= 0:
+                self.state = "GAME_OVER"
+                self.playS("over")
+                self.saveHigh()
+                return
+            self.playerDead = False
+            self.playerX = W * 0.5
+            self.invuln = 1.6
+            self.eShots = []
+            if self.mode == "ls":
+                for e in self.enemies:
+                    if e["st"] == "DIVE":
+                        e["st"] = "FORM"
+                        e["x"] = e["slotX"]
+                        e["y"] = e["slotY"]
+                        e["shot"] = False
+
+        def _clearWave(self):
+            self.playS("clear")
+            self.wave += 1
+            self.message = f"WAVE {self.wave}"
+            self.messageT = 1.5
+            self.ufo = None
+            self.audio.stopUfo()
+            self._setupWave()
+
+        def _spawnUfo(self):
+            if self.ufo is not None:
+                return
+            goingRight = random.random() < 0.5
+            self.ufo = {
+                "x": -30.0 if goingRight else float(W + 30),
+                "y": 30.0,
+                "vx": 95.0 if goingRight else -95.0,
+                "pts": random.choice((50, 100, 150, 200)),
+            }
+            self.audio.startUfo()
+
+        def _punchBarrier(self, bar, wx, wy, radius=7):
+            lx = int(wx - bar["x"])
+            ly = int(wy - bar["y"])
+            try:
+                pygame.draw.circle(bar["surf"], (0, 0, 0, 0), (lx, ly), radius)
+                bar["mask"] = pygame.mask.from_surface(bar["surf"])
+            except Exception:
+                return
+            if bar["mask"].count() < 40:
+                bar["dead"] = True
+
+        def _hitBarriers(self, x, y, fromPlayer):
+            for bar in self.barriers:
+                if bar.get("dead"):
+                    continue
+                if x < bar["x"] or y < bar["y"] or x >= bar["x"] + bar["w"] or y >= bar["y"] + bar["h"]:
+                    continue
+                try:
+                    if bar["mask"].get_at((int(x - bar["x"]), int(y - bar["y"]))):
+                        self._punchBarrier(bar, x, y, 8 if fromPlayer else 7)
+                        self.playS("hit")
+                        return True
+                except Exception:
+                    continue
+            return False
 
         def handlePulses(self, pulses, keys):
             for p in pulses:
                 if p == "escape":
                     if self.state == "PLAYING":
+                        self.state = "MENU"
+                        self.audio.stopUfo()
+                    elif self.state == "PAUSED":
                         self.state = "MENU"
                     else:
                         self.running = False
@@ -1195,116 +1319,358 @@ if pygame is not None:
                         self.beginPlay()
                     elif self.state == "GAME_OVER":
                         self.beginPlay()
-                    elif self.state == "PLAYING" and self.onPlunger:
-                        self.launch()
+                    elif self.state == "PLAYING":
+                        self._firePlayer()
                 elif p == "r":
                     if self.state in ("GAME_OVER", "MENU"):
                         self.beginPlay()
 
-            # Hold space while on plunger: charge (pulse is one-shot — use keys.down)
-            # Space mapped only as pulse; charge with down/s
-            if self.state == "PLAYING" and self.onPlunger and keys.get("down"):
-                self.charging = True
+        def update(self, dt, keys):
+            if self.state != "PLAYING":
+                return
+            if self.messageT > 0:
+                self.messageT -= dt
+            self.idleT += dt
+            if self.idleT >= 0.38:
+                self.idleT = 0.0
+                self.idleFrame = 1 - self.idleFrame
+            self.starOff = (self.starOff + dt * 18.0) % H
+            if self.flashT > 0:
+                self.flashT -= dt
+            if self.invuln > 0:
+                self.invuln -= dt
 
-        def drawFlipper(self, pivot, ang, mirror=False):
-            # Procedural neon flipper for reliable rotation; optional sprite underlay
-            tip = self.flipperTip(pivot, ang)
-            mid = (pivot + tip) * 0.5
-            # fat line
-            pygame.draw.line(self.screen, (0, 200, 255), pivot, tip, 14)
-            pygame.draw.line(self.screen, (180, 255, 255), pivot, tip, 6)
-            pygame.draw.circle(self.screen, CYAN, (int(pivot.x), int(pivot.y)), 8)
-            pygame.draw.circle(self.screen, WHITE, (int(tip.x), int(tip.y)), 5)
-            if self.flipImg is not None:
-                try:
-                    deg = -math.degrees(ang)
-                    img = self.flipImg
-                    if mirror:
-                        img = pygame.transform.flip(img, True, False)
-                        deg = -math.degrees(math.pi - ang)
-                    rot = pygame.transform.rotozoom(img, deg, 0.55)
-                    rect = rot.get_rect(center=(int(mid.x), int(mid.y)))
-                    self.screen.blit(rot, rect)
-                except Exception:
-                    pass
+            if self.playerDead:
+                self.dieWait -= dt
+                self._updateFx(dt)
+                if self.dieWait <= 0:
+                    self._nextLifeOrOver()
+                return
+
+            pw, _ph = self._playerSize()
+            move = 0.0
+            if keys.get("left"):
+                move -= 1.0
+            if keys.get("right"):
+                move += 1.0
+            self.playerX += move * self.playerSpeed * dt
+            half = pw * 0.5
+            self.playerX = max(half + 8, min(W - half - 8, self.playerX))
+
+            speedP = -340.0
+            for s in self.pShots:
+                s["y"] += speedP * dt
+            self.pShots = [s for s in self.pShots if s["y"] > -12]
+
+            speedE = 150.0 + self.wave * 8
+            for s in self.eShots:
+                s["y"] += speedE * dt
+            self.eShots = [s for s in self.eShots if s["y"] < H + 12]
+
+            if self.ufo is not None:
+                self.ufo["x"] += self.ufo["vx"] * dt
+                if self.ufo["x"] < -50 or self.ufo["x"] > W + 50:
+                    self.ufo = None
+                    self.audio.stopUfo()
+            else:
+                self.ufoTimer -= dt
+                if self.ufoTimer <= 0:
+                    self._spawnUfo()
+                    self.ufoTimer = 18.0 + random.random() * 10.0
+
+            if self.mode == "ab":
+                self._updateFormation(dt)
+            else:
+                self._updateDive(dt)
+
+            self._collide()
+            self._updateFx(dt)
+
+            if not self.playerDead and not any(True for _ in self.enemies):
+                self._clearWave()
+
+        def _aliveForm(self):
+            return [e for e in self.enemies if e["st"] in ("FORM",)]
+
+        def _updateFormation(self, dt):
+            self.formStepT += dt
+            living = [e for e in self.enemies]
+            if not living:
+                return
+            n = max(1, len(living))
+            interval = max(0.07, self.formInterval * (n / 32.0) + 0.04)
+            if self.formStepT >= interval:
+                self.formStepT = 0.0
+                minX = min(e["x"] for e in living)
+                maxX = max(e["x"] for e in living)
+                drop = False
+                step = 10.0
+                if self.formDx > 0 and maxX + step > W - 28:
+                    drop = True
+                elif self.formDx < 0 and minX - step < 28:
+                    drop = True
+                if drop:
+                    self.formDx *= -1
+                    for e in living:
+                        e["y"] += 14.0
+                        e["slotY"] += 14.0
+                else:
+                    for e in living:
+                        e["x"] += self.formDx * step
+                        e["slotX"] += self.formDx * step
+
+            self.eShootT -= dt
+            if self.eShootT <= 0 and living:
+                self.eShootT = max(0.35, 1.05 - self.wave * 0.07)
+                cols = {}
+                for e in living:
+                    key = int(round(e["x"] / 20.0))
+                    prev = cols.get(key)
+                    if prev is None or e["y"] > prev["y"]:
+                        cols[key] = e
+                shooter = random.choice(list(cols.values()))
+                self.eShots.append({"x": shooter["x"], "y": shooter["y"] + 14})
+
+            floorY = self.playerY - 36
+            for e in living:
+                if e["y"] >= floorY:
+                    self._killPlayer()
+                    break
+
+        def _updateDive(self, dt):
+            stillIn = 0
+            for e in self.enemies:
+                if e["st"] == "IN":
+                    e["t"] += dt
+                    if e["t"] < 0:
+                        stillIn += 1
+                        continue
+                    tx, ty = e["slotX"], e["slotY"]
+                    dx, dy = tx - e["x"], ty - e["y"]
+                    dist = math.hypot(dx, dy) or 1.0
+                    spd = 220.0
+                    step = spd * dt
+                    if dist <= step + 2:
+                        e["x"], e["y"] = tx, ty
+                        e["st"] = "FORM"
+                    else:
+                        e["x"] += dx / dist * step
+                        e["y"] += dy / dist * step + math.sin(e["t"] * 8 + e["phase"]) * 18 * dt
+                    stillIn += 1
+            self.inboundLeft = stillIn
+
+            parked = [e for e in self.enemies if e["st"] == "FORM"]
+            diving = [e for e in self.enemies if e["st"] == "DIVE"]
+            if stillIn == 0:
+                self.diveT -= dt
+                want = 1 + (1 if self.wave >= 3 else 0)
+                if self.diveT <= 0 and parked and len(diving) < want + 1:
+                    self.diveT = max(0.7, 1.7 - self.wave * 0.08)
+                    pick = random.choice(parked)
+                    pick["st"] = "DIVE"
+                    pick["t"] = 0.0
+                    pick["shot"] = False
+                    pick["phase"] = random.choice((-1.0, 1.0)) * (70 + random.random() * 50)
+
+            for e in list(self.enemies):
+                if e["st"] != "DIVE":
+                    continue
+                e["t"] += dt
+                e["y"] += (95 + self.wave * 10) * dt
+                e["x"] += math.sin(e["t"] * 3.2) * e["phase"] * dt * 0.08 + (self.playerX - e["x"]) * 0.55 * dt
+                if (not e["shot"]) and e["y"] > 160:
+                    e["shot"] = True
+                    self.eShots.append({"x": e["x"], "y": e["y"] + 12})
+                if e["y"] > H + 20:
+                    # recycle to top of slot
+                    e["y"] = -20
+                    e["x"] = e["slotX"]
+                    e["st"] = "FORM"
+                    e["shot"] = False
+
+            self.eShootT -= dt
+            if self.eShootT <= 0 and parked and stillIn == 0:
+                self.eShootT = max(0.45, 1.3 - self.wave * 0.08)
+                shooter = random.choice(parked)
+                self.eShots.append({"x": shooter["x"], "y": shooter["y"] + 14})
+
+        def _collide(self):
+            pbw, pbh = (6, 16)
+            if self.pBullet is not None:
+                pbw, pbh = self.pBullet.get_size()
+            ebw, ebh = (6, 16)
+            if self.eBullet is not None:
+                ebw, ebh = self.eBullet.get_size()
+
+            keepP = []
+            for s in self.pShots:
+                sr = (s["x"] - pbw * 0.5, s["y"] - pbh * 0.5, pbw, pbh)
+                hit = False
+                if self.ufo is not None:
+                    uw, uh = (48, 32)
+                    if self.ufoImg is not None:
+                        uw, uh = self.ufoImg.get_size()
+                    ur = (self.ufo["x"] - uw * 0.5, self.ufo["y"] - uh * 0.5, uw, uh)
+                    if self._overlap(sr, ur):
+                        self._spawnFx("ufo", self.ufo["x"], self.ufo["y"])
+                        self._addScore(self.ufo["pts"])
+                        self.playS("boomE")
+                        self.ufo = None
+                        self.audio.stopUfo()
+                        hit = True
+                if not hit:
+                    for e in list(self.enemies):
+                        if self._overlap(sr, self._enemyRect(e)):
+                            kind = {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
+                            self._spawnFx(kind, e["x"], e["y"])
+                            pts = {1: 10, 2: 20, 3: 30}.get(e["kind"], 10)
+                            if e["st"] == "DIVE":
+                                pts += 20
+                            self._addScore(pts)
+                            self.playS("boomE")
+                            self.enemies.remove(e)
+                            hit = True
+                            break
+                if not hit and self.mode == "ab":
+                    if self._hitBarriers(s["x"], s["y"], True):
+                        hit = True
+                if not hit:
+                    keepP.append(s)
+            self.pShots = keepP
+
+            if self.mode == "ab":
+                self.barriers = [b for b in self.barriers if not b.get("dead")]
+
+            keepE = []
+            pr = self._playerRect()
+            for s in self.eShots:
+                sr = (s["x"] - ebw * 0.5, s["y"] - ebh * 0.5, ebw, ebh)
+                hit = False
+                if self.mode == "ab" and self._hitBarriers(s["x"], s["y"], False):
+                    hit = True
+                if (not hit) and (not self.playerDead) and self._overlap(sr, pr):
+                    self._killPlayer()
+                    hit = True
+                if not hit:
+                    keepE.append(s)
+            self.eShots = keepE
+
+            if not self.playerDead:
+                for e in self.enemies:
+                    if self._overlap(self._enemyRect(e), pr):
+                        kind = {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
+                        self._spawnFx(kind, e["x"], e["y"])
+                        self.playS("boomE")
+                        try:
+                            self.enemies.remove(e)
+                        except ValueError:
+                            pass
+                        self._killPlayer()
+                        break
+
+        def _updateFx(self, dt):
+            live = []
+            for f in self.fx:
+                f["t"] += dt
+                if f["t"] >= 0.09:
+                    f["t"] = 0.0
+                    f["i"] += 1
+                if f["i"] < len(f["frames"]):
+                    live.append(f)
+            self.fx = live
+
+        def _blitC(self, img, x, y):
+            if img is None:
+                return
+            r = img.get_rect(center=(int(x), int(y)))
+            self.screen.blit(img, r)
+
+        def _drawHud(self):
+            score = self.font.render(f"{self.score:05d}", True, WHITE)
+            hi = self.font.render(f"HI {self.highScore:05d}", True, YELLOW)
+            wave = self.font.render(f"W{self.wave}", True, CYAN)
+            self.screen.blit(score, (16, 8))
+            self.screen.blit(hi, (W // 2 - hi.get_width() // 2, 8))
+            self.screen.blit(wave, (W - 70, 8))
+            if self.lifeImg is not None:
+                for i in range(max(0, self.lives)):
+                    self.screen.blit(self.lifeImg, (16 + i * 20, H - 22))
+            if self.messageT > 0 and self.message:
+                msg = self.bigFont.render(self.message, True, YELLOW)
+                self.screen.blit(msg, (W // 2 - msg.get_width() // 2, 220))
 
         def draw(self):
-            if self.tableImg is not None:
-                self.screen.blit(self.tableImg, (0, 0))
+            if self.bg is not None:
+                self.screen.blit(self.bg, (0, 0))
             else:
-                self.screen.fill((10, 0, 20))
-                pygame.draw.rect(self.screen, (40, 0, 60), (60, 20, 780, 440), 2)
-
-            # Dim overlay for HUD readability on neon art
-            hud = pygame.Surface((W, 36), pygame.SRCALPHA)
-            hud.fill((0, 0, 0, 140))
-            self.screen.blit(hud, (0, 0))
-
-            # Bumper flashes
-            for b in self.bumpers:
-                if b["flash"] > 0:
-                    pygame.draw.circle(
-                        self.screen, (255, 100, 255),
-                        (int(b["pos"].x), int(b["pos"].y)), int(b["r"] + 6), 2
-                    )
-
-            # Flippers
-            self.drawFlipper(self.leftPivot, self.leftAng, mirror=False)
-            self.drawFlipper(self.rightPivot, self.rightAng, mirror=True)
-
-            # Plunger spring indicator
-            if self.onPlunger or self.state == "MENU":
-                py = int(self.plungerYMax - self.plungerPower * 80)
-                pygame.draw.line(self.screen, MAGENTA, (self.plungerX, py), (self.plungerX, 450), 4)
-                pygame.draw.circle(self.screen, CYAN, (self.plungerX, py), 6)
-
-            # Ball
-            bx, by = int(self.ball.x), int(self.ball.y)
-            if self.ballImg is not None:
-                r = self.ballImg.get_rect(center=(bx, by))
-                self.screen.blit(self.ballImg, r)
-            else:
-                pygame.draw.circle(self.screen, WHITE, (bx, by), self.ballR)
-                pygame.draw.circle(self.screen, CYAN, (bx, by), self.ballR, 2)
-
-            # HUD
-            sc = self.font.render(f"SCORE {self.score:06d}", True, CYAN)
-            self.screen.blit(sc, (16, 10))
-            hs = self.font.render(f"HI {self.highScore:06d}", True, MAGENTA)
-            self.screen.blit(hs, (W // 2 - hs.get_width() // 2, 10))
-            bl = self.font.render(f"BALLS {self.ballsLeft}", True, YELLOW)
-            self.screen.blit(bl, (W - bl.get_width() - 16, 10))
+                self.screen.fill((4, 2, 12))
+            if self.stars is not None:
+                y = int(self.starOff)
+                self.screen.blit(self.stars, (0, y - H))
+                self.screen.blit(self.stars, (0, y))
 
             if self.state == "MENU":
-                title = self.bigFont.render("PINBALL", True, CYAN)
-                self.screen.blit(title, (W // 2 - title.get_width() // 2, 160))
-                sub = self.font.render("CYBER TABLE", True, MAGENTA)
-                self.screen.blit(sub, (W // 2 - sub.get_width() // 2, 200))
-                go = self.font.render("SPACE TO START", True, WHITE)
-                self.screen.blit(go, (W // 2 - go.get_width() // 2, 260))
-                ctrl = self.font.render("Z/LEFT  /  RIGHT  |  DOWN CHARGE  SPACE LAUNCH", True, (180, 180, 200))
-                self.screen.blit(ctrl, (W // 2 - ctrl.get_width() // 2, 320))
+                title = self.bigFont.render(self.title, True, CYAN)
+                hint = self.font.render("SPACE", True, WHITE)
+                esc = self.font.render("ESC", True, (160, 160, 180))
+                hi = self.font.render(f"HI {self.highScore:05d}", True, YELLOW)
+                self.screen.blit(title, (W // 2 - title.get_width() // 2, 170))
+                self.screen.blit(hint, (W // 2 - hint.get_width() // 2, 230))
+                self.screen.blit(esc, (W // 2 - esc.get_width() // 2, 262))
+                self.screen.blit(hi, (W // 2 - hi.get_width() // 2, 310))
+                return
 
-            elif self.state == "PAUSED":
-                t = self.bigFont.render("PAUSED", True, YELLOW)
-                self.screen.blit(t, (W // 2 - t.get_width() // 2, H // 2 - 20))
+            if self.state == "PAUSED":
+                msg = self.bigFont.render("PAUSED", True, YELLOW)
+                self.screen.blit(msg, (W // 2 - msg.get_width() // 2, 210))
+                self._drawHud()
+                return
 
-            elif self.state == "GAME_OVER":
-                t = self.bigFont.render("GAME OVER", True, MAGENTA)
-                self.screen.blit(t, (W // 2 - t.get_width() // 2, 170))
-                s = self.font.render(f"SCORE {self.score}", True, WHITE)
-                self.screen.blit(s, (W // 2 - s.get_width() // 2, 230))
-                a = self.font.render("SPACE / R  RETRY", True, CYAN)
-                self.screen.blit(a, (W // 2 - a.get_width() // 2, 290))
+            if self.state == "GAME_OVER":
+                msg = self.bigFont.render("GAME OVER", True, MAGENTA)
+                hint = self.font.render("SPACE", True, WHITE)
+                self.screen.blit(msg, (W // 2 - msg.get_width() // 2, 190))
+                self.screen.blit(hint, (W // 2 - hint.get_width() // 2, 240))
+                self._drawHud()
+                return
 
-            if self.messageTimer > 0 and self.message:
-                m = self.font.render(self.message, True, YELLOW)
-                self.screen.blit(m, (W // 2 - m.get_width() // 2, 50))
+            for bar in self.barriers:
+                if not bar.get("dead"):
+                    self.screen.blit(bar["surf"], (bar["x"], bar["y"]))
 
-            # Always show light controls while playing
-            if self.state == "PLAYING" and self.onPlunger:
-                tip = self.font.render("HOLD DOWN TO CHARGE  ·  SPACE TO LAUNCH", True, WHITE)
-                self.screen.blit(tip, (W // 2 - tip.get_width() // 2, H - 28))
+            for e in self.enemies:
+                kind = e["kind"]
+                img = self.eImg.get(kind)
+                if self.idleFrame and self.eIdle.get(kind) is not None:
+                    img = self.eIdle.get(kind)
+                self._blitC(img, e["x"], e["y"])
+
+            if self.ufo is not None:
+                self._blitC(self.ufoImg, self.ufo["x"], self.ufo["y"])
+
+            if self.pBullet is not None:
+                for s in self.pShots:
+                    self._blitC(self.pBullet, s["x"], s["y"])
+            if self.eBullet is not None:
+                for s in self.eShots:
+                    self._blitC(self.eBullet, s["x"], s["y"])
+
+            if not self.playerDead:
+                blink = self.invuln > 0 and int(self.invuln * 12) % 2 == 0
+                if not blink:
+                    self._blitC(self.playerImg, self.playerX, self.playerY)
+                if self.flashT > 0:
+                    pw, ph = self._playerSize()
+                    frame = self.muzzle[0] if self.flashT > 0.04 else self.muzzle[1]
+                    self._blitC(frame, self.playerX, self.playerY - ph * 0.5 - 4)
+
+            for f in self.fx:
+                frames = f["frames"]
+                i = f["i"]
+                if 0 <= i < len(frames) and frames[i] is not None:
+                    self._blitC(frames[i], f["x"], f["y"])
+
+            self._drawHud()
 
         def toImage(self):
             rgb = self.screen
@@ -1319,25 +1685,32 @@ if pygame is not None:
             self.handlePulses(pulses or [], keys)
             if not self.running:
                 return None
-            # continuous charge
-            if self.state == "PLAYING" and self.onPlunger and keys.get("down"):
-                self.plungerPower = min(1.0, self.plungerPower + dt * 1.15)
-                self.ball.y = self.plungerYMax - self.plungerPower * 70
             self.update(dt, keys)
             self.draw()
             return self.toImage()
 
         def stop(self):
             self.running = False
+            try:
+                self.audio.stopUfo()
+            except Exception:
+                pass
             if self.score > self.highScore:
                 self.highScore = self.score
                 self.saveHigh()
 
-    def _factoryPb(host, markKey="pb"):
-        return _CabinetPb(host, markKey)
+    def _factoryAb(host, markKey="ab"):
+        return _CabinetSh(host, markKey, "ab")
 
-    _addTitle("PINBALL", _factoryPb, "pb")
+    def _factoryLs(host, markKey="ls"):
+        return _CabinetSh(host, markKey, "ls")
+
+    _addTitle("ALIEN BLASTER", _factoryAb, "ab")
+    _addTitle("LAST STAND", _factoryLs, "ls")
 
 else:
-    def _factoryPb(host, markKey="pb"):
+    def _factoryAb(host, markKey="ab"):
+        return None
+
+    def _factoryLs(host, markKey="ls"):
         return None
