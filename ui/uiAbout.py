@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QUrl, QSize, QObject, QEvent, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QImage, QColor, QPainter
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QSoundEffect
 from PyQt6 import uic
 
 from core import Logic, Utils, Version
@@ -844,30 +844,54 @@ if pygame is not None:
             return None
 
     class _Sfx:
-        def __init__(self):
+        """One-shots via Qt so they share the About audio device."""
+
+        _NAMES = {
+            "shoot": "c0.wav",
+            "boomE": "c1.wav",
+            "boomP": "c2.wav",
+            "hit": "c3.wav",
+            "ufo": "c4.wav",
+            "life": "c5.wav",
+            "clear": "c6.wav",
+            "over": "c7.wav",
+        }
+
+        def __init__(self, host=None):
             self.ok = False
             self.sounds = {}
+            self._ufoName = "ufo"
+            parent = host if isinstance(host, QObject) else None
+            try:
+                for key, fn in self._NAMES.items():
+                    path = Logic.resourcePath(f"ui/fx/{fn}")
+                    if not path or not os.path.isfile(path):
+                        continue
+                    fx = QSoundEffect(parent)
+                    fx.setSource(QUrl.fromLocalFile(os.path.abspath(path)))
+                    fx.setVolume(0.8)
+                    self.sounds[key] = fx
+                self.ok = bool(self.sounds)
+            except Exception:
+                self.ok = False
+                self.sounds = {}
+            if not self.ok:
+                self._initMixerFallback()
+
+        def _initMixerFallback(self):
             try:
                 if pygame.mixer.get_init() is None:
-                    pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-                names = {
-                    "shoot": "c0.wav",
-                    "boomE": "c1.wav",
-                    "boomP": "c2.wav",
-                    "hit": "c3.wav",
-                    "ufo": "c4.wav",
-                    "life": "c5.wav",
-                    "clear": "c6.wav",
-                    "over": "c7.wav",
-                }
-                for key, fn in names.items():
+                    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+                for key, fn in self._NAMES.items():
                     path = Logic.resourcePath(f"ui/fx/{fn}")
                     if path and os.path.isfile(path):
                         self.sounds[key] = pygame.mixer.Sound(path)
-                self.ok = True
+                self.ok = bool(self.sounds)
             except Exception:
                 self.ok = False
-            self._ufoCh = None
+
+        def _isQtFx(self, snd):
+            return hasattr(snd, "isPlaying")
 
         def play(self, name):
             if not self.ok:
@@ -876,29 +900,25 @@ if pygame is not None:
             if snd is None:
                 return
             try:
-                snd.play()
+                if self._isQtFx(snd):
+                    if snd.isPlaying():
+                        snd.stop()
+                    snd.play()
+                else:
+                    snd.play()
             except Exception:
                 pass
 
         def startUfo(self):
-            if not self.ok:
-                return
-            snd = self.sounds.get("ufo")
+            self.play(self._ufoName)
+
+        def stopUfo(self):
+            snd = self.sounds.get(self._ufoName)
             if snd is None:
                 return
             try:
-                self.stopUfo()
-                self._ufoCh = snd.play()
-            except Exception:
-                self._ufoCh = None
-
-        def stopUfo(self):
-            ch = self._ufoCh
-            self._ufoCh = None
-            if ch is None:
-                return
-            try:
-                ch.stop()
+                if self._isQtFx(snd):
+                    snd.stop()
             except Exception:
                 pass
 
@@ -966,9 +986,32 @@ if pygame is not None:
             scaled = pygame.transform.scale(img, (nw, nh))
         x = (nw - tw) // 2
         y = (nh - th) // 2
-        surf = pygame.Surface((tw, th)).convert()
+        try:
+            surf = pygame.Surface((tw, th)).convert()
+        except Exception:
+            surf = pygame.Surface((tw, th))
+        surf.fill((0, 0, 0))
         surf.blit(scaled, (-x, -y))
         return surf
+
+    def _asOverlay(img):
+        """Alpha copy so the star layer cannot paint an opaque black field."""
+        if img is None:
+            return None
+        try:
+            work = img.convert_alpha()
+        except Exception:
+            work = img
+        try:
+            import numpy as np
+            rgb = pygame.surfarray.pixels3d(work)
+            alpha = pygame.surfarray.pixels_alpha(work)
+            lum = rgb[:, :, 0].astype("uint16") + rgb[:, :, 1] + rgb[:, :, 2]
+            alpha[lum < 40] = 0
+            del rgb, alpha
+        except Exception:
+            pass
+        return work
 
     class _CabinetSh:
         """Original space-defense sessions (formation + dive variants)."""
@@ -1015,12 +1058,19 @@ if pygame is not None:
                 self.bigFont = pygame.font.Font(None, 36)
 
             self.bg = _coverSurf(_loadSurf("b0.png"), W, H)
-            self.stars = _loadSurf("b23.png")
-            if self.stars is not None and self.stars.get_size() != (W, H):
+            if self.bg is not None and self.bg.get_size() != (W, H):
                 try:
-                    self.stars = pygame.transform.scale(self.stars, (W, H))
+                    self.bg = pygame.transform.smoothscale(self.bg, (W, H))
                 except Exception:
-                    pass
+                    self.bg = pygame.transform.scale(self.bg, (W, H))
+            self.stars = _loadSurf("b23.png")
+            if self.stars is not None:
+                if self.stars.get_size() != (W, H):
+                    try:
+                        self.stars = pygame.transform.scale(self.stars, (W, H))
+                    except Exception:
+                        pass
+                self.stars = _asOverlay(self.stars)
             self.playerImg = _fitSurf(_loadSurf("b1.png"), 52, 70)
             self.pBullet = _fitSurf(_loadSurf("b2.png"), 7, 18)
             self.eImg = {
@@ -1048,7 +1098,7 @@ if pygame is not None:
                     frames.append(_fitSurf(_loadSurf(fn), 40, 40))
                 self.expFrames[key] = frames
 
-            self.audio = _Sfx()
+            self.audio = _Sfx(host)
             self.highScore = _readMark(self._markKey)
             self.state = "MENU"
             self.score = 0
@@ -1605,7 +1655,7 @@ if pygame is not None:
             else:
                 self.screen.fill((4, 2, 12))
             if self.stars is not None:
-                y = int(self.starOff)
+                y = int(self.starOff) % H
                 self.screen.blit(self.stars, (0, y - H))
                 self.screen.blit(self.stars, (0, y))
 
