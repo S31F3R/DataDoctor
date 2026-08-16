@@ -855,6 +855,7 @@ if pygame is not None:
             "life": "c5.wav",
             "clear": "c6.wav",
             "over": "c7.wav",
+            "eShot": "c8.wav",
         }
 
         def __init__(self, host=None):
@@ -1091,6 +1092,18 @@ if pygame is not None:
                 _fitSurf(_loadSurf("b21.png"), 18, 18),
                 _fitSurf(_loadSurf("b22.png"), 20, 20),
             ]
+            self.flameBlue = [
+                _fitSurf(_loadSurf("b24.png"), 9, 16),
+                _fitSurf(_loadSurf("b25.png"), 8, 18),
+            ]
+            self.flameGreen = [
+                _fitSurf(_loadSurf("b26.png"), 8, 12),
+                _fitSurf(_loadSurf("b27.png"), 7, 14),
+            ]
+            self.flameBullet = [
+                _fitSurf(_loadSurf("b28.png"), 7, 11),
+                _fitSurf(_loadSurf("b29.png"), 7, 12),
+            ]
             self.expFrames = {}
             for key, pair in self._EXP.items():
                 frames = []
@@ -1108,6 +1121,8 @@ if pygame is not None:
             self.starOff = 0.0
             self.idleT = 0.0
             self.idleFrame = 0
+            self.flameT = 0.0
+            self.flameFrame = 0
             self.flashT = 0.0
             self.invuln = 0.0
             self.message = ""
@@ -1176,6 +1191,29 @@ if pygame is not None:
             self.messageT = 0.0
             self._setupWave()
 
+        def _addEnemy(self, kind, slotX, slotY, inbound=False, delay=0.0):
+            if inbound:
+                side = -1 if (int(slotX) + int(slotY)) % 2 == 0 else 1
+                startX = -40.0 if side < 0 else float(W + 40)
+                startY = 28.0 + random.random() * 36.0
+                st = "IN"
+                t = -delay
+            else:
+                startX, startY = slotX, slotY
+                st = "FORM"
+                t = 0.0
+            self.enemies.append({
+                "kind": kind,
+                "x": startX,
+                "y": startY,
+                "slotX": slotX,
+                "slotY": slotY,
+                "st": st,
+                "t": t,
+                "phase": random.random() * 6.28,
+                "shot": False,
+            })
+
         def _setupWave(self):
             self.pShots = []
             self.eShots = []
@@ -1185,37 +1223,32 @@ if pygame is not None:
             self.formInterval = max(0.12, 0.56 - (self.wave - 1) * 0.05)
             self.eShootT = 0.8
             self.diveT = 1.6
-            cols, rows = 8, 4
-            gapX, gapY = 78, 38
-            originX = 86.0
-            originY = 58.0
-            kinds = [3, 2, 1, 1]
             delay = 0.0
-            for r in range(rows):
-                kind = kinds[r]
-                for c in range(cols):
-                    slotX = originX + c * gapX
-                    slotY = originY + r * gapY
-                    if self.mode == "ls":
-                        side = -1 if (c + r) % 2 == 0 else 1
-                        startX = -40 if side < 0 else W + 40
-                        startY = 30 + r * 18 + random.random() * 20
-                        st = "IN"
-                        delay += 0.09
-                    else:
-                        startX, startY = slotX, slotY
-                        st = "FORM"
-                    self.enemies.append({
-                        "kind": kind,
-                        "x": startX,
-                        "y": startY,
-                        "slotX": slotX,
-                        "slotY": slotY,
-                        "st": st,
-                        "t": -delay if self.mode == "ls" else 0.0,
-                        "phase": random.random() * 6.28,
-                        "shot": False,
-                    })
+            if self.mode == "ls":
+                # Tapered hold: fewer on top, wider below (centered).
+                layout = ((3, 4, 86.0), (2, 6, 72.0), (1, 8, 64.0), (1, 10, 58.0))
+                originY = 50.0
+                gapY = 36.0
+                for r, (kind, count, gapX) in enumerate(layout):
+                    rowW = (count - 1) * gapX
+                    left = (W - rowW) * 0.5
+                    for c in range(count):
+                        self._addEnemy(
+                            kind, left + c * gapX, originY + r * gapY,
+                            inbound=True, delay=delay,
+                        )
+                        delay += 0.08
+            else:
+                cols, rows = 8, 4
+                gapX, gapY = 78, 38
+                originX = 86.0
+                originY = 58.0
+                kinds = [3, 2, 1, 1]
+                for r in range(rows):
+                    for c in range(cols):
+                        self._addEnemy(
+                            kinds[r], originX + c * gapX, originY + r * gapY,
+                        )
             self.inboundLeft = sum(1 for e in self.enemies if e["st"] == "IN")
             self.barriers = []
             if self.mode == "ab" and self.barrierSrc is not None:
@@ -1270,6 +1303,10 @@ if pygame is not None:
             })
             self.flashT = 0.08
             self.playS("shoot")
+
+        def _enemyFire(self, x, y):
+            self.eShots.append({"x": x, "y": y})
+            self.playS("eShot")
 
         def _killPlayer(self):
             if self.playerDead or self.invuln > 0:
@@ -1384,6 +1421,8 @@ if pygame is not None:
             if self.idleT >= 0.38:
                 self.idleT = 0.0
                 self.idleFrame = 1 - self.idleFrame
+            self.flameT += dt
+            self.flameFrame = 0 if int(self.flameT / 0.07) % 2 == 0 else 1
             self.starOff = (self.starOff + dt * 18.0) % H
             if self.flashT > 0:
                 self.flashT -= dt
@@ -1479,7 +1518,7 @@ if pygame is not None:
                     if prev is None or e["y"] > prev["y"]:
                         cols[key] = e
                 shooter = random.choice(list(cols.values()))
-                self.eShots.append({"x": shooter["x"], "y": shooter["y"] + 14})
+                self._enemyFire(shooter["x"], shooter["y"] + 14)
 
             floorY = self.playerY - 36
             for e in living:
@@ -1530,7 +1569,7 @@ if pygame is not None:
                 e["x"] += math.sin(e["t"] * 3.2) * e["phase"] * dt * 0.08 + (self.playerX - e["x"]) * 0.55 * dt
                 if (not e["shot"]) and e["y"] > 160:
                     e["shot"] = True
-                    self.eShots.append({"x": e["x"], "y": e["y"] + 12})
+                    self._enemyFire(e["x"], e["y"] + 12)
                 if e["y"] > H + 20:
                     # recycle to top of slot
                     e["y"] = -20
@@ -1542,7 +1581,7 @@ if pygame is not None:
             if self.eShootT <= 0 and parked and stillIn == 0:
                 self.eShootT = max(0.45, 1.3 - self.wave * 0.08)
                 shooter = random.choice(parked)
-                self.eShots.append({"x": shooter["x"], "y": shooter["y"] + 14})
+                self._enemyFire(shooter["x"], shooter["y"] + 14)
 
         def _collide(self):
             pbw, pbh = (6, 16)
@@ -1698,8 +1737,15 @@ if pygame is not None:
             if self.ufo is not None:
                 self._blitC(self.ufoImg, self.ufo["x"], self.ufo["y"])
 
+            fi = self.flameFrame
             if self.pBullet is not None:
                 for s in self.pShots:
+                    trail = None
+                    if self.flameBullet:
+                        trail = self.flameBullet[fi % len(self.flameBullet)]
+                    if trail is not None:
+                        bh = self.pBullet.get_height()
+                        self._blitC(trail, s["x"], s["y"] + bh * 0.42)
                     self._blitC(self.pBullet, s["x"], s["y"])
             if self.eBullet is not None:
                 for s in self.eShots:
@@ -1707,10 +1753,18 @@ if pygame is not None:
 
             if not self.playerDead:
                 blink = self.invuln > 0 and int(self.invuln * 12) % 2 == 0
+                pw, ph = self._playerSize()
                 if not blink:
                     self._blitC(self.playerImg, self.playerX, self.playerY)
+                    blue = self.flameBlue[fi % len(self.flameBlue)] if self.flameBlue else None
+                    green = self.flameGreen[fi % len(self.flameGreen)] if self.flameGreen else None
+                    if blue is not None:
+                        self._blitC(blue, self.playerX - 6, self.playerY + ph * 0.48)
+                        self._blitC(blue, self.playerX + 6, self.playerY + ph * 0.48)
+                    if green is not None:
+                        self._blitC(green, self.playerX - pw * 0.42, self.playerY + ph * 0.36)
+                        self._blitC(green, self.playerX + pw * 0.42, self.playerY + ph * 0.36)
                 if self.flashT > 0:
-                    pw, ph = self._playerSize()
                     frame = self.muzzle[0] if self.flashT > 0.04 else self.muzzle[1]
                     self._blitC(frame, self.playerX, self.playerY - ph * 0.5 - 4)
 
