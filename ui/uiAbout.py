@@ -1084,7 +1084,21 @@ if pygame is not None:
                 2: _fitSurf(_loadSurf("b19.png"), 36, 34),
                 3: _fitSurf(_loadSurf("b20.png"), 30, 40),
             }
-            self.eBullet = _fitSurf(_loadSurf("b6.png"), 7, 18)
+            self.eBullets = {
+                1: [
+                    _fitSurf(_loadSurf("b6.png"), 8, 20),
+                    _fitSurf(_loadSurf("b30.png"), 8, 20),
+                ],
+                2: [
+                    _fitSurf(_loadSurf("b31.png"), 8, 26),
+                    _fitSurf(_loadSurf("b32.png"), 8, 26),
+                ],
+                3: [
+                    _fitSurf(_loadSurf("b33.png"), 20, 48),
+                    _fitSurf(_loadSurf("b34.png"), 20, 48),
+                ],
+            }
+            self.eBullet = (self.eBullets.get(1) or [None])[0]
             self.barrierSrc = _fitSurf(_loadSurf("b7.png"), 108, 42)
             self.ufoImg = _fitSurf(_loadSurf("b16.png"), 52, 36)
             self.lifeImg = _fitSurf(_loadSurf("b17.png"), 16, 16)
@@ -1304,9 +1318,16 @@ if pygame is not None:
             self.flashT = 0.08
             self.playS("shoot")
 
-        def _enemyFire(self, x, y):
-            self.eShots.append({"x": x, "y": y})
+        def _enemyFire(self, x, y, kind=1):
+            self.eShots.append({"x": x, "y": y, "kind": int(kind or 1)})
             self.playS("eShot")
+
+        def _eShotImg(self, shot):
+            kind = shot.get("kind", 1)
+            frames = self.eBullets.get(kind) or self.eBullets.get(1) or []
+            if not frames:
+                return None
+            return frames[self.flameFrame % len(frames)]
 
         def _killPlayer(self):
             if self.playerDead or self.invuln > 0:
@@ -1518,7 +1539,7 @@ if pygame is not None:
                     if prev is None or e["y"] > prev["y"]:
                         cols[key] = e
                 shooter = random.choice(list(cols.values()))
-                self._enemyFire(shooter["x"], shooter["y"] + 14)
+                self._enemyFire(shooter["x"], shooter["y"] + 14, shooter.get("kind", 1))
 
             floorY = self.playerY - 36
             for e in living:
@@ -1569,7 +1590,7 @@ if pygame is not None:
                 e["x"] += math.sin(e["t"] * 3.2) * e["phase"] * dt * 0.08 + (self.playerX - e["x"]) * 0.55 * dt
                 if (not e["shot"]) and e["y"] > 160:
                     e["shot"] = True
-                    self._enemyFire(e["x"], e["y"] + 12)
+                    self._enemyFire(e["x"], e["y"] + 12, e.get("kind", 1))
                 if e["y"] > H + 20:
                     # recycle to top of slot
                     e["y"] = -20
@@ -1581,15 +1602,13 @@ if pygame is not None:
             if self.eShootT <= 0 and parked and stillIn == 0:
                 self.eShootT = max(0.45, 1.3 - self.wave * 0.08)
                 shooter = random.choice(parked)
-                self._enemyFire(shooter["x"], shooter["y"] + 14)
+                self._enemyFire(shooter["x"], shooter["y"] + 14, shooter.get("kind", 1))
 
         def _collide(self):
             pbw, pbh = (6, 16)
             if self.pBullet is not None:
                 pbw, pbh = self.pBullet.get_size()
             ebw, ebh = (6, 16)
-            if self.eBullet is not None:
-                ebw, ebh = self.eBullet.get_size()
 
             keepP = []
             for s in self.pShots:
@@ -1633,6 +1652,9 @@ if pygame is not None:
             keepE = []
             pr = self._playerRect()
             for s in self.eShots:
+                img = self._eShotImg(s)
+                if img is not None:
+                    ebw, ebh = img.get_size()
                 sr = (s["x"] - ebw * 0.5, s["y"] - ebh * 0.5, ebw, ebh)
                 hit = False
                 if self.mode == "ab" and self._hitBarriers(s["x"], s["y"], False):
@@ -1747,9 +1769,10 @@ if pygame is not None:
                         bh = self.pBullet.get_height()
                         self._blitC(trail, s["x"], s["y"] + bh * 0.42)
                     self._blitC(self.pBullet, s["x"], s["y"])
-            if self.eBullet is not None:
-                for s in self.eShots:
-                    self._blitC(self.eBullet, s["x"], s["y"])
+            for s in self.eShots:
+                img = self._eShotImg(s)
+                if img is not None:
+                    self._blitC(img, s["x"], s["y"])
 
             if not self.playerDead:
                 blink = self.invuln > 0 and int(self.invuln * 12) % 2 == 0
