@@ -1102,45 +1102,44 @@ if pygame is not None:
             self.ok = False
             self.sounds = {}
             self._paths = {}
-            self._pool = []
-            self._poolIdx = 0
+            self._players = {}
             self._ufoName = "ufo"
             self._owner = QObject()
             try:
                 for key, fn in self._NAMES.items():
                     path = Logic.resourcePath(f"ui/fx/{fn}")
-                    if path and os.path.isfile(path):
-                        self._paths[key] = os.path.abspath(path)
-                for _ in range(8):
+                    if not path or not os.path.isfile(path):
+                        continue
+                    path = os.path.abspath(path)
+                    self._paths[key] = path
                     out = QAudioOutput(self._owner)
-                    out.setVolume(0.8)
+                    out.setVolume(0.95 if key == "boomP" else 0.8)
                     pl = QMediaPlayer(self._owner)
                     pl.setAudioOutput(out)
-                    self._pool.append(pl)
-                self.ok = bool(self._paths) and bool(self._pool)
+                    pl.setSource(QUrl.fromLocalFile(path))
+                    self._players[key] = pl
+                self.ok = bool(self._players)
             except Exception:
                 self.ok = False
                 self._paths = {}
-                self._pool = []
+                self._players = {}
 
         def play(self, name):
             if not self.ok:
                 return
-            path = self._paths.get(name)
-            if not path or not self._pool:
+            pl = self._players.get(name)
+            if pl is None:
                 return
             try:
-                pl = self._pool[self._poolIdx]
-                self._poolIdx = (self._poolIdx + 1) % len(self._pool)
                 pl.stop()
-                pl.setSource(QUrl.fromLocalFile(path))
                 pl.setPosition(0)
                 pl.play()
             except Exception:
                 pass
 
         def stop(self, name=None):
-            for pl in self._pool:
+            players = [self._players[name]] if name and name in self._players else list(self._players.values())
+            for pl in players:
                 try:
                     pl.stop()
                 except Exception:
