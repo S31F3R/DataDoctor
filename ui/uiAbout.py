@@ -2282,6 +2282,7 @@ if pygame is not None:
                     self.playerL = pygame.transform.flip(self.playerR, True, False)
                 except Exception:
                     self.playerL = self.playerR
+            # Horizontal bolt is authored tip-right. Flip for left fire.
             self.pBulletR = _fitSurf(_loadSurf("b36.png"), 18, 6)
             self.pBulletL = None
             if self.pBulletR is not None:
@@ -2289,6 +2290,21 @@ if pygame is not None:
                     self.pBulletL = pygame.transform.flip(self.pBulletR, True, False)
                 except Exception:
                     self.pBulletL = self.pBulletR
+            # Same trail as AB/LS, laid over for left/right so it stays behind the tip.
+            rawTrail = [
+                _fitSurf(_loadSurf("b28.png"), 7, 11),
+                _fitSurf(_loadSurf("b29.png"), 7, 12),
+            ]
+            self.pTrailR = [self._rot90(f, clockwise=True) for f in rawTrail]
+            self.pTrailL = []
+            for f in self.pTrailR:
+                if f is None:
+                    self.pTrailL.append(None)
+                else:
+                    try:
+                        self.pTrailL.append(pygame.transform.flip(f, True, False))
+                    except Exception:
+                        self.pTrailL.append(f)
             self.eImg = {
                 1: _fitSurf(_loadSurf("b3.png"), 30, 28),
                 2: _fitSurf(_loadSurf("b4.png"), 32, 30),
@@ -2583,6 +2599,7 @@ if pygame is not None:
                 "x": self.playerX + self.face * pw * 0.45,
                 "y": self.playerY,
                 "vx": self.face * 420.0,
+                "gone": 0.0,
             })
             self.playS("shoot")
 
@@ -2693,12 +2710,17 @@ if pygame is not None:
             self.camX = self._wrap(oldCam + self._wrapDelta(target, oldCam) * min(1.0, 3.2 * dt))
             self.camShift += self._wrapDelta(self.camX, oldCam)
 
-            for s in self.pShots:
-                s["x"] = self._wrap(s["x"] + s["vx"] * dt)
+            # Player bolts do not wrap — a miss leaves the view and frees the slot.
             keepP = []
             for s in self.pShots:
-                if abs(self._wrapDelta(s["x"], self.playerX)) < W * 1.2:
-                    keepP.append(s)
+                s["x"] += s["vx"] * dt
+                s["gone"] = s.get("gone", 0.0) + abs(s["vx"] * dt)
+                sx = self._wrapDelta(s["x"], self.camX)
+                if s["gone"] > self.WORLD * 0.4:
+                    continue
+                if sx < -48 or sx > W + 48:
+                    continue
+                keepP.append(s)
             self.pShots = keepP
 
             for s in self.eShots:
@@ -2806,7 +2828,7 @@ if pygame is not None:
                     img = self.ufoImg if e.get("ufo") and self.ufoImg is not None else self.eImg.get(e["kind"])
                     if img is not None:
                         ew, eh = img.get_size()
-                    if self._viewHit(s["x"], s["y"], pbw * 0.5, pbh * 0.5, ew * 0.45, eh * 0.45, e["x"], e["y"]):
+                    if self._hitOnce(s["x"], s["y"], pbw * 0.5, pbh * 0.5, e["x"], e["y"], ew * 0.45, eh * 0.45):
                         tag = "ufo" if e.get("ufo") else {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
                         self._spawnFx(tag, e["x"], e["y"])
                         pts = 150 if e.get("ufo") else {1: 20, 2: 40, 3: 60}.get(e["kind"], 20)
@@ -2832,6 +2854,19 @@ if pygame is not None:
                         return True
             return False
 
+        def _hitOnce(self, ax, ay, ahw, ahh, bx, by, bhw, bhh):
+            """Player-bolt hit test — no world wrap, so a miss cannot strike the far edge."""
+            sax = self._wrapDelta(ax, self.camX)
+            if sax < -80 or sax > W + 80:
+                return False
+            for sbx in self._screenXs(bx, pad=80):
+                if self._overlap(
+                    (sax - ahw, ay - ahh, ahw * 2, ahh * 2),
+                    (sbx - bhw, by - bhh, bhw * 2, bhh * 2),
+                ):
+                    return True
+            return False
+
         def _updateFx(self, dt):
             live = []
             for f in self.fx:
@@ -2853,6 +2888,14 @@ if pygame is not None:
             if img is None:
                 return
             for sx in self._screenXs(wx):
+                self._blitC(img, sx, wy)
+
+        def _drawOnce(self, img, wx, wy):
+            """Blit in camera space without wrapping to the opposite edge."""
+            if img is None:
+                return
+            sx = self._wrapDelta(wx, self.camX)
+            if -80 <= sx <= W + 80:
                 self._blitC(img, sx, wy)
 
         def _drawHud(self):
@@ -2936,8 +2979,14 @@ if pygame is not None:
                 self._drawWorld(img, e["x"], e["y"])
 
             for s in self.pShots:
-                img = self.pBulletR if s["vx"] >= 0 else self.pBulletL
-                self._drawWorld(img, s["x"], s["y"])
+                goingR = s["vx"] >= 0
+                bolt = self.pBulletR if goingR else self.pBulletL
+                trails = self.pTrailR if goingR else self.pTrailL
+                trail = trails[fi % len(trails)] if trails else None
+                if trail is not None and bolt is not None:
+                    bw = bolt.get_width()
+                    self._drawOnce(trail, s["x"] - (1 if goingR else -1) * bw * 0.42, s["y"])
+                self._drawOnce(bolt, s["x"], s["y"])
             for s in self.eShots:
                 if s.get("ufo") and self.ufoBullets:
                     frames = self.ufoBullets
