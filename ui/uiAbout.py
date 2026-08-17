@@ -510,6 +510,8 @@ class uiAbout(QDialog):
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 self._launchIndex(self._cabList.currentRow())
                 return True
+            if self._moveCatalog(key, event.text()):
+                return True
 
         if self._playMode or self._splashMode:
             if obj is self._playLabel or obj is self:
@@ -668,6 +670,26 @@ class uiAbout(QDialog):
             self._cabList.addItem(item)
         if self._cabList.count() > 0:
             self._cabList.setCurrentRow(0)
+
+    def _moveCatalog(self, key, text=""):
+        """W/S (and arrows) step the SELECT list."""
+        if self._cabList is None or self._cabList.count() < 1:
+            return False
+        ch = (text or "").lower()
+        up = key in (Qt.Key.Key_Up, Qt.Key.Key_W) or ch == "w"
+        down = key in (Qt.Key.Key_Down, Qt.Key.Key_S) or ch == "s"
+        if not up and not down:
+            return False
+        n = self._cabList.count()
+        row = self._cabList.currentRow()
+        if row < 0:
+            row = 0
+        if up:
+            row = (row - 1) % n
+        else:
+            row = (row + 1) % n
+        self._cabList.setCurrentRow(row)
+        return True
 
     def _onCabinetActivate(self, item):
         if item is None:
@@ -880,6 +902,8 @@ class uiAbout(QDialog):
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 if self._cabList is not None:
                     self._launchIndex(self._cabList.currentRow())
+                return
+            if self._moveCatalog(key, event.text()):
                 return
         super().keyPressEvent(event)
 
