@@ -123,6 +123,8 @@ class uiAbout(QDialog):
         self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
         self.buttonSecret = self.findChild(QPushButton, 'buttonSecret')
+        self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
         self.setFixedSize(900, 479)
         self.setWindowTitle(self._TITLE_DEFAULT)
 
@@ -352,21 +354,28 @@ class uiAbout(QDialog):
         return bool(self._cabinetMode or self._playMode or self._splashMode)
 
     def _unlockCabinetSize(self):
+        # Size only — never setWindowFlag here. Flag changes hide a live dialog
+        # (About is opened with exec()), which makes the window vanish.
         self.setMinimumSize(720, 383)
         self.setMaximumSize(16777215, 16777215)
-        self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
-        self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
         self._playLetterbox = None
         self._layoutCabinetChrome()
+        if not self.isVisible():
+            self.show()
+        self.raise_()
+        self.activateWindow()
 
     def _lockStockSize(self):
         if self.isFullScreen() or self.isMaximized():
             self.showNormal()
-        self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
         self.setFixedSize(self._BASE_W, self._BASE_H)
         self._playLetterbox = None
         self._backdropSize = None
         Utils.centerWindowToParent(self)
+        if not self.isVisible():
+            self.show()
+        self.raise_()
+        self.activateWindow()
 
     def _toggleCabinetFill(self):
         if not self._cabinetActive():
@@ -588,6 +597,10 @@ class uiAbout(QDialog):
         self._applyCabinetShell(True)
         self._refreshCatalog()
         self._showCatalogChrome(True)
+        if not self.isVisible():
+            self.show()
+        self.raise_()
+        self.activateWindow()
         if self._cabList is not None:
             self._cabList.setFocus(Qt.FocusReason.OtherFocusReason)
 
