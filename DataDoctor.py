@@ -490,7 +490,11 @@ class uiMain(QMainWindow):
             Logic.logMessage("DEBUG", "uiMain initialized with header context menu, Config.rawData: {}".format(Config.rawData))
 
     def closeEvent(self, event):
-        """Override closeEvent to save splitter sizes if SQL tab is open."""
+        """Save splitter sizes, tear down children, and actually quit the process."""
+        if getattr(self, "_quitting", False):
+            event.accept()
+            return
+        self._quitting = True
         try:
             sqlTab = self.tabSQL or self.findChild(QWidget, 'tabSQL')
 
@@ -515,6 +519,38 @@ class uiMain(QMainWindow):
                         Logic.logException("Failed to save splitter sizes", e)
         except Exception as e:
             Logic.logException("closeEvent failed", e)
+
+        about = getattr(self, "winAbout", None)
+        if about is not None:
+            try:
+                about._closing = True
+                about.stopMusic()
+                about._resetToDefaultAbout()
+                about.close()
+            except Exception:
+                pass
+
+        try:
+            import pygame
+            if pygame.get_init():
+                pygame.quit()
+        except Exception:
+            pass
+
+        try:
+            QThreadPool.globalInstance().waitForDone(400)
+        except Exception:
+            pass
+
+        app = QApplication.instance()
+        if app is not None:
+            try:
+                app.closeAllWindows()
+            except Exception:
+                pass
+            QTimer.singleShot(0, app.quit)
+
+        event.accept()
         super().closeEvent(event)
 
     def showEvent(self, event):

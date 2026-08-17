@@ -27,6 +27,17 @@ except Exception:  # pragma: no cover
     Vector2 = None
 
 
+def _pygameMixer():
+    """pygame.mixer is optional — do not touch pygame.mixer if the module is absent."""
+    if pygame is None:
+        return None
+    try:
+        import pygame.mixer as mix
+        return mix
+    except Exception:
+        return None
+
+
 # user.config optional map (refMarks) — short keys, integer values
 def _readMark(key):
     try:
@@ -119,6 +130,7 @@ class uiAbout(QDialog):
         self._playPulses = []
         self._playLetterbox = None
         self._backdropSize = None
+        self._closing = False
 
         self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
@@ -360,22 +372,24 @@ class uiAbout(QDialog):
         self.setMaximumSize(16777215, 16777215)
         self._playLetterbox = None
         self._layoutCabinetChrome()
-        if not self.isVisible():
+        if not getattr(self, "_closing", False) and not self.isVisible():
             self.show()
-        self.raise_()
-        self.activateWindow()
+            self.raise_()
+            self.activateWindow()
 
     def _lockStockSize(self):
+        closing = getattr(self, "_closing", False)
         if self.isFullScreen() or self.isMaximized():
             self.showNormal()
         self.setFixedSize(self._BASE_W, self._BASE_H)
         self._playLetterbox = None
         self._backdropSize = None
+        if closing:
+            return
         Utils.centerWindowToParent(self)
-        if not self.isVisible():
-            self.show()
-        self.raise_()
-        self.activateWindow()
+        if self.isVisible():
+            self.raise_()
+            self.activateWindow()
 
     def _toggleCabinetFill(self):
         if not self._cabinetActive():
@@ -762,11 +776,12 @@ class uiAbout(QDialog):
             self._splashHoldTimer.start(1500)
 
     def _playCreditTone(self):
-        if pygame is None:
+        mix = _pygameMixer()
+        if mix is None:
             return
         try:
-            if pygame.mixer.get_init() is None:
-                pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
+            if mix.get_init() is None:
+                mix.init(frequency=22050, size=-16, channels=1, buffer=512)
             snd = _synthTone(1180, 80, 0.28)
             if snd is not None:
                 snd.play()
@@ -913,7 +928,26 @@ class uiAbout(QDialog):
             return
         super().keyReleaseEvent(event)
 
+    def exec(self):
+        self._closing = False
+        return super().exec()
+
+    def closeEvent(self, event):
+        self._closing = True
+        self.stopMusic()
+        self._resetToDefaultAbout()
+        super().closeEvent(event)
+
+    def reject(self):
+        self._closing = True
+        self.stopMusic()
+        self._resetToDefaultAbout()
+        super().reject()
+
     def showEvent(self, event):
+        if getattr(self, "_closing", False):
+            super().showEvent(event)
+            return
         if not self._cabinetActive() and not self.isMaximized() and not self.isFullScreen():
             Utils.centerWindowToParent(self)
         if not self._cabinetMode and not self._playMode and not self._splashMode:
@@ -924,16 +958,6 @@ class uiAbout(QDialog):
                 self.buttonSecret.raise_()
             self.startMusic()
         super().showEvent(event)
-
-    def closeEvent(self, event):
-        self.stopMusic()
-        self._resetToDefaultAbout()
-        super().closeEvent(event)
-
-    def reject(self):
-        self.stopMusic()
-        self._resetToDefaultAbout()
-        super().reject()
 
 
 class _WorthyKeyFilter(QObject):
@@ -1045,7 +1069,10 @@ if pygame is not None:
                 sample = int(vol * env * 32767 * math.sin(2 * math.pi * freq * t))
                 sample = max(-32767, min(32767, sample))
                 buf += struct.pack("<h", sample)
-            return pygame.mixer.Sound(buffer=bytes(buf))
+            mix = _pygameMixer()
+            if mix is None:
+                return None
+            return mix.Sound(buffer=bytes(buf))
         except Exception:
             return None
 
@@ -1087,12 +1114,15 @@ if pygame is not None:
 
         def _initMixerFallback(self):
             try:
-                if pygame.mixer.get_init() is None:
-                    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+                mix = _pygameMixer()
+                if mix is None:
+                    return
+                if mix.get_init() is None:
+                    mix.init(frequency=44100, size=-16, channels=2, buffer=512)
                 for key, fn in self._NAMES.items():
                     path = Logic.resourcePath(f"ui/fx/{fn}")
                     if path and os.path.isfile(path):
-                        self.sounds[key] = pygame.mixer.Sound(path)
+                        self.sounds[key] = mix.Sound(path)
                 self.ok = bool(self.sounds)
             except Exception:
                 self.ok = False
