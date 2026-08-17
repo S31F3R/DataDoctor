@@ -507,6 +507,18 @@ class uiAbout(QDialog):
             self._layoutCabinetChrome()
 
     def eventFilter(self, obj, event):
+        if self._splashMode and event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_F11:
+                self._toggleCabinetFill()
+                return True
+            if key == Qt.Key.Key_Escape:
+                self._hideSplash()
+                self._returnToCatalog()
+                return True
+            # Let the intro finish — do not skip or re-launch
+            return True
+
         if (
             self._cabinetMode
             and not self._playMode
@@ -527,7 +539,7 @@ class uiAbout(QDialog):
             if self._moveCatalog(key, event.text()):
                 return True
 
-        if self._playMode or self._splashMode:
+        if self._playMode:
             if obj is self._playLabel or obj is self:
                 et = event.type()
                 if et == QEvent.Type.KeyPress and not event.isAutoRepeat():
@@ -719,6 +731,7 @@ class uiAbout(QDialog):
             return
         self.stopMusic()
         self._showCatalogChrome(False)
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
         self._startSplash(entry)
 
     def _startSplash(self, entry):
@@ -897,14 +910,8 @@ class uiAbout(QDialog):
                 self._hideSplash()
                 self._returnToCatalog()
                 return
-            if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
-                if self._splashCreditsFx is not None and self._splashCreditsFx.opacity() >= 0.99:
-                    if self._splashHoldTimer is not None:
-                        self._splashHoldTimer.stop()
-                    if self._splashCreditTimer is not None:
-                        self._splashCreditTimer.stop()
-                    self._onSplashHoldDone()
-                return
+            # Intro is not skippable; ignore Enter/Space so SELECT cannot re-fire
+            return
         if self._playMode:
             if not event.isAutoRepeat():
                 self._handlePlayKey(event.key(), True, event.text())
