@@ -2446,6 +2446,8 @@ if pygame is not None:
                 self.idleFrame = 1 - self.idleFrame
             self.flameT += dt
             self.flameFrame = 0 if int(self.flameT / 0.07) % 2 == 0 else 1
+            if self.invuln > 0:
+                self.invuln -= dt
 
             if self.playerDead:
                 self.dieWait -= dt
@@ -2578,6 +2580,8 @@ if pygame is not None:
                 if img is not None:
                     ew, eh = img.get_size()
                 if self._viewHit(e["x"], e["y"], ew * 0.4, eh * 0.4, pw * 0.42, ph * 0.42):
+                    if self.invuln > 0:
+                        continue
                     tag = "ufo" if e.get("ufo") else {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
                     self._spawnFx(tag, e["x"], e["y"])
                     self.playS("boomE")
