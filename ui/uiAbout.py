@@ -1153,18 +1153,22 @@ if pygame is not None:
             except Exception:
                 pass
 
+        def stop(self, name=None):
+            names = [name] if name else list(self.sounds)
+            for key in names:
+                snd = self.sounds.get(key)
+                if snd is None:
+                    continue
+                try:
+                    snd.stop()
+                except Exception:
+                    pass
+
         def startUfo(self):
             self.play(self._ufoName)
 
         def stopUfo(self):
-            snd = self.sounds.get(self._ufoName)
-            if snd is None:
-                return
-            try:
-                if self._isQtFx(snd):
-                    snd.stop()
-            except Exception:
-                pass
+            self.stop(self._ufoName)
 
     def _fxPath(name):
         try:
@@ -1428,6 +1432,7 @@ if pygame is not None:
             return (32, 32)
 
         def beginPlay(self):
+            self.audio.stop()
             self.score = 0
             self.lives = 3
             self.wave = 1
@@ -1657,14 +1662,17 @@ if pygame is not None:
             for p in pulses:
                 if p == "escape":
                     if self.state == "PLAYING":
+                        self.audio.stop()
                         self.state = "MENU"
-                        self.audio.stopUfo()
                     elif self.state == "PAUSED":
+                        self.audio.stop()
                         self.state = "MENU"
                     else:
+                        self.audio.stop()
                         self.running = False
                 elif p == "p":
                     if self.state == "PLAYING":
+                        self.audio.stop()
                         self.state = "PAUSED"
                     elif self.state == "PAUSED":
                         self.state = "PLAYING"
@@ -2087,7 +2095,7 @@ if pygame is not None:
         def stop(self):
             self.running = False
             try:
-                self.audio.stopUfo()
+                self.audio.stop()
             except Exception:
                 pass
             if self.score > self.highScore:
