@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QUrl, QSize, QObject, QEvent, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QImage, QColor, QPainter
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QSoundEffect
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import uic
 
 from core import Logic, Utils, Version
@@ -1084,7 +1084,7 @@ if pygame is not None:
             return None
 
     class _Sfx:
-        """One-shots via Qt so they share the About audio device."""
+        """One-shots on the same QMediaPlayer path as About music (survives capture apps)."""
 
         _NAMES = {
             "shoot": "c0.wav",
@@ -1101,66 +1101,48 @@ if pygame is not None:
         def __init__(self, host=None):
             self.ok = False
             self.sounds = {}
+            self._paths = {}
+            self._pool = []
+            self._poolIdx = 0
             self._ufoName = "ufo"
-            parent = host if isinstance(host, QObject) else None
+            self._owner = QObject()
             try:
-                for key, fn in self._NAMES.items():
-                    path = Logic.resourcePath(f"ui/fx/{fn}")
-                    if not path or not os.path.isfile(path):
-                        continue
-                    fx = QSoundEffect(parent)
-                    fx.setSource(QUrl.fromLocalFile(os.path.abspath(path)))
-                    fx.setVolume(0.8)
-                    self.sounds[key] = fx
-                self.ok = bool(self.sounds)
-            except Exception:
-                self.ok = False
-                self.sounds = {}
-            if not self.ok:
-                self._initMixerFallback()
-
-        def _initMixerFallback(self):
-            try:
-                mix = _pygameMixer()
-                if mix is None:
-                    return
-                if mix.get_init() is None:
-                    mix.init(frequency=44100, size=-16, channels=2, buffer=512)
                 for key, fn in self._NAMES.items():
                     path = Logic.resourcePath(f"ui/fx/{fn}")
                     if path and os.path.isfile(path):
-                        self.sounds[key] = mix.Sound(path)
-                self.ok = bool(self.sounds)
+                        self._paths[key] = os.path.abspath(path)
+                for _ in range(8):
+                    out = QAudioOutput(self._owner)
+                    out.setVolume(0.8)
+                    pl = QMediaPlayer(self._owner)
+                    pl.setAudioOutput(out)
+                    self._pool.append(pl)
+                self.ok = bool(self._paths) and bool(self._pool)
             except Exception:
                 self.ok = False
-
-        def _isQtFx(self, snd):
-            return hasattr(snd, "isPlaying")
+                self._paths = {}
+                self._pool = []
 
         def play(self, name):
             if not self.ok:
                 return
-            snd = self.sounds.get(name)
-            if snd is None:
+            path = self._paths.get(name)
+            if not path or not self._pool:
                 return
             try:
-                if self._isQtFx(snd):
-                    if snd.isPlaying():
-                        snd.stop()
-                    snd.play()
-                else:
-                    snd.play()
+                pl = self._pool[self._poolIdx]
+                self._poolIdx = (self._poolIdx + 1) % len(self._pool)
+                pl.stop()
+                pl.setSource(QUrl.fromLocalFile(path))
+                pl.setPosition(0)
+                pl.play()
             except Exception:
                 pass
 
         def stop(self, name=None):
-            names = [name] if name else list(self.sounds)
-            for key in names:
-                snd = self.sounds.get(key)
-                if snd is None:
-                    continue
+            for pl in self._pool:
                 try:
-                    snd.stop()
+                    pl.stop()
                 except Exception:
                     pass
 
@@ -2155,6 +2137,8 @@ if pygame is not None:
                     except Exception:
                         pass
                 self.stars = _asOverlay(self.stars)
+            self.bgLoop = self._loopStrip(self.bg)
+            self.starLoop = self._loopStrip(self.stars)
             side = _loadSurf("b35.png")
             self.playerR = _fitSurf(side, 72, 38)
             self.playerL = None
@@ -2194,6 +2178,10 @@ if pygame is not None:
                     self._rot90(_fitSurf(_loadSurf("b34.png"), 18, 40)),
                 ],
             }
+            self.ufoBullets = [
+                _fitSurf(_loadSurf("b37.png"), 22, 22),
+                _fitSurf(_loadSurf("b38.png"), 22, 22),
+            ]
             self.ufoImg = _fitSurf(_loadSurf("b16.png"), 44, 30)
             self.lifeImg = _fitSurf(_loadSurf("b17.png"), 16, 16)
             flameR = [
@@ -2231,6 +2219,7 @@ if pygame is not None:
             self.vy = 0.0
             self.face = 1
             self.camX = 0.0
+            self.camShift = 0.0
             self.playerDead = False
             self.dieWait = 0.0
             self.invuln = 0.0
@@ -2255,6 +2244,22 @@ if pygame is not None:
             try:
                 ang = -90 if clockwise else 90
                 return pygame.transform.rotate(img, ang)
+            except Exception:
+                return img
+
+        def _loopStrip(self, img):
+            """Mirror-join so horizontal wrap has no hard cut."""
+            if img is None:
+                return None
+            try:
+                iw, ih = img.get_size()
+                strip = pygame.Surface((iw * 2, ih)).convert()
+                strip.blit(img, (0, 0))
+                try:
+                    strip.blit(pygame.transform.flip(img, True, False), (iw, 0))
+                except Exception:
+                    strip.blit(img, (iw, 0))
+                return strip
             except Exception:
                 return img
 
@@ -2300,6 +2305,7 @@ if pygame is not None:
             self.vy = 0.0
             self.face = 1
             self.camX = 0.0
+            self.camShift = 0.0
             self.playerDead = False
             self.dieWait = 0.0
             self.invuln = 0.0
@@ -2472,9 +2478,13 @@ if pygame is not None:
             pw, ph = self._playerSize()
             self.playerY = max(40 + ph * 0.5, min(H - 22 - ph * 0.5, self.playerY))
 
-            look = self.face * 90.0
+            # Keep the ship centered. Look-ahead follows velocity only (not facing),
+            # so flipping left/right does not yank the whole view.
+            look = max(-55.0, min(55.0, self.vx * 0.16))
             target = self.playerX - W * 0.5 + look
-            self.camX = self._wrap(self.camX + self._wrapDelta(target, self.camX) * min(1.0, 6.0 * dt))
+            oldCam = self.camX
+            self.camX = self._wrap(oldCam + self._wrapDelta(target, oldCam) * min(1.0, 3.2 * dt))
+            self.camShift += self._wrapDelta(self.camX, oldCam)
 
             for s in self.pShots:
                 s["x"] = self._wrap(s["x"] + s["vx"] * dt)
@@ -2517,6 +2527,7 @@ if pygame is not None:
                         "vx": (dx / dist) * spd,
                         "vy": (dy / dist) * spd,
                         "kind": e["kind"],
+                        "ufo": bool(e.get("ufo")),
                     })
                     self.playS("eShot")
 
@@ -2563,7 +2574,10 @@ if pygame is not None:
                 return
             for s in list(self.eShots):
                 img = None
-                frames = self.eBullets.get(s.get("kind", 1)) or []
+                if s.get("ufo") and self.ufoBullets:
+                    frames = self.ufoBullets
+                else:
+                    frames = self.eBullets.get(s.get("kind", 1)) or []
                 if frames:
                     img = frames[self.flameFrame % len(frames)]
                 ebw, ebh = (12, 6)
@@ -2647,18 +2661,25 @@ if pygame is not None:
                 msg = self.bigFont.render(self.message, True, YELLOW)
                 self.screen.blit(msg, (W // 2 - msg.get_width() // 2, 210))
 
+        def _blitParallax(self, strip, factor):
+            if strip is None:
+                return
+            period = strip.get_width()
+            if period < 1:
+                return
+            off = int(-(self.camShift * factor) % period)
+            self.screen.blit(strip, (off - period, 0))
+            self.screen.blit(strip, (off, 0))
+            if off + period < W:
+                self.screen.blit(strip, (off + period, 0))
+
         def draw(self):
-            # tiled backdrop + stars follow camera
-            off = int(-(self.camX * 0.35) % W)
-            if self.bg is not None:
-                self.screen.blit(self.bg, (off - W, 0))
-                self.screen.blit(self.bg, (off, 0))
+            if self.bgLoop is not None or self.bg is not None:
+                self.screen.fill((4, 2, 12))
+                self._blitParallax(self.bgLoop or self.bg, 0.28)
             else:
                 self.screen.fill((4, 2, 12))
-            if self.stars is not None:
-                so = int(-(self.camX * 0.7) % W)
-                self.screen.blit(self.stars, (so - W, 0))
-                self.screen.blit(self.stars, (so, 0))
+            self._blitParallax(self.starLoop or self.stars, 0.62)
 
             if self.state == "MENU":
                 title = self.bigFont.render(self.title, True, CYAN)
@@ -2697,7 +2718,10 @@ if pygame is not None:
                 img = self.pBulletR if s["vx"] >= 0 else self.pBulletL
                 self._drawWorld(img, s["x"], s["y"])
             for s in self.eShots:
-                frames = self.eBullets.get(s.get("kind", 1)) or []
+                if s.get("ufo") and self.ufoBullets:
+                    frames = self.ufoBullets
+                else:
+                    frames = self.eBullets.get(s.get("kind", 1)) or []
                 img = frames[fi % len(frames)] if frames else None
                 self._drawWorld(img, s["x"], s["y"])
 
