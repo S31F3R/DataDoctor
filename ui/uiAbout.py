@@ -137,21 +137,33 @@ class uiAbout(QDialog):
         }
         self._playPulses = []
         self._backdropSize = None
+        self._aboutBgSrc = None
+        self._aboutBgSize = None
+        self._aboutLaidSize = None
         self._closing = False
 
         self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
         self.buttonSecret = self.findChild(QPushButton, 'buttonSecret')
+        # Flags only here. Toggling them on a live exec() dialog hides the
+        # window and can duplicate title-bar buttons on some WMs.
         self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
         self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
-        self.setFixedSize(900, 479)
+        # Always resizable. setFixedSize after a larger frame is what left
+        # the grey strip and made min/max buttons flicker.
+        self.setMinimumSize(720, 383)
+        self.resize(self._BASE_W, self._BASE_H)
         self.setWindowTitle(self._TITLE_DEFAULT)
+        pal = self.palette()
+        pal.setColor(self.backgroundRole(), QColor(0, 0, 0))
+        self.setPalette(pal)
+        self.setAutoFillBackground(True)
 
         pngPath = Logic.resourcePath('ui/DataDoctor.png')
-        pixmap = QPixmap(pngPath)
-        scaledPixmap = pixmap.scaled(900, 479, Qt.AspectRatioMode.KeepAspectRatio)
-        self.backgroundLabel.setPixmap(scaledPixmap)
-        self.backgroundLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._aboutBgSrc = QPixmap(pngPath)
+        if self.backgroundLabel is not None:
+            self.backgroundLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.backgroundLabel.setStyleSheet("background-color: black;")
         aboutFont = Utils.makeFontForRole('about')
         fam = Utils.ensureRetroFontLoaded() or aboutFont.family()
         pt = Utils.rolePointSize('about', retro=True)
@@ -159,35 +171,24 @@ class uiAbout(QDialog):
         retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
         self._retroFam = fam
         self._retroPt = pt
-        self.textInfo.setFont(retroFontObj)
-
-        infoList = [
+        self._aboutInfo = [
             ('Version', Version.displayVersion()),
             ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
             ('Author', 'S31F3R'),
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
         ]
-        htmlContent = (
-            f'<html><body style="color: white; font-family: \'{fam}\'; '
-            f'font-size: {pt}pt; padding-left: 50px; white-space: nowrap; line-height: 2.2;">'
-        )
-        for label, content in infoList:
-            if 'GitHub' in label:
-                htmlContent += f'{label}: <a href="{content}" style="color: white;">{content}</a><br>'
-            else:
-                htmlContent += f'{label}: {content}<br>'
-        htmlContent += '</body></html>'
-        self.textInfo.setHtml(htmlContent)
-        self.textInfo.setOpenExternalLinks(True)
-        self.textInfo.setStyleSheet("background-color: transparent; border: none;")
-        self.textInfo.setGeometry(70, 140, 800, 200)
+        if self.textInfo is not None:
+            self.textInfo.setFont(retroFontObj)
+            self.textInfo.setOpenExternalLinks(True)
+            self.textInfo.setStyleSheet("background-color: transparent; border: none;")
         self.setupSecretButton()
         self.mediaPlayer = None
         self.audioOutput = None
         self.setupMusic()
         self._ensureCabinetWidgets()
         self._ensurePlayHost()
+        self._layoutAboutChrome()
 
     def setupMusic(self):
         try:
@@ -223,9 +224,13 @@ class uiAbout(QDialog):
         if not self.buttonSecret:
             return
         self.buttonSecret.raise_()
-        self.buttonSecret.setGeometry(900 - 26, 479 - 26, 22, 22)
+        self.buttonSecret.setGeometry(self._BASE_W - 26, self._BASE_H - 26, 22, 22)
         self.buttonSecret.setText("")
         self.buttonSecret.setFlat(True)
+        # Click only — QDialog would otherwise treat this as the Enter default.
+        self.buttonSecret.setAutoDefault(False)
+        self.buttonSecret.setDefault(False)
+        self.buttonSecret.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.buttonSecret.setCursor(Qt.CursorShape.PointingHandCursor)
         self.buttonSecret.setToolTip("")
         self.buttonSecret.setStyleSheet(
@@ -238,6 +243,59 @@ class uiAbout(QDialog):
             self.buttonSecret.setIcon(QIcon(iconPath))
         self.buttonSecret.setIconSize(QSize(16, 16))
         self.buttonSecret.clicked.connect(self.buttonSecretPressed)
+
+    def _aboutInfoHtml(self, pt):
+        fam = getattr(self, "_retroFam", "monospace")
+        pad = max(24, int(round(50 * (pt / float(max(1, self._retroPt))))))
+        html = (
+            f'<html><body style="color: white; font-family: \'{fam}\'; '
+            f'font-size: {pt}pt; padding-left: {pad}px; white-space: nowrap; line-height: 2.2;">'
+        )
+        for label, content in getattr(self, "_aboutInfo", []):
+            if "GitHub" in label:
+                html += f'{label}: <a href="{content}" style="color: white;">{content}</a><br>'
+            else:
+                html += f'{label}: {content}<br>'
+        html += '</body></html>'
+        return html
+
+    def _layoutAboutChrome(self):
+        """Stock About fill — same cover-scale as play, no side strip."""
+        w = max(1, self.width())
+        h = max(1, self.height())
+        scale = max(1.0, h / float(self._BASE_H))
+        if self.backgroundLabel is not None:
+            self.backgroundLabel.setGeometry(0, 0, w, h)
+            src = self._aboutBgSrc
+            if src is not None and not src.isNull() and self._aboutBgSize != (w, h):
+                cover = src.scaled(
+                    w, h,
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                x = max(0, (cover.width() - w) // 2)
+                y = max(0, (cover.height() - h) // 2)
+                self.backgroundLabel.setPixmap(cover.copy(x, y, w, h))
+                self._aboutBgSize = (w, h)
+        if self.textInfo is not None and not self._cabinetActive():
+            sx = w / float(self._BASE_W)
+            sy = h / float(self._BASE_H)
+            pt = max(self._retroPt, int(round(self._retroPt * min(scale, 2.4))))
+            self.textInfo.setGeometry(
+                int(70 * sx), int(140 * sy),
+                max(200, int(800 * sx)), max(80, int(200 * sy)),
+            )
+            if self._aboutLaidSize != (w, h, pt):
+                retroFontObj = QFont(self._retroFam, pt)
+                retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
+                self.textInfo.setFont(retroFontObj)
+                self.textInfo.setHtml(self._aboutInfoHtml(pt))
+                self._aboutLaidSize = (w, h, pt)
+        if self.buttonSecret is not None and not self._cabinetActive():
+            bs = max(22, int(round(22 * min(scale, 2.0))))
+            self.buttonSecret.setGeometry(w - bs - 4, h - bs - 4, bs, bs)
+            self.buttonSecret.setIconSize(QSize(max(16, bs - 6), max(16, bs - 6)))
+            self.buttonSecret.raise_()
 
     def buttonSecretPressed(self):
         dlg = QMessageBox(self)
@@ -373,10 +431,7 @@ class uiAbout(QDialog):
         return bool(self._cabinetMode or self._playMode or self._splashMode)
 
     def _unlockCabinetSize(self):
-        # Size only — never setWindowFlag here. Flag changes hide a live dialog
-        # (About is opened with exec()), which makes the window vanish.
-        self.setMinimumSize(720, 383)
-        self.setMaximumSize(16777215, 16777215)
+        # Size policy is already free. Do not touch flags or setFixedSize.
         self._layoutCabinetChrome()
         if not getattr(self, "_closing", False) and not self.isVisible():
             self.show()
@@ -384,21 +439,22 @@ class uiAbout(QDialog):
             self.activateWindow()
 
     def _lockStockSize(self):
+        # Keep the current frame (including maximize). Forcing 900×479 here
+        # after a larger play window left a grey strip on the right.
         closing = getattr(self, "_closing", False)
-        if self.isFullScreen() or self.isMaximized():
-            self.showNormal()
-        self.setFixedSize(self._BASE_W, self._BASE_H)
-        self._backdropSize = None
+        self._aboutBgSize = None
+        self._aboutLaidSize = None
         if closing:
+            if self.isFullScreen() or self.isMaximized():
+                self.showNormal()
+            self.resize(self._BASE_W, self._BASE_H)
             return
-        Utils.centerWindowToParent(self)
+        self._layoutAboutChrome()
         if self.isVisible():
             self.raise_()
             self.activateWindow()
 
     def _toggleCabinetFill(self):
-        if not self._cabinetActive():
-            return
         if self.isFullScreen() or self.isMaximized():
             self.showNormal()
         else:
@@ -409,6 +465,8 @@ class uiAbout(QDialog):
         if self._cabinetActive():
             self._layoutCabinetChrome()
             self._syncSessionSize()
+        else:
+            self._layoutAboutChrome()
 
     def _layoutCabinetChrome(self):
         w = max(1, self.width())
@@ -481,6 +539,7 @@ class uiAbout(QDialog):
             Logic.logMessage("WARN", f"Optional view resize failed: {e}")
 
     def _presentPlayImage(self, qimg):
+        """Cover-scale the play buffer so the label is full-bleed (no side bars)."""
         label = self._playLabel
         if label is None or qimg is None or qimg.isNull():
             return
@@ -503,6 +562,14 @@ class uiAbout(QDialog):
         if self._cabinetActive():
             self._layoutCabinetChrome()
             self._syncSessionSize()
+        else:
+            self._layoutAboutChrome()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        # Title-bar maximize can deliver the new size a tick later.
+        if event.type() == QEvent.Type.WindowStateChange:
+            QTimer.singleShot(0, self._afterFillToggle)
 
     def eventFilter(self, obj, event):
         if self._splashMode and event.type() == QEvent.Type.KeyPress:
@@ -902,7 +969,7 @@ class uiAbout(QDialog):
             self.startMusic()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_F11 and self._cabinetActive():
+        if event.key() == Qt.Key.Key_F11:
             self._toggleCabinetFill()
             return
         if self._splashMode:
@@ -927,6 +994,9 @@ class uiAbout(QDialog):
                 return
             if self._moveCatalog(key, event.text()):
                 return
+        # Stock About: QDialog would click the default button on Enter.
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            return
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
@@ -963,6 +1033,7 @@ class uiAbout(QDialog):
             if self.buttonSecret is not None:
                 self.buttonSecret.show()
                 self.buttonSecret.raise_()
+            self._layoutAboutChrome()
             self.startMusic()
         super().showEvent(event)
 
@@ -1385,7 +1456,11 @@ if pygame is not None:
             self.applySize(W, H)
 
         def applySize(self, pw, ph):
-            """Rebuild the offscreen view so the playfield matches the window aspect."""
+            """Rebuild the offscreen view so the playfield matches the window aspect.
+
+            Height stays ~479; width follows the window. Positions are scaled
+            so maximize/un-maximize does not jump the ship or formation.
+            """
             global W, H
             pw = max(640, int(pw))
             ph = max(360, int(ph))
@@ -2300,7 +2375,10 @@ if pygame is not None:
             self.applySize(W, H)
 
         def applySize(self, pw, ph):
-            """Widen the camera window to the host aspect. World coords stay put."""
+            """Widen the camera window to the host aspect.
+
+            World coords stay put — a wider window just shows more of the course.
+            """
             global W, H
             pw = max(640, int(pw))
             ph = max(360, int(ph))
