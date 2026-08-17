@@ -1226,6 +1226,85 @@ if pygame is not None:
         def stopUfo(self):
             self.stop(self._ufoName)
 
+    class _Bgm:
+        """Per-title menu / play loops on QMediaPlayer (same path as About music)."""
+
+        # markKey → (menu, play)
+        _FILES = {
+            "ab": ("c9.wav", "c10.wav"),
+            "ls": ("c11.wav", "c12.wav"),
+            "ic": ("c13.wav", "c14.wav"),
+        }
+
+        def __init__(self, host=None, markKey="ab"):
+            owner = host if isinstance(host, QObject) else QObject()
+            self._owner = owner
+            self._menu = None
+            self._game = None
+            self._cur = None
+            pair = self._FILES.get(str(markKey or ""))
+            if not pair:
+                return
+            self._menu = self._load(pair[0], owner)
+            self._game = self._load(pair[1], owner)
+
+        def _load(self, fn, owner):
+            try:
+                path = Logic.resourcePath(f"ui/fx/{fn}")
+                if not path or not os.path.isfile(path):
+                    return None
+                out = QAudioOutput(owner)
+                out.setVolume(0.55)
+                pl = QMediaPlayer(owner)
+                pl.setAudioOutput(out)
+                pl.setSource(QUrl.fromLocalFile(os.path.abspath(path)))
+                pl.setLoops(-1)
+                return pl
+            except Exception:
+                return None
+
+        def playMenu(self):
+            self._go(self._menu, restart=True)
+
+        def playGame(self):
+            # Same track + unpause: do not rewind
+            self._go(self._game, restart=False)
+
+        def pause(self):
+            if self._cur is None:
+                return
+            try:
+                self._cur.pause()
+            except Exception:
+                pass
+
+        def stop(self):
+            for pl in (self._menu, self._game):
+                if pl is None:
+                    continue
+                try:
+                    pl.stop()
+                except Exception:
+                    pass
+            self._cur = None
+
+        def _go(self, pl, restart):
+            if pl is None:
+                return
+            try:
+                if self._cur is pl:
+                    if restart:
+                        pl.setPosition(0)
+                    pl.play()
+                    return
+                if self._cur is not None:
+                    self._cur.stop()
+                self._cur = pl
+                pl.setPosition(0)
+                pl.play()
+            except Exception:
+                pass
+
     def _fxPath(name):
         try:
             return Logic.resourcePath(f"ui/fx/{name}")
@@ -1420,6 +1499,7 @@ if pygame is not None:
                 self.expFrames[key] = frames
 
             self.audio = _Sfx(host)
+            self.bgm = _Bgm(host, markKey)
             self.highScore = _readMark(self._markKey)
             self.state = "MENU"
             self.score = 0
@@ -1458,6 +1538,7 @@ if pygame is not None:
             self.playerSpeed = 260.0
             self.tilt = 0.0
             self.applySize(W, H)
+            self._syncBgm()
 
         def applySize(self, pw, ph):
             """Rebuild the offscreen view so the playfield matches the window aspect.
@@ -1534,6 +1615,22 @@ if pygame is not None:
         def playS(self, name):
             self.audio.play(name)
 
+        def _syncBgm(self):
+            bgm = getattr(self, "bgm", None)
+            if bgm is None:
+                return
+            if not getattr(self, "running", True):
+                bgm.stop()
+                return
+            if self.state == "PLAYING":
+                bgm.playGame()
+            elif self.state == "PAUSED":
+                bgm.pause()
+            elif self.state in ("MENU", "GAME_OVER"):
+                bgm.playMenu()
+            else:
+                bgm.stop()
+
         def _playerSize(self):
             if self.playerImg is not None:
                 return self.playerImg.get_size()
@@ -1568,6 +1665,7 @@ if pygame is not None:
             self.message = ""
             self.messageT = 0.0
             self._setupWave()
+            self._syncBgm()
 
         def _addEnemy(self, kind, slotX, slotY, inbound=False, delay=0.0):
             if inbound:
@@ -1722,6 +1820,7 @@ if pygame is not None:
                 self.state = "GAME_OVER"
                 self.playS("over")
                 self.saveHigh()
+                self._syncBgm()
                 return
             self.playerDead = False
             self.playerX = W * 0.5
@@ -1795,12 +1894,14 @@ if pygame is not None:
                     else:
                         self.audio.stop()
                         self.running = False
+                    self._syncBgm()
                 elif p == "p":
                     if self.state == "PLAYING":
                         self.audio.stop()
                         self.state = "PAUSED"
                     elif self.state == "PAUSED":
                         self.state = "PLAYING"
+                    self._syncBgm()
                 elif p in ("space", "click"):
                     if self.state == "MENU":
                         self.beginPlay()
@@ -2223,6 +2324,10 @@ if pygame is not None:
                 self.audio.stop()
             except Exception:
                 pass
+            try:
+                self.bgm.stop()
+            except Exception:
+                pass
             if self.score > self.highScore:
                 self.highScore = self.score
                 self.saveHigh()
@@ -2362,6 +2467,7 @@ if pygame is not None:
                 self.expFrames[key] = frames
 
             self.audio = _Sfx(host)
+            self.bgm = _Bgm(host, markKey)
             self.highScore = _readMark(self._markKey)
             self.state = "MENU"
             self.title = "INCURSION"
@@ -2394,6 +2500,7 @@ if pygame is not None:
             self.maxSpeed = 300.0
             self.drag = 2.4
             self.applySize(W, H)
+            self._syncBgm()
 
         def applySize(self, pw, ph):
             """Widen the camera window to the host aspect.
@@ -2497,6 +2604,22 @@ if pygame is not None:
         def playS(self, name):
             self.audio.play(name)
 
+        def _syncBgm(self):
+            bgm = getattr(self, "bgm", None)
+            if bgm is None:
+                return
+            if not getattr(self, "running", True):
+                bgm.stop()
+                return
+            if self.state == "PLAYING":
+                bgm.playGame()
+            elif self.state == "PAUSED":
+                bgm.pause()
+            elif self.state in ("MENU", "GAME_OVER"):
+                bgm.playMenu()
+            else:
+                bgm.stop()
+
         def _wrap(self, x):
             w = self.WORLD
             return x % w
@@ -2541,6 +2664,7 @@ if pygame is not None:
             self.messageT = 0.0
             self.state = "PLAYING"
             self._setupWave()
+            self._syncBgm()
 
         def _setupWave(self):
             self.enemies = []
@@ -2624,6 +2748,7 @@ if pygame is not None:
                 self.state = "GAME_OVER"
                 self.playS("over")
                 self.saveHigh()
+                self._syncBgm()
                 return
             self.playerDead = False
             self.invuln = 1.6
@@ -2639,12 +2764,14 @@ if pygame is not None:
                         self.state = "MENU"
                     else:
                         self.running = False
+                    self._syncBgm()
                 elif p == "p":
                     if self.state == "PLAYING":
                         self.audio.stop()
                         self.state = "PAUSED"
                     elif self.state == "PAUSED":
                         self.state = "PLAYING"
+                    self._syncBgm()
                 elif p in ("space", "click"):
                     if self.state in ("MENU", "GAME_OVER"):
                         self.beginPlay()
@@ -3038,6 +3165,10 @@ if pygame is not None:
             self.running = False
             try:
                 self.audio.stop()
+            except Exception:
+                pass
+            try:
+                self.bgm.stop()
             except Exception:
                 pass
             if self.score > self.highScore:
