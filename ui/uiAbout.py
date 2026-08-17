@@ -2137,8 +2137,8 @@ if pygame is not None:
                     except Exception:
                         pass
                 self.stars = _asOverlay(self.stars)
-            self.bgLoop = self._loopStrip(self.bg)
-            self.starLoop = self._loopStrip(self.stars)
+            self.bgLoop = self._loopStrip(self.bg, alpha=False)
+            self.starLoop = self._loopStrip(self.stars, alpha=True)
             side = _loadSurf("b35.png")
             self.playerR = _fitSurf(side, 72, 38)
             self.playerL = None
@@ -2247,13 +2247,20 @@ if pygame is not None:
             except Exception:
                 return img
 
-        def _loopStrip(self, img):
+        def _loopStrip(self, img, alpha=False):
             """Mirror-join so horizontal wrap has no hard cut."""
             if img is None:
                 return None
             try:
                 iw, ih = img.get_size()
-                strip = pygame.Surface((iw * 2, ih)).convert()
+                flags = pygame.SRCALPHA if alpha else 0
+                strip = pygame.Surface((iw * 2, ih), flags)
+                if not alpha:
+                    try:
+                        strip = strip.convert()
+                    except Exception:
+                        pass
+                    strip.fill((0, 0, 0))
                 strip.blit(img, (0, 0))
                 try:
                     strip.blit(pygame.transform.flip(img, True, False), (iw, 0))
@@ -2541,23 +2548,58 @@ if pygame is not None:
                 self._setupWave()
 
         def _collide(self):
+            if self.playerDead:
+                return
             pw, ph = self._playerSize()
-            pr = (self.playerX - pw * 0.35, self.playerY - ph * 0.35, pw * 0.7, ph * 0.7)
+
+            # Hurt the player first so ramming is never a free kill
+            for s in list(self.eShots):
+                img = None
+                if s.get("ufo") and getattr(self, "ufoBullets", None):
+                    frames = self.ufoBullets
+                else:
+                    frames = self.eBullets.get(s.get("kind", 1)) or []
+                if frames:
+                    img = frames[self.flameFrame % len(frames)]
+                ebw, ebh = (14, 10)
+                if img is not None:
+                    ebw, ebh = img.get_size()
+                if self._viewHit(s["x"], s["y"], ebw * 0.5, ebh * 0.5, pw * 0.42, ph * 0.42):
+                    try:
+                        self.eShots.remove(s)
+                    except ValueError:
+                        pass
+                    self._killPlayer()
+                    return
+
+            for e in list(self.enemies):
+                ew, eh = (28, 28)
+                img = self.ufoImg if e.get("ufo") and self.ufoImg is not None else self.eImg.get(e["kind"])
+                if img is not None:
+                    ew, eh = img.get_size()
+                if self._viewHit(e["x"], e["y"], ew * 0.4, eh * 0.4, pw * 0.42, ph * 0.42):
+                    tag = "ufo" if e.get("ufo") else {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
+                    self._spawnFx(tag, e["x"], e["y"])
+                    self.playS("boomE")
+                    try:
+                        self.enemies.remove(e)
+                    except ValueError:
+                        pass
+                    self._killPlayer()
+                    return
+
             pbw, pbh = (16, 6)
             if self.pBulletR is not None:
                 pbw, pbh = self.pBulletR.get_size()
-
             keepP = []
             for s in self.pShots:
-                sr = (s["x"] - pbw * 0.5, s["y"] - pbh * 0.5, pbw, pbh)
                 hit = False
                 for e in list(self.enemies):
                     ew, eh = (28, 28)
-                    img = self.eImg.get(e["kind"])
+                    img = self.ufoImg if e.get("ufo") and self.ufoImg is not None else self.eImg.get(e["kind"])
                     if img is not None:
                         ew, eh = img.get_size()
-                    er = (e["x"] - ew * 0.5, e["y"] - eh * 0.5, ew, eh)
-                    if self._worldOverlap(sr, er):
+                    if self._viewHit(s["x"], s["y"], pbw * 0.5, pbh * 0.5, ew * 0.45, eh * 0.45, e["x"], e["y"]):
                         tag = "ufo" if e.get("ufo") else {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
                         self._spawnFx(tag, e["x"], e["y"])
                         pts = 150 if e.get("ufo") else {1: 20, 2: 40, 3: 60}.get(e["kind"], 20)
@@ -2570,49 +2612,18 @@ if pygame is not None:
                     keepP.append(s)
             self.pShots = keepP
 
-            if self.playerDead:
-                return
-            for s in list(self.eShots):
-                img = None
-                if s.get("ufo") and self.ufoBullets:
-                    frames = self.ufoBullets
-                else:
-                    frames = self.eBullets.get(s.get("kind", 1)) or []
-                if frames:
-                    img = frames[self.flameFrame % len(frames)]
-                ebw, ebh = (12, 6)
-                if img is not None:
-                    ebw, ebh = img.get_size()
-                sr = (s["x"] - ebw * 0.5, s["y"] - ebh * 0.5, ebw, ebh)
-                if self._worldOverlap(sr, pr):
-                    self.eShots.remove(s)
-                    self._killPlayer()
-                    return
-            for e in list(self.enemies):
-                ew, eh = (28, 28)
-                img = self.eImg.get(e["kind"])
-                if img is not None:
-                    ew, eh = img.get_size()
-                er = (e["x"] - ew * 0.4, e["y"] - eh * 0.4, ew * 0.8, eh * 0.8)
-                if self._worldOverlap(er, pr):
-                    tag = "ufo" if e.get("ufo") else {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
-                    self._spawnFx(tag, e["x"], e["y"])
-                    self.playS("boomE")
-                    try:
-                        self.enemies.remove(e)
-                    except ValueError:
-                        pass
-                    self._killPlayer()
-                    return
-
-        def _worldOverlap(self, a, b):
-            # Compare using wrapped X so shots near the seam still hit
-            ax, ay, aw, ah = a
-            bx, by, bw, bh = b
-            if not (ay < by + bh and ay + ah > by):
-                return False
-            dx = abs(self._wrapDelta(ax + aw * 0.5, bx + bw * 0.5))
-            return dx < (aw + bw) * 0.5
+        def _viewHit(self, ax, ay, ahw, ahh, bhw, bhh, bx=None, by=None):
+            """Hit test in camera space so on-screen overlaps match damage."""
+            if bx is None:
+                bx, by = self.playerX, self.playerY
+            for sax in self._screenXs(ax, pad=160):
+                for sbx in self._screenXs(bx, pad=160):
+                    if self._overlap(
+                        (sax - ahw, ay - ahh, ahw * 2, ahh * 2),
+                        (sbx - bhw, by - bhh, bhw * 2, bhh * 2),
+                    ):
+                        return True
+            return False
 
         def _updateFx(self, dt):
             live = []
@@ -2674,12 +2685,15 @@ if pygame is not None:
                 self.screen.blit(strip, (off + period, 0))
 
         def draw(self):
-            if self.bgLoop is not None or self.bg is not None:
-                self.screen.fill((4, 2, 12))
+            if self.bg is not None or self.bgLoop is not None:
                 self._blitParallax(self.bgLoop or self.bg, 0.28)
             else:
                 self.screen.fill((4, 2, 12))
-            self._blitParallax(self.starLoop or self.stars, 0.62)
+            # Stars stay alpha — never bake them onto an opaque black strip
+            if self.starLoop is not None:
+                self._blitParallax(self.starLoop, 0.62)
+            elif self.stars is not None:
+                self._blitParallax(self.stars, 0.62)
 
             if self.state == "MENU":
                 title = self.bigFont.render(self.title, True, CYAN)
