@@ -1,17 +1,11 @@
 ####### CURRENT TASKS #######
--For USGS and Aquarius items in Data Dictionary, make the second line (the part afte /n) AQUARIUS or USGS, depending on which one it is
-    -USBR doesn't change, stays exactly the way it is now
-    -This change is ONLY for USGS or Aquarius in Data Dictionary. If not in dictionary, use current method
+(none)
 
 ####### FUTURE TASKS #######
 (none)
 
 ####### CURRENT BUGS #######
--Dual axis isn't working. I graphed 4 data sets. 2 of them were in the 383 range the other 2 were in the 214 range. The graph only made 1 axis
-    -If there is a way, we'll need to be able to handle more than 2 axis
-        -If this can be done, make sure to turn that axis off if the dataset using it is hidden via the check box
--Need better full column highlighting on the table. I should be able to use shift click, ctrl click, or a combination of shift ctrl then shift. Needs to work just like other table type copies
-    -It works properly on cells but not on full columns/headers. That's what needs to be fixed
+(none)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
