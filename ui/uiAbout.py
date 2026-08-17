@@ -2299,18 +2299,19 @@ if pygame is not None:
                 2: _fitSurf(_loadSurf("b19.png"), 32, 30),
                 3: _fitSurf(_loadSurf("b20.png"), 28, 36),
             }
+            # Authored nose-down (e3 ball at the bottom, tail up). Aimed at fire.
             self.eBullets = {
                 1: [
-                    self._rot90(_fitSurf(_loadSurf("b6.png"), 8, 20)),
-                    self._rot90(_fitSurf(_loadSurf("b30.png"), 8, 20)),
+                    _fitSurf(_loadSurf("b6.png"), 8, 20),
+                    _fitSurf(_loadSurf("b30.png"), 8, 20),
                 ],
                 2: [
-                    self._rot90(_fitSurf(_loadSurf("b31.png"), 10, 28)),
-                    self._rot90(_fitSurf(_loadSurf("b32.png"), 10, 28)),
+                    _fitSurf(_loadSurf("b31.png"), 10, 28),
+                    _fitSurf(_loadSurf("b32.png"), 10, 28),
                 ],
                 3: [
-                    self._rot90(_fitSurf(_loadSurf("b33.png"), 18, 40)),
-                    self._rot90(_fitSurf(_loadSurf("b34.png"), 18, 40)),
+                    _fitSurf(_loadSurf("b33.png"), 18, 40),
+                    _fitSurf(_loadSurf("b34.png"), 18, 40),
                 ],
             }
             self.ufoBullets = [
@@ -2424,6 +2425,25 @@ if pygame is not None:
                 return pygame.transform.rotate(img, ang)
             except Exception:
                 return img
+
+        def _aimBolt(self, frames, vx, vy):
+            """Rotate nose-down bolt frames so the head leads (vx, vy)."""
+            if not frames:
+                return []
+            ang = 90.0 - math.degrees(math.atan2(vy, vx))
+            out = []
+            for img in frames:
+                if img is None:
+                    out.append(None)
+                    continue
+                try:
+                    out.append(pygame.transform.rotozoom(img, ang, 1.0))
+                except Exception:
+                    try:
+                        out.append(pygame.transform.rotate(img, ang))
+                    except Exception:
+                        out.append(img)
+            return out
 
         def _loopStrip(self, img, alpha=False):
             """Mirror-join so horizontal wrap has no hard cut."""
@@ -2708,13 +2728,18 @@ if pygame is not None:
                 if e["shotT"] <= 0 and dist < 420:
                     e["shotT"] = max(0.7, 1.8 - self.wave * 0.08)
                     spd = 160.0
+                    vx = (dx / dist) * spd
+                    vy = (dy / dist) * spd
+                    kind = e["kind"]
+                    base = self.eBullets.get(kind) or self.eBullets.get(1) or []
                     self.eShots.append({
                         "x": e["x"],
                         "y": e["y"],
-                        "vx": (dx / dist) * spd,
-                        "vy": (dy / dist) * spd,
-                        "kind": e["kind"],
+                        "vx": vx,
+                        "vy": vy,
+                        "kind": kind,
                         "ufo": bool(e.get("ufo")),
+                        "imgs": None if e.get("ufo") else self._aimBolt(base, vx, vy),
                     })
                     self.playS("eShot")
 
@@ -2738,7 +2763,7 @@ if pygame is not None:
                 if s.get("ufo") and getattr(self, "ufoBullets", None):
                     frames = self.ufoBullets
                 else:
-                    frames = self.eBullets.get(s.get("kind", 1)) or []
+                    frames = s.get("imgs") or self.eBullets.get(s.get("kind", 1)) or []
                 if frames:
                     img = frames[self.flameFrame % len(frames)]
                 ebw, ebh = (14, 10)
@@ -2917,7 +2942,7 @@ if pygame is not None:
                 if s.get("ufo") and self.ufoBullets:
                     frames = self.ufoBullets
                 else:
-                    frames = self.eBullets.get(s.get("kind", 1)) or []
+                    frames = s.get("imgs") or self.eBullets.get(s.get("kind", 1)) or []
                 img = frames[fi % len(frames)] if frames else None
                 self._drawWorld(img, s["x"], s["y"])
 
