@@ -17,7 +17,8 @@ Expected install layout (launcher package):
 What this does:
   1) Pick the newest *.zip in Update/ (or --zip path)
   2) Extract to a temp dir under Update/
-  3) Copy DataDoctor.py/.pyw, ui/, core/* (except bunker.db), quickLook/, requirements
+  3) Copy DataDoctor.py as DataDoctor.pyw on Windows (or when .pyw already exists),
+     plus ui/, core/* (except bunker.db), quickLook/, requirements
   4) If temp/bunker.db present → merge into live core/bunker.db via updateBunker.py
   5) pip install -r requirements.txt into Project Files/.venv (if present)
   6) Remove the zip and extract tree
@@ -115,6 +116,31 @@ def runPipInstall(py: str, requirements: Path) -> int:
         return 1
 
 
+def installAppEntry(payload: Path, projectFiles: Path) -> str | None:
+    """
+    Copy DataDoctor.py[.pyw] from the zip payload into Project Files/.
+
+    Windows launcher packages ship DataDoctor.pyw and the VB launcher starts
+    that file. Update zips from packagePython.py only contain DataDoctor.py.
+    If the live install already has DataDoctor.pyw, or the host is Windows,
+    write DataDoctor.pyw and delete any leftover DataDoctor.py.
+    """
+    src = payload / "DataDoctor.py"
+    if not src.is_file():
+        src = payload / "DataDoctor.pyw"
+    if not src.is_file():
+        return None
+
+    wantPyw = (projectFiles / "DataDoctor.pyw").is_file() or sys.platform.startswith("win")
+    destName = "DataDoctor.pyw" if wantPyw else "DataDoctor.py"
+    shutil.copy2(src, projectFiles / destName)
+    if wantPyw:
+        leftover = projectFiles / "DataDoctor.py"
+        if leftover.is_file():
+            leftover.unlink()
+    return destName
+
+
 def runBunkerMerge(py: str, projectFiles: Path, packagedBunker: Path) -> int:
     live = projectFiles / "core" / "bunker.db"
     script = projectFiles / "scripts" / "updateBunker.py"
@@ -165,8 +191,15 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
             if len(kids) == 1:
                 payload = kids[0]
 
-        # App entry + docs (no .pyw — that is Windows package only)
-        for name in ("DataDoctor.py", "requirements.txt", "README.txt", "LICENSE"):
+        # App entry: raw Python zip ships DataDoctor.py. Windows launcher
+        # installs run DataDoctor.pyw (no console). If .pyw is already live
+        # or we are on Windows, write .pyw and drop leftover .py so an old
+        # .pyw is not left sitting next to a new .py.
+        destName = installAppEntry(payload, projectFiles)
+        if destName:
+            print(f"Updated {destName}")
+
+        for name in ("requirements.txt", "README.txt", "LICENSE"):
             src = payload / name
             if src.is_file():
                 shutil.copy2(src, projectFiles / name)

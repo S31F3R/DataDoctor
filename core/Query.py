@@ -1705,22 +1705,24 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
 
         progressDialog.cancel()
 
-        # Show Data Query tab at index 0, moving if necessary
+        # Always select Data Query when a query finishes (user may be on Graph).
+        # Keep it at index 0; setCurrentIndex even when it is already there.
         index = mainWindow.tabWidget.indexOf(mainWindow.tabMain)
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"tabMain index during executeQuery: {index}")
-        if index != 0:
-            if index != -1:
-                mainWindow.tabWidget.removeTab(index)
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Removed tabMain from index {index} to move to 0")
+        if index == -1:
             mainWindow.tabWidget.insertTab(0, mainWindow.tabMain, mainWindow.dataQueryTitle)
-            mainWindow.tabWidget.setCurrentIndex(0)
-
+            index = 0
             if Config.debug:
                 Logic.logMessage("DEBUG", "Inserted tabMain at index 0 after query")
+        elif index != 0:
+            mainWindow.tabWidget.removeTab(index)
+            mainWindow.tabWidget.insertTab(0, mainWindow.tabMain, mainWindow.dataQueryTitle)
+            index = 0
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Moved tabMain to index 0 after query")
+        mainWindow.tabWidget.setCurrentIndex(index)
         QCoreApplication.processEvents()
 
     except Exception as e:

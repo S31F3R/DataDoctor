@@ -146,7 +146,8 @@ FULL APP UPDATE (recommended after first install)
      applyUpdate.cmd
 5) applyUpdate will:
      - Extract the zip
-     - Refresh Project Files code (DataDoctor.py, ui/, core/* except live bunker)
+     - Refresh Project Files code (DataDoctor.pyw, ui/, core/* except live bunker)
+     - Rename DataDoctor.py from the zip to DataDoctor.pyw (Windows launcher)
      - Merge data dictionary into Project Files\\core\\bunker.db
      - pip install -r requirements.txt into Project Files\\.venv
      - Delete the zip when finished

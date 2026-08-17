@@ -1281,6 +1281,35 @@ def buttonStyle(button, iconName=None, iconSize=None):
         if Config.debug:
             Logic.logMessage("DEBUG", "Applied basic flat style to button (no icon effects)")
 
+def bindIndependentWindow(widget, owner=None, allowMaximize=True):
+    """
+    Make widget a real top-level window so minimize goes to the taskbar.
+
+    QMainWindow(parent=main) is transient for main. Several WMs (GNOME especially)
+    then shade-minimize to a tiny title bar instead of a taskbar entry. Detached
+    Graph already uses parent=None for this reason. Main closeEvent still calls
+    closeAllWindows(), so these stay tied to app lifetime.
+    """
+    if widget is None:
+        return
+    flags = (
+        Qt.WindowType.Window
+        | Qt.WindowType.WindowTitleHint
+        | Qt.WindowType.WindowSystemMenuHint
+        | Qt.WindowType.WindowMinimizeButtonHint
+        | Qt.WindowType.WindowCloseButtonHint
+    )
+    if allowMaximize:
+        flags |= Qt.WindowType.WindowMaximizeButtonHint
+    widget.setWindowFlags(flags)
+    widget.setAttribute(Qt.WidgetAttribute.WA_QuitOnClose, False)
+    if owner is not None and Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"bindIndependentWindow: {widget.objectName() or widget.__class__.__name__}",
+        )
+
+
 def centerWindowToParent(ui):
     """Center a window relative to its parent (main window), robust for multi-monitor."""
     parent = ui.parent()
