@@ -80,7 +80,6 @@ class detachedTabWindow(QMainWindow):
                 self._attaching = False
         event.accept()
 
-
 class mainTableKeyFilter(QObject):
     """
     Keyboard shortcuts on the main data table:
@@ -155,9 +154,9 @@ class uiMain(QMainWindow):
         # Define controls
         self.btnPublicQuery = self.findChild(QPushButton, 'btnPublicQuery')
         self.mainTable = self.findChild(QTableWidget, 'mainTable')
+
         # Built-in header sort OFF: single-click highlights; double-click customSort
-        if self.mainTable is not None:
-            self.mainTable.setSortingEnabled(False)
+        if self.mainTable is not None: self.mainTable.setSortingEnabled(False)
         self.btnDataDictionary = self.findChild(QPushButton, 'btnDataDictionary')
         self.btnExportCSV = self.findChild(QPushButton, 'btnExportCSV')
         self.btnOptions = self.findChild(QPushButton, 'btnOptions')
@@ -174,7 +173,7 @@ class uiMain(QMainWindow):
         self.tabMain = self.findChild(QWidget, 'tabMain')
         self.tabSQL = self.findChild(QWidget, 'tabSQL')
         self.tabLog = self.findChild(QWidget, 'tabLog')
-        self.tabGraph = None  # created on first graph (GraphPanel)
+        self.tabGraph = None # created on first graph (GraphPanel)
         self.pteLog = self.findChild(QPlainTextEdit, 'pteLog')
         self.lastQueryType = None
         self.lastQueryItems = []
@@ -185,9 +184,10 @@ class uiMain(QMainWindow):
         self.currentQueryType = "" # str: "AQUARIUS", etc., set post-query
         self.uploadBaselineReady = False
         self.uploadTrackingBlocked = False
+
         # Detached floating windows for Graph / Log only ({'graph'|'log': detachedTabWindow})
         self.detachedWindows = {}
-        self._appIcon = QIcon()  # set from main after load (Windows re-apply)
+        self._appIcon = QIcon() # set from main after load (Windows re-apply)
         self._goatPlayer = None
         self._goatAudio = None
         self.btnRunQuery = self.findChild(QPushButton, 'btnRunQuery')
@@ -220,8 +220,7 @@ class uiMain(QMainWindow):
 
         # Set button style        
         for btn, iconName, iconSize in buttonIcons:
-            if btn is not None:
-                Utils.buttonStyle(btn, iconName, iconSize=iconSize)
+            if btn is not None: Utils.buttonStyle(btn, iconName, iconSize=iconSize)
 
         # Ensure every main toolbar / data-tab button has a tooltip
         # Keep labels short (no parenthetical lists on Public/Internal/Options)
@@ -243,6 +242,7 @@ class uiMain(QMainWindow):
             self.btnSaveSnippet: "Save SQL snippet",
             self.btnDeleteSnippet: "Delete selected SQL snippet",
         }
+
         for btn, tip in mainTooltips.items():
             if btn is not None:
                 btn.setToolTip(tip)
@@ -262,17 +262,17 @@ class uiMain(QMainWindow):
         self.btnExportCSV.clicked.connect(self.btnExportCSVPressed)
         self.btnOptions.clicked.connect(self.btnOptionsPressed)
         self.btnInfo.clicked.connect(self.btnInfoPressed)
+
         if self.btnViewLog:self.btnViewLog.clicked.connect(self.btnViewLogPressed)
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
-        if self.btnSQL is not None:
-            self.btnSQL.clicked.connect(self.btnSQLPressed)
-        if self.btnGraph is not None:
-            self.btnGraph.clicked.connect(self.btnGraphPressed)
-        if self.btnGoat is not None:
-            self.btnGoat.clicked.connect(self.btnGoatPressed)
+
+        if self.btnSQL is not None: self.btnSQL.clicked.connect(self.btnSQLPressed)
+        if self.btnGraph is not None: self.btnGraph.clicked.connect(self.btnGraphPressed)
+        if self.btnGoat is not None: self.btnGoat.clicked.connect(self.btnGoatPressed)
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
         if self.btnUpload:self.btnUpload.clicked.connect(self.btnUploadPressed)
+
         # Single-click header → highlight column; double-click → sort
         self.mainTable.horizontalHeader().sectionClicked.connect(self.onMainHeaderClicked)
         self.mainTable.horizontalHeader().sectionDoubleClicked.connect(self.onMainHeaderDoubleClicked)
@@ -281,6 +281,7 @@ class uiMain(QMainWindow):
         self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
         self.mainTable.itemChanged.connect(self.onMainTableItemChanged)
+
         # Multi-cell ranges for Excel-like copy/paste
         self.mainTable.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.mainTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
@@ -294,6 +295,7 @@ class uiMain(QMainWindow):
         # Multi-column selection → highlight every selected column header
         Upload.ensureHeaderSelectionSync(self)
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
+
         # Graph + Log: right-click tab → Detach tab
         if self.tabWidget is not None:
             tabBar = self.tabWidget.tabBar()
@@ -301,10 +303,9 @@ class uiMain(QMainWindow):
             tabBar.customContextMenuRequested.connect(self.onMainTabBarContextMenu)
         self.btnRunQuery.clicked.connect(self.runCustomQuery)
         self.btnSaveSnippet.clicked.connect(self.saveSnippet)
-        if self.listSnippets is not None:
-            self.listSnippets.doubleClicked.connect(self.loadSnippet)
-        if self.btnDeleteSnippet is not None:
-            self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
+        if self.listSnippets is not None: self.listSnippets.doubleClicked.connect(self.loadSnippet)
+        if self.btnDeleteSnippet is not None: self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
+
         # SQL snippets: drag-reorder + context menu up/down; order in user.config
         # NOTE: empty QListWidget is falsy in PyQt6 (len==0) — always test is not None
         if self.listSnippets is not None:
@@ -312,6 +313,7 @@ class uiMain(QMainWindow):
             self.listSnippets.setDefaultDropAction(Qt.DropAction.MoveAction)
             self.listSnippets.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             self.listSnippets.customContextMenuRequested.connect(self.showSnippetContextMenu)
+
             try:
                 self.listSnippets.model().rowsMoved.connect(self.onSnippetsReordered)
             except Exception:
@@ -464,11 +466,12 @@ class uiMain(QMainWindow):
 
         # Hide log tab on startup (open via btnViewLog)
         logIndex = self.tabWidget.indexOf(self.tabLog) if self.tabLog else -1
+
         if logIndex != -1:
             self.tabWidget.removeTab(logIndex)
+
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Removed tabLog at index {logIndex} on startup")
-
         dataQueryIndex = self.tabWidget.indexOf(self.tabMain)
 
         if dataQueryIndex != -1:
@@ -494,6 +497,7 @@ class uiMain(QMainWindow):
             event.accept()
             return
         self._quitting = True
+
         try:
             sqlTab = self.tabSQL or self.findChild(QWidget, 'tabSQL')
 
@@ -518,8 +522,8 @@ class uiMain(QMainWindow):
                         Logic.logException("Failed to save splitter sizes", e)
         except Exception as e:
             Logic.logException("closeEvent failed", e)
-
         about = getattr(self, "winAbout", None)
+
         if about is not None:
             try:
                 about._closing = True
@@ -528,27 +532,24 @@ class uiMain(QMainWindow):
                 about.close()
             except Exception:
                 pass
-
         try:
             import pygame
             if pygame.get_init():
                 pygame.quit()
         except Exception:
             pass
-
         try:
             QThreadPool.globalInstance().waitForDone(400)
         except Exception:
             pass
-
         app = QApplication.instance()
+
         if app is not None:
             try:
                 app.closeAllWindows()
             except Exception:
                 pass
             QTimer.singleShot(0, app.quit)
-
         event.accept()
         super().closeEvent(event)
 
@@ -556,6 +557,7 @@ class uiMain(QMainWindow):
         """Re-apply app icon after the window is shown (Windows first-paint glitch)."""
         super().showEvent(event)
         icon = getattr(self, '_appIcon', None)
+
         if icon is not None and not icon.isNull():
             try:
                 self.setWindowIcon(icon)
@@ -574,18 +576,20 @@ class uiMain(QMainWindow):
                 if Config.debug:
                     Logic.logMessage("WARN", "listSnippets not found, skipping loadSnippets")
                 return
-
             self.listSnippets.clear()
             namesOnDisk = []
+            
             if os.path.isdir(sqlDir):
                 for file in os.listdir(sqlDir):
                     if file.endswith(".sql"):
                         namesOnDisk.append(file[:-4])
+
             # Prefer user-saved order; append any new files alphabetically at end
             config = Utils.loadConfig()
             savedOrder = config.get('sqlSnippetOrder') or []
             ordered = []
             seen = set()
+
             for name in savedOrder:
                 if name in namesOnDisk and name not in seen:
                     ordered.append(name)
@@ -616,6 +620,7 @@ class uiMain(QMainWindow):
         try:
             config = Utils.loadConfig()
             config['sqlSnippetOrder'] = self.currentSnippetOrder()
+
             with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
                 json.dump(config, configFile, indent=2)
             if Config.debug:
@@ -636,8 +641,8 @@ class uiMain(QMainWindow):
         if self.listSnippets is None:
             return
         item = self.listSnippets.itemAt(pos)
-        if item is None:
-            return
+
+        if item is None: return
         row = self.listSnippets.row(item)
         menu = QMenu(self)
         actUp = menu.addAction("Move Up")
@@ -645,6 +650,7 @@ class uiMain(QMainWindow):
         actUp.setEnabled(row > 0)
         actDown.setEnabled(row < self.listSnippets.count() - 1)
         chosen = menu.exec(self.listSnippets.mapToGlobal(pos))
+
         if chosen == actUp and row > 0:
             taken = self.listSnippets.takeItem(row)
             self.listSnippets.insertItem(row - 1, taken)
@@ -680,17 +686,15 @@ class uiMain(QMainWindow):
                 f.write(sqlText)
             self.loadSnippets() # Reload list to show new snippet immediately
             self.saveSnippetOrder()
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"saveSnippet: Saved snippet {name} to {filePath} and reloaded list")
+            if Config.debug: Logic.logMessage("DEBUG", f"saveSnippet: Saved snippet {name} to {filePath} and reloaded list")
 
     def loadSnippet(self, index):
         """Load selected snippet into pteSQL on double-click."""
         if self.listSnippets is None or self.pteSQL is None:
-            if Config.debug:
-                Logic.logMessage("WARN", "listSnippets or pteSQL not found, skipping loadSnippet")
+            if Config.debug: Logic.logMessage("WARN", "listSnippets or pteSQL not found, skipping loadSnippet")
             return
         item = self.listSnippets.itemFromIndex(index)
+
         if item:
             name = item.text()
             sqlDir = Utils.getSqlSnippetDir()
@@ -701,26 +705,21 @@ class uiMain(QMainWindow):
                     sqlText = f.read()
                 self.pteSQL.setPlainText(sqlText)
 
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"loadSnippet: Loaded {name} into pteSQL")
+                if Config.debug: Logic.logMessage("DEBUG", f"loadSnippet: Loaded {name} into pteSQL")
             else:
-                if Config.debug:
-                    Logic.logMessage("WARN", f"loadSnippet: Snippet file not found: {filePath}")
+                if Config.debug: Logic.logMessage("WARN", f"loadSnippet: Snippet file not found: {filePath}")
 
     def deleteSnippet(self):
         """Delete selected snippet file and remove from listSnippets."""
         if self.listSnippets is None:
-            if Config.debug:
-                Logic.logMessage("WARN", "listSnippets not found, skipping deleteSnippet")
+            if Config.debug: Logic.logMessage("WARN", "listSnippets not found, skipping deleteSnippet")
             return
         selected = self.listSnippets.currentItem()
 
         if not selected:
             QMessageBox.warning(self, "Delete Snippet", "No snippet selected.")
-            if Config.debug:
-                Logic.logMessage("DEBUG", "deleteSnippet: No item selected")
+            if Config.debug: Logic.logMessage("DEBUG", "deleteSnippet: No item selected")
             return
-
         name = selected.text()
         reply = QMessageBox.question(self, "Delete Snippet", f"Delete '{name}'?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
 
@@ -733,17 +732,14 @@ class uiMain(QMainWindow):
                 self.listSnippets.takeItem(self.listSnippets.row(selected))
                 self.saveSnippetOrder()
 
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"deleteSnippet: Deleted {name} from {filePath} and removed from list")
+                if Config.debug: Logic.logMessage("DEBUG", f"deleteSnippet: Deleted {name} from {filePath} and removed from list")
             else:
-                if Config.debug:
-                    Logic.logMessage("WARN", f"deleteSnippet: File not found: {filePath}")
+                if Config.debug: Logic.logMessage("WARN", f"deleteSnippet: File not found: {filePath}")
 
     def runCustomQuery(self):
         """Run custom SQL from pteSQL on a background thread; fill sqlTable on completion."""
         if not self.pteSQL or not self.sqlTable:
-            if Config.debug:
-                Logic.logMessage("WARN", "pteSQL or sqlTable not found, skipping runCustomQuery")
+            if Config.debug: Logic.logMessage("WARN", "pteSQL or sqlTable not found, skipping runCustomQuery")
             return
         if getattr(self, 'sqlQueryRunning', False):
             QMessageBox.information(self, "Run Query", "A SQL query is already running.")
@@ -752,18 +748,13 @@ class uiMain(QMainWindow):
 
         if not sqlText:
             QMessageBox.warning(self, "Run Query", "No SQL query to run.")
-            if Config.debug:
-                Logic.logMessage("DEBUG", "runCustomQuery: No SQL text to run")
+            if Config.debug: Logic.logMessage("DEBUG", "runCustomQuery: No SQL text to run")
             return
         db = self.cbDatabase.currentText()
         dsn = db.split('-')[1].lower() if '-' in db else db.lower() # e.g., 'USBR-LCHDB' -> 'lchdb'
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query (background)")
+        if Config.debug: Logic.logMessage("DEBUG", f"runCustomQuery: Using DSN {dsn} for query (background)")
         self.sqlQueryRunning = True
-
-        if self.btnRunQuery:
-            self.btnRunQuery.setEnabled(False)
+        if self.btnRunQuery: self.btnRunQuery.setEnabled(False)
         signals = sqlQuerySignals()
 
         # Keep reference so signals aren't GC'd before emit
@@ -775,16 +766,14 @@ class uiMain(QMainWindow):
 
     def onSqlQueryFinished(self, results):
         self.sqlQueryRunning = False
-
-        if self.btnRunQuery:
-            self.btnRunQuery.setEnabled(True)
+        if self.btnRunQuery: self.btnRunQuery.setEnabled(True)
 
         if not results:
             QMessageBox.information(self, "Query Result", "No results returned.")
+
             if Config.debug:
                 Logic.logMessage("DEBUG", "runCustomQuery: No results from query")
             return
-
         try:
             columns = list(results[0].keys()) if results else []
             self.sqlTable.setColumnCount(len(columns))
@@ -830,7 +819,6 @@ class uiMain(QMainWindow):
                 # Same normalization as resolveSeriesResponse candidates
                 key = str(k).replace('\n', ' ').replace('\u00a0', ' ').strip()
                 return ' '.join(key.split())
-
             normalizedResponses = {}
 
             for k, v in responses.items():
@@ -840,12 +828,10 @@ class uiMain(QMainWindow):
                 if isinstance(v, dict) and 'label' in v:
                     v['label'] = _normKey(v['label'])
                 normalizedResponses[key] = v
-
             self.seriesResponses = normalizedResponses
             self.currentQueryType = queryType
             
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Stored query data: {len(normalizedResponses)} series, type {queryType}, keys={[repr(k) for k in normalizedResponses.keys()]}")
+            if Config.debug: Logic.logMessage("DEBUG", f"Stored query data: {len(normalizedResponses)} series, type {queryType}, keys={[repr(k) for k in normalizedResponses.keys()]}")
         except Exception as e:
             Logic.logException("storeQueryData failed", e)
 
@@ -854,23 +840,19 @@ class uiMain(QMainWindow):
             self.winQuery.queryType = 'public'
             self.winQuery.show()
 
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnPublicQueryPressed: Opened uiQuery as public")                  
+            if Config.debug: Logic.logMessage("DEBUG", "btnPublicQueryPressed: Opened uiQuery as public")                  
 
     def btnInternalQueryPressed(self):
         if self.winQuery:
             self.winQuery.queryType = 'internal'
             self.winQuery.show()
 
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnInternalQueryPressed: Opened uiQuery as internal")           
+            if Config.debug: Logic.logMessage("DEBUG", "btnInternalQueryPressed: Opened uiQuery as internal")           
 
     def showDataDictionary(self):
         if self.winDataDictionary:
             self.winDataDictionary.show()
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "showDataDictionary: Opened data dictionary")        
+            if Config.debug: Logic.logMessage("DEBUG", "showDataDictionary: Opened data dictionary")        
 
     def btnExportCSVPressed(self):
         # Export the table on the active tab (Data Query vs SQL Query Builder)
@@ -906,9 +888,7 @@ class uiMain(QMainWindow):
 
         if exportTable is None or exportTable.rowCount() == 0:
             QMessageBox.warning(self, "Export CSV", "No data to export.")
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnExportCSVPressed: No data to export")
+            if Config.debug: Logic.logMessage("DEBUG", "btnExportCSVPressed: No data to export")
             return
         config = Utils.loadConfig()
         lastExportPath = config.get('lastExportPath', os.path.expanduser("~/Documents"))
@@ -920,8 +900,7 @@ class uiMain(QMainWindow):
         )
 
         if not fileName:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnExportCSVPressed: Export canceled by user")
+            if Config.debug: Logic.logMessage("DEBUG", "btnExportCSVPressed: Export canceled by user")
             return
         try:
             with open(fileName, 'w', newline='', encoding='utf-8-sig') as csvFile:
@@ -935,17 +914,21 @@ class uiMain(QMainWindow):
                 # Data Query uses vertical header timestamps; SQL results use table columns only
                 if useSqlFormat or not exportTable.verticalHeaderItem(0):
                     writer.writerow(headers)
+
                     for row in range(exportTable.rowCount()):
                         rowData = []
+
                         for col in range(exportTable.columnCount()):
                             item = exportTable.item(row, col)
                             rowData.append(item.text() if item else '')
                         writer.writerow(rowData)
                 else:
                     writer.writerow(['Timestamp'] + headers)
+
                     for row in range(exportTable.rowCount()):
                         tsItem = exportTable.verticalHeaderItem(row)
                         rowData = [tsItem.text() if tsItem else '']
+
                         for col in range(exportTable.columnCount()):
                             item = exportTable.item(row, col)
                             rowData.append(item.text() if item else '')
@@ -954,8 +937,7 @@ class uiMain(QMainWindow):
 
             with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
                 json.dump(config, configFile, indent=2)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"btnExportCSVPressed: Exported table to {fileName}")
+            if Config.debug: Logic.logMessage("DEBUG", f"btnExportCSVPressed: Exported table to {fileName}")
             QMessageBox.information(self, "Export Complete", f"CSV exported successfully to:\n{fileName}")
         except Exception as e:
             Logic.logMessage("ERROR", f"btnExportCSVPressed: Failed to export CSV: {e}")                
@@ -964,26 +946,20 @@ class uiMain(QMainWindow):
     def btnOptionsPressed(self):
         if self.winOptions:
             self.winOptions.exec()
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnOptionsPressed: Opened options dialog")
+            if Config.debug: Logic.logMessage("DEBUG", "btnOptionsPressed: Opened options dialog")
 
     def btnInfoPressed(self):
         if self.winAbout:
             self.winAbout.exec()
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnInfoPressed: Opened about dialog")
+            if Config.debug: Logic.logMessage("DEBUG", "btnInfoPressed: Opened about dialog")
 
     def _parseQueryDate(self, value):
         """Normalize lastStartDate / lastEndDate to datetime, or None."""
-        if value is None:
-            return None
-        if isinstance(value, datetime):
-            return value.replace(second=0, microsecond=0)
-        s = str(value).strip()
-        if not s:
-            return None
+        if value is None: return None
+        if isinstance(value, datetime): return value.replace(second=0, microsecond=0)
+        s = str(value).strip()        
+        if not s: return None
+
         for fmt in ('%Y-%m-%d %H:%M', '%Y-%m-%d %H:%M:%S', '%m/%d/%y %H:%M:00', '%m/%d/%y %H:%M'):
             try:
                 return datetime.strptime(s, fmt)
@@ -1003,11 +979,11 @@ class uiMain(QMainWindow):
         """
         now = now or datetime.now().replace(second=0, microsecond=0)
         endDt = self._parseQueryDate(lastEndDate)
-        if endDt is None:
-            return now
+        if endDt is None: return now
+
         # Older range (end more than 2 hours ago) → keep original end
-        if now - endDt > timedelta(hours=2):
-            return endDt
+        if now - endDt > timedelta(hours=2): return endDt
+
         # Recent / live range → extend end to the moment Refresh was hit
         return now if endDt <= now else endDt
 
@@ -1015,16 +991,14 @@ class uiMain(QMainWindow):
         try:
             if self.lastQueryType and self.lastQueryItems:
                 if not Upload.confirmDiscardPendingEdits(self, "refresh the query"):
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", "btnRefreshPressed: Canceled due to pending edits")
+                    if Config.debug: Logic.logMessage("DEBUG", "btnRefreshPressed: Canceled due to pending edits")
                     return
-
                 # Retrieve last delta and overlay states from globals, default to False if not set
                 deltaChecked = getattr(Config, 'lastDeltaChecked', False)
                 overlayChecked = getattr(Config, 'lastOverlayChecked', False)
-
                 startDate = self.lastStartDate
                 endDate = self.refreshEndDateForQuery(self.lastEndDate)
+
                 # Remember bumped end so the next Refresh keeps extending live series
                 self.lastEndDate = endDate
 
@@ -1039,11 +1013,10 @@ class uiMain(QMainWindow):
                     self.lastQueryType == 'internal', self.winDataDictionary.mainTable,
                     deltaChecked=deltaChecked, overlayChecked=overlayChecked,
                 )
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "btnRefreshPressed: Refreshed query with last parameters")
+
+                if Config.debug: Logic.logMessage("DEBUG", "btnRefreshPressed: Refreshed query with last parameters")
             else:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "btnRefreshPressed: No previous query to refresh")
+                if Config.debug: Logic.logMessage("DEBUG", "btnRefreshPressed: No previous query to refresh")
         except Exception as e:
             Logic.logException("btnRefreshPressed failed", e)
             QMessageBox.warning(self, "Refresh Error", f"Failed to refresh query:\n{e}")
@@ -1051,14 +1024,12 @@ class uiMain(QMainWindow):
     def btnUndoPressed(self):
         try:
             if self.mainTable.rowCount() == 0:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "btnUndoPressed: No data to sort")
+                if Config.debug: Logic.logMessage("DEBUG", "btnUndoPressed: No data to sort")
                 QMessageBox.information(self, "Undo", "No data to sort.")
                 return
             Query.timestampSortTable(self.mainTable, self.winDataDictionary.mainTable)
 
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnUndoPressed: Called timestampSortTable")
+            if Config.debug: Logic.logMessage("DEBUG", "btnUndoPressed: Called timestampSortTable")
         except Exception as e:
             Logic.logException("btnUndoPressed failed", e)
 
@@ -1088,8 +1059,7 @@ class uiMain(QMainWindow):
                 return
             # columnMetadata may be shorter than table (edge cases) — still allow Graph
             meta = self.columnMetadata[col] if col < len(self.columnMetadata) else None
-            if meta is not None:
-                meta['col'] = col  # Add col for stats computation
+            if meta is not None: meta['col'] = col  # Add col for stats computation
             menu = QMenu(self)
 
             if meta is not None:
@@ -1102,8 +1072,8 @@ class uiMain(QMainWindow):
                 elif meta.get('type') == 'overlay':
                     action = menu.addAction("Show details")
                     action.triggered.connect(lambda: self.showHeaderDetails("headerOverlay", meta))
-
             graphAction = menu.addAction("Graph")
+
             # Multi-column selection: graph all selected columns (include the
             # right-clicked header). Old code passed only [c], so Graph on the
             # first/last selected header ignored the rest of the highlight.
@@ -1113,8 +1083,7 @@ class uiMain(QMainWindow):
                 )
             )
 
-            if menu.actions():
-                menu.exec(header.mapToGlobal(pos))
+            if menu.actions(): menu.exec(header.mapToGlobal(pos))
             if Config.debug:
                 Logic.logMessage(
                     "DEBUG",
@@ -1134,18 +1103,16 @@ class uiMain(QMainWindow):
         """
         cols = set()
         table = self.mainTable
+
         if table is not None:
             try:
-                for idx in table.selectedIndexes():
-                    cols.add(idx.column())
+                for idx in table.selectedIndexes(): cols.add(idx.column())
                 for r in table.selectedRanges():
                     for c in range(r.leftColumn(), r.rightColumn() + 1):
                         cols.add(c)
             except Exception as e:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"_columnsForHeaderGraph selection: {e}")
-        if clickedCol is not None and clickedCol >= 0:
-            cols.add(clickedCol)
+                if Config.debug: Logic.logMessage("DEBUG", f"_columnsForHeaderGraph selection: {e}")
+        if clickedCol is not None and clickedCol >= 0: cols.add(clickedCol)
         return sorted(cols)
 
     def showHeaderDetails(self, queryType, meta):
@@ -1156,8 +1123,7 @@ class uiMain(QMainWindow):
             detailsWin.populateDetails(queryType, seriesLabel, "", meta)
             detailsWin.show()
             
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"showHeaderDetails: Opened details for {seriesLabel}")
+            if Config.debug: Logic.logMessage("DEBUG", f"showHeaderDetails: Opened details for {seriesLabel}")
         except Exception as e:
             Logic.logException("showHeaderDetails failed", e)
             QMessageBox.warning(self, "Details Error", f"Failed to show details:\n{e}")
@@ -1166,9 +1132,7 @@ class uiMain(QMainWindow):
         """Show context menu for cell right-click: Metadata details (internal only, non-overlay) + overlay if applicable."""
         try:
             index = self.mainTable.indexAt(pos)
-
-            if not index.isValid():
-                return        
+            if not index.isValid(): return        
             row = index.row()
             col = index.column()
             
@@ -1185,17 +1149,12 @@ class uiMain(QMainWindow):
             db = self.columnMetadata[col].get('dbs') if col < len(self.columnMetadata) else None
             
             # Normalize db to string if it's a list (for single-db normal columns)
-            if isinstance(db, list) and len(db) > 0:
-                db = db[0]
-            
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
+            if isinstance(db, list) and len(db) > 0: db = db[0]            
+            if Config.debug: Logic.logMessage("DEBUG", f"showCellContextMenu: columnMetadata={repr(self.columnMetadata)}, col={col}, lookupId={lookupId!r}, db={db!r}")
             
             # Resolve seriesResponses with multiple candidate keys (header label != storage key for USGS).
             response, normalizedLabel = self.resolveSeriesResponse(col, seriesLabel, db, lookupId)
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")              
+            if Config.debug: Logic.logMessage("DEBUG", f"showCellContextMenu: seriesLabel={seriesLabel!r}, normalizedLabel={normalizedLabel!r}, response type={type(response).__name__ if response else 'None'}, response={repr(response) if response else 'None'}, currentQueryType={self.currentQueryType}, seriesResponses keys={[repr(k) for k in self.seriesResponses.keys()]}")              
             menu = QMenu(self)
             
             # Add metadata details:
@@ -1207,7 +1166,6 @@ class uiMain(QMainWindow):
             allowUsgsPublic = isPublic and db == 'USGS-NWIS'
 
             if colType == 'normal' and (isInternal or allowUsgsPublic):
-
                 # Extract interval from queryInfos (e.g., '20179|HOUR|USBR-LCHDB' -> 'HOUR')
                 queryInfo = self.columnMetadata[col].get('queryInfos', ['|'])[0]
                 interval = queryInfo.split('|')[1] if '|' in queryInfo else 'HOUR' # Default to HOUR if missing
@@ -1231,10 +1189,8 @@ class uiMain(QMainWindow):
                 elif isInternal and db and str(db).startswith('USBR'):
                     # List = full R_* meta; dict kind=mrid = values-only (no meta), like USGS legacy
                     usbrResponse = response
-                    if isinstance(response, dict) and (response.get('kind') or '').lower() == 'mrid':
-                        usbrResponse = response
-                    elif not isinstance(response, list):
-                        usbrResponse = []
+                    if isinstance(response, dict) and (response.get('kind') or '').lower() == 'mrid': usbrResponse = response
+                    elif not isinstance(response, list): usbrResponse = []
                     detailsAction = menu.addAction("Show details")
                     detailsAction.triggered.connect(
                         lambda r=row, c=col, ts=timestampStr, sl=seriesLabel, resp=usbrResponse, iv=interval:
@@ -1266,26 +1222,22 @@ class uiMain(QMainWindow):
                             "DEBUG",
                             f"showCellContextMenu: Added 'Show details' for USGS "
                             f"(queryType={self.currentQueryType}, kind={usgsResponse.get('kind')})",
-                        )
-            
+                        )            
             # Add single action for overlay columns
             isOverlay = colType == 'overlay'
             
             if isOverlay:
                 # Get types from columnMetadata (e.g., ['overlay', 'USBR', 'AQUARIUS'])
                 meta = self.columnMetadata[col]
-                types = ['overlay'] + meta.get('dbs', []) # Overlay first, then DBs in order
-                
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"showCellContextMenu: Overlay types for col {col}: {types}")
+                types = ['overlay'] + meta.get('dbs', []) # Overlay first, then DBs in order                
+                if Config.debug: Logic.logMessage("DEBUG", f"showCellContextMenu: Overlay types for col {col}: {types}")
                 
                 # Add single action
                 detailsAction = menu.addAction("Show details")
                 detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'overlay', multiTypes=types))
 
             # Graph selection (highlighted rows/cols); always available when table has data
-            if menu.actions():
-                menu.addSeparator()
+            if menu.actions(): menu.addSeparator()
             graphAction = menu.addAction("Graph")
             graphAction.triggered.connect(lambda: self.graphTableSelection())
 
@@ -1294,26 +1246,24 @@ class uiMain(QMainWindow):
             copyAction = menu.addAction("Copy")
             copyAction.setShortcut("Ctrl+C")
             copyAction.triggered.connect(lambda: Upload.copySelectionToClipboard(self))
+
             if isInternal:
                 pasteAction = menu.addAction("Paste")
                 pasteAction.setShortcut("Ctrl+V")
                 pasteAction.triggered.connect(lambda: Upload.pasteClipboardToSelection(self))
-
             if menu.actions():
                 # If the right-clicked cell is outside the current multi-selection,
                 # select only that cell so Copy/Paste/Graph target the intended range.
                 sel = self.mainTable.selectionModel()
+
                 if sel is not None and not sel.isSelected(index):
                     self.mainTable.clearSelection()
                     self.mainTable.setCurrentIndex(index)
                     sel.select(index, sel.SelectionFlag.ClearAndSelect)
-                menu.exec(self.mainTable.viewport().mapToGlobal(pos))
-                
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"showCellContextMenu: Displayed menu for cell ({row}, {col}) with {len(menu.actions())} actions")
+                menu.exec(self.mainTable.viewport().mapToGlobal(pos))                
+                if Config.debug: Logic.logMessage("DEBUG", f"showCellContextMenu: Displayed menu for cell ({row}, {col}) with {len(menu.actions())} actions")
             else:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"showCellContextMenu: No actions for cell ({row}, {col})")
+                if Config.debug: Logic.logMessage("DEBUG", f"showCellContextMenu: No actions for cell ({row}, {col})")
         except Exception as e:
             Logic.logException("showCellContextMenu failed", e)
 
@@ -1327,38 +1277,32 @@ class uiMain(QMainWindow):
         candidates = []
 
         def addCandidate(val):
-            if val is None:
-                return
+            if val is None: return
             if isinstance(val, (list, tuple)):
-                for v in val:
-                    addCandidate(v)
+                for v in val: addCandidate(v)
                 return
             key = str(val).replace('\n', ' ').replace('\u00a0', ' ').strip()
             key = ' '.join(key.split())
-            if key and key not in candidates:
-                candidates.append(key)
-
+            if key and key not in candidates: candidates.append(key)
         addCandidate(lookupId)
-
         meta = self.columnMetadata[col] if col < len(self.columnMetadata) else {}
         addCandidate(meta.get('dataIds'))
-        for qi in (meta.get('queryInfos') or []):
-            if isinstance(qi, list):
-                qi = qi[0] if qi else ''
-            qiStr = str(qi) if qi is not None else ''
-            if '|' in qiStr:
-                addCandidate(qiStr.split('|')[0])
-            else:
-                addCandidate(qiStr)
 
+        for qi in (meta.get('queryInfos') or []):
+            if isinstance(qi, list): qi = qi[0] if qi else ''
+            qiStr = str(qi) if qi is not None else ''
+            if '|' in qiStr: addCandidate(qiStr.split('|')[0])
+            else: addCandidate(qiStr)
         if db == 'AQUARIUS':
             addCandidate(seriesLabel.replace('\n', ' ').strip() if seriesLabel else None)
         elif db == 'USGS-NWIS':
             # Prefer DataID candidates already added; header last line is often just interval
             if seriesLabel:
                 parts = [p.strip() for p in seriesLabel.split('\n') if p.strip()]
+
                 for p in parts:
                     addCandidate(p)
+
             # Also try bare time_series_id (dictionary / lookupId may be tsid only)
             for key in list(candidates):
                 try:
@@ -1368,37 +1312,30 @@ class uiMain(QMainWindow):
                     pass
         else:
             # USBR: second header line is usually SDID or SDID-MRID
-            if seriesLabel and '\n' in seriesLabel:
-                addCandidate(seriesLabel.split('\n')[-1].strip())
-            elif seriesLabel:
-                addCandidate(seriesLabel.strip())
-
+            if seriesLabel and '\n' in seriesLabel: addCandidate(seriesLabel.split('\n')[-1].strip())
+            elif seriesLabel: addCandidate(seriesLabel.strip())
         for key in candidates:
-            if key in self.seriesResponses:
-                return self.seriesResponses[key], key
+            if key in self.seriesResponses: return self.seriesResponses[key], key
 
         # Case-insensitive fallback (hex time_series_id case mismatches)
         lowerMap = {str(k).lower(): (k, v) for k, v in self.seriesResponses.items()}
         for key in candidates:
             hit = lowerMap.get(key.lower())
-            if hit:
-                return hit[1], hit[0]
+            if hit: return hit[1], hit[0]
 
         # USGS: match any stored key whose 2nd segment (or whole key) is this tsid
         if db == 'USGS-NWIS' and self.seriesResponses:
             for key in candidates:
                 kl = key.lower()
+
                 for sk, sv in self.seriesResponses.items():
                     sks = str(sk)
-                    if sks.lower() == kl:
-                        return sv, sk
+                    if sks.lower() == kl: return sv, sk
+
                     # Site-tsid[-param] contains this tsid as 2nd segment
                     parts = [p for p in sks.split('-') if p]
-                    if len(parts) >= 2 and parts[1].lower() == kl:
-                        return sv, sk
-                    if len(parts) == 1 and parts[0].lower() == kl:
-                        return sv, sk
-
+                    if len(parts) >= 2 and parts[1].lower() == kl: return sv, sk
+                    if len(parts) == 1 and parts[0].lower() == kl: return sv, sk
         return None, (candidates[0] if candidates else None)
 
     def showMetadataDetails(self, row, col, timestampStr, seriesLabel, response, dbType, interval=None, multiTypes=None):
@@ -1411,18 +1348,13 @@ class uiMain(QMainWindow):
             if multiTypes:
                 meta = self.columnMetadata[col]
                 lookupIds = meta.get('lookupId', [])
-                if not isinstance(lookupIds, list):
-                    lookupIds = [lookupIds] if lookupIds is not None else []
+                if not isinstance(lookupIds, list): lookupIds = [lookupIds] if lookupIds is not None else []
                 dataIds = meta.get('dataIds', [])
-                if not isinstance(dataIds, list):
-                    dataIds = [dataIds] if dataIds is not None else []
+                if not isinstance(dataIds, list): dataIds = [dataIds] if dataIds is not None else []
                 dbs = meta.get('dbs', [])
-                if not isinstance(dbs, list):
-                    dbs = [dbs] if dbs is not None else []
+                if not isinstance(dbs, list): dbs = [dbs] if dbs is not None else []
                 queryInfos = meta.get('queryInfos', [])
-                if not isinstance(queryInfos, list):
-                    queryInfos = [queryInfos] if queryInfos is not None else []
-
+                if not isinstance(queryInfos, list): queryInfos = [queryInfos] if queryInfos is not None else []
                 responsesList = []
                 intervalsList = []
                 
@@ -1439,16 +1371,16 @@ class uiMain(QMainWindow):
                         lid = lookupIds[dbIdx] if dbIdx < len(lookupIds) else None
                         dataId = dataIds[dbIdx] if dbIdx < len(dataIds) else None
                         dbName = dbs[dbIdx] if dbIdx < len(dbs) else t
-                        if isinstance(dbName, list):
-                            dbName = dbName[0] if dbName else t
+                        if isinstance(dbName, list): dbName = dbName[0] if dbName else t
 
                         # Prefer this tab's own DataID/lookupId so primary/secondary don't swap
                         dbResponse = None
                         matchedKey = None
+
                         for prefer in (lid, dataId):
-                            if prefer is None:
-                                continue
+                            if prefer is None: continue
                             preferKey = str(prefer).replace('\n', ' ').strip()
+
                             if preferKey in self.seriesResponses:
                                 dbResponse = self.seriesResponses[preferKey]
                                 matchedKey = preferKey
@@ -1457,9 +1389,7 @@ class uiMain(QMainWindow):
                             dbResponse, matchedKey = self.resolveSeriesResponse(
                                 col, seriesLabel, dbName, lid if lid is not None else dataId
                             )
-
-                        if dbResponse is None:
-                            dbResponse = {}
+                        if dbResponse is None: dbResponse = {}
 
                         # USGS-NWIS: ensure details never receive a non-dict (overlay crash guard)
                         if isinstance(t, str) and t.upper().startswith('USGS') and not isinstance(dbResponse, dict):
@@ -1468,8 +1398,7 @@ class uiMain(QMainWindow):
 
                         # Extract interval from queryInfos
                         qInfo = queryInfos[dbIdx] if dbIdx < len(queryInfos) else '|'
-                        if isinstance(qInfo, list):
-                            qInfo = qInfo[0] if qInfo else '|'
+                        if isinstance(qInfo, list): qInfo = qInfo[0] if qInfo else '|'
                         dbInterval = str(qInfo).split('|')[1] if '|' in str(qInfo) else 'HOUR'
                         intervalsList.append(dbInterval)
 
@@ -1478,25 +1407,19 @@ class uiMain(QMainWindow):
                                 "DEBUG",
                                 f"showMetadataDetails: No seriesResponse for type {t} idx={dbIdx} "
                                 f"lid={lid!r} dataId={dataId!r} matchedKey={matchedKey!r}"
-                            )
-                
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"showMetadataDetails: Gathered {len(responsesList)} responses and intervals for multiTypes {multiTypes}")
-            
+                            )                
+                if Config.debug: Logic.logMessage("DEBUG", f"showMetadataDetails: Gathered {len(responsesList)} responses and intervals for multiTypes {multiTypes}")            
             detailsWin = uiDetails(parent=self)
             detailsWin.populateDetails(dbType, seriesLabel, timestampStr, response, interval, multiTypes=multiTypes, responsesList=responsesList, intervalsList=intervalsList)
-            detailsWin.show()
-            
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"showMetadataDetails: Opened details for {timestampStr} - {seriesLabel} ({dbType}), multiTypes={multiTypes}")
+            detailsWin.show()            
+            if Config.debug: Logic.logMessage("DEBUG", f"showMetadataDetails: Opened details for {timestampStr} - {seriesLabel} ({dbType}), multiTypes={multiTypes}")
         except Exception as e:
             Logic.logException("showMetadataDetails failed", e)
             QMessageBox.warning(self, "Details Error", f"Failed to show details:\n{e}")
 
     def onTabCloseRequested(self, index):
         # removeTab hides the page but keeps the widget so we can re-add log/SQL/query/graph tabs
-        if self.tabWidget is None:
-            return
+        if self.tabWidget is None: return
         widget = self.tabWidget.widget(index)
         self.tabWidget.removeTab(index)
 
@@ -1506,24 +1429,19 @@ class uiMain(QMainWindow):
 
     def tabKeyForWidget(self, widget):
         """Return 'graph' / 'log' for detachable tabs, else None."""
-        if widget is None:
-            return None
-        if self.tabGraph is not None and widget is self.tabGraph:
-            return 'graph'
-        if self.tabLog is not None and widget is self.tabLog:
-            return 'log'
+        if widget is None: return None
+        if self.tabGraph is not None and widget is self.tabGraph: return 'graph'
+        if self.tabLog is not None and widget is self.tabLog: return 'log'
+
         # objectName fallback (reparent edge cases)
         name = widget.objectName() if hasattr(widget, 'objectName') else ''
-        if name == 'tabGraph':
-            return 'graph'
-        if name == 'tabLog':
-            return 'log'
+        if name == 'tabGraph': return 'graph'
+        if name == 'tabLog': return 'log'
         return None
 
     def graphInsertIndex(self):
         """Graph sits immediately to the right of Data Query when present."""
-        if self.tabWidget is None:
-            return 0
+        if self.tabWidget is None: return 0
         dataIdx = self.tabWidget.indexOf(self.tabMain) if self.tabMain is not None else -1
         return dataIdx + 1 if dataIdx != -1 else 0
 
@@ -1532,14 +1450,13 @@ class uiMain(QMainWindow):
         SQL after Data Query and Graph (normal order:
         Data Query | Graph | SQL | Log).
         """
-        if self.tabWidget is None:
-            return 0
+        if self.tabWidget is None: return 0
         idx = self.graphInsertIndex()
+
         # If Graph is already in the main tab bar, place SQL after it
         if self.tabGraph is not None:
             gIdx = self.tabWidget.indexOf(self.tabGraph)
-            if gIdx != -1:
-                idx = gIdx + 1
+            if gIdx != -1: idx = gIdx + 1
         return idx
 
     def ensureGraphPanel(self):
@@ -1551,9 +1468,9 @@ class uiMain(QMainWindow):
 
     def showGraphInMainTabs(self, select=True):
         """Insert Graph tab at normal position if it is not detached and not already open."""
-        if self.tabWidget is None:
-            return -1
+        if self.tabWidget is None: return -1
         panel = self.ensureGraphPanel()
+
         if self.detachedWindows.get('graph') is not None:
             # Content lives in floating window — bring that forward instead
             win = self.detachedWindows['graph']
@@ -1561,11 +1478,9 @@ class uiMain(QMainWindow):
             win.raise_()
             win.activateWindow()
             return -1
-        idx = self.tabWidget.indexOf(panel)
-        if idx == -1:
-            idx = self.tabWidget.insertTab(self.graphInsertIndex(), panel, self.graphTitle)
-        if select and idx >= 0:
-            self.tabWidget.setCurrentIndex(idx)
+        idx = self.tabWidget.indexOf(panel)        
+        if idx == -1: idx = self.tabWidget.insertTab(self.graphInsertIndex(), panel, self.graphTitle)
+        if select and idx >= 0: self.tabWidget.setCurrentIndex(idx)
         return idx
 
     def btnGraphPressed(self):
@@ -1597,7 +1512,6 @@ class uiMain(QMainWindow):
             and self.tabWidget.indexOf(self.tabMain) == -1
         ):
             self.tabWidget.insertTab(0, self.tabMain, self.dataQueryTitle)
-
         panel = self.ensureGraphPanel()
         ok, message = panel.plotFromTable(
             self.mainTable,
@@ -1605,6 +1519,7 @@ class uiMain(QMainWindow):
             rows=rows,
             columnMetadata=getattr(self, 'columnMetadata', None),
         )
+
         if not ok:
             QMessageBox.warning(self, "Graph", message or "Could not build graph.")
             return
@@ -1614,52 +1529,43 @@ class uiMain(QMainWindow):
             win.show()
             win.raise_()
             win.activateWindow()
-            if message and Config.debug:
-                Logic.logMessage("DEBUG", f"graphTableSelection (detached): {message}")
+            if message and Config.debug: Logic.logMessage("DEBUG", f"graphTableSelection (detached): {message}")
             return
-
         self.showGraphInMainTabs(select=True)
-        if message and Config.debug:
-            Logic.logMessage("DEBUG", f"graphTableSelection: {message}")
+        if message and Config.debug: Logic.logMessage("DEBUG", f"graphTableSelection: {message}")
 
     def onMainTabBarContextMenu(self, pos):
         """Right-click Graph or Log tab → Detach tab."""
-        if self.tabWidget is None:
-            return
+        if self.tabWidget is None: return
         tabBar = self.tabWidget.tabBar()
         idx = tabBar.tabAt(pos)
-        if idx < 0:
-            return
+        if idx < 0: return
         widget = self.tabWidget.widget(idx)
         key = self.tabKeyForWidget(widget)
-        if key is None:
-            return
-
+        if key is None: return
         menu = QMenu(self)
         detachAct = menu.addAction("Detach tab")
         chosen = menu.exec(tabBar.mapToGlobal(pos))
-        if chosen == detachAct:
-            self.detachTab(key)
+        if chosen == detachAct: self.detachTab(key)
 
     def detachTab(self, key):
         """
         Pop Graph or Log into its own maximizable window (one window per tab).
         """
-        if key not in ('graph', 'log'):
-            return
+        if key not in ('graph', 'log'): return
         if self.detachedWindows.get(key) is not None:
             win = self.detachedWindows[key]
             win.show()
             win.raise_()
             win.activateWindow()
             return
-
         if key == 'graph':
             content = self.ensureGraphPanel()
             title = self.graphTitle
         else:
             content = self.tabLog
             title = self.logTitle
+
             if content is None:
                 QMessageBox.warning(self, "Detach", "Log tab is not available.")
                 return
@@ -1667,22 +1573,18 @@ class uiMain(QMainWindow):
         # Remove from main tab bar if present (widget is kept alive)
         if self.tabWidget is not None:
             idx = self.tabWidget.indexOf(content)
-            if idx != -1:
-                self.tabWidget.removeTab(idx)
-
+            if idx != -1: self.tabWidget.removeTab(idx)
         win = detachedTabWindow(self, content, title, key)
         self.detachedWindows[key] = win
         win.show()
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"detachTab: detached {key!r}")
+        if Config.debug: Logic.logMessage("DEBUG", f"detachTab: detached {key!r}")
 
     def attachDetachedTab(self, key):
         """
         Return a detached Graph/Log tab to the main window at normal tab order.
         """
         win = self.detachedWindows.pop(key, None)
-        if win is None:
-            return
+        if win is None: return
 
         # Block floating window closeEvent from re-entering attach
         win._attaching = True
@@ -1697,15 +1599,12 @@ class uiMain(QMainWindow):
         # Pull content out of the floating host without destroying it
         if win.hostTabs is not None and content is not None:
             wIdx = win.hostTabs.indexOf(content)
-            if wIdx != -1:
-                win.hostTabs.removeTab(wIdx)
+            if wIdx != -1: win.hostTabs.removeTab(wIdx)
 
         # Tear down floating shell (avoid recursive closeEvent)
         win.hide()
         win.deleteLater()
-
-        if content is None or self.tabWidget is None:
-            return
+        if content is None or self.tabWidget is None: return
 
         if key == 'graph':
             self.tabGraph = content
@@ -1714,12 +1613,9 @@ class uiMain(QMainWindow):
         else:
             # Log always last
             idx = self.tabWidget.addTab(content, title)
-
         self.tabWidget.setCurrentIndex(idx)
-        if key == 'log':
-            self.populateLogViewer()
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"attachDetachedTab: attached {key!r} at index {idx}")
+        if key == 'log': self.populateLogViewer()
+        if Config.debug: Logic.logMessage("DEBUG", f"attachDetachedTab: attached {key!r} at index {idx}")
 
     def btnSQLPressed(self):
         """Toggle SQL Query Builder tab: show if hidden, hide if already open."""
@@ -1727,20 +1623,18 @@ class uiMain(QMainWindow):
         if self.tabSQL is None or self.tabWidget is None:
             QMessageBox.warning(self, "SQL Query Builder", "SQL tab is not available.")
             return
-
         idx = self.tabWidget.indexOf(self.tabSQL)
+
         if idx == -1:
             insertIndex = self.sqlInsertIndex()
             self.tabWidget.insertTab(insertIndex, self.tabSQL, self.sqlTitle)
             self.refreshSqlTab()
             idx = self.tabWidget.indexOf(self.tabSQL)
             self.tabWidget.setCurrentIndex(idx)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"btnSQLPressed: added tabSQL at index {idx}")
+            if Config.debug: Logic.logMessage("DEBUG", f"btnSQLPressed: added tabSQL at index {idx}")
         else:
             self.tabWidget.removeTab(idx)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"btnSQLPressed: removed tabSQL from index {idx}")
+            if Config.debug: Logic.logMessage("DEBUG", f"btnSQLPressed: removed tabSQL from index {idx}")
 
     def btnGoatPressed(self):
         """Play the emergency stress-relief sound."""
@@ -1750,12 +1644,11 @@ class uiMain(QMainWindow):
         except Exception as e:
             Logic.logMessage("WARN", f"Goat audio backend unavailable: {e}")
             return
-
         wavPath = Logic.resourcePath('ui/sounds/Goat.wav')
+
         if not os.path.isfile(wavPath):
             Logic.logMessage("WARN", f"Goat sound missing: {wavPath}")
             return
-
         try:
             if self._goatPlayer is None:
                 self._goatAudio = QAudioOutput(self)
@@ -1782,21 +1675,19 @@ class uiMain(QMainWindow):
             win.raise_()
             win.activateWindow()
             return
-
         idx = self.tabWidget.indexOf(self.tabLog)
+
         if idx == -1:
             # Always open Log Viewer as the last tab (not next to the active tab)
             self.tabWidget.addTab(self.tabLog, self.logTitle)
             idx = self.tabWidget.indexOf(self.tabLog)
             self.tabWidget.setCurrentIndex(idx)
             self.populateLogViewer()
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"btnViewLogPressed: added tabLog at end index {idx}")
+            if Config.debug: Logic.logMessage("DEBUG", f"btnViewLogPressed: added tabLog at end index {idx}")
         else:
             # Already open → close (toggle off), same as btnSQL
             self.tabWidget.removeTab(idx)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"btnViewLogPressed: removed tabLog from index {idx}")
+            if Config.debug: Logic.logMessage("DEBUG", f"btnViewLogPressed: removed tabLog from index {idx}")
 
     def logViewerLineHeight(self):
         """
@@ -1816,6 +1707,7 @@ class uiMain(QMainWindow):
             'INFO': QColor(38, 139, 210),
             'DEBUG': QColor(108, 113, 120),
         }
+
         defaultColor = QColor(200, 200, 200) if Config.retroMode else QColor(40, 40, 40)
 
         # Role 'log' is intentionally larger than UI (especially in retro)
@@ -1824,8 +1716,7 @@ class uiMain(QMainWindow):
         fmt.setForeground(levelColors.get(level, defaultColor))
         fmt.setFont(mono)
 
-        if level in ('ERROR', 'CRITICAL'):
-            fmt.setFontWeight(QFont.Weight.Bold)
+        if level in ('ERROR', 'CRITICAL'): fmt.setFontWeight(QFont.Weight.Bold)
         return fmt
 
     def insertLogLine(self, cursor, text, level):
@@ -1837,6 +1728,7 @@ class uiMain(QMainWindow):
             self.logViewerLineHeight(),
             int(QTextBlockFormat.LineHeightTypes.ProportionalHeight.value),
         )
+
         cursor.setBlockFormat(blockFmt)
         line = text if text.endswith('\n') else text + '\n'
         cursor.insertText(line, self.logViewerFormat(level))
@@ -1846,16 +1738,13 @@ class uiMain(QMainWindow):
         Live-append one formatted log line at the top of pteLog.
         No-op unless the Log tab is open in main or detached — avoids UI work when closed.
         """
-        if self.pteLog is None or self.tabLog is None or self.tabWidget is None:
-            return
-
+        if self.pteLog is None or self.tabLog is None or self.tabWidget is None: return
         logOpenInMain = self.tabWidget.indexOf(self.tabLog) != -1
         logDetached = self.detachedWindows.get('log') is not None
+
         # Tab closed (removeTab) and not floating: skip. Open or detached: still update.
-        if not logOpenInMain and not logDetached:
-            return
-        if not text:
-            return
+        if not logOpenInMain and not logDetached: return
+        if not text: return
 
         # Stay put if user scrolled away from newest; otherwise pin to top
         scrollBar = self.pteLog.verticalScrollBar()
@@ -1865,9 +1754,7 @@ class uiMain(QMainWindow):
         doc = self.pteLog.document()
         if doc.blockCount() <= 2:
             first = doc.firstBlock().text()
-            if first.startswith("(No log entries found"):
-                self.pteLog.clear()
-
+            if first.startswith("(No log entries found"): self.pteLog.clear()
         cursor = self.pteLog.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
         self.insertLogLine(cursor, text, level)
@@ -1878,17 +1765,15 @@ class uiMain(QMainWindow):
 
     def populateLogViewer(self):
         """Load app.log + rotations into pteLog with level-based colors, newest on top."""
-        if not self.pteLog:
-            return
-
+        if not self.pteLog: return
         entries = Logic.loadAllAppLogEntries(newestFirst=True)
         self.pteLog.clear()
         self.pteLog.setUndoRedoEnabled(False)
+
         # Role font on the widget itself (default char format for any plain inserts)
         logFont = Utils.makeFontForRole('log')
         self.pteLog.setFont(logFont)
         self.pteLog.document().setDefaultFont(logFont)
-
         cursor = self.pteLog.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
 
@@ -1898,9 +1783,9 @@ class uiMain(QMainWindow):
                 f"(No log entries found in {Utils.getLogDir()})",
                 'INFO',
             )
+
             self.pteLog.setTextCursor(cursor)
-            if Config.debug:
-                Logic.logMessage("DEBUG", "populateLogViewer: no entries")
+            if Config.debug: Logic.logMessage("DEBUG", "populateLogViewer: no entries")
             return
 
         for entry in entries:
@@ -1920,15 +1805,10 @@ class uiMain(QMainWindow):
 
     def showOverlayCellDetails(self, row, col):
         """Display details for overlay cell using uiDetails window."""
-        item = self.mainTable.item(row, col)
-        
-        if not item:
-            return
-        
-        data = item.data(Qt.ItemDataRole.UserRole)
-        
-        if not data:
-            return
+        item = self.mainTable.item(row, col)        
+        if not item: return        
+        data = item.data(Qt.ItemDataRole.UserRole)        
+        if not data: return
         
         # Get timestamp and series for title
         timestampStr = self.mainTable.verticalHeaderItem(row).text() if self.mainTable.verticalHeaderItem(row) else ""
@@ -1937,10 +1817,8 @@ class uiMain(QMainWindow):
         # Open uiDetails with overlay mode
         detailsWin = uiDetails(parent=self)
         detailsWin.populateDetails('overlay', seriesLabel, timestampStr, data)
-        detailsWin.show()
-        
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"showOverlayCellDetails: Opened details for cell ({row}, {col})")
+        detailsWin.show()        
+        if Config.debug: Logic.logMessage("DEBUG", f"showOverlayCellDetails: Opened details for cell ({row}, {col})")
 
     def refreshSqlTab(self):
         # Load saved splitter sizes from config
@@ -1951,29 +1829,24 @@ class uiMain(QMainWindow):
 
         if sqlSplitter and 'sqlVerticalSizes' in config:
             sqlSplitter.setSizes(config['sqlVerticalSizes'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Restored sqlVerticalSizes: {config['sqlVerticalSizes']}")
+            if Config.debug: Logic.logMessage("DEBUG", f"Restored sqlVerticalSizes: {config['sqlVerticalSizes']}")
         if mainSplitter and 'sqlHorizontalSizes' in config:
             mainSplitter.setSizes(config['sqlHorizontalSizes'])
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Restored sqlHorizontalSizes: {config['sqlHorizontalSizes']}")
+            if Config.debug: Logic.logMessage("DEBUG", f"Restored sqlHorizontalSizes: {config['sqlHorizontalSizes']}")
 
         # Populate cbDatabase and load snippets if controls found
         if self.cbDatabase:
             Utils.loadDatabase(self.cbDatabase, 'sql')
             self.cbDatabase.setMinimumWidth(200)
-            self.cbDatabase.adjustSize()
-            
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Refreshed cbDatabase with sizing")
+            self.cbDatabase.adjustSize()            
+            if Config.debug: Logic.logMessage("DEBUG", "Refreshed cbDatabase with sizing")
         if self.listSnippets is not None:
             self.loadSnippets()
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "Refreshed snippets list")
+            if Config.debug: Logic.logMessage("DEBUG", "Refreshed snippets list")
 
 if __name__ == '__main__':
     app = None
+
     try:
         # Windows taskbar: python.exe / pythonw.exe group under the Python
         # AppUserModelID, so the shell shows the Python icon even when
@@ -1986,40 +1859,42 @@ if __name__ == '__main__':
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
                     'USBR.DataDoctor.1'
                 )
-            except Exception:
-                pass
-
+            except Exception: pass
         app = QApplication(sys.argv)
+
         # Application name only — do NOT set OrganizationName. QStandardPaths
         # AppConfigLocation becomes ~/.config/<App> (or %LocalAppData%\<App>).
         # Adding an org (e.g. "USBR") would redirect to .../USBR/Data Doctor and
         # hide existing user.config + quickLooks (regression from taskbar work).
         app.setApplicationName("Data Doctor")
+
         # Taskbar / window icon (Windows + Linux desktop shells that honor it)
         appIcon = QIcon()
+
         # Windows: .ico next to app (and under ui/icons). Linux: DataDoctor.png.
         # About splash art (ui/DataDoctor.png large) is NOT used as the app icon.
         icoPath = Logic.resourcePath('ui/icons/DataDoctor.ico')
         iconCandidates = (
             icoPath,
+
             # Same folder as DataDoctor.pyw when packaged on Windows
             Logic.resourcePath('DataDoctor.ico'),
             Logic.resourcePath('ui/icons/DataDoctor.png'),
         )
+
         for iconPath in iconCandidates:
             if os.path.isfile(iconPath):
                 appIcon = QIcon(iconPath)
-                if not appIcon.isNull():
-                    break
-        if not appIcon.isNull():
-            app.setWindowIcon(appIcon)
+                if not appIcon.isNull(): break
+        if not appIcon.isNull(): app.setWindowIcon(appIcon)
 
         # Init logging early, then install hooks so uncaught errors are logged and non-fatal
         Logic.initLogging()
         Logic.installExceptionHooks(showDialog=True)
 
-        if Config.debug:
+        if Config.debug:   
             Logic.logMessage("DEBUG", "Applied global app stylesheet with default button effects and tab close styles")
+
             try:
                 sizes = [(s.width(), s.height()) for s in appIcon.availableSizes()] if not appIcon.isNull() else []
                 Logic.logMessage(
@@ -2034,8 +1909,7 @@ if __name__ == '__main__':
 
         # Create instances
         winMain = uiMain()
-        if not appIcon.isNull():
-            winMain.setWindowIcon(appIcon)
+        if not appIcon.isNull(): winMain.setWindowIcon(appIcon)
         winQuery = uiQuery(winMain)
         winDataDictionary = uiDataDictionary(winMain)
         winOptions = uiOptions(winMain)
@@ -2062,11 +1936,11 @@ if __name__ == '__main__':
             Logic.logException("Startup: loadQuickLooks failed", e)
 
         # Keep icon on the main window for showEvent re-apply (Windows cold start)
-        if not appIcon.isNull():
-            winMain._appIcon = appIcon
+        if not appIcon.isNull(): winMain._appIcon = appIcon
 
         # Show main window
         winMain.show()
+
         # Re-apply window icon after first show (Windows sometimes paints the
         # default icon on the very first frame before the process icon sticks).
         if not appIcon.isNull():
@@ -2084,8 +1958,10 @@ if __name__ == '__main__':
             Logic.logMessage("INFO", f"Config directory: {Utils.getConfigDir()}")
         except Exception:
             pass
+
         # Warm keyring off the critical path so first Options open is not cold
         QTimer.singleShot(0, warmKeyringCache)
+
         # GitHub release check (silent if no releases / offline / already current)
         Update.scheduleStartupUpdateCheck(winMain, delayMs=3000)
 
@@ -2103,8 +1979,7 @@ if __name__ == '__main__':
         except Exception:
             print(f"Fatal startup error: {e}", file=sys.stderr)
         try:
-            if app is not None:
-                QMessageBox.critical(None, "Startup Error", f"Data Doctor failed to start:\n{e}")
+            if app is not None: QMessageBox.critical(None, "Startup Error", f"Data Doctor failed to start:\n{e}")
         except Exception:
             pass
         sys.exit(1)
