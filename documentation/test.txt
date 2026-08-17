@@ -11,7 +11,7 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] USGS / Aquarius Data Dictionary second-line source tag
+[x] USGS / Aquarius Data Dictionary second-line source tag
    Steps:
      a. Query a USGS series that IS in the data dictionary (e.g. PVLC bunker row).
         Expect header: first line "commonName-datatype", second line "USGS"
@@ -41,6 +41,7 @@ Current Tests
    Fix: Upload.ensureHeaderSelectionSync disconnects sectionPressed; selectEntireColumn
      owns plain/Shift/Ctrl header selection + highlight.
    RESPONSE (prior): Shift OK; Ctrl visual flash-off; shift after ctrl still used anchor.
+   RESPONSE: This is acting REALLY weird. Ctrl click still flashes but uses it, same bug as before. But now if I try to shift click to highlight a new area, it's still using that ctrl click one, like I can't get rid of it remembering the ctrl click
 
 [ ] HDB password change UI only shows useful outcomes
    Steps:
