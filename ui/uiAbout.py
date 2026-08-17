@@ -2102,18 +2102,669 @@ if pygame is not None:
                 self.highScore = self.score
                 self.saveHigh()
 
+    class _CabinetIn:
+        """Horizontal free-flight scroller — original title Incursion."""
+
+        WORLD = 3600
+        _EXP = {
+            "player": ("b8.png", "b9.png"),
+            "e2": ("b8.png", "b9.png"),
+            "e1": ("b10.png", "b11.png"),
+            "e3": ("b12.png", "b13.png"),
+            "ufo": ("b14.png", "b15.png"),
+        }
+
+        def __init__(self, host, markKey="ic"):
+            self.host = host
+            self._markKey = markKey
+            self.running = True
+            try:
+                if not pygame.get_init():
+                    pygame.init()
+            except Exception:
+                pygame.init()
+            try:
+                pygame.font.init()
+            except Exception:
+                pass
+            _ensureDisplay()
+
+            self.screen = pygame.Surface((W, H))
+            fontPath = None
+            try:
+                fontPath = Logic.resourcePath("ui/fonts/PressStart2P-Regular.ttf")
+            except Exception:
+                fontPath = None
+            if fontPath and os.path.isfile(fontPath):
+                try:
+                    self.font = pygame.font.Font(fontPath, 10)
+                    self.bigFont = pygame.font.Font(fontPath, 16)
+                except Exception:
+                    self.font = pygame.font.Font(None, 22)
+                    self.bigFont = pygame.font.Font(None, 36)
+            else:
+                self.font = pygame.font.Font(None, 22)
+                self.bigFont = pygame.font.Font(None, 36)
+
+            self.bg = _coverSurf(_loadSurf("b0.png"), W, H)
+            self.stars = _loadSurf("b23.png")
+            if self.stars is not None:
+                if self.stars.get_size() != (W, H):
+                    try:
+                        self.stars = pygame.transform.scale(self.stars, (W, H))
+                    except Exception:
+                        pass
+                self.stars = _asOverlay(self.stars)
+            side = _loadSurf("b35.png")
+            self.playerR = _fitSurf(side, 72, 38)
+            self.playerL = None
+            if self.playerR is not None:
+                try:
+                    self.playerL = pygame.transform.flip(self.playerR, True, False)
+                except Exception:
+                    self.playerL = self.playerR
+            self.pBulletR = _fitSurf(_loadSurf("b36.png"), 18, 6)
+            self.pBulletL = None
+            if self.pBulletR is not None:
+                try:
+                    self.pBulletL = pygame.transform.flip(self.pBulletR, True, False)
+                except Exception:
+                    self.pBulletL = self.pBulletR
+            self.eImg = {
+                1: _fitSurf(_loadSurf("b3.png"), 30, 28),
+                2: _fitSurf(_loadSurf("b4.png"), 32, 30),
+                3: _fitSurf(_loadSurf("b5.png"), 28, 36),
+            }
+            self.eIdle = {
+                1: _fitSurf(_loadSurf("b18.png"), 30, 28),
+                2: _fitSurf(_loadSurf("b19.png"), 32, 30),
+                3: _fitSurf(_loadSurf("b20.png"), 28, 36),
+            }
+            self.eBullets = {
+                1: [
+                    self._rot90(_fitSurf(_loadSurf("b6.png"), 8, 20)),
+                    self._rot90(_fitSurf(_loadSurf("b30.png"), 8, 20)),
+                ],
+                2: [
+                    self._rot90(_fitSurf(_loadSurf("b31.png"), 10, 28)),
+                    self._rot90(_fitSurf(_loadSurf("b32.png"), 10, 28)),
+                ],
+                3: [
+                    self._rot90(_fitSurf(_loadSurf("b33.png"), 18, 40)),
+                    self._rot90(_fitSurf(_loadSurf("b34.png"), 18, 40)),
+                ],
+            }
+            self.ufoImg = _fitSurf(_loadSurf("b16.png"), 44, 30)
+            self.lifeImg = _fitSurf(_loadSurf("b17.png"), 16, 16)
+            flameR = [
+                self._rot90(_fitSurf(_loadSurf("b24.png"), 9, 16), clockwise=True),
+                self._rot90(_fitSurf(_loadSurf("b25.png"), 8, 18), clockwise=True),
+            ]
+            self.flameR = flameR
+            self.flameL = []
+            for f in flameR:
+                if f is None:
+                    self.flameL.append(None)
+                else:
+                    try:
+                        self.flameL.append(pygame.transform.flip(f, True, False))
+                    except Exception:
+                        self.flameL.append(f)
+            self.expFrames = {}
+            for key, pair in self._EXP.items():
+                frames = []
+                for fn in pair:
+                    frames.append(_fitSurf(_loadSurf(fn), 36, 36))
+                self.expFrames[key] = frames
+
+            self.audio = _Sfx(host)
+            self.highScore = _readMark(self._markKey)
+            self.state = "MENU"
+            self.title = "INCURSION"
+            self.score = 0
+            self.lives = 3
+            self.wave = 1
+            self.extraAwarded = False
+            self.playerX = 400.0
+            self.playerY = H * 0.5
+            self.vx = 0.0
+            self.vy = 0.0
+            self.face = 1
+            self.camX = 0.0
+            self.playerDead = False
+            self.dieWait = 0.0
+            self.invuln = 0.0
+            self.pShots = []
+            self.eShots = []
+            self.enemies = []
+            self.fx = []
+            self.idleT = 0.0
+            self.idleFrame = 0
+            self.flameT = 0.0
+            self.flameFrame = 0
+            self.message = ""
+            self.messageT = 0.0
+            self.maxPShots = 3
+            self.accel = 780.0
+            self.maxSpeed = 300.0
+            self.drag = 2.4
+
+        def _rot90(self, img, clockwise=False):
+            if img is None:
+                return None
+            try:
+                ang = -90 if clockwise else 90
+                return pygame.transform.rotate(img, ang)
+            except Exception:
+                return img
+
+        def loadHigh(self):
+            return _readMark(self._markKey)
+
+        def saveHigh(self):
+            _writeMark(self._markKey, self.highScore)
+
+        def playS(self, name):
+            self.audio.play(name)
+
+        def _wrap(self, x):
+            w = self.WORLD
+            return x % w
+
+        def _wrapDelta(self, a, b):
+            w = self.WORLD
+            return (a - b + w * 0.5) % w - w * 0.5
+
+        def _sx(self, wx):
+            return (wx - self.camX) % self.WORLD
+
+        def _screenXs(self, wx, pad=80):
+            s = self._sx(wx)
+            out = []
+            if -pad <= s <= W + pad:
+                out.append(s)
+            if s > self.WORLD - W - pad:
+                out.append(s - self.WORLD)
+            return out
+
+        def beginPlay(self):
+            self.audio.stop()
+            self.score = 0
+            self.lives = 3
+            self.wave = 1
+            self.extraAwarded = False
+            self.highScore = self.loadHigh()
+            self.playerX = 400.0
+            self.playerY = H * 0.5
+            self.vx = 0.0
+            self.vy = 0.0
+            self.face = 1
+            self.camX = 0.0
+            self.playerDead = False
+            self.dieWait = 0.0
+            self.invuln = 0.0
+            self.pShots = []
+            self.eShots = []
+            self.fx = []
+            self.message = ""
+            self.messageT = 0.0
+            self.state = "PLAYING"
+            self._setupWave()
+
+        def _setupWave(self):
+            self.enemies = []
+            n = 7 + self.wave * 2
+            n = min(18, n)
+            for i in range(n):
+                kind = 1 if i % 5 < 3 else (2 if i % 5 == 3 else 3)
+                self.enemies.append({
+                    "kind": kind,
+                    "x": random.random() * self.WORLD,
+                    "y": 50 + random.random() * 360,
+                    "vx": random.uniform(-40, 40),
+                    "vy": random.uniform(-30, 30),
+                    "shotT": random.uniform(0.6, 2.2),
+                    "ufo": False,
+                })
+            if self.wave >= 2:
+                self.enemies.append({
+                    "kind": 2,
+                    "x": random.random() * self.WORLD,
+                    "y": 80 + random.random() * 200,
+                    "vx": 90 if random.random() < 0.5 else -90,
+                    "vy": 0.0,
+                    "shotT": 1.4,
+                    "ufo": True,
+                })
+
+        def _addScore(self, n):
+            self.score += int(n)
+            if self.score > self.highScore:
+                self.highScore = self.score
+                self.saveHigh()
+            if (not self.extraAwarded) and self.score >= 2000:
+                self.extraAwarded = True
+                self.lives += 1
+                self.playS("life")
+                self.message = "EXTRA LIFE"
+                self.messageT = 1.4
+
+        def _spawnFx(self, kind, x, y):
+            frames = self.expFrames.get(kind) or self.expFrames.get("e1") or []
+            self.fx.append({"x": x, "y": y, "frames": frames, "i": 0, "t": 0.0})
+
+        def _playerSize(self):
+            img = self.playerR if self.face >= 0 else self.playerL
+            if img is not None:
+                return img.get_size()
+            return (64, 32)
+
+        def _overlap(self, a, b):
+            return a[0] < b[0] + b[2] and a[0] + a[2] > b[0] and a[1] < b[1] + b[3] and a[1] + a[3] > b[1]
+
+        def _firePlayer(self):
+            if self.playerDead or self.state != "PLAYING":
+                return
+            if len(self.pShots) >= self.maxPShots:
+                return
+            pw, _ph = self._playerSize()
+            self.pShots.append({
+                "x": self.playerX + self.face * pw * 0.45,
+                "y": self.playerY,
+                "vx": self.face * 420.0,
+            })
+            self.playS("shoot")
+
+        def _killPlayer(self):
+            if self.playerDead or self.invuln > 0:
+                return
+            self.playerDead = True
+            self.dieWait = 1.25
+            self._spawnFx("player", self.playerX, self.playerY)
+            self.playS("boomP")
+            self.lives -= 1
+            self.pShots = []
+            if self.lives <= 0:
+                self.saveHigh()
+
+        def _nextLifeOrOver(self):
+            if self.lives <= 0:
+                self.state = "GAME_OVER"
+                self.playS("over")
+                self.saveHigh()
+                return
+            self.playerDead = False
+            self.invuln = 1.6
+            self.vx = 0.0
+            self.vy = 0.0
+            self.eShots = []
+
+        def handlePulses(self, pulses, keys):
+            for p in pulses:
+                if p == "escape":
+                    self.audio.stop()
+                    if self.state in ("PLAYING", "PAUSED"):
+                        self.state = "MENU"
+                    else:
+                        self.running = False
+                elif p == "p":
+                    if self.state == "PLAYING":
+                        self.audio.stop()
+                        self.state = "PAUSED"
+                    elif self.state == "PAUSED":
+                        self.state = "PLAYING"
+                elif p in ("space", "click"):
+                    if self.state in ("MENU", "GAME_OVER"):
+                        self.beginPlay()
+                    elif self.state == "PLAYING":
+                        self._firePlayer()
+                elif p == "r":
+                    if self.state in ("GAME_OVER", "MENU"):
+                        self.beginPlay()
+
+        def update(self, dt, keys):
+            if self.state != "PLAYING":
+                return
+            if self.messageT > 0:
+                self.messageT -= dt
+            self.idleT += dt
+            if self.idleT >= 0.38:
+                self.idleT = 0.0
+                self.idleFrame = 1 - self.idleFrame
+            self.flameT += dt
+            self.flameFrame = 0 if int(self.flameT / 0.07) % 2 == 0 else 1
+
+            if self.playerDead:
+                self.dieWait -= dt
+                self._updateFx(dt)
+                if self.dieWait <= 0:
+                    self._nextLifeOrOver()
+                return
+
+            ax = 0.0
+            ay = 0.0
+            if keys.get("left"):
+                ax -= 1.0
+                self.face = -1
+            if keys.get("right"):
+                ax += 1.0
+                self.face = 1
+            if keys.get("up"):
+                ay -= 1.0
+            if keys.get("down"):
+                ay += 1.0
+            if ax and ay:
+                ax *= 0.707
+                ay *= 0.707
+            self.vx += ax * self.accel * dt
+            self.vy += ay * self.accel * dt
+            damp = max(0.0, 1.0 - self.drag * dt)
+            if not ax:
+                self.vx *= damp
+            if not ay:
+                self.vy *= damp
+            sp = math.hypot(self.vx, self.vy)
+            if sp > self.maxSpeed:
+                self.vx *= self.maxSpeed / sp
+                self.vy *= self.maxSpeed / sp
+            self.playerX = self._wrap(self.playerX + self.vx * dt)
+            self.playerY += self.vy * dt
+            pw, ph = self._playerSize()
+            self.playerY = max(40 + ph * 0.5, min(H - 22 - ph * 0.5, self.playerY))
+
+            look = self.face * 90.0
+            target = self.playerX - W * 0.5 + look
+            self.camX = self._wrap(self.camX + self._wrapDelta(target, self.camX) * min(1.0, 6.0 * dt))
+
+            for s in self.pShots:
+                s["x"] = self._wrap(s["x"] + s["vx"] * dt)
+            keepP = []
+            for s in self.pShots:
+                if abs(self._wrapDelta(s["x"], self.playerX)) < W * 1.2:
+                    keepP.append(s)
+            self.pShots = keepP
+
+            for s in self.eShots:
+                s["x"] = self._wrap(s["x"] + s["vx"] * dt)
+                s["y"] += s["vy"] * dt
+            self.eShots = [s for s in self.eShots if 20 < s["y"] < H - 8]
+
+            for e in self.enemies:
+                dx = self._wrapDelta(self.playerX, e["x"])
+                dy = self.playerY - e["y"]
+                dist = math.hypot(dx, dy) or 1.0
+                chase = 55.0 + self.wave * 6
+                if e.get("ufo"):
+                    chase += 40
+                e["vx"] += (dx / dist) * chase * dt * 0.35
+                e["vy"] += (dy / dist) * chase * dt * 0.35
+                e["vx"] += math.sin(e["x"] * 0.01 + e["y"] * 0.02) * 18 * dt
+                ev = math.hypot(e["vx"], e["vy"])
+                cap = 70 if not e.get("ufo") else 140
+                if ev > cap:
+                    e["vx"] *= cap / ev
+                    e["vy"] *= cap / ev
+                e["x"] = self._wrap(e["x"] + e["vx"] * dt)
+                e["y"] += e["vy"] * dt
+                e["y"] = max(46, min(H - 28, e["y"]))
+                e["shotT"] -= dt
+                if e["shotT"] <= 0 and dist < 420:
+                    e["shotT"] = max(0.7, 1.8 - self.wave * 0.08)
+                    spd = 160.0
+                    self.eShots.append({
+                        "x": e["x"],
+                        "y": e["y"],
+                        "vx": (dx / dist) * spd,
+                        "vy": (dy / dist) * spd,
+                        "kind": e["kind"],
+                    })
+                    self.playS("eShot")
+
+            self._collide()
+            self._updateFx(dt)
+            if not self.playerDead and not self.enemies:
+                self.playS("clear")
+                self.wave += 1
+                self.message = f"WAVE {self.wave}"
+                self.messageT = 1.4
+                self._setupWave()
+
+        def _collide(self):
+            pw, ph = self._playerSize()
+            pr = (self.playerX - pw * 0.35, self.playerY - ph * 0.35, pw * 0.7, ph * 0.7)
+            pbw, pbh = (16, 6)
+            if self.pBulletR is not None:
+                pbw, pbh = self.pBulletR.get_size()
+
+            keepP = []
+            for s in self.pShots:
+                sr = (s["x"] - pbw * 0.5, s["y"] - pbh * 0.5, pbw, pbh)
+                hit = False
+                for e in list(self.enemies):
+                    ew, eh = (28, 28)
+                    img = self.eImg.get(e["kind"])
+                    if img is not None:
+                        ew, eh = img.get_size()
+                    er = (e["x"] - ew * 0.5, e["y"] - eh * 0.5, ew, eh)
+                    if self._worldOverlap(sr, er):
+                        tag = "ufo" if e.get("ufo") else {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
+                        self._spawnFx(tag, e["x"], e["y"])
+                        pts = 150 if e.get("ufo") else {1: 20, 2: 40, 3: 60}.get(e["kind"], 20)
+                        self._addScore(pts)
+                        self.playS("boomE")
+                        self.enemies.remove(e)
+                        hit = True
+                        break
+                if not hit:
+                    keepP.append(s)
+            self.pShots = keepP
+
+            if self.playerDead:
+                return
+            for s in list(self.eShots):
+                img = None
+                frames = self.eBullets.get(s.get("kind", 1)) or []
+                if frames:
+                    img = frames[self.flameFrame % len(frames)]
+                ebw, ebh = (12, 6)
+                if img is not None:
+                    ebw, ebh = img.get_size()
+                sr = (s["x"] - ebw * 0.5, s["y"] - ebh * 0.5, ebw, ebh)
+                if self._worldOverlap(sr, pr):
+                    self.eShots.remove(s)
+                    self._killPlayer()
+                    return
+            for e in list(self.enemies):
+                ew, eh = (28, 28)
+                img = self.eImg.get(e["kind"])
+                if img is not None:
+                    ew, eh = img.get_size()
+                er = (e["x"] - ew * 0.4, e["y"] - eh * 0.4, ew * 0.8, eh * 0.8)
+                if self._worldOverlap(er, pr):
+                    tag = "ufo" if e.get("ufo") else {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
+                    self._spawnFx(tag, e["x"], e["y"])
+                    self.playS("boomE")
+                    try:
+                        self.enemies.remove(e)
+                    except ValueError:
+                        pass
+                    self._killPlayer()
+                    return
+
+        def _worldOverlap(self, a, b):
+            # Compare using wrapped X so shots near the seam still hit
+            ax, ay, aw, ah = a
+            bx, by, bw, bh = b
+            if not (ay < by + bh and ay + ah > by):
+                return False
+            dx = abs(self._wrapDelta(ax + aw * 0.5, bx + bw * 0.5))
+            return dx < (aw + bw) * 0.5
+
+        def _updateFx(self, dt):
+            live = []
+            for f in self.fx:
+                f["t"] += dt
+                if f["t"] >= 0.09:
+                    f["t"] = 0.0
+                    f["i"] += 1
+                if f["i"] < len(f["frames"]):
+                    live.append(f)
+            self.fx = live
+
+        def _blitC(self, img, x, y):
+            if img is None:
+                return
+            r = img.get_rect(center=(int(x), int(y)))
+            self.screen.blit(img, r)
+
+        def _drawWorld(self, img, wx, wy):
+            if img is None:
+                return
+            for sx in self._screenXs(wx):
+                self._blitC(img, sx, wy)
+
+        def _drawHud(self):
+            score = self.font.render(f"{self.score:05d}", True, WHITE)
+            hi = self.font.render(f"HI {self.highScore:05d}", True, YELLOW)
+            wave = self.font.render(f"W{self.wave}", True, CYAN)
+            self.screen.blit(score, (16, 6))
+            self.screen.blit(hi, (W // 2 - hi.get_width() // 2, 6))
+            self.screen.blit(wave, (W - 70, 6))
+            # scanner
+            bar = pygame.Rect(80, 22, W - 160, 6)
+            pygame.draw.rect(self.screen, (20, 30, 40), bar)
+            pygame.draw.rect(self.screen, (80, 120, 140), bar, 1)
+            for e in self.enemies:
+                px = bar.x + int((e["x"] / self.WORLD) * bar.w)
+                col = (0, 220, 255) if e.get("ufo") else ((180, 80, 255) if e["kind"] == 1 else ((255, 80, 80) if e["kind"] == 2 else (120, 80, 255)))
+                pygame.draw.rect(self.screen, col, (px, bar.y, 2, bar.h))
+            px = bar.x + int((self.playerX / self.WORLD) * bar.w)
+            pygame.draw.rect(self.screen, (80, 255, 255), (px - 1, bar.y - 1, 3, bar.h + 2))
+            if self.lifeImg is not None:
+                for i in range(max(0, self.lives)):
+                    self.screen.blit(self.lifeImg, (16 + i * 20, H - 22))
+            if self.messageT > 0 and self.message:
+                msg = self.bigFont.render(self.message, True, YELLOW)
+                self.screen.blit(msg, (W // 2 - msg.get_width() // 2, 210))
+
+        def draw(self):
+            # tiled backdrop + stars follow camera
+            off = int(-(self.camX * 0.35) % W)
+            if self.bg is not None:
+                self.screen.blit(self.bg, (off - W, 0))
+                self.screen.blit(self.bg, (off, 0))
+            else:
+                self.screen.fill((4, 2, 12))
+            if self.stars is not None:
+                so = int(-(self.camX * 0.7) % W)
+                self.screen.blit(self.stars, (so - W, 0))
+                self.screen.blit(self.stars, (so, 0))
+
+            if self.state == "MENU":
+                title = self.bigFont.render(self.title, True, CYAN)
+                hint = self.font.render("SPACE", True, WHITE)
+                esc = self.font.render("ESC", True, (160, 160, 180))
+                hi = self.font.render(f"HI {self.highScore:05d}", True, YELLOW)
+                self.screen.blit(title, (W // 2 - title.get_width() // 2, 170))
+                self.screen.blit(hint, (W // 2 - hint.get_width() // 2, 230))
+                self.screen.blit(esc, (W // 2 - esc.get_width() // 2, 262))
+                self.screen.blit(hi, (W // 2 - hi.get_width() // 2, 310))
+                return
+            if self.state == "PAUSED":
+                msg = self.bigFont.render("PAUSED", True, YELLOW)
+                self.screen.blit(msg, (W // 2 - msg.get_width() // 2, 210))
+                self._drawHud()
+                return
+            if self.state == "GAME_OVER":
+                msg = self.bigFont.render("GAME OVER", True, MAGENTA)
+                hint = self.font.render("SPACE", True, WHITE)
+                self.screen.blit(msg, (W // 2 - msg.get_width() // 2, 190))
+                self.screen.blit(hint, (W // 2 - hint.get_width() // 2, 240))
+                self._drawHud()
+                return
+
+            fi = self.flameFrame
+            for e in self.enemies:
+                if e.get("ufo") and self.ufoImg is not None:
+                    img = self.ufoImg
+                else:
+                    img = self.eImg.get(e["kind"])
+                    if self.idleFrame and self.eIdle.get(e["kind"]) is not None:
+                        img = self.eIdle.get(e["kind"])
+                self._drawWorld(img, e["x"], e["y"])
+
+            for s in self.pShots:
+                img = self.pBulletR if s["vx"] >= 0 else self.pBulletL
+                self._drawWorld(img, s["x"], s["y"])
+            for s in self.eShots:
+                frames = self.eBullets.get(s.get("kind", 1)) or []
+                img = frames[fi % len(frames)] if frames else None
+                self._drawWorld(img, s["x"], s["y"])
+
+            if not self.playerDead:
+                blink = self.invuln > 0 and int(self.invuln * 12) % 2 == 0
+                if not blink:
+                    ship = self.playerR if self.face >= 0 else self.playerL
+                    self._drawWorld(ship, self.playerX, self.playerY)
+                    flames = self.flameR if self.face >= 0 else self.flameL
+                    fl = flames[fi % len(flames)] if flames else None
+                    if fl is not None:
+                        pw, _ph = self._playerSize()
+                        self._drawWorld(fl, self.playerX - self.face * pw * 0.48, self.playerY)
+
+            for f in self.fx:
+                frames = f["frames"]
+                i = f["i"]
+                if 0 <= i < len(frames) and frames[i] is not None:
+                    self._drawWorld(frames[i], f["x"], f["y"])
+            self._drawHud()
+
+        def toImage(self):
+            rgb = self.screen
+            if rgb.get_bytesize() != 3:
+                rgb = self.screen.convert(24)
+            raw = pygame.image.tobytes(rgb, "RGB")
+            qimg = QImage(raw, W, H, W * 3, QImage.Format.Format_RGB888)
+            return qimg.copy()
+
+        def tick(self, dt, keys, pulses):
+            keys = keys or {}
+            self.handlePulses(pulses or [], keys)
+            if not self.running:
+                return None
+            self.update(dt, keys)
+            self.draw()
+            return self.toImage()
+
+        def stop(self):
+            self.running = False
+            try:
+                self.audio.stop()
+            except Exception:
+                pass
+            if self.score > self.highScore:
+                self.highScore = self.score
+                self.saveHigh()
+
     def _factoryAb(host, markKey="ab"):
         return _CabinetSh(host, markKey, "ab")
 
     def _factoryLs(host, markKey="ls"):
         return _CabinetSh(host, markKey, "ls")
 
+    def _factoryIc(host, markKey="ic"):
+        return _CabinetIn(host, markKey)
+
     _addTitle("ALIEN BLASTER", _factoryAb, "ab")
     _addTitle("LAST STAND", _factoryLs, "ls")
+    _addTitle("INCURSION", _factoryIc, "ic")
 
 else:
     def _factoryAb(host, markKey="ab"):
         return None
 
     def _factoryLs(host, markKey="ls"):
+        return None
+
+    def _factoryIc(host, markKey="ic"):
         return None
