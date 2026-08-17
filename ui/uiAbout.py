@@ -88,6 +88,8 @@ class uiAbout(QDialog):
 
     _TITLE_DEFAULT = "About Data Doctor"
     _TITLE_CABINET = "S31F3R's Secret"
+    _BASE_W = 900
+    _BASE_H = 479
 
     def __init__(self, winMain=None):
         super().__init__(parent=winMain)
@@ -115,6 +117,8 @@ class uiAbout(QDialog):
             "left": False, "right": False, "up": False, "down": False,
         }
         self._playPulses = []
+        self._playLetterbox = None
+        self._backdropSize = None
 
         self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
@@ -290,7 +294,7 @@ class uiAbout(QDialog):
             f"color: rgba(255,255,255,180); background: transparent; "
             f"font-family: '{fam}'; font-size: {max(6, pt - 2)}pt;"
         )
-        hint.setText("ENTER  ·  ESC")
+        hint.setText("ENTER  ·  ESC  ·  F11")
         hint.hide()
         self._cabHint = hint
 
@@ -344,6 +348,141 @@ class uiAbout(QDialog):
         self._splashCreditTimer.setSingleShot(True)
         self._splashCreditTimer.timeout.connect(self._onSplashCreditInsert)
 
+    def _cabinetActive(self):
+        return bool(self._cabinetMode or self._playMode or self._splashMode)
+
+    def _unlockCabinetSize(self):
+        self.setMinimumSize(720, 383)
+        self.setMaximumSize(16777215, 16777215)
+        self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
+        self._playLetterbox = None
+        self._layoutCabinetChrome()
+
+    def _lockStockSize(self):
+        if self.isFullScreen() or self.isMaximized():
+            self.showNormal()
+        self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
+        self.setFixedSize(self._BASE_W, self._BASE_H)
+        self._playLetterbox = None
+        self._backdropSize = None
+        Utils.centerWindowToParent(self)
+
+    def _toggleCabinetFill(self):
+        if not self._cabinetActive():
+            return
+        if self.isFullScreen() or self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+        QTimer.singleShot(0, self._afterFillToggle)
+
+    def _afterFillToggle(self):
+        self._playLetterbox = None
+        if self._cabinetActive():
+            self._layoutCabinetChrome()
+
+    def _layoutCabinetChrome(self):
+        w = max(1, self.width())
+        h = max(1, self.height())
+        scale = max(1.0, h / float(self._BASE_H))
+        fam = getattr(self, "_retroFam", "monospace")
+        basePt = getattr(self, "_retroPt", 9)
+        pt = max(basePt, int(round(basePt * min(scale, 2.4))))
+
+        if self._cabBackdrop is not None:
+            self._cabBackdrop.setGeometry(0, 0, w, h)
+            if self._backdropSize != (w, h):
+                self._cabBackdrop.setPixmap(_starfieldPixmap(w, h))
+                self._backdropSize = (w, h)
+        if self._cabHeader is not None:
+            self._cabHeader.setGeometry(0, int(h * 0.13), w, max(36, int(40 * min(scale, 2.0))))
+            self._cabHeader.setStyleSheet(
+                f"color: white; background: transparent; font-family: '{fam}'; font-size: {pt + 2}pt;"
+            )
+        if self._cabList is not None:
+            lw = min(720, max(420, int(w * 0.52)))
+            lh = max(180, int(h * 0.52))
+            self._cabList.setGeometry((w - lw) // 2, int(h * 0.24), lw, lh)
+            self._cabList.setStyleSheet(
+                "QListWidget {"
+                "  background: transparent; border: none; outline: none;"
+                f"  color: white; font-family: '{fam}'; font-size: {pt}pt;"
+                "}"
+                "QListWidget::item { padding: 14px 8px; color: white; }"
+                "QListWidget::item:selected {"
+                "  background: rgba(255, 255, 0, 55); color: #ffff66;"
+                "}"
+                "QListWidget::item:hover { background: rgba(255, 255, 255, 20); }"
+                "QScrollBar:vertical { width: 0px; background: transparent; }"
+            )
+        if self._cabHint is not None:
+            self._cabHint.setGeometry(0, h - max(28, int(32 * min(scale, 2.0))), w, max(24, int(30 * min(scale, 2.0))))
+            self._cabHint.setStyleSheet(
+                f"color: rgba(255,255,255,180); background: transparent; "
+                f"font-family: '{fam}'; font-size: {max(6, pt - 2)}pt;"
+            )
+        if self._playLabel is not None:
+            self._playLabel.setGeometry(0, 0, w, h)
+        if self._splashBg is not None:
+            self._splashBg.setGeometry(0, 0, w, h)
+        if self._splashCredits is not None:
+            self._splashCredits.setGeometry(40, h // 2 - 30, w - 80, max(50, int(60 * min(scale, 2.0))))
+            self._splashCredits.setStyleSheet(
+                f"color: #66ffff; background: transparent; "
+                f"font-family: '{fam}'; font-size: {pt + 3}pt;"
+            )
+
+    def _letterboxFill(self, lw, lh):
+        cached = self._playLetterbox
+        if cached is not None and cached.size() == QSize(lw, lh):
+            return cached
+        path = Logic.resourcePath("ui/fx/b0.png")
+        src = QPixmap(path) if path and os.path.isfile(path) else QPixmap()
+        if src.isNull():
+            fill = _starfieldPixmap(lw, lh)
+        else:
+            cover = src.scaled(
+                lw, lh,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            x = max(0, (cover.width() - lw) // 2)
+            y = max(0, (cover.height() - lh) // 2)
+            fill = cover.copy(x, y, lw, lh)
+        self._playLetterbox = fill
+        return fill
+
+    def _presentPlayImage(self, qimg):
+        label = self._playLabel
+        if label is None or qimg is None or qimg.isNull():
+            return
+        lw = max(1, label.width())
+        lh = max(1, label.height())
+        game = QPixmap.fromImage(qimg)
+        gw, gh = game.width(), game.height()
+        if gw < 1 or gh < 1:
+            return
+        scale = min(lw / float(gw), lh / float(gh))
+        nw = max(1, int(round(gw * scale)))
+        nh = max(1, int(round(gh * scale)))
+        scaled = game.scaled(
+            nw, nh,
+            Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        canvas = QPixmap(self._letterboxFill(lw, lh))
+        painter = QPainter(canvas)
+        painter.drawPixmap((lw - nw) // 2, (lh - nh) // 2, scaled)
+        painter.end()
+        label.setPixmap(canvas)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._cabinetActive():
+            self._playLetterbox = None
+            self._layoutCabinetChrome()
+
     def eventFilter(self, obj, event):
         if (
             self._cabinetMode
@@ -356,6 +495,9 @@ class uiAbout(QDialog):
             if key == Qt.Key.Key_Escape:
                 self._closeCabinet()
                 return True
+            if key == Qt.Key.Key_F11:
+                self._toggleCabinetFill()
+                return True
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 self._launchIndex(self._cabList.currentRow())
                 return True
@@ -364,6 +506,9 @@ class uiAbout(QDialog):
             if obj is self._playLabel or obj is self:
                 et = event.type()
                 if et == QEvent.Type.KeyPress and not event.isAutoRepeat():
+                    if event.key() == Qt.Key.Key_F11:
+                        self._toggleCabinetFill()
+                        return True
                     self._handlePlayKey(event.key(), True, event.text())
                     return True
                 if et == QEvent.Type.KeyRelease and not event.isAutoRepeat():
@@ -415,6 +560,7 @@ class uiAbout(QDialog):
         """
         if active:
             self.setWindowTitle(self._TITLE_CABINET)
+            self._unlockCabinetSize()
             if self.backgroundLabel is not None:
                 self.backgroundLabel.hide()
             if self._cabBackdrop is not None:
@@ -423,8 +569,10 @@ class uiAbout(QDialog):
                 self._cabBackdrop.lower()
                 if self.backgroundLabel is not None:
                     self.backgroundLabel.lower()
+            self._layoutCabinetChrome()
         else:
             self.setWindowTitle(self._TITLE_DEFAULT)
+            self._lockStockSize()
             if self._cabBackdrop is not None:
                 self._cabBackdrop.hide()
             if self.backgroundLabel is not None:
@@ -455,6 +603,8 @@ class uiAbout(QDialog):
                 w.raise_()
             else:
                 w.hide()
+        if visible:
+            self._layoutCabinetChrome()
 
     def _closeCabinet(self):
         self._stopEmbeddedSession()
@@ -536,6 +686,7 @@ class uiAbout(QDialog):
             if w is not None:
                 w.show()
                 w.raise_()
+        self._layoutCabinetChrome()
         if self._splashAnim is not None:
             try:
                 self._splashAnim.stop()
@@ -635,6 +786,7 @@ class uiAbout(QDialog):
             self._playLabel.raise_()
             self._playLabel.setFocus(Qt.FocusReason.OtherFocusReason)
             self._playLabel.clear()
+        self._layoutCabinetChrome()
         if self._gameTimer is not None:
             self._gameTimer.start()
 
@@ -648,7 +800,7 @@ class uiAbout(QDialog):
             img = self._session.tick(dt, self._playKeys, self._playPulses)
             self._playPulses = []
             if img is not None and self._playLabel is not None:
-                self._playLabel.setPixmap(QPixmap.fromImage(img))
+                self._presentPlayImage(img)
             if not getattr(self._session, "running", True):
                 self._stopEmbeddedSession()
                 self._returnToCatalog()
@@ -687,6 +839,9 @@ class uiAbout(QDialog):
             self.startMusic()
 
     def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_F11 and self._cabinetActive():
+            self._toggleCabinetFill()
+            return
         if self._splashMode:
             if event.key() == Qt.Key.Key_Escape:
                 self._hideSplash()
@@ -722,7 +877,8 @@ class uiAbout(QDialog):
         super().keyReleaseEvent(event)
 
     def showEvent(self, event):
-        Utils.centerWindowToParent(self)
+        if not self._cabinetActive() and not self.isMaximized() and not self.isFullScreen():
+            Utils.centerWindowToParent(self)
         if not self._cabinetMode and not self._playMode and not self._splashMode:
             if self.textInfo is not None:
                 self.textInfo.show()
