@@ -69,6 +69,14 @@ def _addTitle(title, factory, markKey):
     _CATALOG.append({"title": title, "factory": factory, "key": markKey})
 
 
+def _logicalPlaySize(lw, lh, baseH=479, minW=640, maxW=3200):
+    """Play buffer matches the window aspect at stock height — fill has no bars."""
+    lw = max(1, int(lw))
+    lh = max(1, int(lh))
+    pw = int(round(baseH * (lw / float(lh))))
+    return max(minW, min(pw, maxW)), int(baseH)
+
+
 def _starfieldPixmap(width=900, height=479, seed=31415):
     """Plain starfield for SELECT mode — no app logo / wordmark."""
     pm = QPixmap(width, height)
@@ -128,7 +136,6 @@ class uiAbout(QDialog):
             "left": False, "right": False, "up": False, "down": False,
         }
         self._playPulses = []
-        self._playLetterbox = None
         self._backdropSize = None
         self._closing = False
 
@@ -370,7 +377,6 @@ class uiAbout(QDialog):
         # (About is opened with exec()), which makes the window vanish.
         self.setMinimumSize(720, 383)
         self.setMaximumSize(16777215, 16777215)
-        self._playLetterbox = None
         self._layoutCabinetChrome()
         if not getattr(self, "_closing", False) and not self.isVisible():
             self.show()
@@ -382,7 +388,6 @@ class uiAbout(QDialog):
         if self.isFullScreen() or self.isMaximized():
             self.showNormal()
         self.setFixedSize(self._BASE_W, self._BASE_H)
-        self._playLetterbox = None
         self._backdropSize = None
         if closing:
             return
@@ -401,9 +406,9 @@ class uiAbout(QDialog):
         QTimer.singleShot(0, self._afterFillToggle)
 
     def _afterFillToggle(self):
-        self._playLetterbox = None
         if self._cabinetActive():
             self._layoutCabinetChrome()
+            self._syncSessionSize()
 
     def _layoutCabinetChrome(self):
         w = max(1, self.width())
@@ -456,25 +461,24 @@ class uiAbout(QDialog):
                 f"font-family: '{fam}'; font-size: {pt + 3}pt;"
             )
 
-    def _letterboxFill(self, lw, lh):
-        cached = self._playLetterbox
-        if cached is not None and cached.size() == QSize(lw, lh):
-            return cached
-        path = Logic.resourcePath("ui/fx/b0.png")
-        src = QPixmap(path) if path and os.path.isfile(path) else QPixmap()
-        if src.isNull():
-            fill = _starfieldPixmap(lw, lh)
-        else:
-            cover = src.scaled(
-                lw, lh,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            x = max(0, (cover.width() - lw) // 2)
-            y = max(0, (cover.height() - lh) // 2)
-            fill = cover.copy(x, y, lw, lh)
-        self._playLetterbox = fill
-        return fill
+    def _playLogicalSize(self):
+        label = self._playLabel
+        lw = max(1, label.width() if label is not None else self.width())
+        lh = max(1, label.height() if label is not None else self.height())
+        return _logicalPlaySize(lw, lh, self._BASE_H)
+
+    def _syncSessionSize(self):
+        sess = self._session
+        if sess is None:
+            return
+        applySize = getattr(sess, "applySize", None)
+        if not callable(applySize):
+            return
+        pw, ph = self._playLogicalSize()
+        try:
+            applySize(pw, ph)
+        except Exception as e:
+            Logic.logMessage("WARN", f"Optional view resize failed: {e}")
 
     def _presentPlayImage(self, qimg):
         label = self._playLabel
@@ -483,28 +487,22 @@ class uiAbout(QDialog):
         lw = max(1, label.width())
         lh = max(1, label.height())
         game = QPixmap.fromImage(qimg)
-        gw, gh = game.width(), game.height()
-        if gw < 1 or gh < 1:
+        if game.width() < 1 or game.height() < 1:
             return
-        scale = min(lw / float(gw), lh / float(gh))
-        nw = max(1, int(round(gw * scale)))
-        nh = max(1, int(round(gh * scale)))
-        scaled = game.scaled(
-            nw, nh,
-            Qt.AspectRatioMode.IgnoreAspectRatio,
+        cover = game.scaled(
+            lw, lh,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation,
         )
-        canvas = QPixmap(self._letterboxFill(lw, lh))
-        painter = QPainter(canvas)
-        painter.drawPixmap((lw - nw) // 2, (lh - nh) // 2, scaled)
-        painter.end()
-        label.setPixmap(canvas)
+        x = max(0, (cover.width() - lw) // 2)
+        y = max(0, (cover.height() - lh) // 2)
+        label.setPixmap(cover.copy(x, y, lw, lh))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self._cabinetActive():
-            self._playLetterbox = None
             self._layoutCabinetChrome()
+            self._syncSessionSize()
 
     def eventFilter(self, obj, event):
         if self._splashMode and event.type() == QEvent.Type.KeyPress:
@@ -850,6 +848,7 @@ class uiAbout(QDialog):
             self._playLabel.setFocus(Qt.FocusReason.OtherFocusReason)
             self._playLabel.clear()
         self._layoutCabinetChrome()
+        self._syncSessionSize()
         if self._gameTimer is not None:
             self._gameTimer.start()
 
@@ -860,6 +859,7 @@ class uiAbout(QDialog):
         dt = max(0.0, min(0.05, now - self._lastTick))
         self._lastTick = now
         try:
+            self._syncSessionSize()
             img = self._session.tick(dt, self._playKeys, self._playPulses)
             self._playPulses = []
             if img is not None and self._playLabel is not None:
@@ -1269,7 +1269,6 @@ if pygame is not None:
                 pass
             _ensureDisplay()
 
-            self.screen = pygame.Surface((W, H))
             fontPath = None
             try:
                 fontPath = Logic.resourcePath("ui/fonts/PressStart2P-Regular.ttf")
@@ -1286,20 +1285,12 @@ if pygame is not None:
                 self.font = pygame.font.Font(None, 22)
                 self.bigFont = pygame.font.Font(None, 36)
 
-            self.bg = _coverSurf(_loadSurf("b0.png"), W, H)
-            if self.bg is not None and self.bg.get_size() != (W, H):
-                try:
-                    self.bg = pygame.transform.smoothscale(self.bg, (W, H))
-                except Exception:
-                    self.bg = pygame.transform.scale(self.bg, (W, H))
-            self.stars = _loadSurf("b23.png")
-            if self.stars is not None:
-                if self.stars.get_size() != (W, H):
-                    try:
-                        self.stars = pygame.transform.scale(self.stars, (W, H))
-                    except Exception:
-                        pass
-                self.stars = _asOverlay(self.stars)
+            self._bgSrc = _loadSurf("b0.png")
+            self._starSrc = _loadSurf("b23.png")
+            self._view = None
+            self.screen = None
+            self.bg = None
+            self.stars = None
             self.playerImg = _fitSurf(_loadSurf("b1.png"), 52, 70)
             self.pBullet = _fitSurf(_loadSurf("b2.png"), 7, 18)
             self.eImg = {
@@ -1372,7 +1363,7 @@ if pygame is not None:
             self.title = "ALIEN BLASTER" if mode == "ab" else "LAST STAND"
 
             self.playerX = W * 0.5
-            self.playerY = 428.0
+            self.playerY = H - 51.0
             self.playerDead = False
             self.dieWait = 0.0
             self.pShots = []
@@ -1391,6 +1382,69 @@ if pygame is not None:
             self.maxPShots = 1 if mode == "ab" else 2
             self.playerSpeed = 260.0
             self.tilt = 0.0
+            self.applySize(W, H)
+
+        def applySize(self, pw, ph):
+            """Rebuild the offscreen view so the playfield matches the window aspect."""
+            global W, H
+            pw = max(640, int(pw))
+            ph = max(360, int(ph))
+            oldW, oldH = W, H
+            if self._view == (pw, ph) and self.screen is not None:
+                if self.screen.get_size() == (pw, ph):
+                    return
+            W, H = pw, ph
+            self._view = (pw, ph)
+            self.screen = pygame.Surface((W, H))
+            self.bg = _coverSurf(self._bgSrc, W, H)
+            stars = self._starSrc
+            if stars is not None:
+                try:
+                    self.stars = pygame.transform.scale(stars, (W, H))
+                except Exception:
+                    self.stars = stars
+                self.stars = _asOverlay(self.stars)
+            else:
+                self.stars = None
+            if oldW > 0 and oldW != W:
+                ratio = W / float(oldW)
+                self.playerX *= ratio
+                for s in self.pShots:
+                    s["x"] *= ratio
+                for s in self.eShots:
+                    s["x"] *= ratio
+                for e in self.enemies:
+                    e["x"] *= ratio
+                    if "slotX" in e:
+                        e["slotX"] *= ratio
+                for bar in self.barriers:
+                    bar["x"] *= ratio
+                if self.ufo is not None:
+                    self.ufo["x"] *= ratio
+                for f in self.fx:
+                    f["x"] *= ratio
+            if oldH > 0 and oldH != H:
+                yRatio = H / float(oldH)
+                self.playerY *= yRatio
+                for s in self.pShots:
+                    s["y"] *= yRatio
+                for s in self.eShots:
+                    s["y"] *= yRatio
+                for e in self.enemies:
+                    e["y"] *= yRatio
+                    if "slotY" in e:
+                        e["slotY"] *= yRatio
+                for bar in self.barriers:
+                    bar["y"] *= yRatio
+                if self.ufo is not None:
+                    self.ufo["y"] *= yRatio
+                for f in self.fx:
+                    f["y"] *= yRatio
+            else:
+                self.playerY = H - 51.0
+            pwShip, _ph = self._playerSize()
+            half = pwShip * 0.5
+            self.playerX = max(half + 8, min(W - half - 8, self.playerX))
 
         def loadHigh(self):
             return _readMark(self._markKey)
@@ -1420,7 +1474,7 @@ if pygame is not None:
             self.extraAwarded = False
             self.highScore = self.loadHigh()
             self.playerX = W * 0.5
-            self.playerY = 428.0
+            self.playerY = H - 51.0
             self.tilt = 0.0
             self.playerDead = False
             self.dieWait = 0.0
@@ -1469,9 +1523,15 @@ if pygame is not None:
             self.eShootT = 0.8
             self.diveT = 1.6
             delay = 0.0
+            span = W / 900.0
             if self.mode == "ls":
                 # Tapered hold: fewer on top, wider below (centered).
-                layout = ((3, 4, 86.0), (2, 6, 72.0), (1, 8, 64.0), (1, 10, 58.0))
+                layout = (
+                    (3, 4, 86.0 * span),
+                    (2, 6, 72.0 * span),
+                    (1, 8, 64.0 * span),
+                    (1, 10, 58.0 * span),
+                )
                 originY = 50.0
                 gapY = 36.0
                 for r, (kind, count, gapX) in enumerate(layout):
@@ -1485,8 +1545,9 @@ if pygame is not None:
                         delay += 0.08
             else:
                 cols, rows = 8, 4
-                gapX, gapY = 78, 38
-                originX = 86.0
+                gapX, gapY = 78.0 * span, 38
+                rowW = (cols - 1) * gapX
+                originX = (W - rowW) * 0.5
                 originY = 58.0
                 kinds = [3, 2, 1, 1]
                 for r in range(rows):
@@ -1498,11 +1559,15 @@ if pygame is not None:
             self.barriers = []
             if self.mode == "ab" and self.barrierSrc is not None:
                 bw, bh = self.barrierSrc.get_size()
-                for i, bx in enumerate((118, 304, 490, 676)):
+                n = 4
+                margin = max(40.0, W * 0.10)
+                spanX = max(0.0, W - 2 * margin - bw)
+                xs = [margin + spanX * i / (n - 1) for i in range(n)] if n > 1 else [W * 0.5 - bw * 0.5]
+                for bx in xs:
                     surf = self.barrierSrc.copy()
                     self.barriers.append({
-                        "x": bx,
-                        "y": 366,
+                        "x": float(bx),
+                        "y": H - 113,
                         "surf": surf,
                         "mask": pygame.mask.from_surface(surf),
                         "w": bw,
@@ -2110,7 +2175,6 @@ if pygame is not None:
                 pass
             _ensureDisplay()
 
-            self.screen = pygame.Surface((W, H))
             fontPath = None
             try:
                 fontPath = Logic.resourcePath("ui/fonts/PressStart2P-Regular.ttf")
@@ -2127,17 +2191,14 @@ if pygame is not None:
                 self.font = pygame.font.Font(None, 22)
                 self.bigFont = pygame.font.Font(None, 36)
 
-            self.bg = _coverSurf(_loadSurf("b0.png"), W, H)
-            self.stars = _loadSurf("b23.png")
-            if self.stars is not None:
-                if self.stars.get_size() != (W, H):
-                    try:
-                        self.stars = pygame.transform.scale(self.stars, (W, H))
-                    except Exception:
-                        pass
-                self.stars = _asOverlay(self.stars)
-            self.bgLoop = self._loopStrip(self.bg, alpha=False)
-            self.starLoop = self._loopStrip(self.stars, alpha=True)
+            self._bgSrc = _loadSurf("b0.png")
+            self._starSrc = _loadSurf("b23.png")
+            self._view = None
+            self.screen = None
+            self.bg = None
+            self.stars = None
+            self.bgLoop = None
+            self.starLoop = None
             side = _loadSurf("b35.png")
             self.playerR = _fitSurf(side, 72, 38)
             self.playerL = None
@@ -2236,6 +2297,46 @@ if pygame is not None:
             self.accel = 780.0
             self.maxSpeed = 300.0
             self.drag = 2.4
+            self.applySize(W, H)
+
+        def applySize(self, pw, ph):
+            """Widen the camera window to the host aspect. World coords stay put."""
+            global W, H
+            pw = max(640, int(pw))
+            ph = max(360, int(ph))
+            pw = min(pw, max(640, self.WORLD - 200))
+            if self._view == (pw, ph) and self.screen is not None:
+                if self.screen.get_size() == (pw, ph):
+                    return
+            oldH = H
+            W, H = pw, ph
+            self._view = (pw, ph)
+            self.screen = pygame.Surface((W, H))
+            self.bg = _coverSurf(self._bgSrc, W, H)
+            stars = self._starSrc
+            if stars is not None:
+                try:
+                    self.stars = pygame.transform.scale(stars, (W, H))
+                except Exception:
+                    self.stars = stars
+                self.stars = _asOverlay(self.stars)
+            else:
+                self.stars = None
+            self.bgLoop = self._loopStrip(self.bg, alpha=False)
+            self.starLoop = self._loopStrip(self.stars, alpha=True)
+            if oldH > 0 and oldH != H:
+                yRatio = H / float(oldH)
+                self.playerY *= yRatio
+                for s in self.pShots:
+                    s["y"] *= yRatio
+                for s in self.eShots:
+                    s["y"] *= yRatio
+                for e in self.enemies:
+                    e["y"] *= yRatio
+                for f in self.fx:
+                    f["y"] *= yRatio
+            _pw, phShip = self._playerSize()
+            self.playerY = max(40 + phShip * 0.5, min(H - 22 - phShip * 0.5, self.playerY))
 
         def _rot90(self, img, clockwise=False):
             if img is None:
