@@ -928,14 +928,34 @@ def syncHeaderHighlightsFromSelection(table):
 
 def ensureHeaderSelectionSync(mainWindow):
     """
-    Connect selectionChanged once so multi-column cell selection updates
-    all matching header highlights (not only the last header-click column).
+    One-time header multi-select setup for the main data table:
+
+      1. Disconnect QTableView's default sectionPressed → selectColumn.
+         That slot runs on mouse press (before sectionClicked) and already
+         applies Ctrl/Shift column selection. Our sectionClicked handler then
+         double-toggles Ctrl adds — flash highlight then remove.
+      2. Connect selectionChanged so cell multi-select paints every matching
+         header (not only the last header-click column).
     """
     if mainWindow is None:
         return
     table = getattr(mainWindow, 'mainTable', None)
     if table is None:
         return
+
+    # Kill default header→selectColumn once (safe to call repeatedly)
+    if not getattr(table, '_headerSectionPressedCleared', False):
+        try:
+            header = table.horizontalHeader()
+            if header is not None:
+                header.sectionPressed.disconnect()
+            table._headerSectionPressedCleared = True
+        except (TypeError, RuntimeError):
+            # No receivers, or C++ object quirks — still mark done
+            table._headerSectionPressedCleared = True
+        except Exception:
+            pass
+
     if getattr(table, '_headerSelSyncConnected', False):
         return
     selModel = table.selectionModel()
@@ -952,69 +972,169 @@ def ensureHeaderSelectionSync(mainWindow):
         pass
 
 
-def selectEntireColumn(mainWindow, col):
+def _columnFullySelected(table, col):
+    """True if every row in ``col`` is part of the current selection."""
+    if table is None or col is None or col < 0 or col >= table.columnCount():
+        return False
+    rows = table.rowCount()
+    if rows <= 0:
+        return False
+    selectedRows = {
+        idx.row()
+        for idx in table.selectedIndexes()
+        if idx.column() == col
+    }
+    return len(selectedRows) >= rows
+
+
+def selectTableColumns(table, cols):
     """
-    Highlight all cells in a column (header single-click).
+    Select entire columns (all rows) for the given column indices.
 
-    Avoid setCurrentCell — in SelectItems mode it collapses the range to the
-    current cell (looks like highlight then snap to first cell). Also re-apply
-    after the event loop so Qt's default header click handling cannot undo us.
+    Uses ClearAndSelect with a multi-column QItemSelection so shift/ctrl
+    header multi-select matches cell multi-select behavior.
+    """
+    if table is None:
+        return
+    from PyQt6.QtCore import QItemSelection, QItemSelectionModel
+    from PyQt6.QtWidgets import QTableWidgetSelectionRange
 
-    Header highlight covers every selected column (multi-select via cells or
-    shift/ctrl ranges is synced from selectionChanged).
+    rows = table.rowCount()
+    nCols = table.columnCount()
+    want = []
+    for c in cols or []:
+        try:
+            ci = int(c)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= ci < nCols:
+            want.append(ci)
+    # Preserve first-seen order, unique
+    seen = set()
+    ordered = []
+    for c in want:
+        if c not in seen:
+            seen.add(c)
+            ordered.append(c)
+
+    if rows <= 0 or not ordered:
+        try:
+            table.clearSelection()
+        except Exception:
+            pass
+        highlightColumnHeaders(table, [])
+        return
+
+    model = table.model()
+    selModel = table.selectionModel()
+    if model is None or selModel is None:
+        table.clearSelection()
+        for c in ordered:
+            table.setRangeSelected(
+                QTableWidgetSelectionRange(0, c, rows - 1, c),
+                True,
+            )
+        highlightColumnHeaders(table, ordered)
+        return
+
+    selection = QItemSelection()
+    for c in ordered:
+        topLeft = model.index(0, c)
+        bottomRight = model.index(rows - 1, c)
+        if topLeft.isValid() and bottomRight.isValid():
+            selection.select(topLeft, bottomRight)
+    selModel.select(
+        selection,
+        QItemSelectionModel.SelectionFlag.ClearAndSelect,
+    )
+    # Anchor current index at top of first selected column without collapsing
+    first = model.index(0, ordered[0])
+    if first.isValid():
+        selModel.setCurrentIndex(
+            first,
+            QItemSelectionModel.SelectionFlag.NoUpdate,
+        )
+    highlightColumnHeaders(table, ordered)
+
+
+def selectEntireColumn(mainWindow, col, modifiers=None):
+    """
+    Header click: select whole column(s), Excel-style modifiers.
+
+      plain click  → that column only; sets shift-anchor
+      Shift+click  → range from anchor column through clicked column
+      Ctrl/Cmd+click → toggle clicked column in/out of selection
+      Ctrl+Shift   → add the anchor→click range to the existing selection
+
+    Avoid setCurrentCell — in SelectItems mode it collapses the range.
+    Relies on ensureHeaderSelectionSync having disconnected Qt's default
+    sectionPressed→selectColumn (otherwise Ctrl double-toggles and undoes).
+    Re-apply after the event loop so any residual Qt handling cannot undo us.
     """
     if mainWindow is None:
         return
     table = mainWindow.mainTable
     if table is None or col < 0 or col >= table.columnCount():
         return
-    from PyQt6.QtCore import QTimer
-    from PyQt6.QtCore import QItemSelection, QItemSelectionModel
-    from PyQt6.QtWidgets import QTableWidgetSelectionRange
+    from PyQt6.QtCore import QTimer, Qt
+    from PyQt6.QtWidgets import QApplication
 
     ensureHeaderSelectionSync(mainWindow)
 
     table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
 
-    def _applyColumnSelection(c=col):
-        if table is None or c < 0 or c >= table.columnCount():
-            return
-        rows = table.rowCount()
-        if rows <= 0:
-            return
-        model = table.model()
-        selModel = table.selectionModel()
-        if model is None or selModel is None:
-            # Fallback for unusual setups
-            table.clearSelection()
-            table.setRangeSelected(
-                QTableWidgetSelectionRange(0, c, rows - 1, c),
-                True,
-            )
-            highlightColumnHeaders(table, [c])
-            return
-        topLeft = model.index(0, c)
-        bottomRight = model.index(rows - 1, c)
-        if not topLeft.isValid() or not bottomRight.isValid():
-            return
-        selection = QItemSelection(topLeft, bottomRight)
-        # ClearAndSelect keeps the full column; do NOT call setCurrentCell
-        selModel.select(
-            selection,
-            QItemSelectionModel.SelectionFlag.ClearAndSelect,
-        )
-        # Anchor current index at top of column without collapsing selection
-        selModel.setCurrentIndex(
-            topLeft,
-            QItemSelectionModel.SelectionFlag.NoUpdate,
-        )
-        # Reflect full selection (single column here; multi-col via selectionChanged)
-        highlightColumnHeaders(table, selectedColumnsFromTable(table) or [c])
+    if modifiers is None:
+        try:
+            modifiers = QApplication.keyboardModifiers()
+        except Exception:
+            modifiers = Qt.KeyboardModifier.NoModifier
 
-    _applyColumnSelection(col)
+    ctrl = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
+    # macOS Command is MetaModifier — treat like Ctrl for multi-select
+    meta = bool(modifiers & Qt.KeyboardModifier.MetaModifier)
+    shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+    multiAdd = ctrl or meta
+
+    anchor = getattr(mainWindow, '_headerSelectAnchor', None)
+    if anchor is None or not isinstance(anchor, int):
+        anchor = col
+    elif anchor < 0 or anchor >= table.columnCount():
+        anchor = col
+
+    existing = set(selectedColumnsFromTable(table))
+
+    if shift:
+        lo, hi = (anchor, col) if anchor <= col else (col, anchor)
+        rangeCols = set(range(lo, hi + 1))
+        if multiAdd:
+            target = existing | rangeCols
+        else:
+            target = rangeCols
+        # Keep anchor so further Shift-clicks re-extend from original start
+    elif multiAdd:
+        if col in existing and _columnFullySelected(table, col):
+            target = existing - {col}
+        else:
+            target = existing | {col}
+        mainWindow._headerSelectAnchor = col
+    else:
+        target = {col}
+        mainWindow._headerSelectAnchor = col
+
+    mainWindow._headerSelectCols = sorted(target)
+
+    def _apply():
+        cols = list(getattr(mainWindow, '_headerSelectCols', None) or [])
+        if not cols and 0 <= col < table.columnCount():
+            # Empty after ctrl-deselect of last column is OK
+            selectTableColumns(table, [])
+            return
+        selectTableColumns(table, cols)
+
+    _apply()
     # Defer once so any post-sectionClicked selection reset is overwritten
-    QTimer.singleShot(0, lambda c=col: _applyColumnSelection(c))
+    QTimer.singleShot(0, _apply)
 
 
 def collectUploadRows(mainWindow):

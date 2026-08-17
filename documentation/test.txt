@@ -11,6 +11,37 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
+[ ] USGS / Aquarius Data Dictionary second-line source tag
+   Steps:
+     a. Query a USGS series that IS in the data dictionary (e.g. PVLC bunker row).
+        Expect header: first line "commonName-datatype", second line "USGS"
+        (not the interval).
+     b. Query an Aquarius series that IS in the data dictionary.
+        Expect header: first line "commonName-datatype", second line "AQUARIUS"
+        (not the UID / location id).
+     c. Query a USBR/HDB series in the dictionary — second line still SDID (or SDID-MRID);
+        unchanged.
+     d. Query USGS / Aquarius series NOT in the dictionary — labeling stays the old
+        path (USGS Site Name / interval, Aquarius API label / location).
+   Notes: Only dict hits with a real commonName get the source tag.
+   Fix: core/Query.py buildTable dict-hit branches.
+
+[ ] Header multi-select (Shift / Ctrl like cells) — RETEST Ctrl highlight
+   Steps:
+     a. Click column header A → whole column selected + header highlight.
+     b. Shift+click header D → columns A–D all selected (full columns).
+     c. Ctrl+click header B (when B is selected) → B deselects; others stay.
+     d. Ctrl+click an unselected header → adds that full column (stays highlighted).
+     e. Ctrl+Shift+click extends range and adds it to existing selection.
+     f. Cell multi-select (shift/ctrl in body) still works; headers still highlight
+        every selected column.
+     g. Header right-click Graph graphs all selected columns.
+   Notes: Shift was OK. Ctrl flashed then cleared (Qt sectionPressed→selectColumn
+     already multi-selected; our sectionClicked double-toggled it off).
+   Fix: Upload.ensureHeaderSelectionSync disconnects sectionPressed; selectEntireColumn
+     owns plain/Shift/Ctrl header selection + highlight.
+   RESPONSE (prior): Shift OK; Ctrl visual flash-off; shift after ctrl still used anchor.
+
 [ ] HDB password change UI only shows useful outcomes
    Steps:
      a. Change Oracle password in Options → USBR (user that exists on some HDBs).
@@ -51,33 +82,12 @@ Current Tests
      c. Prompt → Download → file lands in Update/ next to install / AppImage.
      d. Launcher: close + applyUpdate. AppImage: Quit and apply (or applyAppImageUpdate.sh).
 
-[x] Graph Y-scale fits data in current X view (outlier off-screen)
-   Steps:
-     a. Graph a series that includes a bad outlier (e.g. -99999) plus normal values.
-        Full view Y may still span the outlier (expected).
-     b. Zoom into a time window that does NOT include the outlier (1-min data is fine).
-        Expect: Y rescales to the points still on screen (tight around real values).
-     c. Zoom / Home back to full range → Y includes the outlier again.
-     d. Horizontal pan into / out of the outlier window → Y refits each time.
-     e. Vertical arrow pan (↑/↓) still works without fighting the auto Y fit.
-     f. Dual-axis graphs: each Y axis fits its own series in the X window.
-   Notes: -99999 (or any far outlier) was keeping full-series Y after X zoom.
-   Fix: on xlim change, deferred _autoscaleYToXView fits Y to in-view points.
-
-[x] Graph legend toggle keeps current X zoom
-Steps:
-   a. Graph 2+ series. Zoom into a time window (not full range).
-   b. Click a legend ☑ to hide that series.
-      Expect: X zoom stays put (same time window); hidden line disappears.
-   c. Click ☐ to show it again — still same X zoom.
-   d. Y may refit to remaining visible series in the current window (OK).
-   e. Home still returns to full range.
-Notes: _toggleSeriesAt used to call _rescaleToVisible() which reset X to full data.
-Fix: keep X; only _autoscaleYToXView for remaining series.
-
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Multi Y-axis graph (distinct value bands + hide axis with legend)
+[x] Graph Y-scale fits data in current X view (outlier off-screen)
+[x] Graph legend toggle keeps current X zoom
 [x] Header Graph uses full multi-column selection (not just click col)
 [x] Graph markers dense when zoomed (1-minute data)
 [x] Beta updates checkbox (UI-owned, code wire-up only)
@@ -95,7 +105,6 @@ Confirmed
 [x] Context menu Graph + selection window
 [x] Aquarius Server Link placeholder
 [x] Goat stress-relief button plays scream
-[x] About π button — worthy gate
 [x] SQL Query Builder opens with zero tabs open
 [x] Graph middle-mouse pan + range clamp
 [x] Windows first-load icon (retest / improve-only)
@@ -116,7 +125,6 @@ Confirmed
 [x] btnSQL toggles SQL Query Builder tab
 [x] Query list double-click edit allows interval (and database) change
 [x] Data dictionary headers use "commonName - datatype" for all DBs (pre-space-strip)
-[x] Unused About easter-egg icons cleaned up
 [x] SQL + Graph button tooltips and hover/pressed icons
 [x] Graph button plots Data Query table into Graph tab
 [x] Detach / Attach for Graph and Log Viewer tabs only

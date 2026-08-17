@@ -1,6 +1,7 @@
 # uiGraph.py
-# Graph tab: plot mainTable series with zoom toolbar and dual Y-axis when scales differ.
-# Supports dark/light system palette, hover tooltips, table timestamp formats, overlay pairs.
+# Graph tab: plot mainTable series with zoom toolbar and multi Y-axis when
+# scales / value bands differ. Supports dark/light system palette, hover
+# tooltips, table timestamp formats, overlay pairs, legend show/hide.
 
 from __future__ import annotations
 import os
@@ -237,7 +238,7 @@ def parseNumeric(text):
 
 def seriesScale(values):
     """
-    Characteristic magnitude for dual-axis decisions.
+    Characteristic magnitude for multi-axis decisions.
     Prefer data span; fall back to max abs.
     """
     finite = values[np.isfinite(values)]
@@ -250,35 +251,118 @@ def seriesScale(values):
     return max(peak, 1e-12)
 
 
-def assignAxes(seriesList, ratioThreshold=10.0):
+def seriesValueRange(values):
+    """(min, max) of finite values, or None if empty."""
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return None
+    return float(np.nanmin(finite)), float(np.nanmax(finite))
+
+
+def seriesCenter(values):
+    """Median of finite values (axis clustering key)."""
+    finite = values[np.isfinite(values)]
+    if finite.size == 0:
+        return 0.0
+    return float(np.median(finite))
+
+
+def _rangesCompatible(rangeA, rangeB, scaleA, scaleB, scaleRatioThreshold=8.0, minOverlapFrac=0.12):
     """
-    Split series into left / right Y-axis groups when scales differ a lot.
+    True when two series should share one Y-axis.
+
+    Separate axes when:
+      - characteristic scales differ a lot (e.g. elev vs tiny delta), or
+      - value bands barely overlap (e.g. ~383 band vs ~214 band) so each
+        group can use the full plot height for its trend.
+    """
+    sA = max(float(scaleA), 1e-12)
+    sB = max(float(scaleB), 1e-12)
+    ratio = max(sA, sB) / min(sA, sB)
+    if ratio >= scaleRatioThreshold:
+        return False
+    if rangeA is None or rangeB is None:
+        return True
+    lo1, hi1 = rangeA
+    lo2, hi2 = rangeB
+    overlap = max(0.0, min(hi1, hi2) - max(lo1, lo2))
+    span = max(hi1, hi2) - min(lo1, lo2)
+    if span <= 1e-12:
+        return True
+    # Nearly non-overlapping bands → different axes
+    if (overlap / span) < minOverlapFrac:
+        return False
+    return True
+
+
+def assignAxes(seriesList, scaleRatioThreshold=8.0, maxAxes=4):
+    """
+    Partition series into one or more Y-axis groups.
 
     seriesList: list of (label, values ndarray)
-    Returns (leftList, rightList) — each same shape as input items.
+    Returns list of groups; each group is a list of (label, values).
+    Group 0 is plotted on the primary (left) axis; later groups on twins.
     """
     if not seriesList:
-        return [], []
+        return []
     if len(seriesList) == 1:
-        return list(seriesList), []
+        return [list(seriesList)]
 
-    scales = [seriesScale(vals) for _, vals in seriesList]
-    # Use median scale as reference so one outlier does not force everything right
-    ref = float(np.median(scales)) if scales else 1.0
-    ref = max(ref, 1e-12)
+    # Greedy cluster: first compatible group wins; else open a new axis (cap maxAxes)
+    groups = []  # each: items, range, scale, center
+    for item in seriesList:
+        _label, vals = item
+        r = seriesValueRange(vals)
+        s = seriesScale(vals)
+        c = seriesCenter(vals)
+        placed = False
+        for g in groups:
+            if _rangesCompatible(
+                g['range'], r, g['scale'], s, scaleRatioThreshold=scaleRatioThreshold
+            ):
+                g['items'].append(item)
+                if r is not None:
+                    if g['range'] is None:
+                        g['range'] = r
+                    else:
+                        g['range'] = (
+                            min(g['range'][0], r[0]),
+                            max(g['range'][1], r[1]),
+                        )
+                g['scale'] = max(g['scale'], s)
+                # Running center for fallback nearest-group
+                n = len(g['items'])
+                g['center'] = (g['center'] * (n - 1) + c) / n
+                placed = True
+                break
+        if placed:
+            continue
+        if len(groups) < maxAxes:
+            groups.append({
+                'items': [item],
+                'range': r,
+                'scale': s,
+                'center': c,
+            })
+            continue
+        # Cap reached: merge into nearest group by center distance
+        best = min(groups, key=lambda g: abs(g['center'] - c))
+        best['items'].append(item)
+        if r is not None:
+            if best['range'] is None:
+                best['range'] = r
+            else:
+                best['range'] = (
+                    min(best['range'][0], r[0]),
+                    max(best['range'][1], r[1]),
+                )
+        best['scale'] = max(best['scale'], s)
+        n = len(best['items'])
+        best['center'] = (best['center'] * (n - 1) + c) / n
 
-    left, right = [], []
-    for item, scale in zip(seriesList, scales):
-        ratio = max(scale, ref) / min(scale, ref)
-        if ratio >= ratioThreshold:
-            right.append(item)
-        else:
-            left.append(item)
-
-    # Never leave left empty
-    if not left and right:
-        left = [right.pop(0)]
-    return left, right
+    # Never return an empty first group
+    out = [g['items'] for g in groups if g['items']]
+    return out if out else [list(seriesList)]
 
 
 def headerFirstLine(table, col):
@@ -545,7 +629,8 @@ class GraphPanel(QWidget):
         self.canvas = None
         self.toolbar = None
         self._ax = None
-        self._ax2 = None
+        self._ax2 = None  # first twin (compat); full list is _yAxes
+        self._yAxes = []  # all Y axes: [primary, twin1, twin2, ...]
         self._legend = None
         self._hoverCid = None
         self._keyCid = None
@@ -553,7 +638,8 @@ class GraphPanel(QWidget):
         self._pressCid = None
         self._releaseCid = None
         self._scrollCid = None
-        self._lineData = []  # list of dicts: line, label, xs, ys, color, visible
+        # list of dicts: line, label, xs, ys, color, visible, axisIndex
+        self._lineData = []
         self._tsDisplayFmt = '%m/%d/%y %H:%M:00'
         self._useDatetime = False
         self._theme = 'light'
@@ -562,6 +648,7 @@ class GraphPanel(QWidget):
         self._xDataLim = None
         self._yDataLim = None
         self._y2DataLim = None
+        self._yDataLims = []  # parallel to _yAxes
         self._clamping = False
         self._updatingMarkers = False
         self._autoscalingY = False
@@ -579,6 +666,7 @@ class GraphPanel(QWidget):
         self._xDataLim = None
         self._yDataLim = None
         self._y2DataLim = None
+        self._yDataLims = []
         self._lastXLim = None
         self._autoscaleYPending = False
         self._autoscalingY = False
@@ -611,6 +699,7 @@ class GraphPanel(QWidget):
             self.figure = None
             self._ax = None
             self._ax2 = None
+            self._yAxes = []
             self._legend = None
             self._lineData = []
         if self._placeholder is not None:
@@ -657,10 +746,22 @@ class GraphPanel(QWidget):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"GraphPanel toolbar tooltips: {e}")
 
-    def _applyTheme(self, fig, ax, ax2=None):
+    def _applyTheme(self, fig, ax, *extraAxes):
         """Style figure/axes for retro, system dark, or system light."""
         retro = bool(Config.retroMode)
         dark = (not retro) and isSystemDarkMode()
+        # Flatten: allow ax2=None style or a list of twins
+        twins = []
+        for a in extraAxes:
+            if a is None:
+                continue
+            if isinstance(a, (list, tuple)):
+                twins.extend([x for x in a if x is not None])
+            else:
+                twins.append(a)
+
+        # Twin tick colors cycle in retro so multi-axis stays readable
+        retroTwinColors = ['#00FFFF', '#FF00FF', '#FFFF00', '#FF8800']
 
         if retro:
             fig.patch.set_facecolor('#1a1a1a')
@@ -671,12 +772,13 @@ class GraphPanel(QWidget):
             for spine in ax.spines.values():
                 spine.set_color('#00FF00')
             ax.title.set_color('#00FF00')
-            if ax2 is not None:
-                ax2.set_facecolor('#101010')
-                ax2.tick_params(colors='#00FFFF')
-                ax2.yaxis.label.set_color('#00FFFF')
-                for spine in ax2.spines.values():
-                    spine.set_color('#00FFFF')
+            for i, twin in enumerate(twins):
+                c = retroTwinColors[i % len(retroTwinColors)]
+                twin.set_facecolor('#101010')
+                twin.tick_params(colors=c)
+                twin.yaxis.label.set_color(c)
+                for spine in twin.spines.values():
+                    spine.set_color(c)
             return 'retro'
 
         if dark:
@@ -692,11 +794,11 @@ class GraphPanel(QWidget):
             for spine in ax.spines.values():
                 spine.set_color(spineColor)
             ax.title.set_color(textColor)
-            if ax2 is not None:
-                ax2.set_facecolor(axBg)
-                ax2.tick_params(colors=textColor)
-                ax2.yaxis.label.set_color(textColor)
-                for spine in ax2.spines.values():
+            for twin in twins:
+                twin.set_facecolor(axBg)
+                twin.tick_params(colors=textColor)
+                twin.yaxis.label.set_color(textColor)
+                for spine in twin.spines.values():
                     spine.set_color(spineColor)
             return 'dark'
 
@@ -849,7 +951,8 @@ class GraphPanel(QWidget):
         """Toggle visibility of series at _lineData index; refresh legend + axes.
 
         Keep the current X zoom (do not home the view). Refit Y only to remaining
-        visible series still in the current X window.
+        visible series still in the current X window. Hide Y-axis chrome when no
+        series on that axis remain visible.
         """
         if idx is None or idx < 0 or idx >= len(self._lineData):
             return False
@@ -861,11 +964,59 @@ class GraphPanel(QWidget):
         line.set_visible(visible)
         entry['visible'] = visible
         self._refreshLegendAppearance()
+        self._syncAxisVisibility()
         # Do not call _rescaleToVisible() — that resets X to full series range.
         self._autoscaleYToXView()
         if self.canvas is not None:
             self.canvas.draw_idle()
         return True
+
+    def _syncAxisVisibility(self):
+        """
+        Show/hide each Y-axis (ticks, label, relevant spine) based on whether
+        any series on that axis is currently visible.
+        """
+        axes = self._yAxes or ([self._ax] if self._ax is not None else [])
+        if not axes:
+            return
+        for i, ax in enumerate(axes):
+            if ax is None:
+                continue
+            hasVisible = False
+            for entry in self._lineData:
+                line = entry.get('line')
+                if line is None or not line.get_visible():
+                    continue
+                if entry.get('axisIndex', 0) == i or line.axes is ax:
+                    hasVisible = True
+                    break
+            try:
+                ax.yaxis.set_visible(hasVisible)
+            except Exception:
+                pass
+            # Primary (left) vs twins (right, possibly outward)
+            try:
+                if i == 0:
+                    if 'left' in ax.spines:
+                        ax.spines['left'].set_visible(hasVisible)
+                else:
+                    if 'right' in ax.spines:
+                        ax.spines['right'].set_visible(hasVisible)
+            except Exception:
+                pass
+            try:
+                # Blank ylabel when hidden so it does not float alone
+                if not hasVisible:
+                    ax.set_ylabel('')
+                elif not (ax.get_ylabel() or '').strip():
+                    if i == 0:
+                        ax.set_ylabel('Value')
+                    elif i == 1:
+                        ax.set_ylabel('Value (right)')
+                    else:
+                        ax.set_ylabel(f'Value ({i + 1})')
+            except Exception:
+                pass
 
     def _cancelToolbarInteraction(self):
         """
@@ -957,15 +1108,31 @@ class GraphPanel(QWidget):
         span = hi - lo
         return lo - span * 0.05, hi + span * 0.05
 
+    def _axisIndexForEntry(self, entry):
+        """Resolve which _yAxes slot a line entry belongs to."""
+        if entry is None:
+            return 0
+        ai = entry.get('axisIndex')
+        if isinstance(ai, int) and ai >= 0:
+            return ai
+        line = entry.get('line')
+        if line is not None and self._yAxes:
+            for i, ax in enumerate(self._yAxes):
+                if line.axes is ax:
+                    return i
+        if line is not None and self._ax2 is not None and line.axes is self._ax2:
+            return 1
+        return 0
+
     def _rescaleToVisible(self):
         """
         Rescale Y (and shared X) from currently visible series.
-        Keeps dual-axis groups independent on Y.
+        Keeps multi-axis groups independent on Y.
         """
         if self._ax is None:
             return
-        leftYs = []
-        rightYs = []
+        axes = self._yAxes or [self._ax]
+        ysByAxis = [[] for _ in axes]
         allXs = []
         for entry in self._lineData:
             line = entry.get('line')
@@ -979,21 +1146,19 @@ class GraphPanel(QWidget):
             if not np.any(finite):
                 continue
             allXs.append(xs[finite])
-            if line.axes is self._ax2 and self._ax2 is not None:
-                rightYs.append(ys[finite])
-            else:
-                leftYs.append(ys[finite])
+            ai = self._axisIndexForEntry(entry)
+            if 0 <= ai < len(ysByAxis):
+                ysByAxis[ai].append(ys[finite])
 
         xLim = self._padLimits(allXs)
         if xLim is not None:
             self._ax.set_xlim(xLim)
-        yLim = self._padLimits(leftYs)
-        if yLim is not None:
-            self._ax.set_ylim(yLim)
-        if self._ax2 is not None:
-            y2 = self._padLimits(rightYs)
-            if y2 is not None:
-                self._ax2.set_ylim(y2)
+        for i, ax in enumerate(axes):
+            if ax is None:
+                continue
+            yLim = self._padLimits(ysByAxis[i])
+            if yLim is not None:
+                ax.set_ylim(yLim)
 
         try:
             self._lastXLim = tuple(self._ax.get_xlim())
@@ -1023,8 +1188,8 @@ class GraphPanel(QWidget):
         if x1 < x0:
             x0, x1 = x1, x0
 
-        leftYs = []
-        rightYs = []
+        axes = self._yAxes or [self._ax]
+        ysByAxis = [[] for _ in axes]
         for entry in self._lineData:
             line = entry.get('line')
             if line is None or not line.get_visible():
@@ -1041,36 +1206,32 @@ class GraphPanel(QWidget):
             inView = finite & (xs >= x0) & (xs <= x1)
             if not np.any(inView):
                 continue
-            if line.axes is self._ax2 and self._ax2 is not None:
-                rightYs.append(ys[inView])
-            else:
-                leftYs.append(ys[inView])
+            ai = self._axisIndexForEntry(entry)
+            if 0 <= ai < len(ysByAxis):
+                ysByAxis[ai].append(ys[inView])
 
-        yLim = self._padLimits(leftYs)
-        y2Lim = self._padLimits(rightYs) if self._ax2 is not None else None
-        if yLim is None and y2Lim is None:
+        newLims = [self._padLimits(bucket) for bucket in ysByAxis]
+        if all(lim is None for lim in newLims):
             return False
 
         self._autoscalingY = True
         changed = False
         try:
-            if yLim is not None:
+            for i, ax in enumerate(axes):
+                if ax is None or newLims[i] is None:
+                    continue
+                yLim = newLims[i]
                 try:
-                    cur = tuple(self._ax.get_ylim())
+                    cur = tuple(ax.get_ylim())
                 except Exception:
                     cur = None
-                if cur is None or abs(cur[0] - yLim[0]) > 1e-12 or abs(cur[1] - yLim[1]) > 1e-12:
-                    self._ax.set_ylim(yLim)
-                    self._disableAxisOffset(self._ax)
-                    changed = True
-            if self._ax2 is not None and y2Lim is not None:
-                try:
-                    cur2 = tuple(self._ax2.get_ylim())
-                except Exception:
-                    cur2 = None
-                if cur2 is None or abs(cur2[0] - y2Lim[0]) > 1e-12 or abs(cur2[1] - y2Lim[1]) > 1e-12:
-                    self._ax2.set_ylim(y2Lim)
-                    self._disableAxisOffset(self._ax2)
+                if (
+                    cur is None
+                    or abs(cur[0] - yLim[0]) > 1e-12
+                    or abs(cur[1] - yLim[1]) > 1e-12
+                ):
+                    ax.set_ylim(yLim)
+                    self._disableAxisOffset(ax)
                     changed = True
         finally:
             self._autoscalingY = False
@@ -1106,15 +1267,24 @@ class GraphPanel(QWidget):
         """Capture padded data extents after initial plot (pan boundary)."""
         if self._ax is None:
             self._xDataLim = self._yDataLim = self._y2DataLim = None
+            self._yDataLims = []
             return
         try:
             self._xDataLim = tuple(self._ax.get_xlim())
-            self._yDataLim = tuple(self._ax.get_ylim())
+            axes = self._yAxes or [self._ax]
+            self._yDataLims = []
+            for ax in axes:
+                if ax is None:
+                    self._yDataLims.append(None)
+                else:
+                    self._yDataLims.append(tuple(ax.get_ylim()))
+            self._yDataLim = self._yDataLims[0] if self._yDataLims else None
             self._y2DataLim = (
-                tuple(self._ax2.get_ylim()) if self._ax2 is not None else None
+                self._yDataLims[1] if len(self._yDataLims) > 1 else None
             )
         except Exception:
             self._xDataLim = self._yDataLim = self._y2DataLim = None
+            self._yDataLims = []
 
     @staticmethod
     def _disableAxisOffset(ax):
@@ -1189,13 +1359,18 @@ class GraphPanel(QWidget):
             self._clampAxis(
                 self._ax, self._ax.get_xlim, self._ax.set_xlim, self._xDataLim
             )
-            self._clampAxis(
-                self._ax, self._ax.get_ylim, self._ax.set_ylim, self._yDataLim
-            )
-            if self._ax2 is not None and self._y2DataLim is not None:
-                self._clampAxis(
-                    self._ax2, self._ax2.get_ylim, self._ax2.set_ylim, self._y2DataLim
-                )
+            axes = self._yAxes or [self._ax]
+            lims = self._yDataLims or []
+            for i, ax in enumerate(axes):
+                if ax is None:
+                    continue
+                lim = lims[i] if i < len(lims) else None
+                if lim is None and i == 0:
+                    lim = self._yDataLim
+                if lim is None and i == 1:
+                    lim = self._y2DataLim
+                if lim is not None:
+                    self._clampAxis(ax, ax.get_ylim, ax.set_ylim, lim)
         finally:
             self._clamping = False
 
@@ -1228,9 +1403,13 @@ class GraphPanel(QWidget):
         if self._placeholder is not None:
             self._placeholder.hide()
 
-        # Fixed margins — avoid tight_layout so hover/rescales never jump the frame
+        axisGroups = assignAxes(series)
+        nAxes = max(1, len(axisGroups))
+
+        # Fixed margins — leave room for extra right-side Y axes
         fig = Figure(figsize=(8, 5), tight_layout=False)
-        fig.subplots_adjust(left=0.08, right=0.92, top=0.96, bottom=0.14)
+        rightMargin = max(0.72, 0.92 - 0.06 * max(0, nAxes - 2))
+        fig.subplots_adjust(left=0.08, right=rightMargin, top=0.96, bottom=0.14)
         self.figure = fig
         self.canvas = FigureCanvasQTAgg(fig)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -1246,6 +1425,7 @@ class GraphPanel(QWidget):
         ax = fig.add_subplot(111)
         self._ax = ax
         self._ax2 = None
+        self._yAxes = [ax]
         theme = self._applyTheme(fig, ax)
         self._theme = theme
         colorCycle = self._colorCycle(theme)
@@ -1265,11 +1445,10 @@ class GraphPanel(QWidget):
         else:
             x = np.arange(n, dtype=float)
 
-        leftSeries, rightSeries = assignAxes(series)
         self._lineData = []
         colorIdx = 0
 
-        def plotGroup(axTarget, group, isRight=False):
+        def plotGroup(axTarget, group, axisIndex=0):
             nonlocal colorIdx
             for label, vals in group:
                 color = colorCycle[colorIdx % len(colorCycle)]
@@ -1301,20 +1480,41 @@ class GraphPanel(QWidget):
                     'ys': np.asarray(y[mask], dtype=float),
                     'color': color,
                     'visible': True,
+                    'axisIndex': axisIndex,
                 })
-            ylabelColor = colorCycle[0] if not isRight else colorCycle[min(1, len(colorCycle) - 1)]
-            axTarget.set_ylabel(
-                'Value' + (' (right)' if isRight else ''),
-                color=ylabelColor,
+            ylabelColor = colorCycle[min(axisIndex, len(colorCycle) - 1)]
+            if axisIndex == 0:
+                yLabel = 'Value'
+            elif axisIndex == 1:
+                yLabel = 'Value (right)'
+            else:
+                yLabel = f'Value ({axisIndex + 1})'
+            axTarget.set_ylabel(yLabel, color=ylabelColor)
+
+        # Primary axis
+        plotGroup(ax, axisGroups[0] if axisGroups else [], axisIndex=0)
+
+        # Extra axes via twinx; offset spines for 3rd+ axes on the right
+        for axisIndex in range(1, nAxes):
+            twin = ax.twinx()
+            if axisIndex > 1:
+                try:
+                    twin.spines['right'].set_position(
+                        ('outward', 55 * (axisIndex - 1))
+                    )
+                except Exception:
+                    pass
+            self._yAxes.append(twin)
+            if axisIndex == 1:
+                self._ax2 = twin
+            plotGroup(
+                twin,
+                axisGroups[axisIndex] if axisIndex < len(axisGroups) else [],
+                axisIndex=axisIndex,
             )
 
-        plotGroup(ax, leftSeries, isRight=False)
-
-        if rightSeries:
-            ax2 = ax.twinx()
-            self._ax2 = ax2
-            self._applyTheme(fig, ax, ax2)
-            plotGroup(ax2, rightSeries, isRight=True)
+        if len(self._yAxes) > 1:
+            self._applyTheme(fig, ax, *self._yAxes[1:])
 
         if useDatetime:
             ax.xaxis_date()
@@ -1327,9 +1527,8 @@ class GraphPanel(QWidget):
             ax.set_xlabel('Row')
 
         # Keep absolute Y values when zoomed (no 0.4–0.8 offset of 1040.x elev)
-        self._disableAxisOffset(ax)
-        if self._ax2 is not None:
-            self._disableAxisOffset(self._ax2)
+        for yax in self._yAxes:
+            self._disableAxisOffset(yax)
 
         ax.set_title('')
 
@@ -1361,9 +1560,9 @@ class GraphPanel(QWidget):
         # Clamp toolbar pan/zoom navigation as well
         try:
             self._ax.callbacks.connect('xlim_changed', self._onAxisLimitsChanged)
-            self._ax.callbacks.connect('ylim_changed', self._onAxisLimitsChanged)
-            if self._ax2 is not None:
-                self._ax2.callbacks.connect('ylim_changed', self._onAxisLimitsChanged)
+            for yax in self._yAxes:
+                if yax is not None:
+                    yax.callbacks.connect('ylim_changed', self._onAxisLimitsChanged)
         except Exception:
             pass
         self.canvas.setFocus()
@@ -1374,10 +1573,11 @@ class GraphPanel(QWidget):
         if warnings:
             note = ' '.join(warnings)
         if Config.debug:
+            groupSizes = [len(g) for g in axisGroups]
             Logic.logMessage(
                 "DEBUG",
-                f"GraphPanel.plotFromTable: {len(leftSeries)} left, "
-                f"{len(rightSeries)} right, rows={n}, datetime={useDatetime}, "
+                f"GraphPanel.plotFromTable: {nAxes} Y-axis group(s) sizes={groupSizes}, "
+                f"series={len(self._lineData)}, rows={n}, datetime={useDatetime}, "
                 f"theme={theme}, tsFmt={self._tsDisplayFmt!r}",
             )
         return True, note
@@ -1595,17 +1795,27 @@ class GraphPanel(QWidget):
                 self._ax.set_xlim(nx0, nx1)
             if yCh:
                 self._ax.set_ylim(ny0, ny1)
-            if self._ax2 is not None and yCh:
-                y20, y21 = self._ax2.get_ylim()
+            # Proportional Y pan on every twin axis
+            if yCh:
+                axes = self._yAxes or [self._ax]
+                lims = self._yDataLims or []
                 span1 = (y1 - y0) if (y1 - y0) != 0 else 1.0
-                span2 = y21 - y20
-                dy2 = dy * (span2 / span1) if span1 else 0.0
-                n20, n21, y2Ch = self._panLimitsClamped(
-                    y20, y21, self._y2DataLim, dy2
-                )
-                if y2Ch:
-                    self._ax2.set_ylim(n20, n21)
-                changed = changed or y2Ch
+                for i, yax in enumerate(axes):
+                    if i == 0 or yax is None:
+                        continue
+                    try:
+                        y20, y21 = yax.get_ylim()
+                    except Exception:
+                        continue
+                    spanI = y21 - y20
+                    dyI = dy * (spanI / span1) if span1 else 0.0
+                    limI = lims[i] if i < len(lims) else None
+                    if limI is None and i == 1:
+                        limI = self._y2DataLim
+                    n20, n21, yICh = self._panLimitsClamped(y20, y21, limI, dyI)
+                    if yICh:
+                        yax.set_ylim(n20, n21)
+                        changed = True
         except Exception:
             return
         self._midPan = (curPx, curPy)
@@ -1615,7 +1825,7 @@ class GraphPanel(QWidget):
     def _handleArrowPan(self, qtKey):
         """
         Pan current view by ~12% of visible range.
-        Left/Right → X; Up/Down → Y (both axes when dual).
+        Left/Right → X; Up/Down → Y (all axes when multi-axis).
         """
         if self._ax is None or self.canvas is None:
             return False
@@ -1630,6 +1840,29 @@ class GraphPanel(QWidget):
         dy = (y1 - y0) * frac
         changed = False
 
+        def _panAllY(direction):
+            """direction: +1 up, -1 down."""
+            nonlocal changed
+            axes = self._yAxes or [self._ax]
+            lims = self._yDataLims or []
+            for i, yax in enumerate(axes):
+                if yax is None:
+                    continue
+                try:
+                    ya0, ya1 = yax.get_ylim()
+                except Exception:
+                    continue
+                dYi = (ya1 - ya0) * frac * direction
+                limI = lims[i] if i < len(lims) else None
+                if limI is None and i == 0:
+                    limI = self._yDataLim
+                if limI is None and i == 1:
+                    limI = self._y2DataLim
+                n0, n1, ch = self._panLimitsClamped(ya0, ya1, limI, dYi)
+                if ch:
+                    yax.set_ylim(n0, n1)
+                    changed = True
+
         if key == Qt.Key.Key_Left:
             nx0, nx1, ch = self._panLimitsClamped(x0, x1, self._xDataLim, -dx)
             if ch:
@@ -1641,33 +1874,9 @@ class GraphPanel(QWidget):
                 self._ax.set_xlim(nx0, nx1)
                 changed = True
         elif key == Qt.Key.Key_Up:
-            ny0, ny1, ch = self._panLimitsClamped(y0, y1, self._yDataLim, dy)
-            if ch:
-                self._ax.set_ylim(ny0, ny1)
-                changed = True
-            if self._ax2 is not None:
-                y20, y21 = self._ax2.get_ylim()
-                dy2 = (y21 - y20) * frac
-                n20, n21, y2Ch = self._panLimitsClamped(
-                    y20, y21, self._y2DataLim, dy2
-                )
-                if y2Ch:
-                    self._ax2.set_ylim(n20, n21)
-                    changed = True
+            _panAllY(+1)
         elif key == Qt.Key.Key_Down:
-            ny0, ny1, ch = self._panLimitsClamped(y0, y1, self._yDataLim, -dy)
-            if ch:
-                self._ax.set_ylim(ny0, ny1)
-                changed = True
-            if self._ax2 is not None:
-                y20, y21 = self._ax2.get_ylim()
-                dy2 = (y21 - y20) * frac
-                n20, n21, y2Ch = self._panLimitsClamped(
-                    y20, y21, self._y2DataLim, -dy2
-                )
-                if y2Ch:
-                    self._ax2.set_ylim(n20, n21)
-                    changed = True
+            _panAllY(-1)
         else:
             return False
 

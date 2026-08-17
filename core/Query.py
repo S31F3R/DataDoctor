@@ -704,11 +704,11 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             nameLabel = f"{baseLabel}-{dataType}" if dataType else baseLabel
 
             if database == 'USGS-NWIS':
-                # Dictionary hit: commonName-datatype on top, interval underneath.
-                # (Previously Site Name from OGC always won, so hits looked like misses —
-                #  e.g. bunker "PVLC (USGS)" never appeared; Aquarius UID labels did.)
+                # Dictionary hit with a real commonName: "commonName-datatype" on top,
+                # second line is the source tag "USGS" (not interval / dataID).
+                # Weak hits (commonName empty or still the raw id) keep legacy labeling.
                 if baseLabel and baseLabel != dataId and baseLabel != dictKey:
-                    fullLabel = f"{nameLabel} \n{intervalStr}"
+                    fullLabel = f"{nameLabel} \nUSGS"
                     if Config.debug:
                         Logic.logMessage(
                             "DEBUG",
@@ -748,12 +748,15 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                                 f"fallback header {i}: {fullLabel}",
                             )
             elif database == 'AQUARIUS':
-                fullLabel = f"{nameLabel} \n{dataId}"
+                # Dictionary hit: commonName-datatype on top, source tag "AQUARIUS" below.
+                # (Not-in-dict path still uses API label / location — unchanged.)
+                fullLabel = f"{nameLabel} \nAQUARIUS"
 
                 if Config.debug:
                     Logic.logMessage(
                         "DEBUG",
-                        f"buildTable: Aquarius in dict, using commonName-datatype, header {i}: {fullLabel}",
+                        f"buildTable: Aquarius in dict, using commonName-datatype + AQUARIUS, "
+                        f"header {i}: {fullLabel}",
                     )
             else:
                 # USBR / HDB: commonName-datatype, SDID (and MRID when non-zero)
