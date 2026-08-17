@@ -20,7 +20,6 @@ from ui.uiDetails import uiDetails
 from ui.uiGraph import GraphPanel
 from core.Oracle import oracleConnection
 
-
 class detachedTabWindow(QMainWindow):
     """
     Floating host for Graph or Log Viewer with the same tab chrome as the main window.
