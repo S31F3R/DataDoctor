@@ -22,8 +22,9 @@ Current Tests
    Notes: Raw Python zip ships DataDoctor.py; applyUpdate now renames on Windows
      or when .pyw already exists.
    Fix: scripts/applyUpdate.py installAppEntry.
+   RESPONSE: This still isn't working. The .py is the only file getting updated while the .pyw is 12 days old
 
-[ ] Graph hover shows table values (raw when raw is on); axis stays clean
+[x] Graph hover shows table values (raw when raw is on); axis stays clean
    Steps:
      a. Options → Raw data ON. Query a series with many decimals (e.g. 9860.479500506332).
      b. Graph the column. Hover a point — tooltip value must match the table cell
@@ -44,8 +45,9 @@ Current Tests
    Notes: Qt parent made these transient; GNOME shade-minimizes those.
    Fix: Utils.bindIndependentWindow; uiDataDictionary / uiQuery constructed
      with parent=None.
+     RESPONSE: Data Dictionary fixed, but looks like winAbout has the bug. Fix that one
 
-[ ] Query finish selects Data Query tab
+[x] Query finish selects Data Query tab
    Steps:
      a. Run a query, then switch to the Graph tab (leave Graph attached).
      b. Run another query (or Refresh). When it finishes, Data Query tab is
@@ -53,7 +55,7 @@ Current Tests
      c. If Data Query tab was closed, it is re-added at index 0 and selected.
    Fix: core/Query.py executeQuery always setCurrentIndex after placing tabMain.
 
-[ ] Overlay / delta use the display limiter (raw mode)
+[x] Overlay / delta use the display limiter (raw mode)
    Steps:
      a. Options → Raw data ON. Overlay (and/or Delta) a pair whose raw DB
         values differ only past float/display precision
