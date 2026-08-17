@@ -5,18 +5,7 @@
 -Need to start getting this ready for inital release. Need readme.md for github to be setup and need the wiki created for github also
 
 ####### CURRENT BUGS #######
--Ran applyUpdate.cmd and noticed the DataDoctor.py never got renamed to DataDoctor.pyw. I have an old .pyw and the update created the new .py
-    -DataDoctor.py is supposed to get renamed to DataDoctor.pyw on the windows update. Not sure where the issue is but most likely in applyUpdate.py or applyUpdate.cmd
--Graph is ALWAYS rounding. If raw data is selected, the query returns raw data but the graph is still showing rounded
-    -Data points within the graph need to show the raw data, but lets keep the axis clean. No need to have the axis show 7 decimals
--Not sure if this a Qt thing or something that can be fixed but minimizing some windows doesn't put it in the task bar. It minimizes to a very small title bar in the bottom right
-    -This happens with Data Dictionary, so I'm guessing it's only child windows
-    -This doesn't happen with the graph if I detatch it. Minimizing this one takes it to task bar under same icon as the main program, which is normal behavior
--When a query is finished, make sure to select Data Query tab. I was on graph tab and query was finished, I was still on graph tab
--Issue with delta. When raw data is selected in the options, I'm getting a delta when the numbers are exactly the same. I have a 9860.47950050633 on both databases (primary and secondary) with a delta of 0.000000000002
-    -Found the issue. Delta's logic is before our decimal limiter or whatever. If I click the details, I can see primary database is actually 9860.479500506332 and secondary is 9860.47950050633, but in the Overlay Details it shows 9860.47950050633 for both
-    -If I'm correct and we did put a limiter in for this reason, we need the delta logic to go off of that value. Leave the database values showing full percision like they are, like 9860.479500506332, just not in the overlay or delta check
-        -This sounds confusing, may need to talk about it more
+(none — moved to documentation/test.txt)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
