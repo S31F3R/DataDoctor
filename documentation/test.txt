@@ -11,7 +11,7 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] applyUpdate writes DataDoctor.pyw (Windows / existing .pyw)
+[x] applyUpdate writes DataDoctor.pyw (Windows / existing .pyw)
    Steps:
      a. On a Windows launcher install that already has Project Files\DataDoctor.pyw,
         drop a DataDoctor-Python-*.zip in Update\ and run applyUpdate.cmd.
@@ -22,7 +22,6 @@ Current Tests
    Notes: Raw Python zip ships DataDoctor.py; applyUpdate now renames on Windows
      or when .pyw already exists.
    Fix: scripts/applyUpdate.py installAppEntry.
-   RESPONSE: This still isn't working. The .py is the only file getting updated while the .pyw is 12 days old
 
 [x] Graph hover shows table values (raw when raw is on); axis stays clean
    Steps:
