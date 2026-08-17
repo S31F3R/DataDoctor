@@ -260,40 +260,44 @@ class uiAbout(QDialog):
         return html
 
     def _layoutAboutChrome(self):
-        """Stock About fill — same cover-scale as play, no side strip."""
+        """Fit the designed 900×479 About frame in the window.
+
+        Cover-crop (like play) ate the ASCII title on wide maximize. Contain
+        keeps the whole poster; leftover is the dialog's black fill.
+        """
         w = max(1, self.width())
         h = max(1, self.height())
-        scale = max(1.0, h / float(self._BASE_H))
+        fit = min(w / float(self._BASE_W), h / float(self._BASE_H))
+        fw = max(1, int(round(self._BASE_W * fit)))
+        fh = max(1, int(round(self._BASE_H * fit)))
+        ox = (w - fw) // 2
+        oy = (h - fh) // 2
         if self.backgroundLabel is not None:
-            self.backgroundLabel.setGeometry(0, 0, w, h)
+            self.backgroundLabel.setGeometry(ox, oy, fw, fh)
             src = self._aboutBgSrc
-            if src is not None and not src.isNull() and self._aboutBgSize != (w, h):
-                cover = src.scaled(
-                    w, h,
-                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            key = (fw, fh)
+            if src is not None and not src.isNull() and self._aboutBgSize != key:
+                self.backgroundLabel.setPixmap(src.scaled(
+                    fw, fh,
+                    Qt.AspectRatioMode.IgnoreAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
-                )
-                x = max(0, (cover.width() - w) // 2)
-                y = max(0, (cover.height() - h) // 2)
-                self.backgroundLabel.setPixmap(cover.copy(x, y, w, h))
-                self._aboutBgSize = (w, h)
+                ))
+                self._aboutBgSize = key
         if self.textInfo is not None and not self._cabinetActive():
-            sx = w / float(self._BASE_W)
-            sy = h / float(self._BASE_H)
-            pt = max(self._retroPt, int(round(self._retroPt * min(scale, 2.4))))
+            pt = max(self._retroPt, int(round(self._retroPt * min(fit, 2.4))))
             self.textInfo.setGeometry(
-                int(70 * sx), int(140 * sy),
-                max(200, int(800 * sx)), max(80, int(200 * sy)),
+                ox + int(70 * fit), oy + int(140 * fit),
+                max(200, int(800 * fit)), max(80, int(200 * fit)),
             )
-            if self._aboutLaidSize != (w, h, pt):
+            if self._aboutLaidSize != (fw, fh, pt):
                 retroFontObj = QFont(self._retroFam, pt)
                 retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
                 self.textInfo.setFont(retroFontObj)
                 self.textInfo.setHtml(self._aboutInfoHtml(pt))
-                self._aboutLaidSize = (w, h, pt)
+                self._aboutLaidSize = (fw, fh, pt)
         if self.buttonSecret is not None and not self._cabinetActive():
-            bs = max(22, int(round(22 * min(scale, 2.0))))
-            self.buttonSecret.setGeometry(w - bs - 4, h - bs - 4, bs, bs)
+            bs = max(22, int(round(22 * min(fit, 2.0))))
+            self.buttonSecret.setGeometry(ox + fw - bs - 4, oy + fh - bs - 4, bs, bs)
             self.buttonSecret.setIconSize(QSize(max(16, bs - 6), max(16, bs - 6)))
             self.buttonSecret.raise_()
 
