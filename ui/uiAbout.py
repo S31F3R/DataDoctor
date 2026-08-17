@@ -364,17 +364,17 @@ class uiAbout(QDialog):
             if obj is self._playLabel or obj is self:
                 et = event.type()
                 if et == QEvent.Type.KeyPress and not event.isAutoRepeat():
-                    self._handlePlayKey(event.key(), True)
+                    self._handlePlayKey(event.key(), True, event.text())
                     return True
                 if et == QEvent.Type.KeyRelease and not event.isAutoRepeat():
-                    self._handlePlayKey(event.key(), False)
+                    self._handlePlayKey(event.key(), False, event.text())
                     return True
                 if et == QEvent.Type.MouseButtonPress and self._playMode:
                     self._playPulses.append("click")
                     return True
         return super().eventFilter(obj, event)
 
-    def _handlePlayKey(self, key, pressed):
+    def _handlePlayKey(self, key, pressed, text=""):
         mapping = {
             Qt.Key.Key_Left: "left", Qt.Key.Key_A: "left", Qt.Key.Key_Z: "left",
             Qt.Key.Key_Right: "right", Qt.Key.Key_D: "right", Qt.Key.Key_Slash: "right",
@@ -383,6 +383,19 @@ class uiAbout(QDialog):
         }
         if key in mapping:
             self._playKeys[mapping[key]] = pressed
+            return
+        ch = (text or "").lower()
+        if ch == "a":
+            self._playKeys["left"] = pressed
+            return
+        if ch == "d":
+            self._playKeys["right"] = pressed
+            return
+        if ch == "w":
+            self._playKeys["up"] = pressed
+            return
+        if ch == "s":
+            self._playKeys["down"] = pressed
             return
         if not pressed:
             return
@@ -689,7 +702,7 @@ class uiAbout(QDialog):
                 return
         if self._playMode:
             if not event.isAutoRepeat():
-                self._handlePlayKey(event.key(), True)
+                self._handlePlayKey(event.key(), True, event.text())
             return
         if self._cabinetMode:
             key = event.key()
@@ -704,7 +717,7 @@ class uiAbout(QDialog):
 
     def keyReleaseEvent(self, event):
         if self._playMode and not event.isAutoRepeat():
-            self._handlePlayKey(event.key(), False)
+            self._handlePlayKey(event.key(), False, event.text())
             return
         super().keyReleaseEvent(event)
 
@@ -1086,16 +1099,16 @@ if pygame is not None:
             }
             self.eBullets = {
                 1: [
-                    _fitSurf(_loadSurf("b6.png"), 8, 20),
-                    _fitSurf(_loadSurf("b30.png"), 8, 20),
+                    _fitSurf(_loadSurf("b6.png"), 10, 22),
+                    _fitSurf(_loadSurf("b30.png"), 10, 22),
                 ],
                 2: [
-                    _fitSurf(_loadSurf("b31.png"), 8, 26),
-                    _fitSurf(_loadSurf("b32.png"), 8, 26),
+                    _fitSurf(_loadSurf("b31.png"), 14, 36),
+                    _fitSurf(_loadSurf("b32.png"), 14, 36),
                 ],
                 3: [
-                    _fitSurf(_loadSurf("b33.png"), 20, 48),
-                    _fitSurf(_loadSurf("b34.png"), 20, 48),
+                    _fitSurf(_loadSurf("b33.png"), 26, 58),
+                    _fitSurf(_loadSurf("b34.png"), 26, 58),
                 ],
             }
             self.eBullet = (self.eBullets.get(1) or [None])[0]
@@ -1162,6 +1175,7 @@ if pygame is not None:
             self.inboundLeft = 0
             self.maxPShots = 1 if mode == "ab" else 2
             self.playerSpeed = 260.0
+            self.tilt = 0.0
 
         def loadHigh(self):
             return _readMark(self._markKey)
@@ -1191,6 +1205,7 @@ if pygame is not None:
             self.highScore = self.loadHigh()
             self.playerX = W * 0.5
             self.playerY = 428.0
+            self.tilt = 0.0
             self.playerDead = False
             self.dieWait = 0.0
             self.invuln = 0.0
@@ -1350,6 +1365,7 @@ if pygame is not None:
                 return
             self.playerDead = False
             self.playerX = W * 0.5
+            self.tilt = 0.0
             self.invuln = 1.6
             self.eShots = []
             if self.mode == "ls":
@@ -1466,6 +1482,12 @@ if pygame is not None:
             self.playerX += move * self.playerSpeed * dt
             half = pw * 0.5
             self.playerX = max(half + 8, min(W - half - 8, self.playerX))
+            wantTilt = 0.0
+            if keys.get("left") and not keys.get("right"):
+                wantTilt = 16.0
+            elif keys.get("right") and not keys.get("left"):
+                wantTilt = -16.0
+            self.tilt += (wantTilt - self.tilt) * min(1.0, 14.0 * dt)
 
             speedP = -340.0
             for s in self.pShots:
@@ -1532,13 +1554,9 @@ if pygame is not None:
             self.eShootT -= dt
             if self.eShootT <= 0 and living:
                 self.eShootT = max(0.35, 1.05 - self.wave * 0.07)
-                cols = {}
-                for e in living:
-                    key = int(round(e["x"] / 20.0))
-                    prev = cols.get(key)
-                    if prev is None or e["y"] > prev["y"]:
-                        cols[key] = e
-                shooter = random.choice(list(cols.values()))
+                # Any living type can fire so back-row bolts actually appear
+                weights = [max(0.4, float(e["y"])) for e in living]
+                shooter = random.choices(living, weights=weights, k=1)[0]
                 self._enemyFire(shooter["x"], shooter["y"] + 14, shooter.get("kind", 1))
 
             floorY = self.playerY - 36
@@ -1696,6 +1714,20 @@ if pygame is not None:
             r = img.get_rect(center=(int(x), int(y)))
             self.screen.blit(img, r)
 
+        def _rotOff(self, dx, dy, angDeg):
+            rad = math.radians(angDeg)
+            c, s = math.cos(rad), math.sin(rad)
+            return dx * c + dy * s, -dx * s + dy * c
+
+        def _playerDrawImg(self):
+            img = self.playerImg
+            if img is None or abs(self.tilt) < 0.6:
+                return img
+            try:
+                return pygame.transform.rotozoom(img, self.tilt, 1.0)
+            except Exception:
+                return img
+
         def _drawHud(self):
             score = self.font.render(f"{self.score:05d}", True, WHITE)
             hi = self.font.render(f"HI {self.highScore:05d}", True, YELLOW)
@@ -1777,19 +1809,25 @@ if pygame is not None:
             if not self.playerDead:
                 blink = self.invuln > 0 and int(self.invuln * 12) % 2 == 0
                 pw, ph = self._playerSize()
+                ship = self._playerDrawImg()
                 if not blink:
-                    self._blitC(self.playerImg, self.playerX, self.playerY)
+                    self._blitC(ship, self.playerX, self.playerY)
                     blue = self.flameBlue[fi % len(self.flameBlue)] if self.flameBlue else None
                     green = self.flameGreen[fi % len(self.flameGreen)] if self.flameGreen else None
+                    bx, by = self._rotOff(-6, ph * 0.48, self.tilt)
+                    bx2, by2 = self._rotOff(6, ph * 0.48, self.tilt)
+                    gx, gy = self._rotOff(-pw * 0.42, ph * 0.36, self.tilt)
+                    gx2, gy2 = self._rotOff(pw * 0.42, ph * 0.36, self.tilt)
                     if blue is not None:
-                        self._blitC(blue, self.playerX - 6, self.playerY + ph * 0.48)
-                        self._blitC(blue, self.playerX + 6, self.playerY + ph * 0.48)
+                        self._blitC(blue, self.playerX + bx, self.playerY + by)
+                        self._blitC(blue, self.playerX + bx2, self.playerY + by2)
                     if green is not None:
-                        self._blitC(green, self.playerX - pw * 0.42, self.playerY + ph * 0.36)
-                        self._blitC(green, self.playerX + pw * 0.42, self.playerY + ph * 0.36)
+                        self._blitC(green, self.playerX + gx, self.playerY + gy)
+                        self._blitC(green, self.playerX + gx2, self.playerY + gy2)
                 if self.flashT > 0:
                     frame = self.muzzle[0] if self.flashT > 0.04 else self.muzzle[1]
-                    self._blitC(frame, self.playerX, self.playerY - ph * 0.5 - 4)
+                    mx, my = self._rotOff(0, -ph * 0.5 - 4, self.tilt)
+                    self._blitC(frame, self.playerX + mx, self.playerY + my)
 
             for f in self.fx:
                 frames = f["frames"]
