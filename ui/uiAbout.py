@@ -27,6 +27,17 @@ except Exception:  # pragma: no cover
     Vector2 = None
 
 
+def _pygameMixer():
+    """pygame.mixer is optional — do not touch pygame.mixer if the module is absent."""
+    if pygame is None:
+        return None
+    try:
+        import pygame.mixer as mix
+        return mix
+    except Exception:
+        return None
+
+
 # user.config optional map (refMarks) — short keys, integer values
 def _readMark(key):
     try:
@@ -88,6 +99,8 @@ class uiAbout(QDialog):
 
     _TITLE_DEFAULT = "About Data Doctor"
     _TITLE_CABINET = "S31F3R's Secret"
+    _BASE_W = 900
+    _BASE_H = 479
 
     def __init__(self, winMain=None):
         super().__init__(parent=winMain)
@@ -115,10 +128,15 @@ class uiAbout(QDialog):
             "left": False, "right": False, "up": False, "down": False,
         }
         self._playPulses = []
+        self._playLetterbox = None
+        self._backdropSize = None
+        self._closing = False
 
         self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
         self.buttonSecret = self.findChild(QPushButton, 'buttonSecret')
+        self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
         self.setFixedSize(900, 479)
         self.setWindowTitle(self._TITLE_DEFAULT)
 
@@ -290,7 +308,7 @@ class uiAbout(QDialog):
             f"color: rgba(255,255,255,180); background: transparent; "
             f"font-family: '{fam}'; font-size: {max(6, pt - 2)}pt;"
         )
-        hint.setText("ENTER  ·  ESC")
+        hint.setText("ENTER  ·  ESC  ·  F11")
         hint.hide()
         self._cabHint = hint
 
@@ -344,7 +362,163 @@ class uiAbout(QDialog):
         self._splashCreditTimer.setSingleShot(True)
         self._splashCreditTimer.timeout.connect(self._onSplashCreditInsert)
 
+    def _cabinetActive(self):
+        return bool(self._cabinetMode or self._playMode or self._splashMode)
+
+    def _unlockCabinetSize(self):
+        # Size only — never setWindowFlag here. Flag changes hide a live dialog
+        # (About is opened with exec()), which makes the window vanish.
+        self.setMinimumSize(720, 383)
+        self.setMaximumSize(16777215, 16777215)
+        self._playLetterbox = None
+        self._layoutCabinetChrome()
+        if not getattr(self, "_closing", False) and not self.isVisible():
+            self.show()
+            self.raise_()
+            self.activateWindow()
+
+    def _lockStockSize(self):
+        closing = getattr(self, "_closing", False)
+        if self.isFullScreen() or self.isMaximized():
+            self.showNormal()
+        self.setFixedSize(self._BASE_W, self._BASE_H)
+        self._playLetterbox = None
+        self._backdropSize = None
+        if closing:
+            return
+        Utils.centerWindowToParent(self)
+        if self.isVisible():
+            self.raise_()
+            self.activateWindow()
+
+    def _toggleCabinetFill(self):
+        if not self._cabinetActive():
+            return
+        if self.isFullScreen() or self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
+        QTimer.singleShot(0, self._afterFillToggle)
+
+    def _afterFillToggle(self):
+        self._playLetterbox = None
+        if self._cabinetActive():
+            self._layoutCabinetChrome()
+
+    def _layoutCabinetChrome(self):
+        w = max(1, self.width())
+        h = max(1, self.height())
+        scale = max(1.0, h / float(self._BASE_H))
+        fam = getattr(self, "_retroFam", "monospace")
+        basePt = getattr(self, "_retroPt", 9)
+        pt = max(basePt, int(round(basePt * min(scale, 2.4))))
+
+        if self._cabBackdrop is not None:
+            self._cabBackdrop.setGeometry(0, 0, w, h)
+            if self._backdropSize != (w, h):
+                self._cabBackdrop.setPixmap(_starfieldPixmap(w, h))
+                self._backdropSize = (w, h)
+        if self._cabHeader is not None:
+            self._cabHeader.setGeometry(0, int(h * 0.13), w, max(36, int(40 * min(scale, 2.0))))
+            self._cabHeader.setStyleSheet(
+                f"color: white; background: transparent; font-family: '{fam}'; font-size: {pt + 2}pt;"
+            )
+        if self._cabList is not None:
+            lw = min(720, max(420, int(w * 0.52)))
+            lh = max(180, int(h * 0.52))
+            self._cabList.setGeometry((w - lw) // 2, int(h * 0.24), lw, lh)
+            self._cabList.setStyleSheet(
+                "QListWidget {"
+                "  background: transparent; border: none; outline: none;"
+                f"  color: white; font-family: '{fam}'; font-size: {pt}pt;"
+                "}"
+                "QListWidget::item { padding: 14px 8px; color: white; }"
+                "QListWidget::item:selected {"
+                "  background: rgba(255, 255, 0, 55); color: #ffff66;"
+                "}"
+                "QListWidget::item:hover { background: rgba(255, 255, 255, 20); }"
+                "QScrollBar:vertical { width: 0px; background: transparent; }"
+            )
+        if self._cabHint is not None:
+            self._cabHint.setGeometry(0, h - max(28, int(32 * min(scale, 2.0))), w, max(24, int(30 * min(scale, 2.0))))
+            self._cabHint.setStyleSheet(
+                f"color: rgba(255,255,255,180); background: transparent; "
+                f"font-family: '{fam}'; font-size: {max(6, pt - 2)}pt;"
+            )
+        if self._playLabel is not None:
+            self._playLabel.setGeometry(0, 0, w, h)
+        if self._splashBg is not None:
+            self._splashBg.setGeometry(0, 0, w, h)
+        if self._splashCredits is not None:
+            self._splashCredits.setGeometry(40, h // 2 - 30, w - 80, max(50, int(60 * min(scale, 2.0))))
+            self._splashCredits.setStyleSheet(
+                f"color: #66ffff; background: transparent; "
+                f"font-family: '{fam}'; font-size: {pt + 3}pt;"
+            )
+
+    def _letterboxFill(self, lw, lh):
+        cached = self._playLetterbox
+        if cached is not None and cached.size() == QSize(lw, lh):
+            return cached
+        path = Logic.resourcePath("ui/fx/b0.png")
+        src = QPixmap(path) if path and os.path.isfile(path) else QPixmap()
+        if src.isNull():
+            fill = _starfieldPixmap(lw, lh)
+        else:
+            cover = src.scaled(
+                lw, lh,
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            x = max(0, (cover.width() - lw) // 2)
+            y = max(0, (cover.height() - lh) // 2)
+            fill = cover.copy(x, y, lw, lh)
+        self._playLetterbox = fill
+        return fill
+
+    def _presentPlayImage(self, qimg):
+        label = self._playLabel
+        if label is None or qimg is None or qimg.isNull():
+            return
+        lw = max(1, label.width())
+        lh = max(1, label.height())
+        game = QPixmap.fromImage(qimg)
+        gw, gh = game.width(), game.height()
+        if gw < 1 or gh < 1:
+            return
+        scale = min(lw / float(gw), lh / float(gh))
+        nw = max(1, int(round(gw * scale)))
+        nh = max(1, int(round(gh * scale)))
+        scaled = game.scaled(
+            nw, nh,
+            Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        canvas = QPixmap(self._letterboxFill(lw, lh))
+        painter = QPainter(canvas)
+        painter.drawPixmap((lw - nw) // 2, (lh - nh) // 2, scaled)
+        painter.end()
+        label.setPixmap(canvas)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._cabinetActive():
+            self._playLetterbox = None
+            self._layoutCabinetChrome()
+
     def eventFilter(self, obj, event):
+        if self._splashMode and event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_F11:
+                self._toggleCabinetFill()
+                return True
+            if key == Qt.Key.Key_Escape:
+                self._hideSplash()
+                self._returnToCatalog()
+                return True
+            # Let the intro finish — do not skip or re-launch
+            return True
+
         if (
             self._cabinetMode
             and not self._playMode
@@ -356,14 +530,22 @@ class uiAbout(QDialog):
             if key == Qt.Key.Key_Escape:
                 self._closeCabinet()
                 return True
+            if key == Qt.Key.Key_F11:
+                self._toggleCabinetFill()
+                return True
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 self._launchIndex(self._cabList.currentRow())
                 return True
+            if self._moveCatalog(key, event.text()):
+                return True
 
-        if self._playMode or self._splashMode:
+        if self._playMode:
             if obj is self._playLabel or obj is self:
                 et = event.type()
                 if et == QEvent.Type.KeyPress and not event.isAutoRepeat():
+                    if event.key() == Qt.Key.Key_F11:
+                        self._toggleCabinetFill()
+                        return True
                     self._handlePlayKey(event.key(), True, event.text())
                     return True
                 if et == QEvent.Type.KeyRelease and not event.isAutoRepeat():
@@ -415,6 +597,7 @@ class uiAbout(QDialog):
         """
         if active:
             self.setWindowTitle(self._TITLE_CABINET)
+            self._unlockCabinetSize()
             if self.backgroundLabel is not None:
                 self.backgroundLabel.hide()
             if self._cabBackdrop is not None:
@@ -423,8 +606,10 @@ class uiAbout(QDialog):
                 self._cabBackdrop.lower()
                 if self.backgroundLabel is not None:
                     self.backgroundLabel.lower()
+            self._layoutCabinetChrome()
         else:
             self.setWindowTitle(self._TITLE_DEFAULT)
+            self._lockStockSize()
             if self._cabBackdrop is not None:
                 self._cabBackdrop.hide()
             if self.backgroundLabel is not None:
@@ -440,6 +625,10 @@ class uiAbout(QDialog):
         self._applyCabinetShell(True)
         self._refreshCatalog()
         self._showCatalogChrome(True)
+        if not self.isVisible():
+            self.show()
+        self.raise_()
+        self.activateWindow()
         if self._cabList is not None:
             self._cabList.setFocus(Qt.FocusReason.OtherFocusReason)
 
@@ -455,6 +644,8 @@ class uiAbout(QDialog):
                 w.raise_()
             else:
                 w.hide()
+        if visible:
+            self._layoutCabinetChrome()
 
     def _closeCabinet(self):
         self._stopEmbeddedSession()
@@ -506,6 +697,26 @@ class uiAbout(QDialog):
         if self._cabList.count() > 0:
             self._cabList.setCurrentRow(0)
 
+    def _moveCatalog(self, key, text=""):
+        """W/S (and arrows) step the SELECT list."""
+        if self._cabList is None or self._cabList.count() < 1:
+            return False
+        ch = (text or "").lower()
+        up = key in (Qt.Key.Key_Up, Qt.Key.Key_W) or ch == "w"
+        down = key in (Qt.Key.Key_Down, Qt.Key.Key_S) or ch == "s"
+        if not up and not down:
+            return False
+        n = self._cabList.count()
+        row = self._cabList.currentRow()
+        if row < 0:
+            row = 0
+        if up:
+            row = (row - 1) % n
+        else:
+            row = (row + 1) % n
+        self._cabList.setCurrentRow(row)
+        return True
+
     def _onCabinetActivate(self, item):
         if item is None:
             return
@@ -520,6 +731,7 @@ class uiAbout(QDialog):
             return
         self.stopMusic()
         self._showCatalogChrome(False)
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
         self._startSplash(entry)
 
     def _startSplash(self, entry):
@@ -536,6 +748,7 @@ class uiAbout(QDialog):
             if w is not None:
                 w.show()
                 w.raise_()
+        self._layoutCabinetChrome()
         if self._splashAnim is not None:
             try:
                 self._splashAnim.stop()
@@ -576,11 +789,12 @@ class uiAbout(QDialog):
             self._splashHoldTimer.start(1500)
 
     def _playCreditTone(self):
-        if pygame is None:
+        mix = _pygameMixer()
+        if mix is None:
             return
         try:
-            if pygame.mixer.get_init() is None:
-                pygame.mixer.init(frequency=22050, size=-16, channels=1, buffer=512)
+            if mix.get_init() is None:
+                mix.init(frequency=22050, size=-16, channels=1, buffer=512)
             snd = _synthTone(1180, 80, 0.28)
             if snd is not None:
                 snd.play()
@@ -635,6 +849,7 @@ class uiAbout(QDialog):
             self._playLabel.raise_()
             self._playLabel.setFocus(Qt.FocusReason.OtherFocusReason)
             self._playLabel.clear()
+        self._layoutCabinetChrome()
         if self._gameTimer is not None:
             self._gameTimer.start()
 
@@ -648,7 +863,7 @@ class uiAbout(QDialog):
             img = self._session.tick(dt, self._playKeys, self._playPulses)
             self._playPulses = []
             if img is not None and self._playLabel is not None:
-                self._playLabel.setPixmap(QPixmap.fromImage(img))
+                self._presentPlayImage(img)
             if not getattr(self._session, "running", True):
                 self._stopEmbeddedSession()
                 self._returnToCatalog()
@@ -687,19 +902,16 @@ class uiAbout(QDialog):
             self.startMusic()
 
     def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_F11 and self._cabinetActive():
+            self._toggleCabinetFill()
+            return
         if self._splashMode:
             if event.key() == Qt.Key.Key_Escape:
                 self._hideSplash()
                 self._returnToCatalog()
                 return
-            if event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
-                if self._splashCreditsFx is not None and self._splashCreditsFx.opacity() >= 0.99:
-                    if self._splashHoldTimer is not None:
-                        self._splashHoldTimer.stop()
-                    if self._splashCreditTimer is not None:
-                        self._splashCreditTimer.stop()
-                    self._onSplashHoldDone()
-                return
+            # Intro is not skippable; ignore Enter/Space so SELECT cannot re-fire
+            return
         if self._playMode:
             if not event.isAutoRepeat():
                 self._handlePlayKey(event.key(), True, event.text())
@@ -713,6 +925,8 @@ class uiAbout(QDialog):
                 if self._cabList is not None:
                     self._launchIndex(self._cabList.currentRow())
                 return
+            if self._moveCatalog(key, event.text()):
+                return
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
@@ -721,8 +935,28 @@ class uiAbout(QDialog):
             return
         super().keyReleaseEvent(event)
 
+    def exec(self):
+        self._closing = False
+        return super().exec()
+
+    def closeEvent(self, event):
+        self._closing = True
+        self.stopMusic()
+        self._resetToDefaultAbout()
+        super().closeEvent(event)
+
+    def reject(self):
+        self._closing = True
+        self.stopMusic()
+        self._resetToDefaultAbout()
+        super().reject()
+
     def showEvent(self, event):
-        Utils.centerWindowToParent(self)
+        if getattr(self, "_closing", False):
+            super().showEvent(event)
+            return
+        if not self._cabinetActive() and not self.isMaximized() and not self.isFullScreen():
+            Utils.centerWindowToParent(self)
         if not self._cabinetMode and not self._playMode and not self._splashMode:
             if self.textInfo is not None:
                 self.textInfo.show()
@@ -731,16 +965,6 @@ class uiAbout(QDialog):
                 self.buttonSecret.raise_()
             self.startMusic()
         super().showEvent(event)
-
-    def closeEvent(self, event):
-        self.stopMusic()
-        self._resetToDefaultAbout()
-        super().closeEvent(event)
-
-    def reject(self):
-        self.stopMusic()
-        self._resetToDefaultAbout()
-        super().reject()
 
 
 class _WorthyKeyFilter(QObject):
@@ -852,7 +1076,10 @@ if pygame is not None:
                 sample = int(vol * env * 32767 * math.sin(2 * math.pi * freq * t))
                 sample = max(-32767, min(32767, sample))
                 buf += struct.pack("<h", sample)
-            return pygame.mixer.Sound(buffer=bytes(buf))
+            mix = _pygameMixer()
+            if mix is None:
+                return None
+            return mix.Sound(buffer=bytes(buf))
         except Exception:
             return None
 
@@ -894,12 +1121,15 @@ if pygame is not None:
 
         def _initMixerFallback(self):
             try:
-                if pygame.mixer.get_init() is None:
-                    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+                mix = _pygameMixer()
+                if mix is None:
+                    return
+                if mix.get_init() is None:
+                    mix.init(frequency=44100, size=-16, channels=2, buffer=512)
                 for key, fn in self._NAMES.items():
                     path = Logic.resourcePath(f"ui/fx/{fn}")
                     if path and os.path.isfile(path):
-                        self.sounds[key] = pygame.mixer.Sound(path)
+                        self.sounds[key] = mix.Sound(path)
                 self.ok = bool(self.sounds)
             except Exception:
                 self.ok = False
@@ -923,18 +1153,22 @@ if pygame is not None:
             except Exception:
                 pass
 
+        def stop(self, name=None):
+            names = [name] if name else list(self.sounds)
+            for key in names:
+                snd = self.sounds.get(key)
+                if snd is None:
+                    continue
+                try:
+                    snd.stop()
+                except Exception:
+                    pass
+
         def startUfo(self):
             self.play(self._ufoName)
 
         def stopUfo(self):
-            snd = self.sounds.get(self._ufoName)
-            if snd is None:
-                return
-            try:
-                if self._isQtFx(snd):
-                    snd.stop()
-            except Exception:
-                pass
+            self.stop(self._ufoName)
 
     def _fxPath(name):
         try:
@@ -1198,6 +1432,7 @@ if pygame is not None:
             return (32, 32)
 
         def beginPlay(self):
+            self.audio.stop()
             self.score = 0
             self.lives = 3
             self.wave = 1
@@ -1427,14 +1662,17 @@ if pygame is not None:
             for p in pulses:
                 if p == "escape":
                     if self.state == "PLAYING":
+                        self.audio.stop()
                         self.state = "MENU"
-                        self.audio.stopUfo()
                     elif self.state == "PAUSED":
+                        self.audio.stop()
                         self.state = "MENU"
                     else:
+                        self.audio.stop()
                         self.running = False
                 elif p == "p":
                     if self.state == "PLAYING":
+                        self.audio.stop()
                         self.state = "PAUSED"
                     elif self.state == "PAUSED":
                         self.state = "PLAYING"
@@ -1857,7 +2095,7 @@ if pygame is not None:
         def stop(self):
             self.running = False
             try:
-                self.audio.stopUfo()
+                self.audio.stop()
             except Exception:
                 pass
             if self.score > self.highScore:
