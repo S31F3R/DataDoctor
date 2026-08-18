@@ -7,8 +7,15 @@ Auto-update matches GitHub Release tags + asset names from this script.
 
   python scripts/publishRelease.py
   python scripts/publishRelease.py --channel published --build-only
-  python scripts/publishRelease.py --channel rc --number 1 --upload
+  python scripts/publishRelease.py --channel rc --number 2.1 --upload
   python scripts/publishRelease.py --channel beta --number 1 --dry-run
+
+Release notes: documentation/releases/vX.Y.Z.md (created if missing).
+That file is the GitHub Release body. Version.py is committed when it changes.
+
+Order the updater uses: published > rc > beta (same X.Y.Z).
+  3.0.0 > 3.0.0-rc.2.1 > 3.0.0-rc.2 > 3.0.0-beta.4
+Older GitHub Releases (e.g. rc.1) stay up until deleted on the website.
 
 What this Linux machine can build
 ---------------------------------
@@ -49,6 +56,7 @@ from core import Version  # noqa: E402
 
 REPO = Version.GITHUB_REPO
 VERSION_PATH = ROOT / "core" / "Version.py"
+NOTES_DIR = ROOT / "documentation" / "releases"
 
 
 def log(msg: str) -> None:
@@ -84,23 +92,31 @@ def baseTriple(version: str) -> str:
     return f"{major}.{minor}.{patch}"
 
 
-def preKindAndNumber(version: str) -> tuple[str | None, int | None]:
+_PRE_NUM_RE = re.compile(r"^\d+(?:\.\d+)*$")
+
+
+def preKindAndNumber(version: str) -> tuple[str | None, str | None]:
+    """('rc', '2.1') from 3.0.0-rc.2.1."""
     parsed = Version.parseVersion(version)
     if parsed is None or parsed[3] is None:
         return None, None
-    parts = parsed[3]
-    # (('rc',) style via parseVersion: letters → (1, 'rc'), digits → (0, n))
     name = None
-    number = None
-    for kind, val in parts:
+    nums: list[str] = []
+    for kind, val in parsed[3]:
         if kind == 1 and val in ("rc", "beta"):
             name = val
-        elif kind == 0 and isinstance(val, int):
-            number = val
-    return name, number
+        elif kind == 0:
+            nums.append(str(val))
+    return name, ".".join(nums) if nums else None
 
 
-def resolveVersion(channel: str, number: int | None, writeFile: bool, yes: bool) -> str:
+def incrementPreNumber(num: str) -> str:
+    parts = num.split(".")
+    parts[-1] = str(int(parts[-1]) + 1)
+    return ".".join(parts)
+
+
+def resolveVersion(channel: str, number: str | None, writeFile: bool, yes: bool) -> str:
     current = Version.displayVersion()
     base = baseTriple(current)
     kind, existingN = preKindAndNumber(current)
@@ -112,20 +128,16 @@ def resolveVersion(channel: str, number: int | None, writeFile: bool, yes: bool)
             if not askYes("Strip pre-release suffix and write Version.py?", True):
                 die("aborted")
     elif channel in ("rc", "beta"):
-        n = number
-        if n is None:
-            if kind == channel and existingN is not None:
-                n = existingN + 1
+        n = (number or "").strip() if number else None
+        if not n:
+            if kind == channel and existingN:
+                n = incrementPreNumber(existingN)
             else:
-                n = 1
+                n = "1"
             if not yes:
-                raw = ask(f"{channel.upper()} number", str(n))
-                try:
-                    n = int(raw)
-                except ValueError:
-                    die(f"not a number: {raw!r}")
-        if n < 1:
-            die("pre-release number must be >= 1")
+                n = ask(f"{channel.upper()} number (e.g. 2 or 2.1)", n)
+        if not _PRE_NUM_RE.match(n):
+            die(f"pre-release number must look like 1 or 2.1, not {n!r}")
         target = f"{base}-{channel}.{n}"
     else:
         die(f"unknown channel {channel!r} (use published / rc / beta)")
@@ -138,7 +150,6 @@ def resolveVersion(channel: str, number: int | None, writeFile: bool, yes: bool)
         log(f"Version.py {current} → {target}")
         if writeFile:
             setVersionFile(target)
-            # Keep in-memory copy in sync for later displayVersion calls
             Version.VERSION = target
         else:
             log("Version.py not written (--dry-run)")
@@ -160,6 +171,115 @@ def setVersionFile(version: str) -> None:
         die("could not find VERSION = \"...\" in core/Version.py")
     VERSION_PATH.write_text(new, encoding="utf-8")
     log(f"Wrote {VERSION_PATH.relative_to(ROOT)} VERSION = {version!r}")
+
+
+def notesPathFor(version: str) -> Path:
+    return NOTES_DIR / f"v{version}.md"
+
+
+def notesTemplate(version: str, channel: str) -> str:
+    return (
+        f"# Data Doctor {version}\n"
+        f"\n"
+        f"Channel: {channel}\n"
+        f"\n"
+        f"## Changes\n"
+        f"\n"
+        f"- \n"
+        f"\n"
+        f"## Notes\n"
+        f"\n"
+        f"Windows launcher updates use the `DataDoctor-Python-*.zip` asset "
+        f"(`Update\\` + `applyUpdate.cmd`).\n"
+    )
+
+
+def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | None, yes: bool) -> str:
+    """
+    GitHub Release body comes from documentation/releases/vVERSION.md.
+    --notes PATH overrides. Interactive run can type a few bullets first.
+    """
+    dest = notesPathFor(version)
+    if notesArg:
+        src = Path(notesArg)
+        if not src.is_file():
+            die(f"notes file not found: {src}")
+        text = src.read_text(encoding="utf-8").strip() + "\n"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(text, encoding="utf-8")
+        log(f"Release notes copied to {dest.relative_to(ROOT)}")
+        return text
+
+    if dest.is_file() and dest.stat().st_size > 0:
+        log(f"Release notes: {dest.relative_to(ROOT)}")
+        return dest.read_text(encoding="utf-8")
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    extra = ""
+    if not yes:
+        log(f"No {dest.relative_to(ROOT)} yet. Type changes (empty line to finish).")
+        lines = []
+        while True:
+            try:
+                line = input("  - " if not lines else "    ")
+            except EOFError:
+                break
+            if not line.strip():
+                break
+            bullet = line.strip()
+            if not bullet.startswith("-"):
+                bullet = f"- {bullet}"
+            lines.append(bullet)
+        extra = "\n".join(lines)
+    body = notesTemplate(version, channel)
+    if extra:
+        body = body.replace("## Changes\n\n- \n", "## Changes\n\n" + extra + "\n")
+    dest.write_text(body, encoding="utf-8")
+    log(f"Wrote {dest.relative_to(ROOT)} — edit that file next time to change GitHub notes")
+    return body
+
+
+def gitCommitVersion(version: str, extraPaths: list[Path] | None = None) -> None:
+    """Commit Version.py (and notes) so the bump is not left unstaged."""
+    paths = [VERSION_PATH]
+    for p in extraPaths or []:
+        if p is not None and p.is_file():
+            paths.append(p)
+    rels = []
+    for p in paths:
+        try:
+            rels.append(str(p.relative_to(ROOT)))
+        except ValueError:
+            rels.append(str(p))
+    add = subprocess.run(
+        ["git", "add", "--"] + rels,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if add.returncode != 0:
+        log(f"WARN: git add failed: {(add.stderr or add.stdout or '').strip()}")
+        return
+    st = subprocess.run(
+        ["git", "status", "--porcelain", "--"] + rels,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if not (st.stdout or "").strip():
+        log("Version commit: nothing new to commit")
+        return
+    msg = f"Bump version to {version}"
+    commit = subprocess.run(
+        ["git", "commit", "-m", msg],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if commit.returncode != 0:
+        log(f"WARN: git commit failed: {(commit.stderr or commit.stdout or '').strip()}")
+        return
+    log(f"Committed: {msg}")
 
 
 def hostArch() -> str:
@@ -371,9 +491,21 @@ def ensureRelease(token: str, version: str, channel: str, target: str, notes: st
     existing = getReleaseByTag(token, tag)
     if existing:
         html = existing.get("html_url") or ""
-        log(f"Release {tag} already exists — updating assets")
+        log(f"Release {tag} already exists — updating assets / notes")
         if html:
             log(f"  {html}")
+        relId = existing.get("id")
+        if relId and notes:
+            apiJson(
+                "PATCH",
+                f"https://api.github.com/repos/{REPO}/releases/{int(relId)}",
+                token,
+                {
+                    "body": notes,
+                    "prerelease": channel != "published",
+                    "name": version,
+                },
+            )
         return existing
     created = createRelease(token, version, channel, target, notes)
     if created:
@@ -450,13 +582,12 @@ def parseArgs() -> argparse.Namespace:
         "--channel",
         choices=("published", "rc", "beta"),
         default=None,
-        help="published = Version.py triple; rc/beta append -rc.N / -beta.N",
+        help="published = Version.py triple; rc/beta append -rc.N / -beta.N (N can be 2.1)",
     )
     p.add_argument(
         "--number",
-        type=int,
         default=None,
-        help="N in -rc.N or -beta.N (default: 1, or last+1 if Version.py already matches)",
+        help="N in -rc.N or -beta.N (1, 2, 2.1, …). Default: last+1 or 1",
     )
     p.add_argument(
         "--upload",
@@ -500,7 +631,7 @@ def parseArgs() -> argparse.Namespace:
     p.add_argument(
         "--notes",
         default=None,
-        help="release notes file path (default: generated stub)",
+        help="release notes markdown file (default: documentation/releases/vVERSION.md)",
     )
     return p.parse_args()
 
@@ -532,6 +663,9 @@ def main() -> int:
     if args.dryRun:
         log("dry-run: stopping before build / upload")
         return 0
+
+    notesEarly = collectNotes(version, channel, [], notesArg=args.notes, yes=args.yes)
+    gitCommitVersion(version, extraPaths=[notesPathFor(version)])
 
     built: list[tuple[dict, Path]] = []
     if args.skipBuild:
@@ -585,11 +719,7 @@ def main() -> int:
     if not args.yes:
         target = ask("Tag which branch / commit?", target)
 
-    if args.notes:
-        notes = Path(args.notes).read_text(encoding="utf-8")
-    else:
-        notes = defaultNotes(version, channel, [p for _, p in built])
-
+    notes = notesEarly
     release = ensureRelease(token, version, channel, target, notes)
     html = release.get("html_url") or ""
     for it, path in built:

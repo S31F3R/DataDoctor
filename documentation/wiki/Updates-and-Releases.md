@@ -6,8 +6,10 @@ Data Doctor checks [GitHub Releases](https://github.com/S31F3R/DataDoctor/releas
 
 | Channel | What is offered |
 |---------|-----------------|
-| **Stable** (default) | Latest full release |
-| **Beta** | Includes GitHub **Pre-release** tags and `-rc` / `-beta` versions |
+| **Stable** (default) | Latest full release (`v3.0.0`) |
+| **Beta** | Includes GitHub **Pre-release** tags (`-rc` and `-beta`) |
+
+Newest-first among those: **published > rc > beta** of the same `X.Y.Z`. Example: `3.0.0` is newer than `3.0.0-rc.2.1`, which is newer than `3.0.0-rc.1`, which is newer than `3.0.0-beta.4`. A `3.0.0` install will not be offered `3.0.0-rc.1` (that RC is older than 3.0.0).
 
 Toggle **Options → General → Beta updates**. The choice is saved as `updateChannel` in `user.config`.
 
