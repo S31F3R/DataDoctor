@@ -21,6 +21,8 @@ Browse stations and parameters:
 
 - [National Water Dashboard](https://dashboard.waterdata.usgs.gov/app/nwd/en/)
 - [OGC API docs](https://api.waterdata.usgs.gov/docs/ogcapi/)
+- Latest values for a site (lists `time_series_id`):  
+  `https://api.waterdata.usgs.gov/ogcapi/v0/collections/latest-continuous/items?f=json&monitoring_location_id=USGS-09428500`
 - Continuous collection: `https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items`
 - Daily collection: `https://api.waterdata.usgs.gov/ogcapi/v0/collections/daily/items`
 
@@ -35,7 +37,9 @@ Data Doctor accepts:
 
 The **32-character hex** is the modern `time_series_id`. Store **that** hex in the data dictionary `dataID` column so labels and `precisionOverride` match.
 
-The Query window’s DataID **info** button / picker can resolve `Site-Parameter` via `resolveUsgsDataId`.
+Routing is automatic from the method segment: hex → OGC API; digits → legacy IV/DV.
+
+The Query window’s DataID **info** button / picker can resolve `Site-Parameter`.
 
 ## Intervals
 
