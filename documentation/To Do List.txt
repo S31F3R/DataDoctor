@@ -1,8 +1,13 @@
 ####### CURRENT TASKS #######
-(none)
+-Created an auto apply updates on the windows version. on load of the .exe, it will see if there is a .zip in updates, if there is it will run applyUpdate.cmd
+    -Update message box to say restart the program instead of telling user to run applyUpdate.cmd
 
 ####### CURRENT BUGS #######
-(none — moved to documentation/test.txt)
+-when applyUpdate is ran, it creates a copy of bunker.db. we don't need several backups, so at the point it wants to create a .bak, delete all other .bak first
+-Not sure when this happened but winAbout has scroll bars now. It looks like it's sized too small on first load now. I can manually resize it to make the bars go away
+    -If I maximize it, the vertical scroll bar goes away but horzintal stays
+    -Maybe make rezie stick to a specific ratio so scroll bars never show up? Still need the ability to maximize it on any aspect ratio
+-The downloading update dialog box has the progress bar offset to the left. Either center it or make it have the same margins on each side
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
