@@ -3,19 +3,19 @@
 Bundle a platform Instant Client into oracle/client inside a package.
 
 Drop (or replace) these under dist/oracle/ — same name, new contents
-when Oracle updates:
+when Oracle updates. These are Instant Client **Basic Lite** (raw library
+files, no Oracle installer):
 
   oracle-windows.zip   (files at zip root, or one wrapper folder)
   oracle-linux.zip
-  oracle-macos.zip     (files, or a single oracle.dmg inside)
-  oracle.dmg           (macOS Instant Client disk image, optional)
+  oracle-macos.dmg     (Oracle's macOS disk image)
 
 Whatever folder the archive uses (oracle-windows, instantclient_23_7, …)
 is unwrapped. The package always gets:
 
-  …/oracle/client/oci.dll          (Windows)
-  …/oracle/client/libociicus.so    (Linux Basic Lite)
-  …/oracle/client/libociicus.dylib (macOS Basic Lite)
+  …/oracle/client/oci.dll           (Windows)
+  …/oracle/client/libociicus.so     (Linux Lite)
+  …/oracle/client/libociicus.dylib  (macOS Lite)
 
 The Python update zip does not take these — Instant Client is OS-specific.
 """
@@ -38,12 +38,14 @@ ZIP_NAMES = {
     "macos": ("oracle-macos.zip", "oracle-mac.zip", "oracle-darwin.zip"),
 }
 
-# Any one of these means core/Oracle.py will use the packaged client
+# Basic Lite is what we ship. Full Basic names still count as ready.
 MARKER_FILES = {
     "windows": ("oci.dll",),
-    "linux": ("libociei.so", "libociicus.so"),
-    "macos": ("libociei.dylib", "libociicus.dylib"),
+    "linux": ("libociicus.so", "libociei.so"),
+    "macos": ("libociicus.dylib", "libociei.dylib"),
 }
+
+DMG_NAMES = ("oracle-macos.dmg", "oracle-mac.dmg", "oracle.dmg")
 
 _WRAPPER_NAMES = {
     "oracle-windows",
@@ -76,9 +78,10 @@ def findMacosDmg(root: Path) -> Path | None:
     folder = zipDir(root)
     if not folder.is_dir():
         return None
-    exact = folder / "oracle.dmg"
-    if exact.is_file():
-        return exact
+    for name in DMG_NAMES:
+        p = folder / name
+        if p.is_file():
+            return p
     hits = sorted(folder.glob("instantclient*.dmg")) + sorted(folder.glob("*.dmg"))
     return hits[0] if hits else None
 
@@ -161,9 +164,10 @@ def _run7zExtract(archive: Path, dest: Path) -> None:
 
 
 def _dmgInTree(folder: Path) -> Path | None:
-    preferred = folder / "oracle.dmg"
-    if preferred.is_file():
-        return preferred
+    for name in DMG_NAMES:
+        hits = list(folder.rglob(name))
+        if hits:
+            return hits[0]
     hits = sorted(folder.rglob("*.dmg"))
     return hits[0] if hits else None
 
@@ -245,9 +249,12 @@ def installOracleClient(root: Path, destClient: Path, platformKey: str) -> bool:
     z = findOracleZip(root, platformKey)
     dmg = findMacosDmg(root) if platformKey == "macos" else None
 
+    # macOS: Oracle ships a .dmg — prefer that over a leftover dummy zip
     source = None
     kind = None
-    if z is not None:
+    if platformKey == "macos" and dmg is not None:
+        source, kind = dmg, "dmg"
+    elif z is not None:
         source, kind = z, "zip"
     elif dmg is not None:
         source, kind = dmg, "dmg"
@@ -282,7 +289,7 @@ def installOracleClient(root: Path, destClient: Path, platformKey: str) -> bool:
 
     names = ZIP_NAMES.get(platformKey, ())
     expected = names[0] if names else f"oracle-{platformKey}.zip"
-    extra = " (or oracle.dmg)" if platformKey == "macos" else ""
+    extra = " or oracle-macos.dmg" if platformKey == "macos" else ""
     print(f"NOTE: no {expected}{extra} in dist/oracle/ — Instant Client not bundled")
     return False
 

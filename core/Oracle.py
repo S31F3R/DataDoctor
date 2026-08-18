@@ -635,11 +635,12 @@ def ensureOracleClientReady():
         if platform.architecture()[0] != "64bit":
             raise RuntimeError("Only 64-bit platforms supported.")
 
-        # Basic (libociei / oraociei) or Basic Lite (libociicus / oraociicus)
+        # Packaged client is Instant Client Basic Lite (raw files, no installer).
+        # Full Basic library names still count as ready.
         expectedAny = {
             "windows": ["oci.dll"],
-            "linux": ["libociei.so", "libociicus.so"],
-            "darwin": ["libociei.dylib", "libociicus.dylib"],
+            "linux": ["libociicus.so", "libociei.so"],
+            "darwin": ["libociicus.dylib", "libociei.dylib"],
         }
         requiredAny = expectedAny.get(system)
         if not requiredAny:
