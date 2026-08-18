@@ -19,7 +19,7 @@ Current version: **3.0.0** (see `core/Version.py`).
 - **Python 3.13.x** (tested with 3.13.7)
 - Dependencies in [`requirements.txt`](requirements.txt): PyQt6, requests, oracledb, keyring, matplotlib, numpy, pygame
 - **USBR / HDB**: Oracle Instant Client (packaged with Windows/AppImage when present) plus TNS / `tnsnames.ora`
-- **Aquarius** (TLS): a server cert you place yourself — see [Aquarius](https://github.com/S31F3R/DataDoctor/wiki/Aquarius)
+- **Aquarius** (TLS): a server certificate in a `certs/` folder — see [Aquarius](https://github.com/S31F3R/DataDoctor/wiki/Aquarius)
 - **USGS** (optional): an [api.data.gov](https://api.waterdata.usgs.gov/signup/) key for higher rate limits — see [USGS](https://github.com/S31F3R/DataDoctor/wiki/USGS)
 
 ---
@@ -63,7 +63,7 @@ More detail: [Installation](https://github.com/S31F3R/DataDoctor/wiki/Installati
 
 ## First-run setup
 
-Open **Options** and fill in what you use:
+Open **Options** and set the sources that apply:
 
 | Tab | What to set |
 |-----|-------------|
@@ -88,7 +88,7 @@ Config and logs are **per user**, not inside the install folder.
 
 Inside that folder: `user.config`, `logs/app.log`, `quickLook/query/`, `quickLook/sql/`.
 
-The live data dictionary is `core/bunker.db` next to the app (Windows: `Project Files\core\bunker.db`). Do not overwrite it with a packaged copy if you have local edits — `applyUpdate` merges.
+The live data dictionary is `core/bunker.db` next to the app (Windows: `Project Files\core\bunker.db`). Do not overwrite it with a packaged copy if the dictionary has local edits — `applyUpdate` merges.
 
 See [App Data](https://github.com/S31F3R/DataDoctor/wiki/App-Data).
 
@@ -96,7 +96,7 @@ See [App Data](https://github.com/S31F3R/DataDoctor/wiki/App-Data).
 
 ## Aquarius TLS certificates
 
-Create a `certs/` folder **yourself** (the app never creates one) and place the server cert as one of:
+Create a `certs/` folder (the app never creates one) and place the server cert as one of:
 
 - `aquarius.pem` (preferred)
 - `.cer` / `.crt` (converted to `aquarius.pem` on first use; source file removed after success)
@@ -113,7 +113,7 @@ From the project root:
 
 | Script | Output |
 |--------|--------|
-| `python scripts/publishRelease.py` | Prompts published / rc / beta, builds every asset this host can, optional GitHub upload |
+| `python scripts/publishRelease.py` | Prompts published / rc / beta, builds host-supported assets, optional GitHub upload |
 | `python scripts/packageWindows.py` | Windows launcher zip (`DataDoctor.pyw` under `Project Files/`) |
 | `python scripts/packagePython.py` | `DataDoctor-Python.zip` (update payload / raw Python) |
 | `python scripts/packageAppImage.py` | `dist/DataDoctor-<arch>-YYYYMMDD.AppImage` |
