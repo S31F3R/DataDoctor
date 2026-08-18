@@ -642,8 +642,8 @@ def _promptUpdate(parent, info: dict) -> None:
     elif kind == "launcher":
         lines.append("")
         lines.append(
-            "Download will place a Python zip in Update/. After download, close "
-            "Data Doctor and run applyUpdate (applyUpdate.cmd / applyUpdate.sh)."
+            "Download will place a Python zip in Update/. Restart Data Doctor "
+            "to apply the update."
         )
     else:
         lines.append("")
@@ -667,14 +667,38 @@ def _promptUpdate(parent, info: dict) -> None:
 
 def _downloadAndOfferApply(parent, info: dict) -> None:
     from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
-    from PyQt6.QtWidgets import QApplication, QMessageBox, QProgressDialog
     from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import (
+        QApplication, QMessageBox, QDialog, QVBoxLayout, QLabel,
+        QProgressBar, QPushButton,
+    )
 
-    progress = QProgressDialog("Downloading update…", "Cancel", 0, 0, parent)
+    progress = QDialog(parent)
     progress.setWindowTitle("Update")
     progress.setWindowModality(Qt.WindowModality.WindowModal)
-    progress.setMinimumDuration(0)
-    progress.setValue(0)
+    progress.setModal(True)
+    boxLay = QVBoxLayout(progress)
+    boxLay.setContentsMargins(20, 16, 20, 16)
+    boxLay.setSpacing(12)
+    progLabel = QLabel("Downloading update…")
+    progLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    progBar = QProgressBar()
+    progBar.setRange(0, 0)
+    progBar.setTextVisible(False)
+    progBar.setMinimumWidth(320)
+    progCancel = QPushButton("Cancel")
+    progCancel.setAutoDefault(False)
+    cancelled = {"flag": False}
+
+    def _cancelDownload():
+        cancelled["flag"] = True
+        progress.reject()
+
+    progCancel.clicked.connect(_cancelDownload)
+    boxLay.addWidget(progLabel)
+    boxLay.addWidget(progBar)
+    boxLay.addWidget(progCancel, alignment=Qt.AlignmentFlag.AlignHCenter)
+    progress.resize(400, progress.sizeHint().height())
     progress.show()
 
     class _Signals(QObject):
@@ -732,16 +756,12 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                     )
             return
 
-        # Launcher / dev — applyUpdate on disk
-        apply = launcherApplyScript()
-        applyHint = str(apply) if apply else "applyUpdate.cmd / applyUpdate.sh"
+        # Launcher / dev — Windows exe applies the zip from Update/ on next start
         QMessageBox.information(
             parent,
             "Download complete",
             f"Downloaded:\n{path}\n\n"
-            "Close Data Doctor, then run:\n"
-            f"  {applyHint}\n\n"
-            "That merges code + bunker.db and installs requirements into .venv.",
+            "Restart Data Doctor to apply the update.",
         )
 
     signals = _Signals()

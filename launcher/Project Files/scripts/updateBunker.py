@@ -33,7 +33,7 @@ import os
 import shutil
 import sqlite3
 import sys
-from datetime import datetime
+
 from pathlib import Path
 
 
@@ -145,11 +145,15 @@ def merge(packagedPath: Path, userPath: Path, dryRun: bool = False) -> int:
         )
         return 1
 
-    # Backup user DB
+    # One backup only — drop prior bunker.db.bak* then write bunker.db.bak
     if not dryRun:
-        backup = userPath.with_suffix(
-            userPath.suffix + f".bak-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        )
+        for old in userPath.parent.glob(userPath.name + ".bak*"):
+            try:
+                old.unlink()
+                print(f"Removed old backup: {old}")
+            except OSError as e:
+                print(f"WARN: could not remove {old}: {e}", file=sys.stderr)
+        backup = userPath.with_suffix(userPath.suffix + ".bak")
         shutil.copy2(userPath, backup)
         print(f"Backup: {backup}")
 
