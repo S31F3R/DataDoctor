@@ -6,13 +6,13 @@ Aquarius Time-Series is an optional **internal/public** source. Configure it und
 - User (`aqUser`)
 - Password (`aqPassword`)
 
-All three live in the OS keyring, service `DataDoctor`. The server field’s placeholder is the Aquarius **link** you must have (host / base URL your site actually serves). Empty server → Aquarius queries will fail.
+All three live in the OS keyring, service `DataDoctor`. The server field is the Aquarius host / base URL. Empty server → Aquarius queries fail.
 
-Entra vs credential-account login is **not** implemented yet (backlog). Today it is username/password.
+Entra vs credential-account login is not implemented. Username and password are used.
 
 ## TLS certificates
 
-The app **never creates** a `certs/` folder. You create one and drop the server cert in:
+The app never creates a `certs/` folder. Create one and place the server cert:
 
 | File | Behavior |
 |------|----------|
@@ -30,7 +30,7 @@ Search order (existing folders only):
 
 Converted `aquarius.pem` is written **next to** the source file. If conversion fails, the app falls back to system trust, then unverified — it will not keep using a stale pem blindly.
 
-You can instead add the cert to the OS trust store and skip `certs/`.
+The cert can also be added to the OS trust store instead of using `certs/`.
 
 ## Dictionary headers
 

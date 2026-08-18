@@ -16,7 +16,7 @@ Application name is **Data Doctor** (no organization folder). Config is **per us
 | `logs/app.log` | Full Python + Qt logs (Log Viewer tab) |
 | `quickLook/query/` | Saved query lists (Quick Looks) |
 | `quickLook/sql/` | SQL Query Builder snippets |
-| `certs/` | Optional user-level Aquarius cert folder (only if you create it) |
+| `certs/` | Optional user-level Aquarius cert folder (created only if needed) |
 
 Passwords and API keys are **not** in `user.config`. They go to the OS keyring, service name `DataDoctor`:
 

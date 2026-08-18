@@ -35,4 +35,4 @@ If an older file is missing overlay/delta metadata, those checkboxes stay **unch
 
 ## Plot-style Quick Looks
 
-A future plot tool (travel times, delta-pair overlays as saved graph configs) is on the backlog. Today a Quick Look is the **query list**, not a graph layout. After load, use [Graph](Graph) as usual.
+A Quick Look is the **query list**, not a saved graph layout. After load, use [Graph](Graph) as usual.

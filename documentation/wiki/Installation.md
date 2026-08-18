@@ -5,7 +5,7 @@
 - **Python 3.13.x** (tested with 3.13.7)
 - From [`requirements.txt`](https://github.com/S31F3R/DataDoctor/blob/main/requirements.txt): PyQt6, requests, oracledb, keyring, matplotlib, numpy, pygame
 - **USBR queries**: Oracle Instant Client + a working TNS / `tnsnames.ora`
-- **Aquarius**: optional TLS cert you place yourself (see [Aquarius](Aquarius))
+- **Aquarius**: optional TLS certificate (see [Aquarius](Aquarius))
 - **USGS**: optional API key (see [USGS](USGS))
 
 ## From source
@@ -41,12 +41,12 @@ Project Files\
   temp\bunker.db (packaged dictionary for merge only)
 ```
 
-1. Unzip to a folder you can write to.
+1. Unzip to a writable folder.
 2. Install Python 3.13 if needed (an installer may be in the zip). Enable **Add python.exe to PATH**.
 3. Double-click **Data Doctor.exe**.
 4. If a `Project Files\.venv` exists, that env is preferred; otherwise `pip install -r "Project Files\requirements.txt"`.
 
-Do **not** overwrite `Project Files\core\bunker.db` with a zip’s copy if you have local dictionary edits. Updates merge via `applyUpdate.cmd`.
+Do **not** overwrite `Project Files\core\bunker.db` with a zip’s copy if the dictionary has local edits. Updates merge via `applyUpdate.cmd`.
 
 ## Linux AppImage
 
@@ -67,14 +67,14 @@ Needs a matching tool under `scripts/appimagetool/` from [appimagetool releases]
 1. Unzip `DataDoctor-macOS-*.zip`.
 2. Double-click **Data Doctor.command** (needs Python 3.13 and a venv or system env with requirements).
 
-Developers: `python scripts/packageMac.py` (portable zip, can be staged on any host). Native `.app`: run `python scripts/packageMac.py --app` **on a Mac** with PyInstaller.
+A portable zip can be built with `python scripts/packageMac.py`. A native `.app` requires `python scripts/packageMac.py --app` on macOS with PyInstaller.
 
 ## Oracle Instant Client
 
-Packaged Windows/AppImage trees may include Instant Client under `oracle/` (or `Project Files\oracle\`). The app prefers that copy and falls back to a system Instant Client. Point **Options → USBR** at your `tnsnames.ora` if TNS names are not in the default location.
+Packaged Windows/AppImage trees may include Instant Client under `oracle/` (or `Project Files\oracle\`). The app prefers that copy and falls back to a system Instant Client. Set **Options → USBR** to the `tnsnames.ora` path if TNS names are not in the default location.
 
 ## Next
 
 - [Updates and Releases](Updates-and-Releases)
 - [App Data](App-Data)
-- Fill **Options** (USGS key, HDB login, Aquarius server)
+- **Options**: USGS key, HDB login, and/or Aquarius server as needed
