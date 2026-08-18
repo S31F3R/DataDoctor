@@ -950,7 +950,12 @@ class uiMain(QMainWindow):
 
     def btnInfoPressed(self):
         if self.winAbout:
-            self.winAbout.exec()
+            about = self.winAbout
+            if about.isVisible():
+                about.raise_()
+                about.activateWindow()
+            else:
+                about.show()
             if Config.debug: Logic.logMessage("DEBUG", "btnInfoPressed: Opened about dialog")
 
     def _parseQueryDate(self, value):
