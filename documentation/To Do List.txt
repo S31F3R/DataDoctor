@@ -1,34 +1,5 @@
 ####### CURRENT TASKS #######
--GitHub issue from the app (crash + manual) — DISCUSSION / PLANNING ONLY (do not implement yet)
-    -Yes, the GitHub Issues API can create issues (POST /repos/S31F3R/DataDoctor/issues).
-     Repo already has issues enabled. Body can include app.log text.
-    -Do NOT ship a PAT / GitHub App secret inside the desktop app. Anyone can extract
-     it and file spam as Data Doctor. That rules out "app posts the issue by itself"
-     unless we add a tiny backend or a GitHub App that mints short-lived tokens.
-    -Safe options to pick from later:
-        A. Report button / crash dialog opens a pre-filled Issues URL
-           (https://github.com/S31F3R/DataDoctor/issues/new?title=...&body=...)
-           User must be logged into GitHub. No secret in the app. Cannot attach
-           a file via the URL; log text can be copied into the body (size limits).
-        B. Same as A, plus "Copy app.log" / "Open log folder" so the user pastes
-           or attaches the file themselves in the GitHub UI.
-        C. Crash dialog writes a local dump and offers A+B. Uncaught hooks already
-           log tracebacks to app.log (Logic.installExceptionHooks).
-        D. Only if we want true no-login filing: a small relay (Cloud Function /
-           GitHub App) that accepts a dump and opens the issue. Needs hosting +
-           abuse limits. Not for v3.0.
-    -Recommendation: C for first release (crash + a Tools/About "Report an issue"
-     that pre-fills version, OS, and log tail). Revisit D if users will not have
-     a GitHub account.
-    -Also useful later: a GitHub issue template (bug / crash) so the URL lands
-     on a form instead of a blank markdown box.
--Need to start getting this ready for inital release. Need readme.md for github to be setup and need the wiki created for github also
-    -README.md rewritten (GitHub-facing). Wiki pages drafted under documentation/wiki/.
-     GitHub wiki is enabled but has no first page yet — .wiki.git 404s until you
-     create Home once in the GitHub UI (Settings already has Wikis on). After that:
-       git clone https://github.com/S31F3R/DataDoctor.wiki.git
-       copy documentation/wiki/*.md into it and push.
-     Seifer: commit documentation/ (test.txt, this file, wiki/). Grok does not.
+(none)
 
 ####### CURRENT BUGS #######
 (none — moved to documentation/test.txt)
@@ -45,6 +16,7 @@
         -Apply Overwrite Flag
 -Add datatype as an option to add to labels
 -Need a profile tab in options. Allow export/import of quickLooks, override system dark/light mode, etc.
+-Get OAuth App for GitHub stuffs
 
 ####### QUERY ENHANCEMENTS MODIFICATIONS #######
 -Aquarius daily TZ offset (UC 2300 vs expected 0000)
@@ -52,7 +24,7 @@
      meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
 
 ####### WIKI IDEAS #######
-(Drafted under documentation/wiki/ — publish after GitHub Home page exists)
+(Live wiki is DataDoctor.wiki.git. Edit documentation/wiki/; pre-push publishes.)
 -QAQC and how it works with Data Dictionary
 -Aquarius link, what is required
 -Explanation of BOP and EOP for USBR
@@ -65,11 +37,12 @@
 -Expladin how header labels from data dictionary are created 
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
--Update readme  (done — GitHub-facing README.md; Seifer confirm)
--Need documentation on different installers and pre req, maybe add in wiki or readme  (drafted)
--Provide links to stuff like requesting USGS API key, Reclamation website, USGS data browser, and documention on how to find USGS information to create dataID  (README + wiki/USGS)
+-Update readme
+-Need documentation on different installers and pre req, maybe add in wiki or readme
+-Provide links to stuff like requesting USGS API key, Reclamation website, USGS data browser, and documention on how to find USGS information to create dataID
 -Document GitHub Releases: asset names (DataDoctor-Python.zip, DataDoctor-x86_64.AppImage),
-  tag = vMAJOR.MINOR.PATCH or vX.Y.Z-rc.N, check Pre-release for beta  (wiki/Updates-and-Releases)
+  tag = vMAJOR.MINOR.PATCH or vX.Y.Z-rc.N, check Pre-release for beta
+(Public README + wiki cover these. Retest in documentation/test.txt.)
 
 ####### WORKFLOW (for Grok / Seifer) #######
 -To Do List = backlog only (not currently being worked)
@@ -77,8 +50,17 @@
 -When Seifer confirms a test item: mark [x] in test.txt (and leave off this list)
 -If a test fails: keep in test.txt with notes; do not put back on To Do until abandoned
 -Clean up test.txt after confirmed [x] items (standard workflow): drop long steps for [x] into a short Confirmed list; keep retest items detailed
--Documentation: Grok may edit documentation/ as part of normal workflow (To Do, test.txt, notes, etc.)
+-Documentation: Grok may edit documentation/ as part of normal workflow (To Do, test.txt, notes, wiki, README, etc.)
+-README.md and documentation/wiki/ are public. Write them for users / operators.
+  Do not put Seifer-only asides, "talking to you" notes, or Grok/Seifer chatter in them.
+-Seifer-only / Grok-only talk goes in documentation/status.grok (gitignored, like secret.grok).
+  That includes release how-tos, OAuth leftovers, "do this on this machine", etc.
 -Commits:
-    - Grok may auto-commit code paths (ui, core, scripts, README, requirements, sounds, icons, …)
-    - Grok must NOT auto-commit documentation/ — Seifer commits those
-    - secret.grok is gitignored; never commit it
+    - Grok may auto-commit code paths (ui, core, scripts, requirements, sounds, icons, …)
+    - Grok may auto-commit README.md and documentation/wiki/
+    - Grok must NOT auto-commit other documentation/ (To Do, test.txt, notes) — Seifer commits those
+    - secret.grok and status.grok are gitignored; never commit them
+-Wiki: documentation/wiki/ is the working copy. This machine uses
+  `git config core.hooksPath scripts/hooks` so Code-OSS Push also runs
+  scripts/publishWiki.py → https://github.com/S31F3R/DataDoctor.wiki.git
+  when those pages differ. Re-set hooksPath after a fresh clone.

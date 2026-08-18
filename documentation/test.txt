@@ -48,17 +48,31 @@ Current Tests
    Fix: header event filter owns left-clicks; headerSelectPlan keeps Shift
      origin on last plain click only.
 
+[ ] Crash / About Report on GitHub (option C, no stored login)
+   Steps:
+     a. Trigger or simulate an uncaught error — dialog has Report on GitHub,
+        Copy log, Open log folder. Report opens a pre-filled new-issue page
+        (needs a GitHub account; GitHub's own login).
+     b. About → Report issue link opens /issues/new/choose (bug / crash forms).
+     c. No GitHub token / password fields in Options.
+
+[ ] publishRelease.py dry-run + build-only
+   Steps:
+     a. python scripts/publishRelease.py --channel rc --number 1 --dry-run
+        prints plan; does not write Version.py or build.
+     b. python scripts/publishRelease.py --channel published --build-only --skip-appimage --yes
+        writes versioned zips under dist/ (Python, Windows --skip-venv, macOS --skip-venv).
+     c. Asset names contain vMAJOR.MINOR.PATCH and *python* / .AppImage as Update.py expects.
+
 [ ] GitHub README + wiki first pass
    Steps:
      a. Open https://github.com/S31F3R/DataDoctor — README shows install options,
         config paths, certs, packaging table, wiki/releases/issues links.
-     b. Create the first wiki page in the GitHub UI (Wikis is already enabled;
-        the .wiki.git repo does not exist until Home exists). Then push
-        documentation/wiki/*.md (or copy into the cloned wiki repo).
-     c. Wiki Home + sidebar list Installation, Updates, App Data, Querying,
-        Data Dictionary, Overlay/Delta, USGS, USBR HDB, Aquarius, Quick Looks,
-        Graph, CSV Export. Spot-check a couple of pages for accuracy.
-   Notes: Pages live in documentation/wiki/ until the remote wiki is initialized.
+     b. Wiki is live (pre-push from documentation/wiki/). Home + sidebar list
+        Installation, Updates, App Data, Querying, Data Dictionary,
+        Overlay/Delta, USGS, USBR HDB, Aquarius, Quick Looks, Graph, CSV Export.
+     c. Public pages should read as user docs (no Seifer-only asides).
+        Operator notes live in documentation/status.grok.
 
 [ ] HDB password change UI only shows useful outcomes
    Steps:
