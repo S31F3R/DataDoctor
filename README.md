@@ -113,6 +113,7 @@ From the project root:
 
 | Script | Output |
 |--------|--------|
+| `python scripts/publishRelease.py` | Prompts published / rc / beta, builds every asset this host can, optional GitHub upload |
 | `python scripts/packageWindows.py` | Windows launcher zip (`DataDoctor.pyw` under `Project Files/`) |
 | `python scripts/packagePython.py` | `DataDoctor-Python.zip` (update payload / raw Python) |
 | `python scripts/packageAppImage.py` | `dist/DataDoctor-<arch>-YYYYMMDD.AppImage` |

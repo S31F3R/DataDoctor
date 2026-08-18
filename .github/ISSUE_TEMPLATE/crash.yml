@@ -1,0 +1,35 @@
+name: Crash
+description: The unexpected-error dialog appeared, or the app quit
+title: "[Crash] "
+labels: ["crash"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If the in-app crash dialog is still open, **Report on GitHub** pre-fills a
+        markdown issue with the traceback. This form is for filing after the fact.
+        You need a GitHub account.
+  - type: input
+    id: version
+    attributes:
+      label: Data Doctor version
+      placeholder: "3.0.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What were you doing
+    validations:
+      required: true
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Traceback / app.log tail
+      render: shell

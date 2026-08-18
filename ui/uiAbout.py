@@ -181,6 +181,7 @@ class uiAbout(QDialog):
         self._aboutInfo = [
             ('Version', Version.displayVersion()),
             ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
+            ('Report issue', f'https://github.com/{Version.GITHUB_REPO}/issues/new/choose'),
             ('Author', 'S31F3R'),
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
@@ -259,7 +260,7 @@ class uiAbout(QDialog):
             f'font-size: {pt}pt; padding-left: {pad}px; white-space: nowrap; line-height: 2.2;">'
         )
         for label, content in getattr(self, "_aboutInfo", []):
-            if "GitHub" in label:
+            if str(content).startswith("http://") or str(content).startswith("https://"):
                 html += f'{label}: <a href="{content}" style="color: white;">{content}</a><br>'
             else:
                 html += f'{label}: {content}<br>'
