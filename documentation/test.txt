@@ -11,6 +11,25 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
+[ ] Update dialogs: restart, not applyUpdate.cmd
+   Steps:
+     a. Windows launcher + Beta updates. When an update is offered, text says
+        restart Data Doctor (no applyUpdate.cmd).
+     b. After Download, "Restart Data Doctor to apply the update."
+     c. Progress dialog: bar has even left/right margins (not shoved left).
+
+[ ] applyUpdate keeps a single bunker.db.bak
+   Steps:
+     a. Run applyUpdate twice (or merge bunker twice).
+     b. Project Files/core/ has at most one bunker.db.bak (no .bak-timestamp pile).
+
+[ ] About: no scrollbars; ratio lock; maximize still works
+   Steps:
+     a. Open About — no H/V scrollbars; window is 900×479-ish, not a tiny crop.
+     b. Drag a corner — window stays 900:479.
+     c. Maximize — fills the screen; art contained; still no scrollbars.
+     d. Restore — back to ratio, no scrollbars.
+
 [ ] Child windows minimize to the taskbar (not a tiny title bar) — RETEST About
    Steps:
      a. Open Data Dictionary. Minimize it. Expect a taskbar / dock entry (same
