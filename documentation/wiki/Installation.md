@@ -71,7 +71,7 @@ A portable zip can be built with `python scripts/packageMac.py`. A native `.app`
 
 ## Oracle Instant Client
 
-Packaged Windows / Linux / macOS trees may include Instant Client under `oracle/client` (or `Project Files\oracle\client`). The app prefers that copy and falls back to a system Instant Client. Set **Options → USBR** to the `tnsnames.ora` path if TNS names are not in the default location.
+Packaged Windows / Linux / macOS trees may include Instant Client under `oracle/client` (or `Project Files\oracle\client`). Basic and Basic Lite both work. The app prefers that copy and falls back to a system Instant Client. Set **Options → USBR** to the `tnsnames.ora` path if TNS names are not in the default location.
 
 The Python update zip does not include Instant Client (it is OS-specific).
 
