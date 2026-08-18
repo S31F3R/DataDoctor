@@ -11,78 +11,54 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[x] applyUpdate writes DataDoctor.pyw (Windows / existing .pyw)
-   Steps:
-     a. On a Windows launcher install that already has Project Files\DataDoctor.pyw,
-        drop a DataDoctor-Python-*.zip in Update\ and run applyUpdate.cmd.
-     b. Expect Project Files\DataDoctor.pyw updated to the new code.
-     c. Expect NO leftover Project Files\DataDoctor.py (old .pyw must not sit
-        next to a new .py).
-     d. Restart via Data Doctor.exe — it should launch the new .pyw.
-   Notes: Raw Python zip ships DataDoctor.py; applyUpdate now renames on Windows
-     or when .pyw already exists.
-   Fix: scripts/applyUpdate.py installAppEntry.
-
-[x] Graph hover shows table values (raw when raw is on); axis stays clean
-   Steps:
-     a. Options → Raw data ON. Query a series with many decimals (e.g. 9860.479500506332).
-     b. Graph the column. Hover a point — tooltip value must match the table cell
-        (full raw text), not 4-significant-figure rounding.
-     c. Y-axis tick labels stay short/clean (no 7-decimal labels).
-     d. Options → Raw data OFF. Re-query + graph. Hover matches the rounded table
-        cell; axis still clean.
-   Fix: ui/uiGraph.py stores table/overlay display strings on each point.
-
-[ ] Child windows minimize to the taskbar (not a tiny title bar)
+[ ] Child windows minimize to the taskbar (not a tiny title bar) — RETEST About
    Steps:
      a. Open Data Dictionary. Minimize it. Expect a taskbar / dock entry (same
         pattern as a detached Graph), not a shaded title bar in the corner.
      b. Restore from that entry. Window comes back normally.
      c. Open Public/Internal Query. Minimize — same taskbar behavior.
      d. Detached Graph still minimizes to the taskbar as before.
-     e. Close the main window — Data Dictionary / Query close with it.
+     e. Open About (info button). Minimize — taskbar / dock entry, not a
+        shaded title bar. Restore works. Main window stays usable (About is
+        no longer application-modal).
+     f. Close the main window — Data Dictionary / Query / About close with it.
    Notes: Qt parent made these transient; GNOME shade-minimizes those.
-   Fix: Utils.bindIndependentWindow; uiDataDictionary / uiQuery constructed
-     with parent=None.
-     RESPONSE: Data Dictionary fixed, but looks like winAbout has the bug. Fix that one
+     Data Dictionary / Query confirmed. About was still parented + exec() modal.
+   Fix: Utils.bindIndependentWindow; uiAbout constructed with parent=None,
+     NonModal, shown via show() (not exec()).
 
-[x] Query finish selects Data Query tab
-   Steps:
-     a. Run a query, then switch to the Graph tab (leave Graph attached).
-     b. Run another query (or Refresh). When it finishes, Data Query tab is
-        selected — not still sitting on Graph.
-     c. If Data Query tab was closed, it is re-added at index 0 and selected.
-   Fix: core/Query.py executeQuery always setCurrentIndex after placing tabMain.
-
-[x] Overlay / delta use the display limiter (raw mode)
-   Steps:
-     a. Options → Raw data ON. Overlay (and/or Delta) a pair whose raw DB
-        values differ only past float/display precision
-        (e.g. 9860.479500506332 vs 9860.47950050633).
-     b. Table cells / regular Details still show the full raw DB value.
-     c. Overlay Details: Primary Value and Secondary Value match the limiter
-        (same string, e.g. 9860.47950050633) and Delta is 0 (not 0.000000000002).
-     d. If Delta column is on, that cell is 0 (unsigned, not scientific notation).
-     e. Overlay cell is not painted red for that matching row.
-   Fix: core/QueryUtils.py modifyTable deltas/overlay from valuePrecision
-     strings; uiDetails populateOverlay uses those strings as-is.
-
-[ ] Header multi-select (Shift / Ctrl like cells) — RETEST Ctrl highlight
+[ ] Header multi-select (Shift / Ctrl like cells) — RETEST Ctrl + Shift origin
    Steps:
      a. Click column header A → whole column selected + header highlight.
      b. Shift+click header D → columns A–D all selected (full columns).
      c. Ctrl+click header B (when B is selected) → B deselects; others stay.
+        No flash off-then-on.
      d. Ctrl+click an unselected header → adds that full column (stays highlighted).
-     e. Ctrl+Shift+click extends range and adds it to existing selection.
-     f. Cell multi-select (shift/ctrl in body) still works; headers still highlight
+     e. After a Ctrl+click, Shift+click still extends from the last *plain*
+        click (A), not from the Ctrl-clicked column. Plain-click a new column
+        first if you want a new Shift range.
+     f. Ctrl+Shift+click extends range from the plain-click origin and adds
+        it to the existing selection.
+     g. Cell multi-select (shift/ctrl in body) still works; headers still highlight
         every selected column.
-     g. Header right-click Graph graphs all selected columns.
-   Notes: Shift was OK. Ctrl flashed then cleared (Qt sectionPressed→selectColumn
-     already multi-selected; our sectionClicked double-toggled it off).
-   Fix: Upload.ensureHeaderSelectionSync disconnects sectionPressed; selectEntireColumn
-     owns plain/Shift/Ctrl header selection + highlight.
-   RESPONSE (prior): Shift OK; Ctrl visual flash-off; shift after ctrl still used anchor.
-   RESPONSE: This is acting REALLY weird. Ctrl click still flashes but uses it, same bug as before. But now if I try to shift click to highlight a new area, it's still using that ctrl click one, like I can't get rid of it remembering the ctrl click
+     h. Header right-click Graph graphs all selected columns.
+     i. Dragging a header edge still resizes the column.
+   Notes: Qt C++ sectionPressed→selectColumn survived Python disconnect
+     (Ctrl flash). Ctrl also stole the Shift origin.
+   Fix: header event filter owns left-clicks; headerSelectPlan keeps Shift
+     origin on last plain click only.
+
+[ ] GitHub README + wiki first pass
+   Steps:
+     a. Open https://github.com/S31F3R/DataDoctor — README shows install options,
+        config paths, certs, packaging table, wiki/releases/issues links.
+     b. Create the first wiki page in the GitHub UI (Wikis is already enabled;
+        the .wiki.git repo does not exist until Home exists). Then push
+        documentation/wiki/*.md (or copy into the cloned wiki repo).
+     c. Wiki Home + sidebar list Installation, Updates, App Data, Querying,
+        Data Dictionary, Overlay/Delta, USGS, USBR HDB, Aquarius, Quick Looks,
+        Graph, CSV Export. Spot-check a couple of pages for accuracy.
+   Notes: Pages live in documentation/wiki/ until the remote wiki is initialized.
 
 [ ] HDB password change UI only shows useful outcomes
    Steps:
@@ -127,6 +103,10 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] applyUpdate writes DataDoctor.pyw (Windows / existing .pyw)
+[x] Graph hover shows table values (raw when raw is on); axis stays clean
+[x] Query finish selects Data Query tab
+[x] Overlay / delta use the display limiter (raw mode)
 [x] USGS / Aquarius Data Dictionary second-line source tag
 [x] Multi Y-axis graph (distinct value bands + hide axis with legend)
 [x] Graph Y-scale fits data in current X view (outlier off-screen)
