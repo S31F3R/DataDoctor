@@ -24,17 +24,16 @@
      meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
 
 ####### WIKI IDEAS #######
-(Live wiki is DataDoctor.wiki.git. Edit documentation/wiki/; pre-push publishes.)
--QAQC and how it works with Data Dictionary
--Aquarius link, what is required
--Explanation of BOP and EOP for USBR
--Overlay and delta explanation
--Overlay auto marked for edits/upload
--CSV dumps based on Data Query tab or SQL Build tab
--Diffrent quicklooks, how to save/use them
--AppData, what is stored and where
--dataDictionary valuePrecision and precisionOverride explanation
--Expladin how header labels from data dictionary are created 
+(Published — all of these have pages. Edit documentation/wiki/; pre-push updates GitHub.)
+-QAQC and Data Dictionary → wiki/Data-Dictionary
+-Aquarius link / certs → wiki/Aquarius
+-BOP and EOP → wiki/USBR-HDB
+-Overlay and delta + auto-mark for upload → wiki/Overlay-and-Delta
+-CSV from Data Query or SQL Builder → wiki/CSV-Export
+-Quick Looks save/load → wiki/Quick-Looks
+-AppData locations → wiki/App-Data
+-valuePrecision / precisionOverride → wiki/Data-Dictionary
+-Header labels from the dictionary → wiki/Data-Dictionary
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme

@@ -64,6 +64,25 @@ Current Tests
         writes versioned zips under dist/ (Python, Windows --skip-venv, macOS --skip-venv).
      c. Asset names contain vMAJOR.MINOR.PATCH and *python* / .AppImage as Update.py expects.
 
+[ ] publishRelease re-upload same tag — RETEST
+   Steps:
+     a. v3.0.0-rc.1 already exists (https://github.com/S31F3R/DataDoctor/releases/tag/v3.0.0-rc.1).
+     b. python scripts/publishRelease.py --channel rc --number 1 --upload --skip-build --yes
+        must NOT 422 already_exists.
+     c. Script says the release already exists, replaces same-named assets, finishes OK.
+   Notes: Second --upload POSTed a new release; GitHub rejected the duplicate tag.
+   Fix: GET release by tag first; delete+replace assets with the same name.
+
+[ ] publishRelease --upload without `gh` CLI — RETEST
+   Steps:
+     a. Builds already succeeded (dist/DataDoctor-*-v3.0.0-rc.1.*).
+     b. python scripts/publishRelease.py --channel rc --number 1 --upload --skip-build --yes
+        must NOT crash with FileNotFoundError: 'gh'.
+     c. Uses GITHUB_TOKEN / git credential if `gh` is missing.
+     d. Creates GitHub Pre-release v3.0.0-rc.1 and attaches the four dist files.
+   Notes: githubToken() called `gh` without catching a missing binary.
+   Fix: FileNotFoundError → fall through to git credential; --skip-build reuses dist/.
+
 [ ] GitHub README + wiki first pass
    Steps:
      a. Open https://github.com/S31F3R/DataDoctor — README shows install options,
