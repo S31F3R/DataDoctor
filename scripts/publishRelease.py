@@ -314,7 +314,7 @@ def githubToken() -> str | None:
     return gitCredentialToken()
 
 
-def apiJson(method: str, url: str, token: str, body=None, raw=False):
+def apiJson(method: str, url: str, token: str, body=None, raw=False, allowCodes=()):
     data = None
     headers = {
         "User-Agent": f"DataDoctor-publish/{Version.displayVersion()}",
@@ -335,8 +335,19 @@ def apiJson(method: str, url: str, token: str, body=None, raw=False):
                 return {}
             return json.loads(payload.decode("utf-8"))
     except urllib.error.HTTPError as e:
+        if e.code in allowCodes:
+            try:
+                e.read()
+            except Exception:
+                pass
+            return None
         err = e.read().decode("utf-8", errors="replace")
         die(f"GitHub API {method} {url} → HTTP {e.code}\n{err}")
+
+
+def getReleaseByTag(token: str, tag: str) -> dict | None:
+    url = f"https://api.github.com/repos/{REPO}/releases/tags/{urllib.parse.quote(tag)}"
+    return apiJson("GET", url, token, allowCodes=(404,))
 
 
 def createRelease(token: str, version: str, channel: str, target: str, notes: str) -> dict:
@@ -354,7 +365,39 @@ def createRelease(token: str, version: str, channel: str, target: str, notes: st
     return apiJson("POST", url, token, body)
 
 
+def ensureRelease(token: str, version: str, channel: str, target: str, notes: str) -> dict:
+    """Create the release, or reuse it if this tag was already published."""
+    tag = f"v{version}"
+    existing = getReleaseByTag(token, tag)
+    if existing:
+        html = existing.get("html_url") or ""
+        log(f"Release {tag} already exists — updating assets")
+        if html:
+            log(f"  {html}")
+        return existing
+    created = createRelease(token, version, channel, target, notes)
+    if created:
+        return created
+    # Race or odd 422: fetch again
+    again = getReleaseByTag(token, tag)
+    if again:
+        return again
+    die(f"could not create or load release {tag}")
+
+
+def deleteReleaseAsset(token: str, assetId: int) -> None:
+    url = f"https://api.github.com/repos/{REPO}/releases/assets/{int(assetId)}"
+    apiJson("DELETE", url, token)
+
+
 def uploadAsset(token: str, release: dict, path: Path, assetName: str) -> None:
+    assets = list(release.get("assets") or [])
+    for asset in assets:
+        if asset.get("name") == assetName and asset.get("id") is not None:
+            log(f"  replacing existing {assetName}")
+            deleteReleaseAsset(token, int(asset["id"]))
+            release["assets"] = [a for a in assets if a.get("id") != asset.get("id")]
+            break
     uploadTmpl = release.get("upload_url") or ""
     # upload_url looks like https://uploads.github.com/.../assets{?name,label}
     base = uploadTmpl.split("{", 1)[0]
@@ -547,7 +590,7 @@ def main() -> int:
     else:
         notes = defaultNotes(version, channel, [p for _, p in built])
 
-    release = createRelease(token, version, channel, target, notes)
+    release = ensureRelease(token, version, channel, target, notes)
     html = release.get("html_url") or ""
     for it, path in built:
         uploadAsset(token, release, path, it["assetName"])
