@@ -298,13 +298,19 @@ def githubToken() -> str | None:
         val = (os.environ.get(key) or "").strip()
         if val:
             return val
-    gh = subprocess.run(
-        ["gh", "auth", "token"],
-        capture_output=True,
-        text=True,
-    )
-    if gh.returncode == 0 and (gh.stdout or "").strip():
-        return gh.stdout.strip()
+    # gh is optional — missing binary must not abort the upload
+    try:
+        gh = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+        )
+        if gh.returncode == 0 and (gh.stdout or "").strip():
+            return gh.stdout.strip()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        pass
     return gitCredentialToken()
 
 
@@ -438,6 +444,12 @@ def parseArgs() -> argparse.Namespace:
         help="skip the PyInstaller AppImage (slow)",
     )
     p.add_argument(
+        "--skip-build",
+        dest="skipBuild",
+        action="store_true",
+        help="do not run packagers; upload/reuse files already in dist/",
+    )
+    p.add_argument(
         "--target",
         default=None,
         help="git branch or SHA the GitHub tag should point at (default: current branch)",
@@ -478,16 +490,27 @@ def main() -> int:
         log("dry-run: stopping before build / upload")
         return 0
 
-    if not args.yes and not askYes("Build the BUILD assets above?", True):
-        die("aborted")
-
     built: list[tuple[dict, Path]] = []
-    for it in items:
-        if not it["ok"]:
-            continue
-        path = runPackager(it, dryRun=False)
-        if path is not None:
-            built.append((it, path))
+    if args.skipBuild:
+        log("Skipping packagers (--skip-build); using existing dist/ files")
+        for it in items:
+            if not it["ok"]:
+                continue
+            if it["out"].is_file():
+                mb = it["out"].stat().st_size / (1024 * 1024)
+                log(f"  reuse {it['out']} ({mb:.1f} MB)")
+                built.append((it, it["out"]))
+            else:
+                die(f"--skip-build but missing {it['out']}")
+    else:
+        if not args.yes and not askYes("Build the BUILD assets above?", True):
+            die("aborted")
+        for it in items:
+            if not it["ok"]:
+                continue
+            path = runPackager(it, dryRun=False)
+            if path is not None:
+                built.append((it, path))
 
     if not built:
         die("nothing was built")
@@ -504,8 +527,8 @@ def main() -> int:
     if not doUpload:
         log("Skipping GitHub upload. Files are in dist/.")
         log("Upload later with: python scripts/publishRelease.py --channel "
-            f"{channel} --yes --upload --skip-appimage")
-        log("(re-run will rebuild; or attach dist/ files in the GitHub UI)")
+            f"{channel} --yes --upload --skip-build")
+        log("(reuses dist/ files; or attach them in the GitHub UI)")
         return 0
 
     token = githubToken()
