@@ -131,6 +131,10 @@ def modifyTable(
         # Deltas: use primary series rule (same units as primary)
         dRule = pRule
 
+        # Display-limited strings (raw → formatRawNumber; else DEC/SIG). Overlay
+        # details and delta both use these so matching displayed values are 0.
+        pDispCol = [''] * numRows
+        sDispCol = [''] * numRows
         for r in range(numRows):
             pText = grid[pIdx][r] if pIdx < len(grid) else ''
             sText = grid[sIdx][r] if sIdx < len(grid) else ''
@@ -138,15 +142,22 @@ def modifyTable(
             sDec = parseDecimalText(sText)
             if pDec is not None:
                 primaryVals[r] = float(pDec)
+                pDispCol[r] = Logic.valuePrecision(pText, rule=pRule)
             if sDec is not None:
                 secondaryVals[r] = float(sDec)
-            # Delta from already-formatted display strings (buildTable applied
-            # valuePrecision). Matching display text → exact 0 (never -0.00).
+                sDispCol[r] = Logic.valuePrecision(sText, rule=sRule)
+            # Delta off the limiter, not the raw database strings. Matching
+            # display text → exact 0 (never 1e-15 / 0.000000000002).
             if pDec is not None and sDec is not None:
-                if str(pText).strip() == str(sText).strip():
+                if pDispCol[r] == sDispCol[r]:
                     deltaDecimals[r] = Decimal(0)
                 else:
-                    deltaDecimals[r] = pDec - sDec
+                    pDispDec = parseDecimalText(pDispCol[r])
+                    sDispDec = parseDecimalText(sDispCol[r])
+                    if pDispDec is not None and sDispDec is not None:
+                        deltaDecimals[r] = pDispDec - sDispDec
+                    else:
+                        deltaDecimals[r] = pDec - sDec
 
         if overlayChecked:
             # Merge secondary into primary column offline
@@ -155,9 +166,9 @@ def modifyTable(
             for r in range(numRows):
                 hasP = np.isfinite(primaryVals[r])
                 hasS = np.isfinite(secondaryVals[r])
-                # Prefer Decimal delta from display strings; never use str(float) path
-                pStr = Logic.valuePrecision(primaryVals[r], rule=pRule) if hasP else ''
-                sStr = Logic.valuePrecision(secondaryVals[r], rule=sRule) if hasS else ''
+                # Same limiter strings used for the delta check (not a re-float)
+                pStr = pDispCol[r] if hasP else ''
+                sStr = sDispCol[r] if hasS else ''
                 dStr = formatDeltaValue(deltaDecimals[r], dRule)
                 roles[r] = {
                     'primaryVal': pStr,

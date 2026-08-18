@@ -1,0 +1,23 @@
+#!/bin/sh
+# Publish documentation/wiki/ to DataDoctor.wiki.git when it differs.
+# Installed via: git config core.hooksPath scripts/hooks
+#
+# Git feeds ref lines on stdin — consume them so the pipe does not break.
+while read -r _unused; do
+    :
+done
+
+root=$(git rev-parse --show-toplevel) || exit 1
+script="$root/scripts/publishWiki.py"
+if [ ! -f "$script" ]; then
+    echo "wiki: missing $script — skip" >&2
+    exit 0
+fi
+
+if [ -x "$root/.venv/bin/python" ]; then
+    py="$root/.venv/bin/python"
+else
+    py="python3"
+fi
+
+exec "$py" "$script" --from-hook

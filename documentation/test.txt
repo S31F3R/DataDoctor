@@ -11,36 +11,68 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] USGS / Aquarius Data Dictionary second-line source tag
+[ ] Child windows minimize to the taskbar (not a tiny title bar) — RETEST About
    Steps:
-     a. Query a USGS series that IS in the data dictionary (e.g. PVLC bunker row).
-        Expect header: first line "commonName-datatype", second line "USGS"
-        (not the interval).
-     b. Query an Aquarius series that IS in the data dictionary.
-        Expect header: first line "commonName-datatype", second line "AQUARIUS"
-        (not the UID / location id).
-     c. Query a USBR/HDB series in the dictionary — second line still SDID (or SDID-MRID);
-        unchanged.
-     d. Query USGS / Aquarius series NOT in the dictionary — labeling stays the old
-        path (USGS Site Name / interval, Aquarius API label / location).
-   Notes: Only dict hits with a real commonName get the source tag.
-   Fix: core/Query.py buildTable dict-hit branches.
+     a. Open Data Dictionary. Minimize it. Expect a taskbar / dock entry (same
+        pattern as a detached Graph), not a shaded title bar in the corner.
+     b. Restore from that entry. Window comes back normally.
+     c. Open Public/Internal Query. Minimize — same taskbar behavior.
+     d. Detached Graph still minimizes to the taskbar as before.
+     e. Open About (info button). Minimize — taskbar / dock entry, not a
+        shaded title bar. Restore works. Main window stays usable (About is
+        no longer application-modal).
+     f. Close the main window — Data Dictionary / Query / About close with it.
+   Notes: Qt parent made these transient; GNOME shade-minimizes those.
+     Data Dictionary / Query confirmed. About was still parented + exec() modal.
+   Fix: Utils.bindIndependentWindow; uiAbout constructed with parent=None,
+     NonModal, shown via show() (not exec()).
 
-[ ] Header multi-select (Shift / Ctrl like cells) — RETEST Ctrl highlight
+[ ] Header multi-select (Shift / Ctrl like cells) — RETEST Ctrl + Shift origin
    Steps:
      a. Click column header A → whole column selected + header highlight.
      b. Shift+click header D → columns A–D all selected (full columns).
      c. Ctrl+click header B (when B is selected) → B deselects; others stay.
+        No flash off-then-on.
      d. Ctrl+click an unselected header → adds that full column (stays highlighted).
-     e. Ctrl+Shift+click extends range and adds it to existing selection.
-     f. Cell multi-select (shift/ctrl in body) still works; headers still highlight
+     e. After a Ctrl+click, Shift+click still extends from the last *plain*
+        click (A), not from the Ctrl-clicked column. Plain-click a new column
+        first if you want a new Shift range.
+     f. Ctrl+Shift+click extends range from the plain-click origin and adds
+        it to the existing selection.
+     g. Cell multi-select (shift/ctrl in body) still works; headers still highlight
         every selected column.
-     g. Header right-click Graph graphs all selected columns.
-   Notes: Shift was OK. Ctrl flashed then cleared (Qt sectionPressed→selectColumn
-     already multi-selected; our sectionClicked double-toggled it off).
-   Fix: Upload.ensureHeaderSelectionSync disconnects sectionPressed; selectEntireColumn
-     owns plain/Shift/Ctrl header selection + highlight.
-   RESPONSE (prior): Shift OK; Ctrl visual flash-off; shift after ctrl still used anchor.
+     h. Header right-click Graph graphs all selected columns.
+     i. Dragging a header edge still resizes the column.
+   Notes: Qt C++ sectionPressed→selectColumn survived Python disconnect
+     (Ctrl flash). Ctrl also stole the Shift origin.
+   Fix: header event filter owns left-clicks; headerSelectPlan keeps Shift
+     origin on last plain click only.
+
+[ ] Crash / About Report on GitHub (option C, no stored login)
+   Steps:
+     a. Trigger or simulate an uncaught error — dialog has Report on GitHub,
+        Copy log, Open log folder. Report opens a pre-filled new-issue page
+        (needs a GitHub account; GitHub's own login).
+     b. About → Report issue link opens /issues/new/choose (bug / crash forms).
+     c. No GitHub token / password fields in Options.
+
+[ ] publishRelease.py dry-run + build-only
+   Steps:
+     a. python scripts/publishRelease.py --channel rc --number 1 --dry-run
+        prints plan; does not write Version.py or build.
+     b. python scripts/publishRelease.py --channel published --build-only --skip-appimage --yes
+        writes versioned zips under dist/ (Python, Windows --skip-venv, macOS --skip-venv).
+     c. Asset names contain vMAJOR.MINOR.PATCH and *python* / .AppImage as Update.py expects.
+
+[ ] GitHub README + wiki first pass
+   Steps:
+     a. Open https://github.com/S31F3R/DataDoctor — README shows install options,
+        config paths, certs, packaging table, wiki/releases/issues links.
+     b. Wiki is live (pre-push from documentation/wiki/). Home + sidebar list
+        Installation, Updates, App Data, Querying, Data Dictionary,
+        Overlay/Delta, USGS, USBR HDB, Aquarius, Quick Looks, Graph, CSV Export.
+     c. Public pages should read as user docs (no Seifer-only asides).
+        Operator notes live in documentation/status.grok.
 
 [ ] HDB password change UI only shows useful outcomes
    Steps:
@@ -85,6 +117,11 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] applyUpdate writes DataDoctor.pyw (Windows / existing .pyw)
+[x] Graph hover shows table values (raw when raw is on); axis stays clean
+[x] Query finish selects Data Query tab
+[x] Overlay / delta use the display limiter (raw mode)
+[x] USGS / Aquarius Data Dictionary second-line source tag
 [x] Multi Y-axis graph (distinct value bands + hide axis with legend)
 [x] Graph Y-scale fits data in current X view (outlier off-screen)
 [x] Graph legend toggle keeps current X zoom

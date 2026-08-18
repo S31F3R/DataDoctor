@@ -1,0 +1,46 @@
+name: Bug report
+description: Something in Data Doctor is wrong or confusing
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        You need a GitHub account. Please attach or paste a tail of `app.log` if you have one
+        (About → Report issue, or the crash dialog **Copy log** / **Open log folder**).
+  - type: input
+    id: version
+    attributes:
+      label: Data Doctor version
+      placeholder: "3.0.0 (About window)"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "Windows 11 / Ubuntu 24.04 / macOS …"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - Windows launcher zip (Data Doctor.exe)
+        - Linux AppImage
+        - macOS Data Doctor.command
+        - From source
+        - Other
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: app.log tail (optional)
+      render: shell

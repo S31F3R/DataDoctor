@@ -35,7 +35,8 @@ USGS_DEFAULT_INTERVAL = 'INSTANT:15'
 class uiQuery(QMainWindow):
     """Query window: Builds and executes public/internal API calls."""
     def __init__(self, winMain=None):
-        super().__init__(parent=winMain)
+        # No Qt parent: child QMainWindows shade-minimize instead of taskbar.
+        super().__init__(None)
         uiPath = Logic.resourcePath('ui/winQuery.ui')
 
         if Config.debug:
@@ -155,7 +156,7 @@ class uiQuery(QMainWindow):
         # Set initial state
         Logic.initializeQueryWindow(self, self.rbCustomDateTime, self.dteStartDate, self.dteEndDate)
         Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowMaximizeButtonHint)
+        Utils.bindIndependentWindow(self, owner=winMain, allowMaximize=False)
 
         if Config.debug:
             Logic.logMessage("DEBUG", "uiQuery initialized")

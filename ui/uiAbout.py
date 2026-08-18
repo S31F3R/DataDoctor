@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QUrl, QSize, QObject, QEvent, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QImage, QColor, QPainter
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput, QSoundEffect
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import uic
 
 from core import Logic, Utils, Version
@@ -69,6 +69,14 @@ def _addTitle(title, factory, markKey):
     _CATALOG.append({"title": title, "factory": factory, "key": markKey})
 
 
+def _logicalPlaySize(lw, lh, baseH=479, minW=640, maxW=3200):
+    """Play buffer matches the window aspect at stock height — fill has no bars."""
+    lw = max(1, int(lw))
+    lh = max(1, int(lh))
+    pw = int(round(baseH * (lw / float(lh))))
+    return max(minW, min(pw, maxW)), int(baseH)
+
+
 def _starfieldPixmap(width=900, height=479, seed=31415):
     """Plain starfield for SELECT mode — no app logo / wordmark."""
     pm = QPixmap(width, height)
@@ -103,7 +111,9 @@ class uiAbout(QDialog):
     _BASE_H = 479
 
     def __init__(self, winMain=None):
-        super().__init__(parent=winMain)
+        # No Qt parent: a child QDialog is transient and GNOME shade-minimizes
+        # it to a tiny title bar. Same pattern as Data Dictionary / Query.
+        super().__init__(None)
         uic.loadUi(Logic.resourcePath('ui/winAbout.ui'), self)
         self.winMain = winMain
         self._cabinetMode = False
@@ -128,23 +138,39 @@ class uiAbout(QDialog):
             "left": False, "right": False, "up": False, "down": False,
         }
         self._playPulses = []
-        self._playLetterbox = None
         self._backdropSize = None
+        self._aboutBgSrc = None
+        self._aboutBgSize = None
+        self._aboutLaidSize = None
         self._closing = False
 
         self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
         self.buttonSecret = self.findChild(QPushButton, 'buttonSecret')
+        # Flags only here (before first show). Toggling them on a live window
+        # hides it and can duplicate title-bar buttons on some WMs.
+        Utils.bindIndependentWindow(self, owner=winMain, allowMaximize=True)
+        # Force NonModal even if an older .ui still says ApplicationModal
+        # (modal About shade-minimizes and blocks the main window).
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        self.setModal(False)
         self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
         self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
-        self.setFixedSize(900, 479)
+        # Always resizable. setFixedSize after a larger frame is what left
+        # the grey strip and made min/max buttons flicker.
+        self.setMinimumSize(720, 383)
+        self.resize(self._BASE_W, self._BASE_H)
         self.setWindowTitle(self._TITLE_DEFAULT)
+        pal = self.palette()
+        pal.setColor(self.backgroundRole(), QColor(0, 0, 0))
+        self.setPalette(pal)
+        self.setAutoFillBackground(True)
 
         pngPath = Logic.resourcePath('ui/DataDoctor.png')
-        pixmap = QPixmap(pngPath)
-        scaledPixmap = pixmap.scaled(900, 479, Qt.AspectRatioMode.KeepAspectRatio)
-        self.backgroundLabel.setPixmap(scaledPixmap)
-        self.backgroundLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._aboutBgSrc = QPixmap(pngPath)
+        if self.backgroundLabel is not None:
+            self.backgroundLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.backgroundLabel.setStyleSheet("background-color: black;")
         aboutFont = Utils.makeFontForRole('about')
         fam = Utils.ensureRetroFontLoaded() or aboutFont.family()
         pt = Utils.rolePointSize('about', retro=True)
@@ -152,35 +178,25 @@ class uiAbout(QDialog):
         retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
         self._retroFam = fam
         self._retroPt = pt
-        self.textInfo.setFont(retroFontObj)
-
-        infoList = [
+        self._aboutInfo = [
             ('Version', Version.displayVersion()),
             ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
+            ('Report issue', f'https://github.com/{Version.GITHUB_REPO}/issues/new/choose'),
             ('Author', 'S31F3R'),
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
         ]
-        htmlContent = (
-            f'<html><body style="color: white; font-family: \'{fam}\'; '
-            f'font-size: {pt}pt; padding-left: 50px; white-space: nowrap; line-height: 2.2;">'
-        )
-        for label, content in infoList:
-            if 'GitHub' in label:
-                htmlContent += f'{label}: <a href="{content}" style="color: white;">{content}</a><br>'
-            else:
-                htmlContent += f'{label}: {content}<br>'
-        htmlContent += '</body></html>'
-        self.textInfo.setHtml(htmlContent)
-        self.textInfo.setOpenExternalLinks(True)
-        self.textInfo.setStyleSheet("background-color: transparent; border: none;")
-        self.textInfo.setGeometry(70, 140, 800, 200)
+        if self.textInfo is not None:
+            self.textInfo.setFont(retroFontObj)
+            self.textInfo.setOpenExternalLinks(True)
+            self.textInfo.setStyleSheet("background-color: transparent; border: none;")
         self.setupSecretButton()
         self.mediaPlayer = None
         self.audioOutput = None
         self.setupMusic()
         self._ensureCabinetWidgets()
         self._ensurePlayHost()
+        self._layoutAboutChrome()
 
     def setupMusic(self):
         try:
@@ -216,9 +232,13 @@ class uiAbout(QDialog):
         if not self.buttonSecret:
             return
         self.buttonSecret.raise_()
-        self.buttonSecret.setGeometry(900 - 26, 479 - 26, 22, 22)
+        self.buttonSecret.setGeometry(self._BASE_W - 26, self._BASE_H - 26, 22, 22)
         self.buttonSecret.setText("")
         self.buttonSecret.setFlat(True)
+        # Click only — QDialog would otherwise treat this as the Enter default.
+        self.buttonSecret.setAutoDefault(False)
+        self.buttonSecret.setDefault(False)
+        self.buttonSecret.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.buttonSecret.setCursor(Qt.CursorShape.PointingHandCursor)
         self.buttonSecret.setToolTip("")
         self.buttonSecret.setStyleSheet(
@@ -231,6 +251,63 @@ class uiAbout(QDialog):
             self.buttonSecret.setIcon(QIcon(iconPath))
         self.buttonSecret.setIconSize(QSize(16, 16))
         self.buttonSecret.clicked.connect(self.buttonSecretPressed)
+
+    def _aboutInfoHtml(self, pt):
+        fam = getattr(self, "_retroFam", "monospace")
+        pad = max(24, int(round(50 * (pt / float(max(1, self._retroPt))))))
+        html = (
+            f'<html><body style="color: white; font-family: \'{fam}\'; '
+            f'font-size: {pt}pt; padding-left: {pad}px; white-space: nowrap; line-height: 2.2;">'
+        )
+        for label, content in getattr(self, "_aboutInfo", []):
+            if str(content).startswith("http://") or str(content).startswith("https://"):
+                html += f'{label}: <a href="{content}" style="color: white;">{content}</a><br>'
+            else:
+                html += f'{label}: {content}<br>'
+        html += '</body></html>'
+        return html
+
+    def _layoutAboutChrome(self):
+        """Fit the designed 900×479 About frame in the window.
+
+        Cover-crop (like play) ate the ASCII title on wide maximize. Contain
+        keeps the whole poster; leftover is the dialog's black fill.
+        """
+        w = max(1, self.width())
+        h = max(1, self.height())
+        fit = min(w / float(self._BASE_W), h / float(self._BASE_H))
+        fw = max(1, int(round(self._BASE_W * fit)))
+        fh = max(1, int(round(self._BASE_H * fit)))
+        ox = (w - fw) // 2
+        oy = (h - fh) // 2
+        if self.backgroundLabel is not None:
+            self.backgroundLabel.setGeometry(ox, oy, fw, fh)
+            src = self._aboutBgSrc
+            key = (fw, fh)
+            if src is not None and not src.isNull() and self._aboutBgSize != key:
+                self.backgroundLabel.setPixmap(src.scaled(
+                    fw, fh,
+                    Qt.AspectRatioMode.IgnoreAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                ))
+                self._aboutBgSize = key
+        if self.textInfo is not None and not self._cabinetActive():
+            pt = max(self._retroPt, int(round(self._retroPt * min(fit, 2.4))))
+            self.textInfo.setGeometry(
+                ox + int(70 * fit), oy + int(140 * fit),
+                max(200, int(800 * fit)), max(80, int(200 * fit)),
+            )
+            if self._aboutLaidSize != (fw, fh, pt):
+                retroFontObj = QFont(self._retroFam, pt)
+                retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
+                self.textInfo.setFont(retroFontObj)
+                self.textInfo.setHtml(self._aboutInfoHtml(pt))
+                self._aboutLaidSize = (fw, fh, pt)
+        if self.buttonSecret is not None and not self._cabinetActive():
+            bs = max(22, int(round(22 * min(fit, 2.0))))
+            self.buttonSecret.setGeometry(ox + fw - bs - 4, oy + fh - bs - 4, bs, bs)
+            self.buttonSecret.setIconSize(QSize(max(16, bs - 6), max(16, bs - 6)))
+            self.buttonSecret.raise_()
 
     def buttonSecretPressed(self):
         dlg = QMessageBox(self)
@@ -366,11 +443,7 @@ class uiAbout(QDialog):
         return bool(self._cabinetMode or self._playMode or self._splashMode)
 
     def _unlockCabinetSize(self):
-        # Size only — never setWindowFlag here. Flag changes hide a live dialog
-        # (About is opened with exec()), which makes the window vanish.
-        self.setMinimumSize(720, 383)
-        self.setMaximumSize(16777215, 16777215)
-        self._playLetterbox = None
+        # Size policy is already free. Do not touch flags or setFixedSize.
         self._layoutCabinetChrome()
         if not getattr(self, "_closing", False) and not self.isVisible():
             self.show()
@@ -378,22 +451,22 @@ class uiAbout(QDialog):
             self.activateWindow()
 
     def _lockStockSize(self):
+        # Keep the current frame (including maximize). Forcing 900×479 here
+        # after a larger play window left a grey strip on the right.
         closing = getattr(self, "_closing", False)
-        if self.isFullScreen() or self.isMaximized():
-            self.showNormal()
-        self.setFixedSize(self._BASE_W, self._BASE_H)
-        self._playLetterbox = None
-        self._backdropSize = None
+        self._aboutBgSize = None
+        self._aboutLaidSize = None
         if closing:
+            if self.isFullScreen() or self.isMaximized():
+                self.showNormal()
+            self.resize(self._BASE_W, self._BASE_H)
             return
-        Utils.centerWindowToParent(self)
+        self._layoutAboutChrome()
         if self.isVisible():
             self.raise_()
             self.activateWindow()
 
     def _toggleCabinetFill(self):
-        if not self._cabinetActive():
-            return
         if self.isFullScreen() or self.isMaximized():
             self.showNormal()
         else:
@@ -401,9 +474,11 @@ class uiAbout(QDialog):
         QTimer.singleShot(0, self._afterFillToggle)
 
     def _afterFillToggle(self):
-        self._playLetterbox = None
         if self._cabinetActive():
             self._layoutCabinetChrome()
+            self._syncSessionSize()
+        else:
+            self._layoutAboutChrome()
 
     def _layoutCabinetChrome(self):
         w = max(1, self.width())
@@ -456,55 +531,57 @@ class uiAbout(QDialog):
                 f"font-family: '{fam}'; font-size: {pt + 3}pt;"
             )
 
-    def _letterboxFill(self, lw, lh):
-        cached = self._playLetterbox
-        if cached is not None and cached.size() == QSize(lw, lh):
-            return cached
-        path = Logic.resourcePath("ui/fx/b0.png")
-        src = QPixmap(path) if path and os.path.isfile(path) else QPixmap()
-        if src.isNull():
-            fill = _starfieldPixmap(lw, lh)
-        else:
-            cover = src.scaled(
-                lw, lh,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            x = max(0, (cover.width() - lw) // 2)
-            y = max(0, (cover.height() - lh) // 2)
-            fill = cover.copy(x, y, lw, lh)
-        self._playLetterbox = fill
-        return fill
+    def _playLogicalSize(self):
+        label = self._playLabel
+        lw = max(1, label.width() if label is not None else self.width())
+        lh = max(1, label.height() if label is not None else self.height())
+        return _logicalPlaySize(lw, lh, self._BASE_H)
+
+    def _syncSessionSize(self):
+        sess = self._session
+        if sess is None:
+            return
+        applySize = getattr(sess, "applySize", None)
+        if not callable(applySize):
+            return
+        pw, ph = self._playLogicalSize()
+        try:
+            applySize(pw, ph)
+        except Exception as e:
+            Logic.logMessage("WARN", f"Optional view resize failed: {e}")
 
     def _presentPlayImage(self, qimg):
+        """Cover-scale the play buffer so the label is full-bleed (no side bars)."""
         label = self._playLabel
         if label is None or qimg is None or qimg.isNull():
             return
         lw = max(1, label.width())
         lh = max(1, label.height())
         game = QPixmap.fromImage(qimg)
-        gw, gh = game.width(), game.height()
-        if gw < 1 or gh < 1:
+        if game.width() < 1 or game.height() < 1:
             return
-        scale = min(lw / float(gw), lh / float(gh))
-        nw = max(1, int(round(gw * scale)))
-        nh = max(1, int(round(gh * scale)))
-        scaled = game.scaled(
-            nw, nh,
-            Qt.AspectRatioMode.IgnoreAspectRatio,
+        cover = game.scaled(
+            lw, lh,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
             Qt.TransformationMode.SmoothTransformation,
         )
-        canvas = QPixmap(self._letterboxFill(lw, lh))
-        painter = QPainter(canvas)
-        painter.drawPixmap((lw - nw) // 2, (lh - nh) // 2, scaled)
-        painter.end()
-        label.setPixmap(canvas)
+        x = max(0, (cover.width() - lw) // 2)
+        y = max(0, (cover.height() - lh) // 2)
+        label.setPixmap(cover.copy(x, y, lw, lh))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self._cabinetActive():
-            self._playLetterbox = None
             self._layoutCabinetChrome()
+            self._syncSessionSize()
+        else:
+            self._layoutAboutChrome()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        # Title-bar maximize can deliver the new size a tick later.
+        if event.type() == QEvent.Type.WindowStateChange:
+            QTimer.singleShot(0, self._afterFillToggle)
 
     def eventFilter(self, obj, event):
         if self._splashMode and event.type() == QEvent.Type.KeyPress:
@@ -850,6 +927,7 @@ class uiAbout(QDialog):
             self._playLabel.setFocus(Qt.FocusReason.OtherFocusReason)
             self._playLabel.clear()
         self._layoutCabinetChrome()
+        self._syncSessionSize()
         if self._gameTimer is not None:
             self._gameTimer.start()
 
@@ -860,6 +938,7 @@ class uiAbout(QDialog):
         dt = max(0.0, min(0.05, now - self._lastTick))
         self._lastTick = now
         try:
+            self._syncSessionSize()
             img = self._session.tick(dt, self._playKeys, self._playPulses)
             self._playPulses = []
             if img is not None and self._playLabel is not None:
@@ -902,7 +981,7 @@ class uiAbout(QDialog):
             self.startMusic()
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_F11 and self._cabinetActive():
+        if event.key() == Qt.Key.Key_F11:
             self._toggleCabinetFill()
             return
         if self._splashMode:
@@ -927,6 +1006,9 @@ class uiAbout(QDialog):
                 return
             if self._moveCatalog(key, event.text()):
                 return
+        # Stock About: QDialog would click the default button on Enter.
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            return
         super().keyPressEvent(event)
 
     def keyReleaseEvent(self, event):
@@ -935,9 +1017,16 @@ class uiAbout(QDialog):
             return
         super().keyReleaseEvent(event)
 
-    def exec(self):
+    def show(self):
         self._closing = False
-        return super().exec()
+        super().show()
+
+    def exec(self):
+        # Modal exec() shade-minimizes on GNOME. About is a free window.
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        return QDialog.DialogCode.Accepted
 
     def closeEvent(self, event):
         self._closing = True
@@ -963,6 +1052,7 @@ class uiAbout(QDialog):
             if self.buttonSecret is not None:
                 self.buttonSecret.show()
                 self.buttonSecret.raise_()
+            self._layoutAboutChrome()
             self.startMusic()
         super().showEvent(event)
 
@@ -1084,7 +1174,7 @@ if pygame is not None:
             return None
 
     class _Sfx:
-        """One-shots via Qt so they share the About audio device."""
+        """One-shots on the same QMediaPlayer path as About music (survives capture apps)."""
 
         _NAMES = {
             "shoot": "c0.wav",
@@ -1101,66 +1191,47 @@ if pygame is not None:
         def __init__(self, host=None):
             self.ok = False
             self.sounds = {}
+            self._paths = {}
+            self._players = {}
             self._ufoName = "ufo"
-            parent = host if isinstance(host, QObject) else None
+            self._owner = QObject()
             try:
                 for key, fn in self._NAMES.items():
                     path = Logic.resourcePath(f"ui/fx/{fn}")
                     if not path or not os.path.isfile(path):
                         continue
-                    fx = QSoundEffect(parent)
-                    fx.setSource(QUrl.fromLocalFile(os.path.abspath(path)))
-                    fx.setVolume(0.8)
-                    self.sounds[key] = fx
-                self.ok = bool(self.sounds)
+                    path = os.path.abspath(path)
+                    self._paths[key] = path
+                    out = QAudioOutput(self._owner)
+                    out.setVolume(0.95 if key == "boomP" else 0.8)
+                    pl = QMediaPlayer(self._owner)
+                    pl.setAudioOutput(out)
+                    pl.setSource(QUrl.fromLocalFile(path))
+                    self._players[key] = pl
+                self.ok = bool(self._players)
             except Exception:
                 self.ok = False
-                self.sounds = {}
-            if not self.ok:
-                self._initMixerFallback()
-
-        def _initMixerFallback(self):
-            try:
-                mix = _pygameMixer()
-                if mix is None:
-                    return
-                if mix.get_init() is None:
-                    mix.init(frequency=44100, size=-16, channels=2, buffer=512)
-                for key, fn in self._NAMES.items():
-                    path = Logic.resourcePath(f"ui/fx/{fn}")
-                    if path and os.path.isfile(path):
-                        self.sounds[key] = mix.Sound(path)
-                self.ok = bool(self.sounds)
-            except Exception:
-                self.ok = False
-
-        def _isQtFx(self, snd):
-            return hasattr(snd, "isPlaying")
+                self._paths = {}
+                self._players = {}
 
         def play(self, name):
             if not self.ok:
                 return
-            snd = self.sounds.get(name)
-            if snd is None:
+            pl = self._players.get(name)
+            if pl is None:
                 return
             try:
-                if self._isQtFx(snd):
-                    if snd.isPlaying():
-                        snd.stop()
-                    snd.play()
-                else:
-                    snd.play()
+                pl.stop()
+                pl.setPosition(0)
+                pl.play()
             except Exception:
                 pass
 
         def stop(self, name=None):
-            names = [name] if name else list(self.sounds)
-            for key in names:
-                snd = self.sounds.get(key)
-                if snd is None:
-                    continue
+            players = [self._players[name]] if name and name in self._players else list(self._players.values())
+            for pl in players:
                 try:
-                    snd.stop()
+                    pl.stop()
                 except Exception:
                     pass
 
@@ -1169,6 +1240,85 @@ if pygame is not None:
 
         def stopUfo(self):
             self.stop(self._ufoName)
+
+    class _Bgm:
+        """Per-title menu / play loops on QMediaPlayer (same path as About music)."""
+
+        # markKey → (menu, play)
+        _FILES = {
+            "ab": ("c9.wav", "c10.wav"),
+            "ls": ("c11.wav", "c12.wav"),
+            "ic": ("c13.wav", "c14.wav"),
+        }
+
+        def __init__(self, host=None, markKey="ab"):
+            owner = host if isinstance(host, QObject) else QObject()
+            self._owner = owner
+            self._menu = None
+            self._game = None
+            self._cur = None
+            pair = self._FILES.get(str(markKey or ""))
+            if not pair:
+                return
+            self._menu = self._load(pair[0], owner)
+            self._game = self._load(pair[1], owner)
+
+        def _load(self, fn, owner):
+            try:
+                path = Logic.resourcePath(f"ui/fx/{fn}")
+                if not path or not os.path.isfile(path):
+                    return None
+                out = QAudioOutput(owner)
+                out.setVolume(0.55)
+                pl = QMediaPlayer(owner)
+                pl.setAudioOutput(out)
+                pl.setSource(QUrl.fromLocalFile(os.path.abspath(path)))
+                pl.setLoops(-1)
+                return pl
+            except Exception:
+                return None
+
+        def playMenu(self):
+            self._go(self._menu, restart=True)
+
+        def playGame(self):
+            # Same track + unpause: do not rewind
+            self._go(self._game, restart=False)
+
+        def pause(self):
+            if self._cur is None:
+                return
+            try:
+                self._cur.pause()
+            except Exception:
+                pass
+
+        def stop(self):
+            for pl in (self._menu, self._game):
+                if pl is None:
+                    continue
+                try:
+                    pl.stop()
+                except Exception:
+                    pass
+            self._cur = None
+
+        def _go(self, pl, restart):
+            if pl is None:
+                return
+            try:
+                if self._cur is pl:
+                    if restart:
+                        pl.setPosition(0)
+                    pl.play()
+                    return
+                if self._cur is not None:
+                    self._cur.stop()
+                self._cur = pl
+                pl.setPosition(0)
+                pl.play()
+            except Exception:
+                pass
 
     def _fxPath(name):
         try:
@@ -1288,7 +1438,6 @@ if pygame is not None:
                 pass
             _ensureDisplay()
 
-            self.screen = pygame.Surface((W, H))
             fontPath = None
             try:
                 fontPath = Logic.resourcePath("ui/fonts/PressStart2P-Regular.ttf")
@@ -1305,20 +1454,12 @@ if pygame is not None:
                 self.font = pygame.font.Font(None, 22)
                 self.bigFont = pygame.font.Font(None, 36)
 
-            self.bg = _coverSurf(_loadSurf("b0.png"), W, H)
-            if self.bg is not None and self.bg.get_size() != (W, H):
-                try:
-                    self.bg = pygame.transform.smoothscale(self.bg, (W, H))
-                except Exception:
-                    self.bg = pygame.transform.scale(self.bg, (W, H))
-            self.stars = _loadSurf("b23.png")
-            if self.stars is not None:
-                if self.stars.get_size() != (W, H):
-                    try:
-                        self.stars = pygame.transform.scale(self.stars, (W, H))
-                    except Exception:
-                        pass
-                self.stars = _asOverlay(self.stars)
+            self._bgSrc = _loadSurf("b0.png")
+            self._starSrc = _loadSurf("b23.png")
+            self._view = None
+            self.screen = None
+            self.bg = None
+            self.stars = None
             self.playerImg = _fitSurf(_loadSurf("b1.png"), 52, 70)
             self.pBullet = _fitSurf(_loadSurf("b2.png"), 7, 18)
             self.eImg = {
@@ -1373,6 +1514,7 @@ if pygame is not None:
                 self.expFrames[key] = frames
 
             self.audio = _Sfx(host)
+            self.bgm = _Bgm(host, markKey)
             self.highScore = _readMark(self._markKey)
             self.state = "MENU"
             self.score = 0
@@ -1391,7 +1533,7 @@ if pygame is not None:
             self.title = "ALIEN BLASTER" if mode == "ab" else "LAST STAND"
 
             self.playerX = W * 0.5
-            self.playerY = 428.0
+            self.playerY = H - 51.0
             self.playerDead = False
             self.dieWait = 0.0
             self.pShots = []
@@ -1410,6 +1552,74 @@ if pygame is not None:
             self.maxPShots = 1 if mode == "ab" else 2
             self.playerSpeed = 260.0
             self.tilt = 0.0
+            self.applySize(W, H)
+            self._syncBgm()
+
+        def applySize(self, pw, ph):
+            """Rebuild the offscreen view so the playfield matches the window aspect.
+
+            Height stays ~479; width follows the window. Positions are scaled
+            so maximize/un-maximize does not jump the ship or formation.
+            """
+            global W, H
+            pw = max(640, int(pw))
+            ph = max(360, int(ph))
+            oldW, oldH = W, H
+            if self._view == (pw, ph) and self.screen is not None:
+                if self.screen.get_size() == (pw, ph):
+                    return
+            W, H = pw, ph
+            self._view = (pw, ph)
+            self.screen = pygame.Surface((W, H))
+            self.bg = _coverSurf(self._bgSrc, W, H)
+            stars = self._starSrc
+            if stars is not None:
+                try:
+                    self.stars = pygame.transform.scale(stars, (W, H))
+                except Exception:
+                    self.stars = stars
+                self.stars = _asOverlay(self.stars)
+            else:
+                self.stars = None
+            if oldW > 0 and oldW != W:
+                ratio = W / float(oldW)
+                self.playerX *= ratio
+                for s in self.pShots:
+                    s["x"] *= ratio
+                for s in self.eShots:
+                    s["x"] *= ratio
+                for e in self.enemies:
+                    e["x"] *= ratio
+                    if "slotX" in e:
+                        e["slotX"] *= ratio
+                for bar in self.barriers:
+                    bar["x"] *= ratio
+                if self.ufo is not None:
+                    self.ufo["x"] *= ratio
+                for f in self.fx:
+                    f["x"] *= ratio
+            if oldH > 0 and oldH != H:
+                yRatio = H / float(oldH)
+                self.playerY *= yRatio
+                for s in self.pShots:
+                    s["y"] *= yRatio
+                for s in self.eShots:
+                    s["y"] *= yRatio
+                for e in self.enemies:
+                    e["y"] *= yRatio
+                    if "slotY" in e:
+                        e["slotY"] *= yRatio
+                for bar in self.barriers:
+                    bar["y"] *= yRatio
+                if self.ufo is not None:
+                    self.ufo["y"] *= yRatio
+                for f in self.fx:
+                    f["y"] *= yRatio
+            else:
+                self.playerY = H - 51.0
+            pwShip, _ph = self._playerSize()
+            half = pwShip * 0.5
+            self.playerX = max(half + 8, min(W - half - 8, self.playerX))
 
         def loadHigh(self):
             return _readMark(self._markKey)
@@ -1419,6 +1629,22 @@ if pygame is not None:
 
         def playS(self, name):
             self.audio.play(name)
+
+        def _syncBgm(self):
+            bgm = getattr(self, "bgm", None)
+            if bgm is None:
+                return
+            if not getattr(self, "running", True):
+                bgm.stop()
+                return
+            if self.state == "PLAYING":
+                bgm.playGame()
+            elif self.state == "PAUSED":
+                bgm.pause()
+            elif self.state in ("MENU", "GAME_OVER"):
+                bgm.playMenu()
+            else:
+                bgm.stop()
 
         def _playerSize(self):
             if self.playerImg is not None:
@@ -1439,7 +1665,7 @@ if pygame is not None:
             self.extraAwarded = False
             self.highScore = self.loadHigh()
             self.playerX = W * 0.5
-            self.playerY = 428.0
+            self.playerY = H - 51.0
             self.tilt = 0.0
             self.playerDead = False
             self.dieWait = 0.0
@@ -1454,6 +1680,7 @@ if pygame is not None:
             self.message = ""
             self.messageT = 0.0
             self._setupWave()
+            self._syncBgm()
 
         def _addEnemy(self, kind, slotX, slotY, inbound=False, delay=0.0):
             if inbound:
@@ -1488,9 +1715,15 @@ if pygame is not None:
             self.eShootT = 0.8
             self.diveT = 1.6
             delay = 0.0
+            span = W / 900.0
             if self.mode == "ls":
                 # Tapered hold: fewer on top, wider below (centered).
-                layout = ((3, 4, 86.0), (2, 6, 72.0), (1, 8, 64.0), (1, 10, 58.0))
+                layout = (
+                    (3, 4, 86.0 * span),
+                    (2, 6, 72.0 * span),
+                    (1, 8, 64.0 * span),
+                    (1, 10, 58.0 * span),
+                )
                 originY = 50.0
                 gapY = 36.0
                 for r, (kind, count, gapX) in enumerate(layout):
@@ -1504,8 +1737,9 @@ if pygame is not None:
                         delay += 0.08
             else:
                 cols, rows = 8, 4
-                gapX, gapY = 78, 38
-                originX = 86.0
+                gapX, gapY = 78.0 * span, 38
+                rowW = (cols - 1) * gapX
+                originX = (W - rowW) * 0.5
                 originY = 58.0
                 kinds = [3, 2, 1, 1]
                 for r in range(rows):
@@ -1517,11 +1751,15 @@ if pygame is not None:
             self.barriers = []
             if self.mode == "ab" and self.barrierSrc is not None:
                 bw, bh = self.barrierSrc.get_size()
-                for i, bx in enumerate((118, 304, 490, 676)):
+                n = 4
+                margin = max(40.0, W * 0.10)
+                spanX = max(0.0, W - 2 * margin - bw)
+                xs = [margin + spanX * i / (n - 1) for i in range(n)] if n > 1 else [W * 0.5 - bw * 0.5]
+                for bx in xs:
                     surf = self.barrierSrc.copy()
                     self.barriers.append({
-                        "x": bx,
-                        "y": 366,
+                        "x": float(bx),
+                        "y": H - 113,
                         "surf": surf,
                         "mask": pygame.mask.from_surface(surf),
                         "w": bw,
@@ -1597,6 +1835,7 @@ if pygame is not None:
                 self.state = "GAME_OVER"
                 self.playS("over")
                 self.saveHigh()
+                self._syncBgm()
                 return
             self.playerDead = False
             self.playerX = W * 0.5
@@ -1670,12 +1909,14 @@ if pygame is not None:
                     else:
                         self.audio.stop()
                         self.running = False
+                    self._syncBgm()
                 elif p == "p":
                     if self.state == "PLAYING":
                         self.audio.stop()
                         self.state = "PAUSED"
                     elif self.state == "PAUSED":
                         self.state = "PLAYING"
+                    self._syncBgm()
                 elif p in ("space", "click"):
                     if self.state == "MENU":
                         self.beginPlay()
@@ -2098,6 +2339,853 @@ if pygame is not None:
                 self.audio.stop()
             except Exception:
                 pass
+            try:
+                self.bgm.stop()
+            except Exception:
+                pass
+            if self.score > self.highScore:
+                self.highScore = self.score
+                self.saveHigh()
+
+    class _CabinetIn:
+        """Horizontal free-flight scroller — original title Incursion."""
+
+        WORLD = 3600
+        _EXP = {
+            "player": ("b8.png", "b9.png"),
+            "e2": ("b8.png", "b9.png"),
+            "e1": ("b10.png", "b11.png"),
+            "e3": ("b12.png", "b13.png"),
+            "ufo": ("b14.png", "b15.png"),
+        }
+
+        def __init__(self, host, markKey="ic"):
+            self.host = host
+            self._markKey = markKey
+            self.running = True
+            try:
+                if not pygame.get_init():
+                    pygame.init()
+            except Exception:
+                pygame.init()
+            try:
+                pygame.font.init()
+            except Exception:
+                pass
+            _ensureDisplay()
+
+            fontPath = None
+            try:
+                fontPath = Logic.resourcePath("ui/fonts/PressStart2P-Regular.ttf")
+            except Exception:
+                fontPath = None
+            if fontPath and os.path.isfile(fontPath):
+                try:
+                    self.font = pygame.font.Font(fontPath, 10)
+                    self.bigFont = pygame.font.Font(fontPath, 16)
+                except Exception:
+                    self.font = pygame.font.Font(None, 22)
+                    self.bigFont = pygame.font.Font(None, 36)
+            else:
+                self.font = pygame.font.Font(None, 22)
+                self.bigFont = pygame.font.Font(None, 36)
+
+            self._bgSrc = _loadSurf("b0.png")
+            self._starSrc = _loadSurf("b23.png")
+            self._view = None
+            self.screen = None
+            self.bg = None
+            self.stars = None
+            self.bgLoop = None
+            self.starLoop = None
+            side = _loadSurf("b35.png")
+            self.playerR = _fitSurf(side, 72, 38)
+            self.playerL = None
+            if self.playerR is not None:
+                try:
+                    self.playerL = pygame.transform.flip(self.playerR, True, False)
+                except Exception:
+                    self.playerL = self.playerR
+            # Horizontal bolt is authored tip-right. Flip for left fire.
+            self.pBulletR = _fitSurf(_loadSurf("b36.png"), 18, 6)
+            self.pBulletL = None
+            if self.pBulletR is not None:
+                try:
+                    self.pBulletL = pygame.transform.flip(self.pBulletR, True, False)
+                except Exception:
+                    self.pBulletL = self.pBulletR
+            # Same trail as AB/LS, laid over for left/right so it stays behind the tip.
+            rawTrail = [
+                _fitSurf(_loadSurf("b28.png"), 7, 11),
+                _fitSurf(_loadSurf("b29.png"), 7, 12),
+            ]
+            self.pTrailR = [self._rot90(f, clockwise=True) for f in rawTrail]
+            self.pTrailL = []
+            for f in self.pTrailR:
+                if f is None:
+                    self.pTrailL.append(None)
+                else:
+                    try:
+                        self.pTrailL.append(pygame.transform.flip(f, True, False))
+                    except Exception:
+                        self.pTrailL.append(f)
+            self.eImg = {
+                1: _fitSurf(_loadSurf("b3.png"), 30, 28),
+                2: _fitSurf(_loadSurf("b4.png"), 32, 30),
+                3: _fitSurf(_loadSurf("b5.png"), 28, 36),
+            }
+            self.eIdle = {
+                1: _fitSurf(_loadSurf("b18.png"), 30, 28),
+                2: _fitSurf(_loadSurf("b19.png"), 32, 30),
+                3: _fitSurf(_loadSurf("b20.png"), 28, 36),
+            }
+            # Authored nose-down (e3 ball at the bottom, tail up). Aimed at fire.
+            self.eBullets = {
+                1: [
+                    _fitSurf(_loadSurf("b6.png"), 8, 20),
+                    _fitSurf(_loadSurf("b30.png"), 8, 20),
+                ],
+                2: [
+                    _fitSurf(_loadSurf("b31.png"), 10, 28),
+                    _fitSurf(_loadSurf("b32.png"), 10, 28),
+                ],
+                3: [
+                    _fitSurf(_loadSurf("b33.png"), 18, 40),
+                    _fitSurf(_loadSurf("b34.png"), 18, 40),
+                ],
+            }
+            self.ufoBullets = [
+                _fitSurf(_loadSurf("b37.png"), 22, 22),
+                _fitSurf(_loadSurf("b38.png"), 22, 22),
+            ]
+            self.ufoImg = _fitSurf(_loadSurf("b16.png"), 44, 30)
+            self.lifeImg = _fitSurf(_loadSurf("b17.png"), 16, 16)
+            flameR = [
+                self._rot90(_fitSurf(_loadSurf("b24.png"), 9, 16), clockwise=True),
+                self._rot90(_fitSurf(_loadSurf("b25.png"), 8, 18), clockwise=True),
+            ]
+            self.flameR = flameR
+            self.flameL = []
+            for f in flameR:
+                if f is None:
+                    self.flameL.append(None)
+                else:
+                    try:
+                        self.flameL.append(pygame.transform.flip(f, True, False))
+                    except Exception:
+                        self.flameL.append(f)
+            self.expFrames = {}
+            for key, pair in self._EXP.items():
+                frames = []
+                for fn in pair:
+                    frames.append(_fitSurf(_loadSurf(fn), 36, 36))
+                self.expFrames[key] = frames
+
+            self.audio = _Sfx(host)
+            self.bgm = _Bgm(host, markKey)
+            self.highScore = _readMark(self._markKey)
+            self.state = "MENU"
+            self.title = "INCURSION"
+            self.score = 0
+            self.lives = 3
+            self.wave = 1
+            self.extraAwarded = False
+            self.playerX = 400.0
+            self.playerY = H * 0.5
+            self.vx = 0.0
+            self.vy = 0.0
+            self.face = 1
+            self.camX = 0.0
+            self.camShift = 0.0
+            self.playerDead = False
+            self.dieWait = 0.0
+            self.invuln = 0.0
+            self.pShots = []
+            self.eShots = []
+            self.enemies = []
+            self.fx = []
+            self.idleT = 0.0
+            self.idleFrame = 0
+            self.flameT = 0.0
+            self.flameFrame = 0
+            self.message = ""
+            self.messageT = 0.0
+            self.maxPShots = 3
+            self.accel = 780.0
+            self.maxSpeed = 300.0
+            self.drag = 2.4
+            self.applySize(W, H)
+            self._syncBgm()
+
+        def applySize(self, pw, ph):
+            """Widen the camera window to the host aspect.
+
+            World coords stay put — a wider window just shows more of the course.
+            """
+            global W, H
+            pw = max(640, int(pw))
+            ph = max(360, int(ph))
+            pw = min(pw, max(640, self.WORLD - 200))
+            if self._view == (pw, ph) and self.screen is not None:
+                if self.screen.get_size() == (pw, ph):
+                    return
+            oldH = H
+            W, H = pw, ph
+            self._view = (pw, ph)
+            self.screen = pygame.Surface((W, H))
+            self.bg = _coverSurf(self._bgSrc, W, H)
+            stars = self._starSrc
+            if stars is not None:
+                try:
+                    self.stars = pygame.transform.scale(stars, (W, H))
+                except Exception:
+                    self.stars = stars
+                self.stars = _asOverlay(self.stars)
+            else:
+                self.stars = None
+            self.bgLoop = self._loopStrip(self.bg, alpha=False)
+            self.starLoop = self._loopStrip(self.stars, alpha=True)
+            if oldH > 0 and oldH != H:
+                yRatio = H / float(oldH)
+                self.playerY *= yRatio
+                for s in self.pShots:
+                    s["y"] *= yRatio
+                for s in self.eShots:
+                    s["y"] *= yRatio
+                for e in self.enemies:
+                    e["y"] *= yRatio
+                for f in self.fx:
+                    f["y"] *= yRatio
+            _pw, phShip = self._playerSize()
+            self.playerY = max(40 + phShip * 0.5, min(H - 22 - phShip * 0.5, self.playerY))
+
+        def _rot90(self, img, clockwise=False):
+            if img is None:
+                return None
+            try:
+                ang = -90 if clockwise else 90
+                return pygame.transform.rotate(img, ang)
+            except Exception:
+                return img
+
+        def _aimBolt(self, frames, vx, vy):
+            """Rotate nose-down bolt frames so the head leads (vx, vy)."""
+            if not frames:
+                return []
+            ang = 90.0 - math.degrees(math.atan2(vy, vx))
+            out = []
+            for img in frames:
+                if img is None:
+                    out.append(None)
+                    continue
+                try:
+                    out.append(pygame.transform.rotozoom(img, ang, 1.0))
+                except Exception:
+                    try:
+                        out.append(pygame.transform.rotate(img, ang))
+                    except Exception:
+                        out.append(img)
+            return out
+
+        def _loopStrip(self, img, alpha=False):
+            """Mirror-join so horizontal wrap has no hard cut."""
+            if img is None:
+                return None
+            try:
+                iw, ih = img.get_size()
+                flags = pygame.SRCALPHA if alpha else 0
+                strip = pygame.Surface((iw * 2, ih), flags)
+                if not alpha:
+                    try:
+                        strip = strip.convert()
+                    except Exception:
+                        pass
+                    strip.fill((0, 0, 0))
+                strip.blit(img, (0, 0))
+                try:
+                    strip.blit(pygame.transform.flip(img, True, False), (iw, 0))
+                except Exception:
+                    strip.blit(img, (iw, 0))
+                return strip
+            except Exception:
+                return img
+
+        def loadHigh(self):
+            return _readMark(self._markKey)
+
+        def saveHigh(self):
+            _writeMark(self._markKey, self.highScore)
+
+        def playS(self, name):
+            self.audio.play(name)
+
+        def _syncBgm(self):
+            bgm = getattr(self, "bgm", None)
+            if bgm is None:
+                return
+            if not getattr(self, "running", True):
+                bgm.stop()
+                return
+            if self.state == "PLAYING":
+                bgm.playGame()
+            elif self.state == "PAUSED":
+                bgm.pause()
+            elif self.state in ("MENU", "GAME_OVER"):
+                bgm.playMenu()
+            else:
+                bgm.stop()
+
+        def _wrap(self, x):
+            w = self.WORLD
+            return x % w
+
+        def _wrapDelta(self, a, b):
+            w = self.WORLD
+            return (a - b + w * 0.5) % w - w * 0.5
+
+        def _sx(self, wx):
+            return (wx - self.camX) % self.WORLD
+
+        def _screenXs(self, wx, pad=80):
+            s = self._sx(wx)
+            out = []
+            if -pad <= s <= W + pad:
+                out.append(s)
+            if s > self.WORLD - W - pad:
+                out.append(s - self.WORLD)
+            return out
+
+        def beginPlay(self):
+            self.audio.stop()
+            self.score = 0
+            self.lives = 3
+            self.wave = 1
+            self.extraAwarded = False
+            self.highScore = self.loadHigh()
+            self.playerX = 400.0
+            self.playerY = H * 0.5
+            self.vx = 0.0
+            self.vy = 0.0
+            self.face = 1
+            self.camX = 0.0
+            self.camShift = 0.0
+            self.playerDead = False
+            self.dieWait = 0.0
+            self.invuln = 0.0
+            self.pShots = []
+            self.eShots = []
+            self.fx = []
+            self.message = ""
+            self.messageT = 0.0
+            self.state = "PLAYING"
+            self._setupWave()
+            self._syncBgm()
+
+        def _setupWave(self):
+            self.enemies = []
+            n = 7 + self.wave * 2
+            n = min(18, n)
+            for i in range(n):
+                kind = 1 if i % 5 < 3 else (2 if i % 5 == 3 else 3)
+                self.enemies.append({
+                    "kind": kind,
+                    "x": random.random() * self.WORLD,
+                    "y": 50 + random.random() * 360,
+                    "vx": random.uniform(-40, 40),
+                    "vy": random.uniform(-30, 30),
+                    "shotT": random.uniform(0.6, 2.2),
+                    "ufo": False,
+                })
+            if self.wave >= 2:
+                self.enemies.append({
+                    "kind": 2,
+                    "x": random.random() * self.WORLD,
+                    "y": 80 + random.random() * 200,
+                    "vx": 90 if random.random() < 0.5 else -90,
+                    "vy": 0.0,
+                    "shotT": 1.4,
+                    "ufo": True,
+                })
+
+        def _addScore(self, n):
+            self.score += int(n)
+            if self.score > self.highScore:
+                self.highScore = self.score
+                self.saveHigh()
+            if (not self.extraAwarded) and self.score >= 2000:
+                self.extraAwarded = True
+                self.lives += 1
+                self.playS("life")
+                self.message = "EXTRA LIFE"
+                self.messageT = 1.4
+
+        def _spawnFx(self, kind, x, y):
+            frames = self.expFrames.get(kind) or self.expFrames.get("e1") or []
+            self.fx.append({"x": x, "y": y, "frames": frames, "i": 0, "t": 0.0})
+
+        def _playerSize(self):
+            img = self.playerR if self.face >= 0 else self.playerL
+            if img is not None:
+                return img.get_size()
+            return (64, 32)
+
+        def _overlap(self, a, b):
+            return a[0] < b[0] + b[2] and a[0] + a[2] > b[0] and a[1] < b[1] + b[3] and a[1] + a[3] > b[1]
+
+        def _firePlayer(self):
+            if self.playerDead or self.state != "PLAYING":
+                return
+            if len(self.pShots) >= self.maxPShots:
+                return
+            pw, _ph = self._playerSize()
+            self.pShots.append({
+                "x": self.playerX + self.face * pw * 0.45,
+                "y": self.playerY,
+                "vx": self.face * 420.0,
+                "gone": 0.0,
+            })
+            self.playS("shoot")
+
+        def _killPlayer(self):
+            if self.playerDead or self.invuln > 0:
+                return
+            self.playerDead = True
+            self.dieWait = 1.25
+            self._spawnFx("player", self.playerX, self.playerY)
+            self.playS("boomP")
+            self.lives -= 1
+            self.pShots = []
+            if self.lives <= 0:
+                self.saveHigh()
+
+        def _nextLifeOrOver(self):
+            if self.lives <= 0:
+                self.state = "GAME_OVER"
+                self.playS("over")
+                self.saveHigh()
+                self._syncBgm()
+                return
+            self.playerDead = False
+            self.invuln = 1.6
+            self.vx = 0.0
+            self.vy = 0.0
+            self.eShots = []
+
+        def handlePulses(self, pulses, keys):
+            for p in pulses:
+                if p == "escape":
+                    self.audio.stop()
+                    if self.state in ("PLAYING", "PAUSED"):
+                        self.state = "MENU"
+                    else:
+                        self.running = False
+                    self._syncBgm()
+                elif p == "p":
+                    if self.state == "PLAYING":
+                        self.audio.stop()
+                        self.state = "PAUSED"
+                    elif self.state == "PAUSED":
+                        self.state = "PLAYING"
+                    self._syncBgm()
+                elif p in ("space", "click"):
+                    if self.state in ("MENU", "GAME_OVER"):
+                        self.beginPlay()
+                    elif self.state == "PLAYING":
+                        self._firePlayer()
+                elif p == "r":
+                    if self.state in ("GAME_OVER", "MENU"):
+                        self.beginPlay()
+
+        def update(self, dt, keys):
+            if self.state != "PLAYING":
+                return
+            if self.messageT > 0:
+                self.messageT -= dt
+            self.idleT += dt
+            if self.idleT >= 0.38:
+                self.idleT = 0.0
+                self.idleFrame = 1 - self.idleFrame
+            self.flameT += dt
+            self.flameFrame = 0 if int(self.flameT / 0.07) % 2 == 0 else 1
+            if self.invuln > 0:
+                self.invuln -= dt
+
+            if self.playerDead:
+                self.dieWait -= dt
+                self._updateFx(dt)
+                if self.dieWait <= 0:
+                    self._nextLifeOrOver()
+                return
+
+            ax = 0.0
+            ay = 0.0
+            if keys.get("left"):
+                ax -= 1.0
+                self.face = -1
+            if keys.get("right"):
+                ax += 1.0
+                self.face = 1
+            if keys.get("up"):
+                ay -= 1.0
+            if keys.get("down"):
+                ay += 1.0
+            if ax and ay:
+                ax *= 0.707
+                ay *= 0.707
+            self.vx += ax * self.accel * dt
+            self.vy += ay * self.accel * dt
+            damp = max(0.0, 1.0 - self.drag * dt)
+            if not ax:
+                self.vx *= damp
+            if not ay:
+                self.vy *= damp
+            sp = math.hypot(self.vx, self.vy)
+            if sp > self.maxSpeed:
+                self.vx *= self.maxSpeed / sp
+                self.vy *= self.maxSpeed / sp
+            self.playerX = self._wrap(self.playerX + self.vx * dt)
+            self.playerY += self.vy * dt
+            pw, ph = self._playerSize()
+            self.playerY = max(40 + ph * 0.5, min(H - 22 - ph * 0.5, self.playerY))
+
+            # Keep the ship centered. Look-ahead follows velocity only (not facing),
+            # so flipping left/right does not yank the whole view.
+            look = max(-55.0, min(55.0, self.vx * 0.16))
+            target = self.playerX - W * 0.5 + look
+            oldCam = self.camX
+            self.camX = self._wrap(oldCam + self._wrapDelta(target, oldCam) * min(1.0, 3.2 * dt))
+            self.camShift += self._wrapDelta(self.camX, oldCam)
+
+            # Player bolts do not wrap — a miss leaves the view and frees the slot.
+            keepP = []
+            for s in self.pShots:
+                s["x"] += s["vx"] * dt
+                s["gone"] = s.get("gone", 0.0) + abs(s["vx"] * dt)
+                sx = self._wrapDelta(s["x"], self.camX)
+                if s["gone"] > self.WORLD * 0.4:
+                    continue
+                if sx < -48 or sx > W + 48:
+                    continue
+                keepP.append(s)
+            self.pShots = keepP
+
+            for s in self.eShots:
+                s["x"] = self._wrap(s["x"] + s["vx"] * dt)
+                s["y"] += s["vy"] * dt
+            self.eShots = [s for s in self.eShots if 20 < s["y"] < H - 8]
+
+            for e in self.enemies:
+                dx = self._wrapDelta(self.playerX, e["x"])
+                dy = self.playerY - e["y"]
+                dist = math.hypot(dx, dy) or 1.0
+                chase = 55.0 + self.wave * 6
+                if e.get("ufo"):
+                    chase += 40
+                e["vx"] += (dx / dist) * chase * dt * 0.35
+                e["vy"] += (dy / dist) * chase * dt * 0.35
+                e["vx"] += math.sin(e["x"] * 0.01 + e["y"] * 0.02) * 18 * dt
+                ev = math.hypot(e["vx"], e["vy"])
+                cap = 70 if not e.get("ufo") else 140
+                if ev > cap:
+                    e["vx"] *= cap / ev
+                    e["vy"] *= cap / ev
+                e["x"] = self._wrap(e["x"] + e["vx"] * dt)
+                e["y"] += e["vy"] * dt
+                e["y"] = max(46, min(H - 28, e["y"]))
+                e["shotT"] -= dt
+                if e["shotT"] <= 0 and dist < 420:
+                    e["shotT"] = max(0.7, 1.8 - self.wave * 0.08)
+                    spd = 160.0
+                    vx = (dx / dist) * spd
+                    vy = (dy / dist) * spd
+                    kind = e["kind"]
+                    base = self.eBullets.get(kind) or self.eBullets.get(1) or []
+                    self.eShots.append({
+                        "x": e["x"],
+                        "y": e["y"],
+                        "vx": vx,
+                        "vy": vy,
+                        "kind": kind,
+                        "ufo": bool(e.get("ufo")),
+                        "imgs": None if e.get("ufo") else self._aimBolt(base, vx, vy),
+                    })
+                    self.playS("eShot")
+
+            self._collide()
+            self._updateFx(dt)
+            if not self.playerDead and not self.enemies:
+                self.playS("clear")
+                self.wave += 1
+                self.message = f"WAVE {self.wave}"
+                self.messageT = 1.4
+                self._setupWave()
+
+        def _collide(self):
+            if self.playerDead:
+                return
+            pw, ph = self._playerSize()
+
+            # Hurt the player first so ramming is never a free kill
+            for s in list(self.eShots):
+                img = None
+                if s.get("ufo") and getattr(self, "ufoBullets", None):
+                    frames = self.ufoBullets
+                else:
+                    frames = s.get("imgs") or self.eBullets.get(s.get("kind", 1)) or []
+                if frames:
+                    img = frames[self.flameFrame % len(frames)]
+                ebw, ebh = (14, 10)
+                if img is not None:
+                    ebw, ebh = img.get_size()
+                if self._viewHit(s["x"], s["y"], ebw * 0.5, ebh * 0.5, pw * 0.42, ph * 0.42):
+                    try:
+                        self.eShots.remove(s)
+                    except ValueError:
+                        pass
+                    self._killPlayer()
+                    return
+
+            for e in list(self.enemies):
+                ew, eh = (28, 28)
+                img = self.ufoImg if e.get("ufo") and self.ufoImg is not None else self.eImg.get(e["kind"])
+                if img is not None:
+                    ew, eh = img.get_size()
+                if self._viewHit(e["x"], e["y"], ew * 0.4, eh * 0.4, pw * 0.42, ph * 0.42):
+                    if self.invuln > 0:
+                        continue
+                    tag = "ufo" if e.get("ufo") else {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
+                    self._spawnFx(tag, e["x"], e["y"])
+                    self.playS("boomE")
+                    try:
+                        self.enemies.remove(e)
+                    except ValueError:
+                        pass
+                    self._killPlayer()
+                    return
+
+            pbw, pbh = (16, 6)
+            if self.pBulletR is not None:
+                pbw, pbh = self.pBulletR.get_size()
+            keepP = []
+            for s in self.pShots:
+                hit = False
+                for e in list(self.enemies):
+                    ew, eh = (28, 28)
+                    img = self.ufoImg if e.get("ufo") and self.ufoImg is not None else self.eImg.get(e["kind"])
+                    if img is not None:
+                        ew, eh = img.get_size()
+                    if self._hitOnce(s["x"], s["y"], pbw * 0.5, pbh * 0.5, e["x"], e["y"], ew * 0.45, eh * 0.45):
+                        tag = "ufo" if e.get("ufo") else {1: "e1", 2: "e2", 3: "e3"}.get(e["kind"], "e1")
+                        self._spawnFx(tag, e["x"], e["y"])
+                        pts = 150 if e.get("ufo") else {1: 20, 2: 40, 3: 60}.get(e["kind"], 20)
+                        self._addScore(pts)
+                        self.playS("boomE")
+                        self.enemies.remove(e)
+                        hit = True
+                        break
+                if not hit:
+                    keepP.append(s)
+            self.pShots = keepP
+
+        def _viewHit(self, ax, ay, ahw, ahh, bhw, bhh, bx=None, by=None):
+            """Hit test in camera space so on-screen overlaps match damage."""
+            if bx is None:
+                bx, by = self.playerX, self.playerY
+            for sax in self._screenXs(ax, pad=160):
+                for sbx in self._screenXs(bx, pad=160):
+                    if self._overlap(
+                        (sax - ahw, ay - ahh, ahw * 2, ahh * 2),
+                        (sbx - bhw, by - bhh, bhw * 2, bhh * 2),
+                    ):
+                        return True
+            return False
+
+        def _hitOnce(self, ax, ay, ahw, ahh, bx, by, bhw, bhh):
+            """Player-bolt hit test — no world wrap, so a miss cannot strike the far edge."""
+            sax = self._wrapDelta(ax, self.camX)
+            if sax < -80 or sax > W + 80:
+                return False
+            for sbx in self._screenXs(bx, pad=80):
+                if self._overlap(
+                    (sax - ahw, ay - ahh, ahw * 2, ahh * 2),
+                    (sbx - bhw, by - bhh, bhw * 2, bhh * 2),
+                ):
+                    return True
+            return False
+
+        def _updateFx(self, dt):
+            live = []
+            for f in self.fx:
+                f["t"] += dt
+                if f["t"] >= 0.09:
+                    f["t"] = 0.0
+                    f["i"] += 1
+                if f["i"] < len(f["frames"]):
+                    live.append(f)
+            self.fx = live
+
+        def _blitC(self, img, x, y):
+            if img is None:
+                return
+            r = img.get_rect(center=(int(x), int(y)))
+            self.screen.blit(img, r)
+
+        def _drawWorld(self, img, wx, wy):
+            if img is None:
+                return
+            for sx in self._screenXs(wx):
+                self._blitC(img, sx, wy)
+
+        def _drawOnce(self, img, wx, wy):
+            """Blit in camera space without wrapping to the opposite edge."""
+            if img is None:
+                return
+            sx = self._wrapDelta(wx, self.camX)
+            if -80 <= sx <= W + 80:
+                self._blitC(img, sx, wy)
+
+        def _drawHud(self):
+            score = self.font.render(f"{self.score:05d}", True, WHITE)
+            hi = self.font.render(f"HI {self.highScore:05d}", True, YELLOW)
+            wave = self.font.render(f"W{self.wave}", True, CYAN)
+            self.screen.blit(score, (16, 6))
+            self.screen.blit(hi, (W // 2 - hi.get_width() // 2, 6))
+            self.screen.blit(wave, (W - 70, 6))
+            # scanner
+            bar = pygame.Rect(80, 22, W - 160, 6)
+            pygame.draw.rect(self.screen, (20, 30, 40), bar)
+            pygame.draw.rect(self.screen, (80, 120, 140), bar, 1)
+            for e in self.enemies:
+                px = bar.x + int((e["x"] / self.WORLD) * bar.w)
+                col = (0, 220, 255) if e.get("ufo") else ((180, 80, 255) if e["kind"] == 1 else ((255, 80, 80) if e["kind"] == 2 else (120, 80, 255)))
+                pygame.draw.rect(self.screen, col, (px, bar.y, 2, bar.h))
+            px = bar.x + int((self.playerX / self.WORLD) * bar.w)
+            pygame.draw.rect(self.screen, (80, 255, 255), (px - 1, bar.y - 1, 3, bar.h + 2))
+            if self.lifeImg is not None:
+                for i in range(max(0, self.lives)):
+                    self.screen.blit(self.lifeImg, (16 + i * 20, H - 22))
+            if self.messageT > 0 and self.message:
+                msg = self.bigFont.render(self.message, True, YELLOW)
+                self.screen.blit(msg, (W // 2 - msg.get_width() // 2, 210))
+
+        def _blitParallax(self, strip, factor):
+            if strip is None:
+                return
+            period = strip.get_width()
+            if period < 1:
+                return
+            off = int(-(self.camShift * factor) % period)
+            self.screen.blit(strip, (off - period, 0))
+            self.screen.blit(strip, (off, 0))
+            if off + period < W:
+                self.screen.blit(strip, (off + period, 0))
+
+        def draw(self):
+            if self.bg is not None or self.bgLoop is not None:
+                self._blitParallax(self.bgLoop or self.bg, 0.28)
+            else:
+                self.screen.fill((4, 2, 12))
+            # Stars stay alpha — never bake them onto an opaque black strip
+            if self.starLoop is not None:
+                self._blitParallax(self.starLoop, 0.62)
+            elif self.stars is not None:
+                self._blitParallax(self.stars, 0.62)
+
+            if self.state == "MENU":
+                title = self.bigFont.render(self.title, True, CYAN)
+                hint = self.font.render("SPACE", True, WHITE)
+                esc = self.font.render("ESC", True, (160, 160, 180))
+                hi = self.font.render(f"HI {self.highScore:05d}", True, YELLOW)
+                self.screen.blit(title, (W // 2 - title.get_width() // 2, 170))
+                self.screen.blit(hint, (W // 2 - hint.get_width() // 2, 230))
+                self.screen.blit(esc, (W // 2 - esc.get_width() // 2, 262))
+                self.screen.blit(hi, (W // 2 - hi.get_width() // 2, 310))
+                return
+            if self.state == "PAUSED":
+                msg = self.bigFont.render("PAUSED", True, YELLOW)
+                self.screen.blit(msg, (W // 2 - msg.get_width() // 2, 210))
+                self._drawHud()
+                return
+            if self.state == "GAME_OVER":
+                msg = self.bigFont.render("GAME OVER", True, MAGENTA)
+                hint = self.font.render("SPACE", True, WHITE)
+                self.screen.blit(msg, (W // 2 - msg.get_width() // 2, 190))
+                self.screen.blit(hint, (W // 2 - hint.get_width() // 2, 240))
+                self._drawHud()
+                return
+
+            fi = self.flameFrame
+            for e in self.enemies:
+                if e.get("ufo") and self.ufoImg is not None:
+                    img = self.ufoImg
+                else:
+                    img = self.eImg.get(e["kind"])
+                    if self.idleFrame and self.eIdle.get(e["kind"]) is not None:
+                        img = self.eIdle.get(e["kind"])
+                self._drawWorld(img, e["x"], e["y"])
+
+            for s in self.pShots:
+                goingR = s["vx"] >= 0
+                bolt = self.pBulletR if goingR else self.pBulletL
+                trails = self.pTrailR if goingR else self.pTrailL
+                trail = trails[fi % len(trails)] if trails else None
+                if trail is not None and bolt is not None:
+                    bw = bolt.get_width()
+                    self._drawOnce(trail, s["x"] - (1 if goingR else -1) * bw * 0.42, s["y"])
+                self._drawOnce(bolt, s["x"], s["y"])
+            for s in self.eShots:
+                if s.get("ufo") and self.ufoBullets:
+                    frames = self.ufoBullets
+                else:
+                    frames = s.get("imgs") or self.eBullets.get(s.get("kind", 1)) or []
+                img = frames[fi % len(frames)] if frames else None
+                self._drawWorld(img, s["x"], s["y"])
+
+            if not self.playerDead:
+                blink = self.invuln > 0 and int(self.invuln * 12) % 2 == 0
+                if not blink:
+                    ship = self.playerR if self.face >= 0 else self.playerL
+                    self._drawWorld(ship, self.playerX, self.playerY)
+                    flames = self.flameR if self.face >= 0 else self.flameL
+                    fl = flames[fi % len(flames)] if flames else None
+                    if fl is not None:
+                        pw, _ph = self._playerSize()
+                        self._drawWorld(fl, self.playerX - self.face * pw * 0.48, self.playerY)
+
+            for f in self.fx:
+                frames = f["frames"]
+                i = f["i"]
+                if 0 <= i < len(frames) and frames[i] is not None:
+                    self._drawWorld(frames[i], f["x"], f["y"])
+            self._drawHud()
+
+        def toImage(self):
+            rgb = self.screen
+            if rgb.get_bytesize() != 3:
+                rgb = self.screen.convert(24)
+            raw = pygame.image.tobytes(rgb, "RGB")
+            qimg = QImage(raw, W, H, W * 3, QImage.Format.Format_RGB888)
+            return qimg.copy()
+
+        def tick(self, dt, keys, pulses):
+            keys = keys or {}
+            self.handlePulses(pulses or [], keys)
+            if not self.running:
+                return None
+            self.update(dt, keys)
+            self.draw()
+            return self.toImage()
+
+        def stop(self):
+            self.running = False
+            try:
+                self.audio.stop()
+            except Exception:
+                pass
+            try:
+                self.bgm.stop()
+            except Exception:
+                pass
             if self.score > self.highScore:
                 self.highScore = self.score
                 self.saveHigh()
@@ -2108,12 +3196,19 @@ if pygame is not None:
     def _factoryLs(host, markKey="ls"):
         return _CabinetSh(host, markKey, "ls")
 
+    def _factoryIc(host, markKey="ic"):
+        return _CabinetIn(host, markKey)
+
     _addTitle("ALIEN BLASTER", _factoryAb, "ab")
     _addTitle("LAST STAND", _factoryLs, "ls")
+    _addTitle("INCURSION", _factoryIc, "ic")
 
 else:
     def _factoryAb(host, markKey="ab"):
         return None
 
     def _factoryLs(host, markKey="ls"):
+        return None
+
+    def _factoryIc(host, markKey="ic"):
         return None

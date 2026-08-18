@@ -142,10 +142,12 @@ class dictionaryTableKeyFilter(QObject):
 class uiDataDictionary(QMainWindow):
     """Data dictionary editor: Manages labels for time-series IDs."""
     def __init__(self, winMain=None):
-        super().__init__(parent=winMain)
+        # No Qt parent: child QMainWindows shade-minimize instead of taskbar.
+        super().__init__(None)
         uic.loadUi(Logic.resourcePath('ui/winDataDictionary.ui'), self)
         self.winMain = winMain
         self._saveInProgress = False
+        Utils.bindIndependentWindow(self, owner=winMain, allowMaximize=True)
 
         # Define controls
         self.mainTable = self.findChild(QTableWidget, 'dataDictionaryTable')

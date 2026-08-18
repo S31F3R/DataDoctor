@@ -299,8 +299,8 @@ def assignAxes(seriesList, scaleRatioThreshold=8.0, maxAxes=4):
     """
     Partition series into one or more Y-axis groups.
 
-    seriesList: list of (label, values ndarray)
-    Returns list of groups; each group is a list of (label, values).
+    seriesList: list of (label, values[, texts])
+    Returns list of groups; each group is a list of those tuples.
     Group 0 is plotted on the primary (left) axis; later groups on twins.
     """
     if not seriesList:
@@ -311,7 +311,7 @@ def assignAxes(seriesList, scaleRatioThreshold=8.0, maxAxes=4):
     # Greedy cluster: first compatible group wins; else open a new axis (cap maxAxes)
     groups = []  # each: items, range, scale, center
     for item in seriesList:
-        _label, vals = item
+        vals = item[1]
         r = seriesValueRange(vals)
         s = seriesScale(vals)
         c = seriesCenter(vals)
@@ -460,7 +460,7 @@ def selectedDataRows(table):
 
 def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None, rows=None):
     """
-    For overlay columns, return [(primaryLabel, vals), (secondaryLabel, vals)]
+    For overlay columns, return [(primaryLabel, vals, texts), (secondaryLabel, vals, texts)]
     from per-cell UserRole primaryVal / secondaryVal. Empty list if not overlay data.
 
     Legend labels use the first line of each series' original header (dict-style
@@ -478,6 +478,8 @@ def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None, rows=
     n = len(rows)
     primary = np.full(n, np.nan)
     secondary = np.full(n, np.nan)
+    primaryTexts = [''] * n
+    secondaryTexts = [''] * n
     hasAny = False
     for i, r in enumerate(rows):
         item = table.item(r, col)
@@ -487,8 +489,12 @@ def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None, rows=
         if not isinstance(role, dict) or not role.get('overlay'):
             continue
         hasAny = True
-        primary[i] = parseNumeric(role.get('primaryVal', ''))
-        secondary[i] = parseNumeric(role.get('secondaryVal', ''))
+        pRaw = role.get('primaryVal', '')
+        sRaw = role.get('secondaryVal', '')
+        primary[i] = parseNumeric(pRaw)
+        secondary[i] = parseNumeric(sRaw)
+        primaryTexts[i] = str(pRaw).strip() if pRaw not in (None, '') else ''
+        secondaryTexts[i] = str(sRaw).strip() if sRaw not in (None, '') else ''
 
     if not hasAny:
         return []
@@ -510,9 +516,9 @@ def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None, rows=
         sLabel = sName
     out = []
     if np.any(np.isfinite(primary)):
-        out.append((pLabel, primary))
+        out.append((pLabel, primary, primaryTexts))
     if np.any(np.isfinite(secondary)):
-        out.append((sLabel, secondary))
+        out.append((sLabel, secondary, secondaryTexts))
     return out
 
 
@@ -523,7 +529,8 @@ def extractSeries(table, columns=None, rows=None, columnMetadata=None):
     Overlay columns expand to primary + secondary series (UserRole values).
     columns / rows default to current selection, or the full table when empty.
 
-    Returns (timestamps list[datetime|None], tsTexts list[str], series list[(label, values)], warnings)
+    Returns (timestamps list[datetime|None], tsTexts list[str],
+             series list[(label, values, displayTexts)], warnings)
     """
     warnings = []
     if table is None or table.rowCount() <= 0 or table.columnCount() <= 0:
@@ -587,13 +594,16 @@ def extractSeries(table, columns=None, rows=None, columnMetadata=None):
                     continue
 
         vals = np.empty(n, dtype=float)
+        texts = [''] * n
         for i, r in enumerate(rows):
             item = table.item(r, c)
-            vals[i] = parseNumeric(item.text() if item is not None else '')
+            raw = item.text() if item is not None else ''
+            vals[i] = parseNumeric(raw)
+            texts[i] = (raw or '').strip()
         if not np.any(np.isfinite(vals)):
             warnings.append(f"Skipped '{label}' (no numeric values).")
             continue
-        series.append((label, vals))
+        series.append((label, vals, texts))
 
     if not series:
         return timestamps, tsTexts, [], ["No numeric series found to graph."]
@@ -1450,7 +1460,10 @@ class GraphPanel(QWidget):
 
         def plotGroup(axTarget, group, axisIndex=0):
             nonlocal colorIdx
-            for label, vals in group:
+            for item in group:
+                label = item[0]
+                vals = item[1]
+                texts = item[2] if len(item) > 2 else None
                 color = colorCycle[colorIdx % len(colorCycle)]
                 colorIdx += 1
                 y = np.array(vals, dtype=float)
@@ -1473,11 +1486,18 @@ class GraphPanel(QWidget):
                     markevery=markEvery,
                     picker=5,
                 )
+                yTexts = None
+                if texts is not None:
+                    try:
+                        yTexts = [texts[i] for i, keep in enumerate(mask) if keep]
+                    except Exception:
+                        yTexts = None
                 self._lineData.append({
                     'line': line,
                     'label': label,
                     'xs': np.asarray(x[mask], dtype=float),
                     'ys': np.asarray(y[mask], dtype=float),
+                    'yTexts': yTexts,
                     'color': color,
                     'visible': True,
                     'axisIndex': axisIndex,
@@ -1922,7 +1942,7 @@ class GraphPanel(QWidget):
                 self._lastTipKey = None
             return
 
-        best = None  # (dist2_px, x, y, label)
+        best = None  # (dist2_px, x, y, label, displayText)
 
         for entry in self._lineData:
             line = entry.get('line')
@@ -1930,6 +1950,7 @@ class GraphPanel(QWidget):
                 continue
             xs = entry.get('xs')
             ys = entry.get('ys')
+            yTexts = entry.get('yTexts')
             label = entry.get('label') or ''
             if xs is None or ys is None or xs.size == 0:
                 continue
@@ -1942,7 +1963,10 @@ class GraphPanel(QWidget):
                 dist2 = float(d2[i])
                 # ~14 px hit radius
                 if dist2 < 196 and (best is None or dist2 < best[0]):
-                    best = (dist2, float(xs[i]), float(ys[i]), label)
+                    disp = ''
+                    if yTexts is not None and 0 <= i < len(yTexts):
+                        disp = yTexts[i] or ''
+                    best = (dist2, float(xs[i]), float(ys[i]), label, disp)
             except Exception:
                 continue
 
@@ -1952,15 +1976,17 @@ class GraphPanel(QWidget):
                 self._lastTipKey = None
             return
 
-        _dist, px, py, label = best
+        _dist, px, py, label, disp = best
         tsStr = self._formatXForTooltip(px)
-        try:
-            if abs(py) >= 1000 or (abs(py) > 0 and abs(py) < 0.01):
-                valStr = f"{py:g}"
-            else:
-                valStr = f"{py:.4g}"
-        except Exception:
-            valStr = str(py)
+        # Table/overlay display string so raw mode is not .4g-rounded.
+        # Axis ticks stay matplotlib-plain (no 7-decimal labels).
+        if disp:
+            valStr = disp
+        else:
+            try:
+                valStr = Logic.formatRawNumber(py) if Config.rawData else Logic.valuePrecision(py)
+            except Exception:
+                valStr = str(py)
 
         tip = f"{label}\n{tsStr}\n{valStr}"
         tipKey = (label, round(px, 6), round(py, 6))

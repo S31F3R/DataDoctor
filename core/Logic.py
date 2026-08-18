@@ -689,18 +689,22 @@ def installExceptionHooks(showDialog=True):
             # Avoid dialog storms if many exceptions fire
             if getattr(app, 'dataDoctorShowingErrorDialog', False):
                 return
-            app.dataDoctorShowingErrorDialog = True
             try:
-                QMessageBox.critical(
-                    None,
-                    "Unexpected Error",
-                    "An unexpected error occurred and was logged.\n\n"
-                    f"{excType.__name__}: {excValue}\n\n"
-                    "The application will continue if possible.\n"
-                    "See app.log for details."
-                )
-            finally:
-                app.dataDoctorShowingErrorDialog = False
+                from core import Report
+                Report.showCrashDialog(excType, excValue, excTb)
+            except Exception:
+                app.dataDoctorShowingErrorDialog = True
+                try:
+                    QMessageBox.critical(
+                        None,
+                        "Unexpected Error",
+                        "An unexpected error occurred and was logged.\n\n"
+                        f"{excType.__name__}: {excValue}\n\n"
+                        "The application will continue if possible.\n"
+                        "See app.log for details.",
+                    )
+                finally:
+                    app.dataDoctorShowingErrorDialog = False
         except Exception:
             pass
 

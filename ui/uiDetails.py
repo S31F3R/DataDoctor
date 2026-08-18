@@ -609,21 +609,17 @@ class uiDetails(QWidget):
         if table is None:
             table = self.detailsTable # Fallback to main table
         
-        # Handle missing keys safely
+        # UserRole already holds display-limited strings (same limiter as delta).
+        # Do not re-float — that hid raw vs overlay mismatches.
         primaryVal = data.get('primaryVal', 'N/A') if data.get('primaryVal') is not None else 'N/A'
         secondaryVal = data.get('secondaryVal', 'N/A') if data.get('secondaryVal') is not None else 'N/A'
         delta = data.get('delta', 'N/A') if data.get('delta') is not None else 'N/A'
-        
-        # valuePrecision handles rawData (fixed-point, no scientific notation)
-        try:
-            if primaryVal != 'N/A':
-                primaryVal = Logic.valuePrecision(float(primaryVal))
-            if secondaryVal != 'N/A':
-                secondaryVal = Logic.valuePrecision(float(secondaryVal))
-            if delta != 'N/A':
-                delta = Logic.valuePrecision(float(delta))
-        except (ValueError, TypeError):
-            pass # Keep as string if not numeric
+        if primaryVal in ('', None):
+            primaryVal = 'N/A'
+        if secondaryVal in ('', None):
+            secondaryVal = 'N/A'
+        if delta in ('', None):
+            delta = 'N/A'
         
         # Add rows for overlay specifics (broken out per user request)
         self.addRow("Primary Database", data.get('db1', 'N/A'), table=table)
