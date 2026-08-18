@@ -90,7 +90,7 @@ def main() -> int:
         "--include-oracle-client",
         dest="includeOracleClient",
         action="store_true",
-        help="Include oracle/client if present (large / platform-specific)",
+        help="Include repo oracle/client if present (OS-specific; prefer dist/oracle zips in Windows/AppImage/Mac packages instead)",
     )
     args = parser.parse_args()
 

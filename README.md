@@ -18,7 +18,7 @@ Current version: **3.0.0** (see `core/Version.py`).
 
 - **Python 3.13.x** (tested with 3.13.7)
 - Dependencies in [`requirements.txt`](requirements.txt): PyQt6, requests, oracledb, keyring, matplotlib, numpy, pygame
-- **USBR / HDB**: Oracle Instant Client (packaged with Windows/AppImage when present) plus TNS / `tnsnames.ora`
+- **USBR / HDB**: Oracle Instant Client (may ship inside the Windows / AppImage / macOS package) plus TNS / `tnsnames.ora`
 - **Aquarius** (TLS): a server certificate in a `certs/` folder — see [Aquarius](https://github.com/S31F3R/DataDoctor/wiki/Aquarius)
 - **USGS** (optional): an [api.data.gov](https://api.waterdata.usgs.gov/signup/) key for higher rate limits — see [USGS](https://github.com/S31F3R/DataDoctor/wiki/USGS)
 

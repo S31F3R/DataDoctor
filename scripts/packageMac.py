@@ -45,6 +45,8 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
+from oracleBundle import installOracleClient
+
 
 def projectRoot() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -188,14 +190,7 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
         src = root / name
         if src.exists():
             copyTree(src, projectFiles / name, ignoreNames={'.git', '__pycache__', 'client'})
-            if name == "oracle":
-                client = root / "oracle" / "client"
-                if client.exists():
-                    copyTree(
-                        client,
-                        projectFiles / "oracle" / "client",
-                        ignoreNames={'__pycache__'},
-                    )
+    installOracleClient(root, projectFiles / "oracle" / "client", "macos")
 
     pySrc = root / "DataDoctor.py"
     if pySrc.is_file():
@@ -411,6 +406,13 @@ def buildApp(root: Path, outApp: Path, workPath: Path) -> int:
     if outApp.exists():
         shutil.rmtree(outApp)
     shutil.copytree(built, outApp)
+    dest = None
+    for sqlnet in outApp.rglob("sqlnet.ora"):
+        dest = sqlnet.parent.parent.parent / "client"
+        break
+    if dest is None:
+        dest = outApp / "Contents" / "Resources" / "oracle" / "client"
+    installOracleClient(root, dest, "macos")
     print(f"Wrote {outApp}")
     return 0
 
