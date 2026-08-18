@@ -8,7 +8,7 @@ import threading
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta
 
-from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
+from PyQt6.QtCore import Qt, QObject, QEvent, QRunnable, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QAbstractItemView, QMessageBox
 
@@ -926,15 +926,111 @@ def syncHeaderHighlightsFromSelection(table):
     highlightColumnHeaders(table, selectedColumnsFromTable(table))
 
 
+def _headerResizeHandleAt(header, pos):
+    """True if pos is on a column-resize grip (leave those clicks to Qt)."""
+    if header is None:
+        return False
+    try:
+        from PyQt6.QtWidgets import QStyle
+        style = header.style()
+        handle = style.pixelMetric(QStyle.PixelMetric.PM_HeaderGripMargin, None, header)
+        if handle < 3:
+            handle = 4
+        x = pos.x()
+        firstVisible = True
+        for visual in range(header.count()):
+            logical = header.logicalIndex(visual)
+            if header.isSectionHidden(logical):
+                continue
+            start = header.sectionViewportPosition(logical)
+            end = start + header.sectionSize(logical)
+            if abs(x - end) <= handle:
+                return True
+            if firstVisible and abs(x - start) <= handle:
+                return True
+            firstVisible = False
+        return False
+    except Exception:
+        try:
+            return header.cursor().shape() == Qt.CursorShape.SplitHCursor
+        except Exception:
+            return False
+
+
+class _HeaderSelectFilter(QObject):
+    """
+    Own header left-clicks so Qt never runs sectionPressed → selectColumn.
+
+    That C++ slot is connected in QTableView and often survives Python
+    disconnect(); it selects on press, then our sectionClicked handler
+    toggles the same column off — the Ctrl flash.
+    """
+
+    def __init__(self, mainWindow):
+        super().__init__(mainWindow)
+        self.mainWindow = mainWindow
+
+    def eventFilter(self, obj, event):
+        if event.type() != QEvent.Type.MouseButtonPress:
+            return False
+        if event.button() != Qt.MouseButton.LeftButton:
+            return False
+        table = getattr(self.mainWindow, 'mainTable', None)
+        if table is None:
+            return False
+        header = table.horizontalHeader()
+        if obj is not header:
+            return False
+        if _headerResizeHandleAt(header, event.pos()):
+            return False
+        col = header.logicalIndexAt(event.pos())
+        if col < 0:
+            return False
+        selectEntireColumn(self.mainWindow, col, event.modifiers(), defer=False)
+        return True
+
+
+def headerSelectPlan(col, existing, storedAnchor, columnCount, shift, multiAdd, colFullySelected=True):
+    """
+    Excel-like header click plan. Pure (no Qt) so the origin rules stay obvious.
+
+      plain        → that column only; becomes the Shift origin
+      Shift        → range from the last *plain* click, not from Ctrl clicks
+      Ctrl         → toggle membership; does not steal the Shift origin
+      Ctrl+Shift   → add origin→click range to the existing selection
+
+    Returns (target_cols set, new_stored_anchor).
+    """
+    if not isinstance(storedAnchor, int) or storedAnchor < 0 or storedAnchor >= columnCount:
+        storedAnchor = None
+    existing = set(existing or [])
+
+    if shift:
+        if storedAnchor is None:
+            target = (existing | {col}) if multiAdd else {col}
+            return target, col
+        lo, hi = (storedAnchor, col) if storedAnchor <= col else (col, storedAnchor)
+        rangeCols = set(range(lo, hi + 1))
+        target = (existing | rangeCols) if multiAdd else rangeCols
+        return target, storedAnchor
+    if multiAdd:
+        if col in existing and colFullySelected:
+            target = existing - {col}
+        else:
+            target = existing | {col}
+        return target, storedAnchor
+    return {col}, col
+
+
 def ensureHeaderSelectionSync(mainWindow):
     """
     One-time header multi-select setup for the main data table:
 
-      1. Disconnect QTableView's default sectionPressed → selectColumn.
-         That slot runs on mouse press (before sectionClicked) and already
-         applies Ctrl/Shift column selection. Our sectionClicked handler then
-         double-toggles Ctrl adds — flash highlight then remove.
-      2. Connect selectionChanged so cell multi-select paints every matching
+      1. Intercept header left-clicks (event filter) so Qt's C++
+         sectionPressed → selectColumn never runs. Python disconnect()
+         often leaves that C++ slot connected — Ctrl then flashes off.
+      2. Also try to disconnect the default slot (belt and suspenders).
+      3. Connect selectionChanged so cell multi-select paints every matching
          header (not only the last header-click column).
     """
     if mainWindow is None:
@@ -943,18 +1039,33 @@ def ensureHeaderSelectionSync(mainWindow):
     if table is None:
         return
 
-    # Kill default header→selectColumn once (safe to call repeatedly)
-    if not getattr(table, '_headerSectionPressedCleared', False):
+    header = None
+    try:
+        header = table.horizontalHeader()
+    except Exception:
+        header = None
+
+    if header is not None and not getattr(table, '_headerSelectFilterInstalled', False):
+        filt = _HeaderSelectFilter(mainWindow)
+        header.installEventFilter(filt)
+        table._headerSelectFilter = filt
+        table._headerSelectFilterInstalled = True
+
+    # Kill default header→selectColumn (C++ slot may ignore bare disconnect)
+    if header is not None and not getattr(table, '_headerSectionPressedCleared', False):
         try:
-            header = table.horizontalHeader()
-            if header is not None:
-                header.sectionPressed.disconnect()
-            table._headerSectionPressedCleared = True
+            header.sectionPressed.disconnect(table.selectColumn)
         except (TypeError, RuntimeError):
-            # No receivers, or C++ object quirks — still mark done
-            table._headerSectionPressedCleared = True
+            pass
         except Exception:
             pass
+        try:
+            header.sectionPressed.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        except Exception:
+            pass
+        table._headerSectionPressedCleared = True
 
     if getattr(table, '_headerSelSyncConnected', False):
         return
@@ -1057,26 +1168,25 @@ def selectTableColumns(table, cols):
     highlightColumnHeaders(table, ordered)
 
 
-def selectEntireColumn(mainWindow, col, modifiers=None):
+def selectEntireColumn(mainWindow, col, modifiers=None, defer=True):
     """
     Header click: select whole column(s), Excel-style modifiers.
 
-      plain click  → that column only; sets shift-anchor
-      Shift+click  → range from anchor column through clicked column
-      Ctrl/Cmd+click → toggle clicked column in/out of selection
-      Ctrl+Shift   → add the anchor→click range to the existing selection
+      plain click  → that column only; sets the Shift origin
+      Shift+click  → range from the last *plain* click through this column
+      Ctrl/Cmd+click → toggle clicked column; does not change the Shift origin
+      Ctrl+Shift   → add the origin→click range to the existing selection
 
     Avoid setCurrentCell — in SelectItems mode it collapses the range.
-    Relies on ensureHeaderSelectionSync having disconnected Qt's default
-    sectionPressed→selectColumn (otherwise Ctrl double-toggles and undoes).
-    Re-apply after the event loop so any residual Qt handling cannot undo us.
+    The header event filter owns the click (defer=False) so Qt cannot
+    selectColumn first. sectionClicked fallback still defers one tick.
     """
     if mainWindow is None:
         return
     table = mainWindow.mainTable
     if table is None or col < 0 or col >= table.columnCount():
         return
-    from PyQt6.QtCore import QTimer, Qt
+    from PyQt6.QtCore import QTimer
     from PyQt6.QtWidgets import QApplication
 
     ensureHeaderSelectionSync(mainWindow)
@@ -1096,32 +1206,18 @@ def selectEntireColumn(mainWindow, col, modifiers=None):
     shift = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
     multiAdd = ctrl or meta
 
-    anchor = getattr(mainWindow, '_headerSelectAnchor', None)
-    if anchor is None or not isinstance(anchor, int):
-        anchor = col
-    elif anchor < 0 or anchor >= table.columnCount():
-        anchor = col
-
     existing = set(selectedColumnsFromTable(table))
-
-    if shift:
-        lo, hi = (anchor, col) if anchor <= col else (col, anchor)
-        rangeCols = set(range(lo, hi + 1))
-        if multiAdd:
-            target = existing | rangeCols
-        else:
-            target = rangeCols
-        # Keep anchor so further Shift-clicks re-extend from original start
-    elif multiAdd:
-        if col in existing and _columnFullySelected(table, col):
-            target = existing - {col}
-        else:
-            target = existing | {col}
-        mainWindow._headerSelectAnchor = col
-    else:
-        target = {col}
-        mainWindow._headerSelectAnchor = col
-
+    stored = getattr(mainWindow, '_headerSelectAnchor', None)
+    target, newAnchor = headerSelectPlan(
+        col,
+        existing,
+        stored,
+        table.columnCount(),
+        shift,
+        multiAdd,
+        colFullySelected=_columnFullySelected(table, col),
+    )
+    mainWindow._headerSelectAnchor = newAnchor
     mainWindow._headerSelectCols = sorted(target)
 
     def _apply():
@@ -1133,8 +1229,9 @@ def selectEntireColumn(mainWindow, col, modifiers=None):
         selectTableColumns(table, cols)
 
     _apply()
-    # Defer once so any post-sectionClicked selection reset is overwritten
-    QTimer.singleShot(0, _apply)
+    if defer:
+        # sectionClicked fallback: overwrite any leftover Qt selectColumn
+        QTimer.singleShot(0, _apply)
 
 
 def collectUploadRows(mainWindow):

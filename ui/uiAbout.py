@@ -111,7 +111,9 @@ class uiAbout(QDialog):
     _BASE_H = 479
 
     def __init__(self, winMain=None):
-        super().__init__(parent=winMain)
+        # No Qt parent: a child QDialog is transient and GNOME shade-minimizes
+        # it to a tiny title bar. Same pattern as Data Dictionary / Query.
+        super().__init__(None)
         uic.loadUi(Logic.resourcePath('ui/winAbout.ui'), self)
         self.winMain = winMain
         self._cabinetMode = False
@@ -145,8 +147,13 @@ class uiAbout(QDialog):
         self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
         self.buttonSecret = self.findChild(QPushButton, 'buttonSecret')
-        # Flags only here. Toggling them on a live exec() dialog hides the
-        # window and can duplicate title-bar buttons on some WMs.
+        # Flags only here (before first show). Toggling them on a live window
+        # hides it and can duplicate title-bar buttons on some WMs.
+        Utils.bindIndependentWindow(self, owner=winMain, allowMaximize=True)
+        # Force NonModal even if an older .ui still says ApplicationModal
+        # (modal About shade-minimizes and blocks the main window).
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        self.setModal(False)
         self.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, True)
         self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
         # Always resizable. setFixedSize after a larger frame is what left
@@ -174,6 +181,7 @@ class uiAbout(QDialog):
         self._aboutInfo = [
             ('Version', Version.displayVersion()),
             ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
+            ('Report issue', f'https://github.com/{Version.GITHUB_REPO}/issues/new/choose'),
             ('Author', 'S31F3R'),
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
@@ -252,7 +260,7 @@ class uiAbout(QDialog):
             f'font-size: {pt}pt; padding-left: {pad}px; white-space: nowrap; line-height: 2.2;">'
         )
         for label, content in getattr(self, "_aboutInfo", []):
-            if "GitHub" in label:
+            if str(content).startswith("http://") or str(content).startswith("https://"):
                 html += f'{label}: <a href="{content}" style="color: white;">{content}</a><br>'
             else:
                 html += f'{label}: {content}<br>'
@@ -1009,9 +1017,16 @@ class uiAbout(QDialog):
             return
         super().keyReleaseEvent(event)
 
-    def exec(self):
+    def show(self):
         self._closing = False
-        return super().exec()
+        super().show()
+
+    def exec(self):
+        # Modal exec() shade-minimizes on GNOME. About is a free window.
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        return QDialog.DialogCode.Accepted
 
     def closeEvent(self, event):
         self._closing = True

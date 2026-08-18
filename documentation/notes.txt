@@ -19,3 +19,7 @@ Select .venv
 
 git rm -r --cached __pycache__
 git commit -m "Remove __pycache__ from tracking"
+
+
+
+python ./publishRelease.py --channel rc --number 2.1 --upload --yes

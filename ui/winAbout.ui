@@ -3,7 +3,7 @@
  <class>winAbout</class>
  <widget class="QDialog" name="winAbout">
   <property name="windowModality">
-   <enum>Qt::WindowModality::ApplicationModal</enum>
+   <enum>Qt::WindowModality::NonModal</enum>
   </property>
   <property name="geometry">
    <rect>
@@ -21,7 +21,7 @@
     <normaloff>icons/Info.png</normaloff>icons/Info.png</iconset>
   </property>
   <property name="modal">
-   <bool>true</bool>
+   <bool>false</bool>
   </property>
   <widget class="QLabel" name="backgroundLabel">
    <property name="geometry">

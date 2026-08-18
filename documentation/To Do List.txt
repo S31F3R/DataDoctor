@@ -1,8 +1,5 @@
 ####### CURRENT TASKS #######
--Is there a way to make a GitHub issue programatically? I'm thinking during a crash that we catch or a button I add, maybe both. Have the ability to send the crash dump, meaning app.log, to GitHub
-    -If this is possible, I would make it used during crashes and a new tool that allows a user to create an issue from this app
-    -Don't act on this right away, it's currently up for dicussion and planning
--Need to start getting this ready for inital release. Need readme.md for github to be setup and need the wiki created for github also
+(none)
 
 ####### CURRENT BUGS #######
 (none — moved to documentation/test.txt)
@@ -19,6 +16,7 @@
         -Apply Overwrite Flag
 -Add datatype as an option to add to labels
 -Need a profile tab in options. Allow export/import of quickLooks, override system dark/light mode, etc.
+-Get OAuth App for GitHub stuffs
 
 ####### QUERY ENHANCEMENTS MODIFICATIONS #######
 -Aquarius daily TZ offset (UC 2300 vs expected 0000)
@@ -26,16 +24,16 @@
      meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
 
 ####### WIKI IDEAS #######
--QAQC and how it works with Data Dictionary
--Aquarius link, what is required
--Explanation of BOP and EOP for USBR
--Overlay and delta explanation
--Overlay auto marked for edits/upload
--CSV dumps based on Data Query tab or SQL Build tab
--Diffrent quicklooks, how to save/use them
--AppData, what is stored and where
--dataDictionary valuePrecision and precisionOverride explanation
--Expladin how header labels from data dictionary are created 
+(Published — all of these have pages. Edit documentation/wiki/; pre-push updates GitHub.)
+-QAQC and Data Dictionary → wiki/Data-Dictionary
+-Aquarius link / certs → wiki/Aquarius
+-BOP and EOP → wiki/USBR-HDB
+-Overlay and delta + auto-mark for upload → wiki/Overlay-and-Delta
+-CSV from Data Query or SQL Builder → wiki/CSV-Export
+-Quick Looks save/load → wiki/Quick-Looks
+-AppData locations → wiki/App-Data
+-valuePrecision / precisionOverride → wiki/Data-Dictionary
+-Header labels from the dictionary → wiki/Data-Dictionary
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme
@@ -43,6 +41,7 @@
 -Provide links to stuff like requesting USGS API key, Reclamation website, USGS data browser, and documention on how to find USGS information to create dataID
 -Document GitHub Releases: asset names (DataDoctor-Python.zip, DataDoctor-x86_64.AppImage),
   tag = vMAJOR.MINOR.PATCH or vX.Y.Z-rc.N, check Pre-release for beta
+(Public README + wiki cover these. Retest in documentation/test.txt.)
 
 ####### WORKFLOW (for Grok / Seifer) #######
 -To Do List = backlog only (not currently being worked)
@@ -50,8 +49,17 @@
 -When Seifer confirms a test item: mark [x] in test.txt (and leave off this list)
 -If a test fails: keep in test.txt with notes; do not put back on To Do until abandoned
 -Clean up test.txt after confirmed [x] items (standard workflow): drop long steps for [x] into a short Confirmed list; keep retest items detailed
--Documentation: Grok may edit documentation/ as part of normal workflow (To Do, test.txt, notes, etc.)
+-Documentation: Grok may edit documentation/ as part of normal workflow (To Do, test.txt, notes, wiki, README, etc.)
+-README.md and documentation/wiki/ are public. Write them for users / operators.
+  Do not put Seifer-only asides, "talking to you" notes, or Grok/Seifer chatter in them.
+-Seifer-only / Grok-only talk goes in documentation/status.grok (gitignored, like secret.grok).
+  That includes release how-tos, OAuth leftovers, "do this on this machine", etc.
 -Commits:
-    - Grok may auto-commit code paths (ui, core, scripts, README, requirements, sounds, icons, …)
-    - Grok must NOT auto-commit documentation/ — Seifer commits those
-    - secret.grok is gitignored; never commit it
+    - Grok may auto-commit code paths (ui, core, scripts, requirements, sounds, icons, …)
+    - Grok may auto-commit README.md and documentation/wiki/
+    - Grok must NOT auto-commit other documentation/ (To Do, test.txt, notes) — Seifer commits those
+    - secret.grok and status.grok are gitignored; never commit them
+-Wiki: documentation/wiki/ is the working copy. This machine uses
+  `git config core.hooksPath scripts/hooks` so Code-OSS Push also runs
+  scripts/publishWiki.py → https://github.com/S31F3R/DataDoctor.wiki.git
+  when those pages differ. Re-set hooksPath after a fresh clone.

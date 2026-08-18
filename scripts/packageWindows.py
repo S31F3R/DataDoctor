@@ -39,6 +39,8 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
+from oracleBundle import installOracleClient
+
 
 def projectRoot() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -224,11 +226,7 @@ def main():
         src = root / name
         if src.exists():
             copyTree(src, projectFiles / name, ignoreNames={'.git', '__pycache__', 'client'})
-            # oracle/client is large / platform-specific — include if present
-            if name == "oracle":
-                client = root / "oracle" / "client"
-                if client.exists():
-                    copyTree(client, projectFiles / "oracle" / "client", ignoreNames={'__pycache__'})
+    installOracleClient(root, projectFiles / "oracle" / "client", "windows")
 
     # DataDoctor.py → DataDoctor.pyw
     pySrc = root / "DataDoctor.py"

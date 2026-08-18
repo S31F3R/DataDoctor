@@ -635,20 +635,21 @@ def ensureOracleClientReady():
         if platform.architecture()[0] != "64bit":
             raise RuntimeError("Only 64-bit platforms supported.")
 
-        expectedFiles = {
+        # Packaged client is Instant Client Basic Lite (raw files, no installer).
+        # Full Basic library names still count as ready.
+        expectedAny = {
             "windows": ["oci.dll"],
-            "linux": ["libociei.so"],
-            "darwin": ["libociei.dylib"],
+            "linux": ["libociicus.so", "libociei.so"],
+            "darwin": ["libociicus.dylib", "libociei.dylib"],
         }
-        requiredFiles = expectedFiles.get(system)
-        if not requiredFiles:
+        requiredAny = expectedAny.get(system)
+        if not requiredAny:
             raise RuntimeError(f"Unsupported platform: {system}")
 
         clientDirPath = "oracle/client"
         clientDir = Path(Logic.resourcePath(clientDirPath))
-        packagedReady = (
-            clientDir.exists()
-            and all((clientDir / f).exists() for f in requiredFiles)
+        packagedReady = clientDir.exists() and any(
+            (clientDir / f).exists() for f in requiredAny
         )
 
         if packagedReady:
