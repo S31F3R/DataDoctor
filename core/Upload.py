@@ -959,36 +959,48 @@ def _headerResizeHandleAt(header, pos):
 
 class _HeaderSelectFilter(QObject):
     """
-    Own header left-clicks so Qt never runs sectionPressed → selectColumn.
+    Own header left-clicks on the header *viewport*.
 
-    That C++ slot is connected in QTableView and often survives Python
-    disconnect(); it selects on press, then our sectionClicked handler
-    toggles the same column off — the Ctrl flash.
+    Clicks land on QHeaderView.viewport(), not the header widget. A filter
+    only on the header never sees the press, so Qt still runs
+    sectionPressed→selectColumn and sectionClicked→our handler. Ctrl then
+    adds (us) and immediately toggles off (Qt).
     """
 
     def __init__(self, mainWindow):
         super().__init__(mainWindow)
         self.mainWindow = mainWindow
+        self._atePress = False
 
     def eventFilter(self, obj, event):
-        if event.type() != QEvent.Type.MouseButtonPress:
-            return False
-        if event.button() != Qt.MouseButton.LeftButton:
-            return False
         table = getattr(self.mainWindow, 'mainTable', None)
         if table is None:
             return False
         header = table.horizontalHeader()
-        if obj is not header:
+        if header is None:
             return False
-        if _headerResizeHandleAt(header, event.pos()):
+        viewport = header.viewport()
+        if obj is not header and obj is not viewport:
             return False
-        col = header.logicalIndexAt(event.pos())
+
+        et = event.type()
+        if et == QEvent.Type.MouseButtonRelease:
+            if self._atePress and event.button() == Qt.MouseButton.LeftButton:
+                self._atePress = False
+                return True
+            return False
+        if et != QEvent.Type.MouseButtonPress:
+            return False
+        if event.button() != Qt.MouseButton.LeftButton:
+            return False
+        pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+        if _headerResizeHandleAt(header, pos):
+            return False
+        col = header.logicalIndexAt(pos)
         if col < 0:
             return False
-        # Header MouseButtonPress often has empty event.modifiers() on Windows;
-        # QApplication.keyboardModifiers() still sees Ctrl/Shift.
         selectEntireColumn(self.mainWindow, col, None, defer=False)
+        self._atePress = True
         return True
 
 
@@ -1047,20 +1059,32 @@ def ensureHeaderSelectionSync(mainWindow):
     except Exception:
         header = None
 
-    if header is not None and not getattr(table, '_headerSelectFilterInstalled', False):
-        filt = _HeaderSelectFilter(mainWindow)
+    if header is not None:
+        filt = getattr(table, '_headerSelectFilter', None)
+        if filt is None:
+            filt = _HeaderSelectFilter(mainWindow)
+            table._headerSelectFilter = filt
         header.installEventFilter(filt)
-        table._headerSelectFilter = filt
+        viewport = header.viewport()
+        if viewport is not None:
+            viewport.installEventFilter(filt)
         table._headerSelectFilterInstalled = True
 
-    # Kill default header→selectColumn (C++ slot may ignore bare disconnect)
+    # Kill Qt header→selectColumn and our sectionClicked (filter owns clicks).
+    # C++ sectionPressed often ignores a Python disconnect(); still try.
     if header is not None and not getattr(table, '_headerSectionPressedCleared', False):
-        try:
-            header.sectionPressed.disconnect(table.selectColumn)
-        except (TypeError, RuntimeError):
-            pass
-        except Exception:
-            pass
+        for sig, slot in (
+            (header.sectionPressed, getattr(table, 'selectColumn', None)),
+            (header.sectionClicked, getattr(mainWindow, 'onMainHeaderClicked', None)),
+        ):
+            if slot is None:
+                continue
+            try:
+                sig.disconnect(slot)
+            except (TypeError, RuntimeError):
+                pass
+            except Exception:
+                pass
         try:
             header.sectionPressed.disconnect()
         except (TypeError, RuntimeError):
