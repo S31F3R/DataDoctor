@@ -23,49 +23,22 @@ Current Tests
      a. Run applyUpdate twice (or merge bunker twice).
      b. Project Files/core/ has at most one bunker.db.bak (no .bak-timestamp pile).
 
-[ ] About: no scrollbars; ratio lock; maximize still works
-   Steps:
-     a. Open About — no H/V scrollbars; window is 900×479-ish, not a tiny crop.
-     b. Drag a corner — window stays 900:479.
-     c. Maximize — fills the screen; art contained; still no scrollbars.
-     d. Restore — back to ratio, no scrollbars.
-
-[ ] Child windows minimize to the taskbar (not a tiny title bar) — RETEST About
-   Steps:
-     a. Open Data Dictionary. Minimize it. Expect a taskbar / dock entry (same
-        pattern as a detached Graph), not a shaded title bar in the corner.
-     b. Restore from that entry. Window comes back normally.
-     c. Open Public/Internal Query. Minimize — same taskbar behavior.
-     d. Detached Graph still minimizes to the taskbar as before.
-     e. Open About (info button). Minimize — taskbar / dock entry, not a
-        shaded title bar. Restore works. Main window stays usable (About is
-        no longer application-modal).
-     f. Close the main window — Data Dictionary / Query / About close with it.
-   Notes: Qt parent made these transient; GNOME shade-minimizes those.
-     Data Dictionary / Query confirmed. About was still parented + exec() modal.
-   Fix: Utils.bindIndependentWindow; uiAbout constructed with parent=None,
-     NonModal, shown via show() (not exec()).
-
-[ ] Header multi-select (Shift / Ctrl like cells) — RETEST Ctrl + Shift origin
+[ ] Header multi-select — RETEST Ctrl add (step D)
    Steps:
      a. Click column header A → whole column selected + header highlight.
-     b. Shift+click header D → columns A–D all selected (full columns).
+     b. Shift+click header D → columns A–D all selected. Origin stays A.
      c. Ctrl+click header B (when B is selected) → B deselects; others stay.
-        No flash off-then-on.
-     d. Ctrl+click an unselected header → adds that full column (stays highlighted).
-     e. After a Ctrl+click, Shift+click still extends from the last *plain*
-        click (A), not from the Ctrl-clicked column. Plain-click a new column
-        first if you want a new Shift range.
-     f. Ctrl+Shift+click extends range from the plain-click origin and adds
-        it to the existing selection.
-     g. Cell multi-select (shift/ctrl in body) still works; headers still highlight
-        every selected column.
-     h. Header right-click Graph graphs all selected columns.
-     i. Dragging a header edge still resizes the column.
-   Notes: Qt C++ sectionPressed→selectColumn survived Python disconnect
-     (Ctrl flash). Ctrl also stole the Shift origin.
-   Fix: header event filter owns left-clicks; headerSelectPlan keeps Shift
-     origin on last plain click only.
+     d. Ctrl+click an unselected header (e.g. F) → F is *added*; A–D+F stay.
+        Must not collapse to only F. Must not make F the Shift origin.
+     e. After that Ctrl+click, Shift+click another header still extends from
+        the last *plain* click (A), not from F or D.
+     f. Plain-click a new column, then Shift+click — new range from that click.
+     g. Cell multi-select still works; header Graph uses all selected columns.
+     h. Dragging a header edge still resizes the column.
+   Notes: A/B OK. RESPONSE: D failed — Ctrl+click unselected looked like a
+     plain click (that column became the Shift pointer). Header press often
+     has empty event.modifiers() on Windows.
+   Fix: selectEntireColumn always ORs QApplication.keyboardModifiers().
 
 [ ] Crash / About Report on GitHub (option C, no stored login)
    Steps:
@@ -74,43 +47,6 @@ Current Tests
         (needs a GitHub account; GitHub's own login).
      b. About → Report issue link opens /issues/new/choose (bug / crash forms).
      c. No GitHub token / password fields in Options.
-
-[ ] publishRelease.py dry-run + build-only
-   Steps:
-     a. python scripts/publishRelease.py --channel rc --number 1 --dry-run
-        prints plan; does not write Version.py or build.
-     b. python scripts/publishRelease.py --channel published --build-only --skip-appimage --yes
-        writes versioned zips under dist/ (Python, Windows --skip-venv, macOS --skip-venv).
-     c. Asset names contain vMAJOR.MINOR.PATCH and *python* / .AppImage as Update.py expects.
-
-[ ] publishRelease re-upload same tag — RETEST
-   Steps:
-     a. v3.0.0-rc.1 already exists (https://github.com/S31F3R/DataDoctor/releases/tag/v3.0.0-rc.1).
-     b. python scripts/publishRelease.py --channel rc --number 1 --upload --skip-build --yes
-        must NOT 422 already_exists.
-     c. Script says the release already exists, replaces same-named assets, finishes OK.
-   Notes: Second --upload POSTed a new release; GitHub rejected the duplicate tag.
-   Fix: GET release by tag first; delete+replace assets with the same name.
-
-[ ] publishRelease --upload without `gh` CLI — RETEST
-   Steps:
-     a. Builds already succeeded (dist/DataDoctor-*-v3.0.0-rc.1.*).
-     b. python scripts/publishRelease.py --channel rc --number 1 --upload --skip-build --yes
-        must NOT crash with FileNotFoundError: 'gh'.
-     c. Uses GITHUB_TOKEN / git credential if `gh` is missing.
-     d. Creates GitHub Pre-release v3.0.0-rc.1 and attaches the four dist files.
-   Notes: githubToken() called `gh` without catching a missing binary.
-   Fix: FileNotFoundError → fall through to git credential; --skip-build reuses dist/.
-
-[ ] GitHub README + wiki first pass
-   Steps:
-     a. Open https://github.com/S31F3R/DataDoctor — README shows install options,
-        config paths, certs, packaging table, wiki/releases/issues links.
-     b. Wiki is live (pre-push from documentation/wiki/). Home + sidebar list
-        Installation, Updates, App Data, Querying, Data Dictionary,
-        Overlay/Delta, USGS, USBR HDB, Aquarius, Quick Looks, Graph, CSV Export.
-     c. Public pages should read as user docs (no Seifer-only asides).
-        Operator notes live in documentation/status.grok.
 
 [ ] HDB password change UI only shows useful outcomes
    Steps:
@@ -137,12 +73,6 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[ ] Update check works with no GitHub releases yet
-   Steps:
-     a. Start app with network; no popup (silent — nothing published yet is OK).
-     b. About shows version from core/Version.py (currently 3.0.0).
-     c. Options → General: "Beta updates" checkbox off by default; save persists updateChannel.
-
 [ ] Update check after a real release (when you publish one)
    Steps:
      a. Bump Version.VERSION lower than a published tag OR publish a higher tag with assets:
@@ -155,6 +85,13 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] About: no scrollbars; ratio lock; maximize still works
+[x] Child windows minimize to the taskbar (About + Dictionary + Query)
+[x] publishRelease.py dry-run + build-only
+[x] publishRelease re-upload same tag (no 422)
+[x] publishRelease --upload without gh CLI
+[x] GitHub README + wiki first pass
+[x] Update check silent when nothing newer (incl. no releases)
 [x] applyUpdate writes DataDoctor.pyw (Windows / existing .pyw)
 [x] Graph hover shows table values (raw when raw is on); axis stays clean
 [x] Query finish selects Data Query tab
