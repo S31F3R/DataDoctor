@@ -986,7 +986,9 @@ class _HeaderSelectFilter(QObject):
         col = header.logicalIndexAt(event.pos())
         if col < 0:
             return False
-        selectEntireColumn(self.mainWindow, col, event.modifiers(), defer=False)
+        # Header MouseButtonPress often has empty event.modifiers() on Windows;
+        # QApplication.keyboardModifiers() still sees Ctrl/Shift.
+        selectEntireColumn(self.mainWindow, col, None, defer=False)
         return True
 
 
@@ -1194,11 +1196,17 @@ def selectEntireColumn(mainWindow, col, modifiers=None, defer=True):
     table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
 
+    # Always union with the live keyboard state. Passing event.modifiers()
+    # alone misses Ctrl/Shift on some header presses (looks like a plain
+    # click → that column becomes the new Shift origin).
+    try:
+        live = QApplication.keyboardModifiers()
+    except Exception:
+        live = Qt.KeyboardModifier.NoModifier
     if modifiers is None:
-        try:
-            modifiers = QApplication.keyboardModifiers()
-        except Exception:
-            modifiers = Qt.KeyboardModifier.NoModifier
+        modifiers = live
+    else:
+        modifiers = modifiers | live
 
     ctrl = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
     # macOS Command is MetaModifier — treat like Ctrl for multi-select
