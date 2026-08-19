@@ -35,10 +35,12 @@ Current Tests
      f. Plain-click a new column, then Shift+click — new range from that click.
      g. Cell multi-select still works; header Graph uses all selected columns.
      h. Dragging a header edge still resizes the column.
-   Notes: A/B OK. RESPONSE: D failed — Ctrl+click unselected looked like a
-     plain click (that column became the Shift pointer). Header press often
-     has empty event.modifiers() on Windows.
-   Fix: selectEntireColumn always ORs QApplication.keyboardModifiers().
+   Notes: A/B OK. Shift origin no longer stolen by Ctrl.
+     RESPONSE: Ctrl still selects then rapidly unselects (Linux + Windows).
+     Clicks hit the header viewport; filter on the header never saw them, so
+     Qt selectColumn ran after us and toggled the column off.
+   Fix: filter on header.viewport(); eat press+release so sectionClicked
+     / selectColumn do not run.
 
 [ ] Crash / About Report on GitHub (option C, no stored login)
    Steps:
