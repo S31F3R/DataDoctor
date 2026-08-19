@@ -23,7 +23,7 @@ Current Tests
      a. Run applyUpdate twice (or merge bunker twice).
      b. Project Files/core/ has at most one bunker.db.bak (no .bak-timestamp pile).
 
-[ ] Header multi-select — RETEST Ctrl add (step D)
+[x] Header multi-select — RETEST Ctrl add (step D)
    Steps:
      a. Click column header A → whole column selected + header highlight.
      b. Shift+click header D → columns A–D all selected. Origin stays A.
