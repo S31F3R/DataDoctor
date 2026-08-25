@@ -50,7 +50,7 @@ Current Tests
      b. About → Report issue link opens /issues/new/choose (bug / crash forms).
      c. No GitHub token / password fields in Options.
 
-[ ] HDB password change UI only shows useful outcomes
+[x] HDB password change UI only shows useful outcomes
    Steps:
      a. Change Oracle password in Options → USBR (user that exists on some HDBs).
      b. Popup lists successes; wrong-password DBs get per-DB prompt; locked accounts listed.
