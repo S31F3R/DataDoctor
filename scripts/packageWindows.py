@@ -295,6 +295,7 @@ def main():
     print("Packaged Project Files/certs/")
 
     # Packaged bunker.db for merge → Project Files/temp/ (live user DB is core/)
+    bunkerSrc = root / "core" / "bunker.db"
     tempDir = projectFiles / "temp"
     if bunkerSrc.is_file():
         tempDir.mkdir(parents=True, exist_ok=True)
