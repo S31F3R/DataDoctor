@@ -30,21 +30,22 @@ Data Doctor.exe
 applyUpdate.cmd
 README.txt
 UPDATE.txt
-Update\
+Update\                 (includes a DataDoctor-Python-*.zip for first run)
 Project Files\
   DataDoctor.pyw
   core\          (live bunker.db stays here)
   ui\
   quickLook\
   oracle\
+  certs\         (empty; drop aquarius.pem / .cer here)
   scripts\
   temp\bunker.db (packaged dictionary for merge only)
 ```
 
 1. Unzip to a writable folder.
 2. Install Python 3.13 if needed (an installer may be in the zip). Enable **Add python.exe to PATH**.
-3. Double-click **Data Doctor.exe**.
-4. If a `Project Files\.venv` exists, that env is preferred; otherwise `pip install -r "Project Files\requirements.txt"`.
+3. Run **applyUpdate.cmd** once. Linux/mac virtualenvs cannot run on Windows, so the zip does not ship a `.venv`. applyUpdate creates `Project Files\.venv`, installs requirements, and applies the Python payload already in `Update\`.
+4. Double-click **Data Doctor.exe**.
 
 Do **not** overwrite `Project Files\core\bunker.db` with a zip’s copy if the dictionary has local edits. Updates merge via `applyUpdate.cmd`.
 

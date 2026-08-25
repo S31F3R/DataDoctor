@@ -11,7 +11,7 @@ Data Doctor checks [GitHub Releases](https://github.com/S31F3R/DataDoctor/releas
 
 Newest-first among those: **published > rc > beta** of the same `X.Y.Z`. Example: `3.0.0` is newer than `3.0.0-rc.2.1`, which is newer than `3.0.0-rc.1`, which is newer than `3.0.0-beta.4`. A `3.0.0` install will not be offered `3.0.0-rc.1` (that RC is older than 3.0.0).
 
-Toggle **Options → General → Beta updates**. The choice is saved as `updateChannel` in `user.config`.
+Toggle **Options → General → Beta updates**. The choice is saved as `updateChannel` in `user.config`. Saving with the box **checked** runs an update check (including pre-releases). Saving with it **unchecked** offers the latest published (non-RC / non-beta) release so you can leave the beta channel.
 
 ## Release assets
 
@@ -32,7 +32,9 @@ Tags use `vMAJOR.MINOR.PATCH`. Release candidates and betas use `vX.Y.Z-rc.N` or
 2. Put `DataDoctor-Python-*.zip` in the install’s `Update\` folder (next to `Data Doctor.exe`).
 3. Run `applyUpdate.cmd`.
 
-That refreshes `Project Files` code (`DataDoctor.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary (`Project Files\temp\bunker.db` → live `core\bunker.db`), and runs pip.
+That refreshes `Project Files` code (`DataDoctor.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary (`Project Files\temp\bunker.db` → live `core\bunker.db`), creates `Project Files\.venv` if missing, and runs pip. `Project Files\certs\` is left alone so Aquarius certificates survive updates.
+
+Dictionary merge updates `datatype` / `siteName` / `database` from the packaged copy. `valuePrecision`, `precisionOverride`, `expectedMin`, `expectedMax`, `cuttoffMin`, `cutoffMax`, and `rateOfChange` fill blanks only and never overwrite a value you already set.
 
 Dictionary-only merge:
 

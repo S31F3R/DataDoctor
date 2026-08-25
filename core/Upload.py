@@ -957,6 +957,23 @@ def _headerResizeHandleAt(header, pos):
             return False
 
 
+def _qtObjectAlive(obj) -> bool:
+    """False if the SIP wrapper's C++ object is already gone."""
+    if obj is None:
+        return False
+    try:
+        from PyQt6 import sip
+        if sip.isdeleted(obj):
+            return False
+    except Exception:
+        pass
+    try:
+        obj.objectName()
+        return True
+    except RuntimeError:
+        return False
+
+
 class _HeaderSelectFilter(QObject):
     """
     Own header left-clicks on the header *viewport*.
@@ -973,13 +990,21 @@ class _HeaderSelectFilter(QObject):
         self._atePress = False
 
     def eventFilter(self, obj, event):
+        if getattr(Logic, 'appIsQuitting', False):
+            return False
         table = getattr(self.mainWindow, 'mainTable', None)
-        if table is None:
+        if table is None or not _qtObjectAlive(table):
             return False
-        header = table.horizontalHeader()
-        if header is None:
+        try:
+            header = table.horizontalHeader()
+        except RuntimeError:
             return False
-        viewport = header.viewport()
+        if header is None or not _qtObjectAlive(header):
+            return False
+        try:
+            viewport = header.viewport()
+        except RuntimeError:
+            return False
         if obj is not header and obj is not viewport:
             return False
 

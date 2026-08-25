@@ -12,6 +12,19 @@ from PyQt6 import uic
 from core import Logic, Utils, Config
 
 
+def _indexIsBeingEdited(option, index) -> bool:
+    """True when this cell currently has an open editor (combobox overlay)."""
+    view = option.widget
+    if not isinstance(view, QAbstractItemView):
+        return False
+    try:
+        if view.state() != QAbstractItemView.State.EditingState:
+            return False
+        return view.currentIndex() == index
+    except RuntimeError:
+        return False
+
+
 class ValuePrecisionDelegate(QStyledItemDelegate):
     """
     Combobox editor for the valuePrecision column.
@@ -40,10 +53,20 @@ class ValuePrecisionDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         combo = QComboBox(parent)
         combo.setEditable(False)
+        combo.setAutoFillBackground(True)
+        combo.setFrame(True)
         for label, ident in self._labels:
             combo.addItem(label, ident)
         combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         return combo
+
+    def paint(self, painter, option, index):
+        # While the combobox editor is open, skip drawing the cell text so it
+        # does not overlay the combo's current item.
+        if _indexIsBeingEdited(option, index):
+            painter.fillRect(option.rect, option.palette.base())
+            return
+        super().paint(painter, option, index)
 
     def setEditorData(self, editor, index):
         current = (index.data(Qt.ItemDataRole.DisplayRole) or '').strip()
@@ -97,11 +120,19 @@ class DatabaseDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         combo = QComboBox(parent)
         combo.setEditable(False)
+        combo.setAutoFillBackground(True)
+        combo.setFrame(True)
         combo.addItem('')  # blank allowed
         for name in self.databases:
             combo.addItem(name)
         combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         return combo
+
+    def paint(self, painter, option, index):
+        if _indexIsBeingEdited(option, index):
+            painter.fillRect(option.rect, option.palette.base())
+            return
+        super().paint(painter, option, index)
 
     def setEditorData(self, editor, index):
         current = (index.data(Qt.ItemDataRole.DisplayRole) or '').strip()

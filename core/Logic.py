@@ -22,6 +22,20 @@ exceptionHooksInstalled = False
 qtMessageHandlerInstalled = False
 qtMessageHandlerRef = None  # Must keep ref — PyQt GC's the handler otherwise
 logNotifier = None  # LogNotifier for live log viewer (created in initLogging)
+# True once the main window starts shutting down. Teardown RuntimeErrors
+# (deleted QTableWidget, etc.) must not open a crash dialog.
+appIsQuitting = False
+
+
+def isDeletedQtObjectError(excType, excValue) -> bool:
+    """True for PyQt 'wrapped C/C++ object of type X has been deleted'."""
+    if excType is None:
+        return False
+    name = getattr(excType, "__name__", "") or ""
+    if name != "RuntimeError" and excType is not RuntimeError:
+        return False
+    text = str(excValue or "")
+    return "wrapped C/C++ object" in text and "has been deleted" in text
 
 
 class LogNotifier(QObject):
@@ -669,9 +683,12 @@ def installExceptionHooks(showDialog=True):
         if issubclass(excType, (KeyboardInterrupt, SystemExit)):
             sys.__excepthook__(excType, excValue, excTb)
             return
+        duringQuit = bool(appIsQuitting)
+        deletedQt = isDeletedQtObjectError(excType, excValue)
         try:
             tbText = ''.join(traceback.format_exception(excType, excValue, excTb)).rstrip()
-            logMessage("CRITICAL", f"Uncaught exception:\n{tbText}")
+            level = "DEBUG" if duringQuit and deletedQt else "CRITICAL"
+            logMessage(level, f"Uncaught exception:\n{tbText}")
         except Exception:
             try:
                 sys.__excepthook__(excType, excValue, excTb)
@@ -679,7 +696,9 @@ def installExceptionHooks(showDialog=True):
                 pass
             return
 
-        if not showDialog:
+        # Closing the UI deletes Qt widgets while filters may still run.
+        # Logging is enough; a dialog during quit caused duplicate GitHub reports.
+        if duringQuit or not showDialog:
             return
         try:
             from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -738,8 +757,14 @@ def installExceptionHooks(showDialog=True):
                 )).rstrip()
                 obj = getattr(unraisable, 'object', None)
                 errMsg = getattr(unraisable, 'err_msg', None) or 'Unraisable exception'
+                duringQuit = bool(appIsQuitting)
+                deletedQt = isDeletedQtObjectError(
+                    getattr(unraisable, 'exc_type', None),
+                    getattr(unraisable, 'exc_value', None),
+                )
+                level = "DEBUG" if duringQuit and deletedQt else "ERROR"
                 logMessage(
-                    "ERROR",
+                    level,
                     f"{errMsg} (object={obj!r}):\n{tbText}",
                 )
             except Exception:

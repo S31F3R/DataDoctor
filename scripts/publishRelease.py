@@ -57,6 +57,15 @@ from core import Version  # noqa: E402
 REPO = Version.GITHUB_REPO
 VERSION_PATH = ROOT / "core" / "Version.py"
 NOTES_DIR = ROOT / "documentation" / "releases"
+WORKING_NOTES = ROOT / "documentation" / "Working Notes.txt"
+WORKING_NOTES_STUB = (
+    "Working Notes\n"
+    "=============\n"
+    "Cleared after packaged release. Add bug fixes, GitHub issue numbers,\n"
+    "and features/tasks here. Seifer copies these into the versioned\n"
+    "release notes (documentation/releases/vVERSION.md) before the next publish.\n"
+    "\n"
+)
 
 
 def log(msg: str) -> None:
@@ -194,10 +203,32 @@ def notesTemplate(version: str, channel: str) -> str:
     )
 
 
+def workingNotesBody() -> str:
+    """Non-stub content from documentation/Working Notes.txt, or empty."""
+    if not WORKING_NOTES.is_file():
+        return ""
+    text = WORKING_NOTES.read_text(encoding="utf-8").strip()
+    if not text:
+        return ""
+    if text.lower().startswith("working notes") and "cleared after packaged" in text.lower():
+        return ""
+    return text + "\n"
+
+
+def clearWorkingNotes() -> None:
+    WORKING_NOTES.parent.mkdir(parents=True, exist_ok=True)
+    WORKING_NOTES.write_text(WORKING_NOTES_STUB, encoding="utf-8")
+    log(f"Cleared {WORKING_NOTES.relative_to(ROOT)}")
+
+
 def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | None, yes: bool) -> str:
     """
     GitHub Release body comes from documentation/releases/vVERSION.md.
     --notes PATH overrides. Interactive run can type a few bullets first.
+
+    If the versioned file is missing/empty, seed it from Working Notes so a
+    same-run publish still has a body. Working Notes is cleared after the
+    version commit (assume Seifer already copied, or we just seeded).
     """
     dest = notesPathFor(version)
     if notesArg:
@@ -213,6 +244,22 @@ def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | 
     if dest.is_file() and dest.stat().st_size > 0:
         log(f"Release notes: {dest.relative_to(ROOT)}")
         return dest.read_text(encoding="utf-8")
+
+    working = workingNotesBody()
+    if working:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        body = (
+            f"# Data Doctor {version}\n\n"
+            f"Channel: {channel}\n\n"
+            f"## Changes\n\n"
+            f"{working.rstrip()}\n\n"
+            f"## Notes\n\n"
+            f"Windows launcher updates use the `DataDoctor-Python-*.zip` asset "
+            f"(`Update\\` + `applyUpdate.cmd`).\n"
+        )
+        dest.write_text(body, encoding="utf-8")
+        log(f"Seeded {dest.relative_to(ROOT)} from Working Notes")
+        return body
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     extra = ""
@@ -665,7 +712,12 @@ def main() -> int:
         return 0
 
     notesEarly = collectNotes(version, channel, [], notesArg=args.notes, yes=args.yes)
-    gitCommitVersion(version, extraPaths=[notesPathFor(version)])
+    # Packaged release: clear Working Notes (seeded into vVERSION.md if needed).
+    extraNotes = [notesPathFor(version)]
+    if WORKING_NOTES.is_file() or workingNotesBody():
+        clearWorkingNotes()
+        extraNotes.append(WORKING_NOTES)
+    gitCommitVersion(version, extraPaths=extraNotes)
 
     built: list[tuple[dict, Path]] = []
     if args.skipBuild:
@@ -718,6 +770,22 @@ def main() -> int:
     target = args.target or gitCurrentBranch()
     if not args.yes:
         target = ask("Tag which branch / commit?", target)
+
+    # GitHub tags the remote branch. Push the version bump first so the
+    # release points at Version.py that matches the assets.
+    push = subprocess.run(
+        ["git", "push", "origin", target],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if push.returncode != 0:
+        log(
+            "WARN: git push failed (tag may point at the previous remote tip): "
+            f"{(push.stderr or push.stdout or '').strip()}"
+        )
+    else:
+        log(f"Pushed {target} to origin")
 
     notes = notesEarly
     release = ensureRelease(token, version, channel, target, notes)

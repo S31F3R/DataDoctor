@@ -497,6 +497,8 @@ class uiMain(QMainWindow):
             event.accept()
             return
         self._quitting = True
+        Logic.appIsQuitting = True
+        self._removeHeaderSelectFilters()
 
         try:
             sqlTab = self.tabSQL or self.findChild(QWidget, 'tabSQL')
@@ -552,6 +554,32 @@ class uiMain(QMainWindow):
             QTimer.singleShot(0, app.quit)
         event.accept()
         super().closeEvent(event)
+
+    def _removeHeaderSelectFilters(self):
+        """Detach header click filters before Qt deletes the table on close."""
+        table = getattr(self, "mainTable", None)
+        if table is None:
+            return
+        filt = getattr(table, "_headerSelectFilter", None)
+        if filt is None:
+            return
+        try:
+            header = table.horizontalHeader()
+        except RuntimeError:
+            header = None
+        for widget in (table, header, getattr(header, "viewport", lambda: None)()):
+            if widget is None:
+                continue
+            try:
+                widget.removeEventFilter(filt)
+            except RuntimeError:
+                pass
+            except Exception:
+                pass
+        try:
+            table._headerSelectFilter = None
+        except Exception:
+            pass
 
     def showEvent(self, event):
         """Re-apply app icon after the window is shown (Windows first-paint glitch)."""
