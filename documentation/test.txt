@@ -7,58 +7,33 @@ Workflow:
   - FAIL → note here; Grok re-fixes
   - Grok may commit any non-documentation/ paths; documentation/ commits stay with Seifer
     (README.md and other non-docs paths are fair game)
+  - After confirmed [x] items: drop long steps into Confirmed; keep retest items detailed
 
 Current Tests
 --------------------------------------------------------------------------------
 
-[x] Update dialogs: restart, not applyUpdate.cmd
-   Steps:
-     a. Windows launcher + Beta updates. When an update is offered, text says
-        restart Data Doctor (no applyUpdate.cmd).
-     b. After Download, "Restart Data Doctor to apply the update."
-     c. Progress dialog: bar has even left/right margins (not shoved left).
-
-[x] applyUpdate keeps a single bunker.db.bak
-   Steps:
-     a. Run applyUpdate twice (or merge bunker twice).
-     b. Project Files/core/ has at most one bunker.db.bak (no .bak-timestamp pile).
-
-[x] Header multi-select — RETEST Ctrl add (step D)
-   Steps:
-     a. Click column header A → whole column selected + header highlight.
-     b. Shift+click header D → columns A–D all selected. Origin stays A.
-     c. Ctrl+click header B (when B is selected) → B deselects; others stay.
-     d. Ctrl+click an unselected header (e.g. F) → F is *added*; A–D+F stay.
-        Must not collapse to only F. Must not make F the Shift origin.
-     e. After that Ctrl+click, Shift+click another header still extends from
-        the last *plain* click (A), not from F or D.
-     f. Plain-click a new column, then Shift+click — new range from that click.
-     g. Cell multi-select still works; header Graph uses all selected columns.
-     h. Dragging a header edge still resizes the column.
-   Notes: A/B OK. Shift origin no longer stolen by Ctrl.
-     RESPONSE: Ctrl still selects then rapidly unselects (Linux + Windows).
-     Clicks hit the header viewport; filter on the header never saw them, so
-     Qt selectColumn ran after us and toggled the column off.
-   Fix: filter on header.viewport(); eat press+release so sectionClicked
-     / selectColumn do not run.
-
 [ ] Crash / About Report on GitHub (option C, no stored login)
    Steps:
      a. Trigger or simulate an uncaught error — dialog has Report on GitHub,
-        Copy log, Open log folder. Report opens a pre-filled new-issue page
-        (needs a GitHub account; GitHub's own login).
-     b. About → Report issue link opens /issues/new/choose (bug / crash forms).
-     c. No GitHub token / password fields in Options.
+        Copy log, Open log folder. Report opens a short GitHub crash form
+        (needs a GitHub account; GitHub's own login). Must NOT 500/"Whoops".
+     b. Full crash text is on the clipboard (paste into the form).
+     c. About → Report issue link opens /issues/new/choose (bug / crash forms).
+     d. No GitHub token / password fields in Options.
+     e. One Report click → one browser tab (not two).
 
-[x] HDB password change UI only shows useful outcomes
+[ ] Close Data Doctor (Windows) — no deleted-QTableWidget crash
    Steps:
-     a. Change Oracle password in Options → USBR (user that exists on some HDBs).
-     b. Popup lists successes; wrong-password DBs get per-DB prompt; locked accounts listed.
-     c. Missing users and TNS/network noise stay out of the popup (still in app.log).
-     d. On per-DB wrong-password prompt: Cancel is labeled Skip — skips that DB and
-        continues remaining HDBs (listed under "Skipped" in summary, not as errors).
-   Notes: status 'locked' shown; 'error'/'missing' silent in UI.
-   Fix: Cancel → Skip continues queue; skipped DBs separate from errors.
+     a. Open a query so the main table has columns, then close the app.
+     b. No Unexpected Error dialog. app.log may have a DEBUG teardown line;
+        must not pop Report on GitHub.
+
+[ ] Data Dictionary combobox — one text only
+   Steps:
+     a. Open Data Dictionary. Click a database cell and a valuePrecision cell.
+     b. While the dropdown is open, the cell shows the combo text once
+        (no ghost of the previous value behind/over the combo).
+     c. Pick a value, click away — cell shows that value only.
 
 [ ] HDB database-link failure → direct connect fallback
    Steps:
@@ -67,11 +42,58 @@ Current Tests
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
 
+[ ] MCS Oracle credentials prompted once per session burst
+   Steps:
+     a. sqlnet.ora WALLET_LOCATION METHOD=MCS (Windows). Run a multi-SDID HDB query.
+     b. Windows cert/credential prompt should happen for the first new session,
+        not once per worker thread. Follow-up queries while the app stays open
+        should reuse pooled sessions (no new prompt until OS cache expires).
+     c. FILE wallet / non-MCS path unchanged.
+
+[ ] sqlnet.log Fatals in app.log
+   Steps:
+     a. Cause an Oracle Fatal (bad TNS, refused connect, etc.) so sqlnet.log
+        is written (often cwd or TNS_ADMIN).
+     b. app.log has matching ERROR lines: sqlnet.log (...): Fatal ...
+        Same timestamp window as the failure.
+
+[ ] Windows package: empty certs/ + first-run applyUpdate.cmd
+   Steps:
+     a. Unzip DataDoctor-Windows-*.zip. Project Files\certs\ exists
+        (README ok; empty is fine).
+     b. Update\ contains DataDoctor-Python.zip. No Linux .venv in the zip.
+     c. After Python 3.13 is on PATH: run applyUpdate.cmd → creates
+        Project Files\.venv, pip installs, app starts via Data Doctor.exe.
+     d. Put a dummy aquarius.pem in certs\, run applyUpdate again — pem still there.
+
+[ ] bunker merge fills blanks only (QAQC / precision)
+   Steps:
+     a. User bunker row has valuePrecision / expectedMax set; packaged row
+        has different valuePrecision and a new expectedMin.
+     b. python "Project Files/scripts/updateBunker.py" --dry-run then merge.
+     c. valuePrecision unchanged; expectedMin filled; siteName/datatype/database
+        still update from packaged.
+
+[ ] USBR CSV → bunker.db
+   Steps:
+     a. From project root: python scripts/updateBunkerFromCsv.py FILE.csv --dry-run
+     b. SITE_DATATYPE_ID/SITE_ID insert-only; SITE_NAME and DATATYPE_NAME update;
+        SITE_COMMON_NAME fills blank only; DB_SITE_CODE maps (LC→USBR-LCHDB,
+        UC→USBR-UCHDB2, CU→USBR-CUHDB, YAO, KBO, LBO, ECO).
+     c. valuePrecision and QAQC columns untouched.
+
+[ ] Beta updates checkbox after Save
+   Steps:
+     a. Options → check Beta updates → Save. GitHub check runs (pre-releases
+        included). If an RC is newer, the update dialog appears.
+     b. Uncheck Beta updates → Save. Offers the latest published (non-RC)
+        release even if this install is an RC. Cancel leaves the current build.
+
 [ ] Mac package script
    Steps:
      a. From project root: python scripts/packageMac.py --skip-venv
      b. dist/DataDoctor-macOS-YYYYMMDD.zip contains Data Doctor.command + Project Files/
-        + Update/ + applyUpdate.sh
+        + Update/ + applyUpdate.sh + Project Files/certs/
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
@@ -87,6 +109,10 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Update dialogs: restart, not applyUpdate.cmd
+[x] applyUpdate keeps a single bunker.db.bak
+[x] Header multi-select Ctrl add (viewport filter; Shift origin not stolen)
+[x] HDB password change UI only shows useful outcomes (Skip vs errors)
 [x] About: no scrollbars; ratio lock; maximize still works
 [x] Child windows minimize to the taskbar (About + Dictionary + Query)
 [x] publishRelease.py dry-run + build-only

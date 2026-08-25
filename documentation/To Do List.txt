@@ -1,45 +1,6 @@
 ####### CURRENT TASKS #######
--sqlnet.log gets created with specific sql errors. Lets make sure these get logged in the app.log
-  -The log I'm looking at is all Fatal errors so I'm guessing it only logs those. Log them as ERROR in app.log format
--Create a bunker update script that takes .csv files, parses them, and updates bunker.db
-  -.csv will be USBR only
-  -here is the .csv to data dictonary map with a note:
-    -SITE_DATATYPE_ID = dataID (this shouldn't change, only add)
-    -SITE_ID = siteID (this shouldn't change, only add)
-    -SITE_NAME = siteName (this could change. Update based on what .csv has)
-    -SITE_COMMON_NAME = commonName (only add. If changed, that means user did it so don't change)
-    -DATATYPE_NAME = datatype (this could change. Update based on what .csv has)
-    -USGS_ID = ignore this, not used
-    -DB_SITE_CODE = database (this could change. Update based on what .csv has)
-      -Data Dictionary uses different format: 
-        -YAO = USBR-YAOHDB
-        -UC = USBR-UCHDB2
-        -LC = USBR-LCHDB
-        -CU = USBR-CUHDB
-        -KBO = USBR-KBOHDB
-        -lbo = USBR-LBOHDB
-    -valuePrecision, precisionOverride, expectedMin, expectedMax, cuttoffMin, cutoffMax, and rateOfChange should never be touched by this script
--Need to find out if a .venv in Linux is different than a .venv on Windows. If it's not, the windows package needs to include the .venv in Project Files
-  -The windows version uses the python in the .venv to run. If the Linux and Windows .venv are different, need to come up with a solution
-    -If the .venv for Linux can't be packaged for windows, does the applyUpdate.cmd create the .venv when it installs requirements? if so, make the Windows package take the python package and place it in the Updates folder. Then the instructions for installing the windows version should let the user know to take the windows package, unzip then run applyUpdate.cmd
--Need to make sure Aquarius certs are not getting removed during updates. I could have sworn I had a cert but it's currently missing
--Validate bunker.db merge script takes valuePrecision, precisionOverride, expectedMin, expectedMax, cuttoffMin, cutoffMax, and rateOfChange are NOT overriding values but filling in blanks
--Make sure bug fixes are added to release notes. Don't assume release notes version. Instead, create a Working Notes document. Apon a new packaged release, clear this out. Leave it up to me to put notes in proper spot so assume I did and clear this out
-  -Bug fixes include bugs I document. If the bug is on github, make sure to include the issue # (or whatever it's called) and make sure any future github issues are documented in commit
-  -Also make sure any features are added to the Working Notes. This includes TASKS
-  -Make sure all of this is documented in workflow
--If checking Beta updates in options and after the user hits save, run a github check to see if there is beta update out. This will handle if the user never had a beta update
-  -If unchecking and after the user hits save, update to last "published" non alpha/beta/rc version. This will revert back to a non beta version
 
 ####### CURRENT BUGS #######
--When selecting a cell with a combobox in data dictionary, the text gets overlayed with the text that was already in there and text from the combobox. Only need to display 1
--Get an error on Windows when closing the program. This is creating 2 knon bugs now. First is the bug on close: RuntimeError: wrapped C/C++ object of type QTableWidget has been deleted
-  -Second error is hitting Report on GitHub pops up twice for the same error. Hitting the button opens up this github link: https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2FS31F3R%2FDataDoctor%2Fissues%2Fnew%3Ftitle%3DCrash%253A%2BRuntimeError%253A%2Bwrapped%2BC%252FC%252B%252B%2Bobject%2Bof%2Btype%2BQTableWidget%2Bhas%2Bbeen%2Bdeleted%26body%3D%252A%252AKind%253A%252A%252A%2Bcrash%250A%252A%252AVersion%253A%252A%252A%2B3.0.0-rc.2.2%250A%252A%252AOS%253A%252A%252A%2BWindows%2B11%2B%2528AMD64%2529%250A%252A%252APython%253A%252A%252A%2B3.13.7%250A%250A%2523%2523%2BWhat%2Bhappened%250A%250ARuntimeError%253A%2Bwrapped%2BC%252FC%252B%252B%2Bobject%2Bof%2Btype%2BQTableWidget%2Bhas%2Bbeen%2Bdeleted%250A%250A%2523%2523%2BTraceback%250A%250A%2560%2560%2560%250ATraceback%2B%2528most%2Brecent%2Bcall%2Blast%2529%253A%250A%2B%2BFile%2B%2522C%253A%255CProgram%2BFiles%255CData%2BDoctor%255CProject%2BFiles%255Ccore%255CUpload.py%2522%252C%2Bline%2B979%252C%2Bin%2BeventFilter%250A%2B%2B%2B%2Bheader%2B%253D%2Btable.horizontalHeader%2528%2529%250ARuntimeError%253A%2Bwrapped%2BC%252FC%252B%252B%2Bobject%2Bof%2Btype%2BQTableWidget%2Bhas%2Bbeen%2Bdeleted%250A%2560%2560%2560%250A%250A%2523%2523%2Bapp.log%2B%2528tail%2529%250A%250A%2560%2560%2560%250ABUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B63%253A%2BRS41LC%2B-%2Bflow%2B%250A2337%250A2026-08-05%2B06%253A04%253A48%252C624%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B64%253A%2BPDMLC-Forebay-Elevation%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C624%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B65%253A%2BPDMLC%2B-%2BLake%2BHavasu%2B-%2Bres%2Bel%2Binst%2B%250A2090%250A2026-08-05%2B06%253A04%253A48%252C624%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B66%253A%2BPDMLC-Tailbay-Stage%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C624%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B67%253A%2BPDMLC%2B-%2BBelow%2BParker%2BDam%2B-%2Bave%2Btbay%2Belev%2B%250A2149%250A2026-08-05%2B06%253A04%253A48%252C624%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B68%253A%2BPDMLC%2B-%2BLake%2BHavasu%2B-%2Bpower%2Brelease%2B%250A2146%250A2026-08-05%2B06%253A04%253A48%252C625%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B69%253A%2BSCADA-2146-Parker_CFS-Corrected%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C625%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B70%253A%2BPGLC-Stage%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C625%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B71%253A%2BPGLC%2B-%2Bgage%2Bheight%2B%250A2055%250A2026-08-05%2B06%253A04%253A48%252C625%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bin%2Bdict%252C%2Busing%2Bdict%2Blabel%252C%2Bheader%2B72%253A%2BPGLC%2B%250Aec5dbfd2308e47f1afd46f967094a933%250A2026-08-05%2B06%253A04%253A48%252C625%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B73%253A%2BPGLC%2B-%2Bflow%2B%250A2119%250A2026-08-05%2B06%253A04%253A48%252C625%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B74%253A%2BWWLC-Stage%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C626%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B75%253A%2BWWLC%2B-%2Bgage%2Bheight%2B%250A2058%250A2026-08-05%2B06%253A04%253A48%252C626%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B76%253A%2BWWLC-Discharge%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C626%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B77%253A%2BWWLC%2B-%2Bflow%2B%250A2021%250A2026-08-05%2B06%253A04%253A48%252C626%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B78%253A%2BPVLC%2B%2528USGS%2529%2B-%2Binstantaneous%2Bflow%2B%250A23516%250A2026-08-05%2B06%253A04%253A48%252C626%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSGS%2Bdict%2BHIT%2Bkey%253D%2527f02e05bac5ca472dbce494a3f54ef451%2527%2Brow%253D29304%2BcommonName%2Bheader%2B79%253A%2BPVLC%2B%2528USGS%2529%2B%250AINSTANT%250A2026-08-05%2B06%253A04%253A48%252C626%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B80%253A%2BBIBLC-Stage%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C627%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B81%253A%2BBIBLC%2B-%2Bgage%2Bheight%2B%250A20181%250A2026-08-05%2B06%253A04%253A48%252C627%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B82%253A%2BBIBLC-Discharge%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C627%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B83%253A%2BBIBLC%2B-%2Bflow%2B%250A20179%250A2026-08-05%2B06%253A04%253A48%252C627%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B84%253A%2BBMPLC-Stage%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C627%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B85%253A%2BBMPLC%2B-%2Bgage%2Bheight%2B%250A20191%250A2026-08-05%2B06%253A04%253A48%252C628%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B86%253A%2BBMPLC-Discharge%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C628%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B87%253A%2BBMPLC%2B-%2Bflow%2B%250A20189%250A2026-08-05%2B06%253A04%253A48%252C628%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B88%253A%2BTFLC-Stage%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C628%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B89%253A%2BTFLC%2B-%2Bgage%2Bheight%2B%250A2057%250A2026-08-05%2B06%253A04%253A48%252C628%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B90%253A%2BTFLC-Discharge%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C628%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B91%253A%2BTFLC%2B-%2Bflow%2B%250A2020%250A2026-08-05%2B06%253A04%253A48%252C629%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B92%253A%2BBOBLC-Stage%2B%250ASystem%250A2026-08-05%2B06%253A04%253A48%252C629%2B%255BDEBUG%255D%2BbuildTable%253A%2BUSBR%2Bin%2Bdict%252C%2Bheader%2B93%253A%2BBOBLC%2B-%2Bgage%2Bheight%2B%250A20186%250A2026-08-05%2B06%253A04%253A48%252C629%2B%255BDEBUG%255D%2BbuildTable%253A%2BAquarius%2Bnot%2Bin%2Bdict%252C%2Busing%2BAPI%2Blabel%252C%2Bheader%2B94%253A%2BBOBLC-Discharge%2B%250ASystem%250A2026-08-05%2B06%253A07%253A33%252C085%2B%255BDEBUG%255D%2BuiDetails%2Binitialized%250A%2560%2560%2560%250A
-    -The link takes the user to a page that says "Whoops, something went wrong!". This has been happening for several days so I don't think it's a temp github issue
--When using MCS method for Oracle queries, it prompts for credentials A LOT. It looks like it does it for each thread that uses a new oracle connection. This is indffecient. Need to see if there is a way to put credentials in, let it verify, then use that session
-  -Normally the MCS method does work this way and as long as it's being used frequently, other queries won't prompt again. It only prompts again after a certain amount of time passes, like it expires
-  -This change only needs to happen when method is MCS. This is specified in the sqlnet.ora file. If wallet is being used, use current method UNLESS our changes for MCS make wallet more effecient also
--certs folder isn't in the windows pakage. it needs to be, just an empty folder but I want the spot available for the user to put the cert into without having to create it and hope they did it right
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
@@ -87,6 +48,14 @@
 -When Seifer confirms a test item: mark [x] in test.txt (and leave off this list)
 -If a test fails: keep in test.txt with notes; do not put back on To Do until abandoned
 -Clean up test.txt after confirmed [x] items (standard workflow): drop long steps for [x] into a short Confirmed list; keep retest items detailed
+-Working Notes: documentation/Working Notes.txt
+  - Grok adds bug fixes, features, and TASKS here as they land (do not guess the
+    GitHub release file name). If a bug is on GitHub, include the issue number.
+  - Future GitHub issues that are fixed go in the commit message as well
+    (e.g. "Fix header Ctrl+click (#12)").
+  - Seifer copies Working Notes into documentation/releases/vVERSION.md
+  - python scripts/publishRelease.py on a packaged release seeds an empty
+    vVERSION.md from Working Notes if needed, then clears Working Notes
 -Documentation: Grok may edit documentation/ as part of normal workflow (To Do, test.txt, notes, wiki, README, etc.)
 -README.md and documentation/wiki/ are public. Write them for users / operators.
   Do not put Seifer-only asides, "talking to you" notes, or Grok/Seifer chatter in them.
@@ -95,7 +64,7 @@
 -Commits:
     - Grok may auto-commit code paths (ui, core, scripts, requirements, sounds, icons, …)
     - Grok may auto-commit README.md and documentation/wiki/
-    - Grok must NOT auto-commit other documentation/ (To Do, test.txt, notes) — Seifer commits those
+    - Grok must NOT auto-commit other documentation/ (To Do, test.txt, notes, Working Notes) — Seifer commits those
     - secret.grok and status.grok are gitignored; never commit them
 -Wiki: documentation/wiki/ is the working copy. This machine uses
   `git config core.hooksPath scripts/hooks` so Code-OSS Push also runs
