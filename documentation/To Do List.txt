@@ -15,7 +15,7 @@
         -YAO = USBR-YAOHDB
         -UC = USBR-UCHDB2
         -LC = USBR-LCHDB
-        -CU = USBR-UCHDB
+        -CU = USBR-CUHDB
         -KBO = USBR-KBOHDB
         -lbo = USBR-LBOHDB
     -valuePrecision, precisionOverride, expectedMin, expectedMax, cuttoffMin, cutoffMax, and rateOfChange should never be touched by this script
