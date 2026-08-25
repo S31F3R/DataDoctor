@@ -26,8 +26,8 @@ DB_SITE_CODE map:
   ECO → USBR-ECOHDB
 
 Usage (from project root):
-  python scripts/updateBunkerFromCsv.py path/to/export.csv
-  python scripts/updateBunkerFromCsv.py *.csv --db core/bunker.db --dry-run
+  python scripts/updateBunkerFromCsv.py "path/to/export.csv"
+  python scripts/updateBunkerFromCsv.py "*.csv" --db "core/bunker.db" --dry-run
 """
 
 from __future__ import annotations
