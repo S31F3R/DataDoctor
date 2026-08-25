@@ -11,14 +11,14 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Update dialogs: restart, not applyUpdate.cmd
+[x] Update dialogs: restart, not applyUpdate.cmd
    Steps:
      a. Windows launcher + Beta updates. When an update is offered, text says
         restart Data Doctor (no applyUpdate.cmd).
      b. After Download, "Restart Data Doctor to apply the update."
      c. Progress dialog: bar has even left/right margins (not shoved left).
 
-[ ] applyUpdate keeps a single bunker.db.bak
+[x] applyUpdate keeps a single bunker.db.bak
    Steps:
      a. Run applyUpdate twice (or merge bunker twice).
      b. Project Files/core/ has at most one bunker.db.bak (no .bak-timestamp pile).
