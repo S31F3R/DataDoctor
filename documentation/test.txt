@@ -22,13 +22,13 @@ Current Tests
      d. No GitHub token / password fields in Options.
      e. One Report click → one browser tab (not two).
 
-[ ] Close Data Doctor (Windows) — no deleted-QTableWidget crash
+[x] Close Data Doctor (Windows) — no deleted-QTableWidget crash
    Steps:
      a. Open a query so the main table has columns, then close the app.
      b. No Unexpected Error dialog. app.log may have a DEBUG teardown line;
         must not pop Report on GitHub.
 
-[ ] Data Dictionary combobox — one text only
+[x] Data Dictionary combobox — one text only
    Steps:
      a. Open Data Dictionary. Click a database cell and a valuePrecision cell.
      b. While the dropdown is open, the cell shows the combo text once
@@ -41,6 +41,7 @@ Current Tests
      b. If link fails (ORA-02019 etc.), retry by connecting to the target DSN directly.
      c. Query still returns data when direct path works.
    Notes: USBR.sqlRead detects link errors and re-runs without link.
+   RESPONSE: I don't think this is working at all. 
 
 [ ] MCS Oracle credentials prompted once per session burst
    Steps:
@@ -74,7 +75,7 @@ Current Tests
      c. valuePrecision unchanged; expectedMin filled; siteName/datatype/database
         still update from packaged.
 
-[ ] USBR CSV → bunker.db
+[x] USBR CSV → bunker.db
    Steps:
      a. From project root: python scripts/updateBunkerFromCsv.py FILE.csv --dry-run
      b. SITE_DATATYPE_ID/SITE_ID insert-only; SITE_NAME and DATATYPE_NAME update;

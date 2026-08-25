@@ -1,4 +1,10 @@
 ####### CURRENT TASKS #######
+-In query list, have a right click delete option
+-Verified UCHDB, LCHDB, and YAOHDB have links between each other
+    -For internal queriest, do not attempt to run a database link on KBOHDB, CUHDB, LBOHDB, and ECOHDB
+      -These need to be run on their OWN thread with their own connections, similar to how AQUARIUS, USGS-NWIS, and USBR are seperated
+-When hitting Save Quick Look and there is already a quick look name in the combo box, auto fill in the Quick Look Name with that name
+  -If a quickLook with the same name exists, prompt it exists and confirm Overwrite via message box with yes or no
 
 ####### CURRENT BUGS #######
 
