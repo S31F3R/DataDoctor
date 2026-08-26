@@ -8,7 +8,7 @@ import time
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Any, Optional, Tuple, Dict
 from core import Logic, Config
@@ -32,6 +32,11 @@ _mcsConnectLock = threading.Lock()
 _mcsPoolsLock = threading.Lock()
 _mcsPools: Dict[str, "_McsPool"] = {}
 _sqlnetLogState: Dict[str, int] = {}
+_sqlnetProcessStart = time.time()
+_SQLNET_TIME_RE = re.compile(
+    r"Time:\s*(\d{1,2}-[A-Za-z]{3}-\d{4}\s+\d{1,2}:\d{2}:\d{2})",
+    re.IGNORECASE,
+)
 
 # Oracle docs: quoted passwords may not contain double-quote or return/newline.
 # Also reject other control characters (unsafe / non-printable).
@@ -839,6 +844,20 @@ def _sqlnetLogPaths() -> List[str]:
     return out
 
 
+def _sqlnetBlockTime(block: str):
+    """Parse Instant Client 'Time: 25-AUG-2026 17:10:23' if present."""
+    m = _SQLNET_TIME_RE.search(block or "")
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    for fmt in ("%d-%b-%Y %H:%M:%S", "%d-%B-%Y %H:%M:%S"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def _fatalSqlnetBlocks(text: str) -> List[str]:
     if not text or not text.strip():
         return []
@@ -859,11 +878,14 @@ def _fatalSqlnetBlocks(text: str) -> List[str]:
 
 def ingestSqlnetLog() -> None:
     """
-    Copy new Fatal entries from Instant Client sqlnet.log into app.log as ERROR.
+    Copy Fatal entries that Instant Client appended *after this process started*
+    into app.log as ERROR, in the live log timeline.
 
-    Instant Client writes Fatals to sqlnet.log (often cwd) and does not go
-    through Python logging. Offset-tracked so we do not spam the same block.
+    First sight of a sqlnet.log is EOF only — never dump hours of old Fatals
+    into the current query. Blocks whose Oracle Time: is before process start
+    are skipped even if they sit in newly-read bytes (file truncated/rewritten).
     """
+    cutoff = datetime.fromtimestamp(_sqlnetProcessStart) - timedelta(seconds=120)
     for path in _sqlnetLogPaths():
         if not os.path.isfile(path):
             continue
@@ -871,26 +893,30 @@ def ingestSqlnetLog() -> None:
             size = os.path.getsize(path)
         except OSError:
             continue
-        prev = _sqlnetLogState.get(path, 0)
+        if path not in _sqlnetLogState:
+            # First sight: remember EOF; do not ingest history
+            _sqlnetLogState[path] = size
+            continue
+        prev = _sqlnetLogState[path]
         if size < prev:
             prev = 0
         if size == prev:
             continue
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
-                if prev > 0:
-                    f.seek(prev)
-                    newText = f.read()
-                else:
-                    # First sight: only the tail so an old giant log is not dumped
-                    f.seek(max(0, size - 32768))
-                    newText = f.read()
+                f.seek(prev)
+                newText = f.read()
         except Exception:
             continue
         _sqlnetLogState[path] = size
         for block in _fatalSqlnetBlocks(newText):
+            when = _sqlnetBlockTime(block)
+            if when is not None and when < cutoff:
+                continue
             clipped = block if len(block) <= 4000 else block[:3997] + "..."
-            Logic.logMessage("ERROR", f"sqlnet.log ({os.path.basename(path)}): {clipped}")
+            whenLabel = when.strftime("%H:%M:%S") if when is not None else ""
+            prefix = f"sqlnet.log {whenLabel}: " if whenLabel else "sqlnet.log: "
+            Logic.logMessage("ERROR", prefix + clipped)
 
 
 def _connectionAlive(conn) -> bool:
