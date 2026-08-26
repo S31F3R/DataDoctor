@@ -1104,6 +1104,18 @@ def loadQuickLook(cbQuickLook, listQueryList, chkbDelta=None, chkbOverlay=None):
     except Exception as e:        
         logMessage("ERROR", "loadQuickLook: Failed to load Quick Look from {}: {}".format(quickLookPath, e))
 
+def quickLookExists(quickLookName) -> bool:
+    """True if a user or example Quick Look JSON already uses this name."""
+    name = (quickLookName or "").strip()
+    if not name:
+        return False
+    userPath = os.path.join(Utils.getQuickLookDir(), f"{name}.json")
+    if os.path.isfile(userPath):
+        return True
+    examplePath = resourcePath(f"quickLook/{name}.json")
+    return os.path.isfile(examplePath)
+
+
 def deleteQuickLook(quickLookName):
     if not quickLookName:        
         logMessage("WARN", "Empty quick look name—cannot delete.")

@@ -12,6 +12,36 @@ primaryDsn = None
 queryLimit = 500
 maxThreads = 15
 
+# Internal queries may use @dblink among these (verified UC/LC/YAO family).
+_LINKED_HDB_ALIASES = frozenset({"lchdb", "yaohdb", "uchdb2", "uchdb"})
+# No usable links from that family — always a direct session on its own worker.
+_ISOLATED_HDB_ALIASES = frozenset({"kbohdb", "cuhdb", "lbohdb", "ecohdb"})
+
+
+def hdbAlias(svr) -> str:
+    """USBR-LCHDB|LCHDBA or USBR-LCHDB or lchdb → lchdb."""
+    s = str(svr or "").strip()
+    if "|" in s:
+        s = s.split("|", 1)[0].strip()
+    if "-" in s:
+        s = s.split("-", 1)[1].strip()
+    return s.lower()
+
+
+def hdbAllowsDbLink(svr) -> bool:
+    """True when this HDB is in the UC/LC/YAO family that shares database links."""
+    return hdbAlias(svr) in _LINKED_HDB_ALIASES
+
+
+def hdbIsolatedDirect(svr) -> bool:
+    """True when internal queries must connect to this HDB directly (no @link)."""
+    alias = hdbAlias(svr)
+    if alias in _ISOLATED_HDB_ALIASES:
+        return True
+    if not alias:
+        return False
+    return alias not in _LINKED_HDB_ALIASES
+
 def fetchAgenMap(oracleConn, schema):
     # Fetch agen map from primary dsn's hdb tables (local, no link)
     agenMap = {}
@@ -221,18 +251,15 @@ def isDbLinkError(exc):
     """True if this looks like a failed Oracle database link (not auth)."""
     if exc is None:
         return False
-    try:
-        if Oracle.isAuthError(exc):
-            return False
-    except Exception:
-        pass
-    text = str(exc).upper() if exc is not None else ''
-    # Common link / remote-access failures
     markers = (
         'ORA-02019',  # connection description for remote database not found
         'ORA-02068',  # following severe error from...
         'ORA-02063',  # preceding line from...
+        'ORA-02070',
+        'ORA-02082',
         'ORA-02085',  # database link ... connects to ...
+        'ORA-04052',
+        'ORA-04054',
         'ORA-12154',  # TNS could not resolve (sometimes via link)
         'ORA-12514',
         'ORA-12541',
@@ -240,7 +267,20 @@ def isDbLinkError(exc):
         'DATABASE LINK',
         'DBLINK',
     )
-    return any(m in text for m in markers)
+    seen = set()
+    cur = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        try:
+            if Oracle.isAuthError(cur):
+                return False
+        except Exception:
+            pass
+        text = str(cur).upper() if cur is not None else ""
+        if any(m in text for m in markers):
+            return True
+        cur = getattr(cur, "__cause__", None) or getattr(cur, "__context__", None)
+    return False
 
 
 def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', forceDirect=False):
@@ -259,13 +299,16 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
         )
 
     # Parse svr to short lower if full format
-    if '|' in str(svr):
-        svr = str(svr).split('|', 1)[0].strip()
-    if '-' in svr:
-        svr = svr.split('-')[1].lower()
+    svr = hdbAlias(svr)
 
-    # Set primary dsn on first call
-    if primaryDsn is None:
+    isolated = hdbIsolatedDirect(svr)
+    if isolated:
+        forceDirect = True
+
+    # Set primary dsn on first *linked* HDB only. Isolated HDBs never become
+    # the primary (that used to make later UC/LC/YAO queries go through @link
+    # from KBO/CU/LBO/ECO).
+    if primaryDsn is None and not isolated:
         primaryDsn = svr
 
         if Config.debug:
@@ -275,8 +318,8 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
     from core.Utils import hdbSchemaForDatabase
     targetSchema = hdbSchemaForDatabase(f'USBR-{svr.upper()}')
 
-    # Direct connect to target when forced or when this IS the primary
-    useDirect = forceDirect or (svr == primaryDsn)
+    # Direct connect: forced, isolated HDB, this IS the primary, or no primary yet
+    useDirect = forceDirect or isolated or (primaryDsn is None) or (svr == primaryDsn)
     if useDirect:
         dsn = svr
         link = ''
@@ -708,12 +751,14 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
                 existing.extend(raw)
 
     if workerErrors and not resultDict:
-        # Link failed entirely → retry with direct connection to target DSN
-        if link and not forceDirect and any(isDbLinkError(e) for e in workerErrors):
+        # Linked query failed entirely → retry with a direct session to the
+        # target DSN. Any worker error (not only ORA-02019) — the previous
+        # isDbLinkError filter was missing real link failures.
+        if link and not forceDirect:
             Logic.logMessage(
                 "WARN",
                 f"sqlRead: database link to {svr} failed; retrying with direct connection "
-                f"(no @{svr})",
+                f"(no @{svr}): {workerErrors[0]}",
             )
             return sqlRead(
                 svr, SDIDs, startDate, endDate, interval,
@@ -727,12 +772,11 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
             f"sqlRead: {len(workerErrors)} worker task(s) failed; continuing with partial results "
             f"for {len(resultDict)} SDIDs",
         )
-    # Partial results with link errors: still try direct for empty SDIDs once
+    # Partial results over a link: retry missing SDIDs on a direct connection
     if (
         link
         and not forceDirect
         and workerErrors
-        and any(isDbLinkError(e) for e in workerErrors)
         and any(str(s) not in resultDict for s in SDIDs)
     ):
         Logic.logMessage(

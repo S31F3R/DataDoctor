@@ -61,9 +61,15 @@ WORKING_NOTES = ROOT / "documentation" / "Working Notes.txt"
 WORKING_NOTES_STUB = (
     "Working Notes\n"
     "=============\n"
-    "Cleared after packaged release. Add bug fixes, GitHub issue numbers,\n"
-    "and features/tasks here. Seifer copies these into the versioned\n"
-    "release notes (documentation/releases/vVERSION.md) before the next publish.\n"
+    "Scratch file for unreleased changes. Do not create vVERSION.md here —\n"
+    "the version is unknown until publish (rc.N, beta.N, or full vX.Y.Z).\n"
+    "\n"
+    "Write one bullet per change (bug fix, feature, or TASK). Include a\n"
+    "GitHub issue number when there is one.\n"
+    "\n"
+    "publishRelease.py copies these bullets under ## Changes in\n"
+    "documentation/releases/vVERSION.md (no Working Notes heading), then\n"
+    "resets this file to this template.\n"
     "\n"
 )
 
@@ -204,15 +210,36 @@ def notesTemplate(version: str, channel: str) -> str:
 
 
 def workingNotesBody() -> str:
-    """Non-stub content from documentation/Working Notes.txt, or empty."""
+    """
+    Change bullets from documentation/Working Notes.txt.
+
+    The file is a scratch pad (title + instructions + bullets). Only the
+    bullets (and wrapped continuation lines) go under ## Changes in the
+    versioned .md — never the 'Working Notes' heading.
+    """
     if not WORKING_NOTES.is_file():
         return ""
-    text = WORKING_NOTES.read_text(encoding="utf-8").strip()
-    if not text:
+    text = WORKING_NOTES.read_text(encoding="utf-8")
+    bullets: list[str] = []
+    started = False
+    for raw in text.splitlines():
+        stripped = raw.rstrip()
+        s = stripped.strip()
+        if not started:
+            if s.startswith("-") and s.lstrip("-").strip():
+                started = True
+                bullets.append(stripped if stripped.startswith("-") else f"- {s}")
+            continue
+        if s.lower() == "working notes":
+            continue
+        if s and set(s) <= {"=", "-"}:
+            continue
+        bullets.append(stripped)
+    while bullets and not bullets[-1].strip():
+        bullets.pop()
+    if not bullets:
         return ""
-    if text.lower().startswith("working notes") and "cleared after packaged" in text.lower():
-        return ""
-    return text + "\n"
+    return "\n".join(bullets) + "\n"
 
 
 def clearWorkingNotes() -> None:
@@ -226,9 +253,9 @@ def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | 
     GitHub Release body comes from documentation/releases/vVERSION.md.
     --notes PATH overrides. Interactive run can type a few bullets first.
 
-    If the versioned file is missing/empty, seed it from Working Notes so a
-    same-run publish still has a body. Working Notes is cleared after the
-    version commit (assume Seifer already copied, or we just seeded).
+    If the versioned file is missing/empty, seed ## Changes from Working
+    Notes bullets (the scratch file has no version in its name — that is
+    chosen at publish). Then reset Working Notes to the empty template.
     """
     dest = notesPathFor(version)
     if notesArg:

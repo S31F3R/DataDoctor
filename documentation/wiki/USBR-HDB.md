@@ -44,7 +44,9 @@ Internal Data Query only. Edited cells (magenta) and overlay auto-fills can be s
 
 ## Database links
 
-A multi-DB internal query may use `@link` from the primary. If the link fails (`ORA-02019` and similar), Data Doctor retries by connecting to the target DSN **directly**.
+**UCHDB2 / LCHDB / YAOHDB** share database links. A mixed internal query among those three may use `@link` from the first of them. If that link fails, Data Doctor retries by connecting to the target DSN **directly**.
+
+**KBOHDB, CUHDB, LBOHDB, and ECOHDB** are queried on their own worker with a **direct** connection (no `@link`), the same way USGS and Aquarius are separate from the USBR group.
 
 ## Public USBR web (not HDB)
 

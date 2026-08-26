@@ -21,7 +21,7 @@ See [App Data](App-Data).
 In the Query window:
 
 1. Build the list (and set Delta / Overlay if you want them stored).
-2. **Save Quick Look** — name it. That becomes the last-used name in `user.config`.
+2. **Save Quick Look** — the name box is filled from the combo when a Quick Look is already selected. If that name exists, confirm overwrite.
 3. Pick it in the combo and **Load Quick Look**.
 4. **Delete Quick Look** removes that saved file.
 

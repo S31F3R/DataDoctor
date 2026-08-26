@@ -395,12 +395,32 @@ class uiQuery(QMainWindow):
         dlg.setLabelText("Quick Look name:")
         dlg.setInputMode(QInputDialog.InputMode.TextInput)
         dlg.setOkButtonText("Save")
+        existingName = ""
+        if self.cbQuickLook is not None:
+            existingName = (self.cbQuickLook.currentText() or "").strip()
+        if existingName:
+            dlg.setTextValue(existingName)
         hint = dlg.sizeHint()
         dlg.resize(max(hint.width(), 280) + 60, hint.height())
         ok = dlg.exec() == dlg.DialogCode.Accepted
         name = dlg.textValue().strip() if ok else ""
 
         if ok and name:
+            if Logic.quickLookExists(name):
+                reply = QMessageBox.question(
+                    self,
+                    "Overwrite Quick Look",
+                    f"A Quick Look named '{name}' already exists.\n\nOverwrite it?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if reply != QMessageBox.StandardButton.Yes:
+                    if Config.debug:
+                        Logic.logMessage(
+                            "DEBUG",
+                            f"btnSaveQuickLookPressed: overwrite of '{name}' declined",
+                        )
+                    return
             deltaChecked = bool(self.chkbDelta.isChecked()) if self.chkbDelta is not None else False
             overlayChecked = bool(self.chkbOverlay.isChecked()) if self.chkbOverlay is not None else False
             Logic.saveQuickLook(
@@ -410,6 +430,10 @@ class uiQuery(QMainWindow):
                 overlayPairs=overlayChecked,
             )
             Utils.loadQuickLooks(self.cbQuickLook)
+            if self.cbQuickLook is not None:
+                idx = self.cbQuickLook.findText(name)
+                if idx >= 0:
+                    self.cbQuickLook.setCurrentIndex(idx)
 
             if Config.debug:
                 Logic.logMessage(
@@ -642,28 +666,34 @@ class uiQuery(QMainWindow):
 
     def showQueryListContextMenu(self, pos):
         """
-        Right-click a query list item: Insert Query Above / Below when DataID is set.
-        Inserts act like Add Query but place the new row relative to the clicked item.
+        Right-click a query list item: Insert Query Above / Below when DataID
+        is set, and Delete (clicked row, or all selected if the click is in
+        the selection).
         """
         if self.listQueryList is None:
             return
         item = self.listQueryList.itemAt(pos)
         if item is None:
             return
-        # Select the right-clicked row so the user sees the anchor
         row = self.listQueryList.row(item)
-        self.listQueryList.setCurrentRow(row)
+        selected = self.listQueryList.selectedItems()
+        if item not in selected:
+            self.listQueryList.clearSelection()
+            item.setSelected(True)
+            self.listQueryList.setCurrentItem(item)
 
         dataID = self.qleDataID.text().strip() if self.qleDataID is not None else ''
         menu = QMenu(self)
         actAbove = menu.addAction("Insert Query Above")
         actBelow = menu.addAction("Insert Query Below")
-        # Only useful when form has a DataID ready to insert
         actAbove.setEnabled(bool(dataID))
         actBelow.setEnabled(bool(dataID))
         if not dataID:
             actAbove.setToolTip("Enter a Data ID first")
             actBelow.setToolTip("Enter a Data ID first")
+        menu.addSeparator()
+        nSel = len(self.listQueryList.selectedItems())
+        actDelete = menu.addAction("Delete" if nSel <= 1 else f"Delete ({nSel})")
 
         chosen = menu.exec(self.listQueryList.mapToGlobal(pos))
         if chosen is None:
@@ -672,6 +702,8 @@ class uiQuery(QMainWindow):
             self.insertQueryAt(row, below=False)
         elif chosen == actBelow:
             self.insertQueryAt(row, below=True)
+        elif chosen == actDelete:
+            self.btnRemoveQueryPressed()
 
     def insertQueryAt(self, anchorRow, below=False):
         """Insert form values into the list above or below anchorRow (like Add Query)."""
