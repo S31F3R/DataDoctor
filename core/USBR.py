@@ -42,12 +42,21 @@ def hdbIsolatedDirect(svr) -> bool:
         return False
     return alias not in _LINKED_HDB_ALIASES
 
+def qualifyHdbObject(name, schema='', link=''):
+    """
+    Linked remote: SCHEMA.name@link  (LCHDBA.r_base@lchdb)
+    Direct session: name             (r_base) — default schema / public synonyms
+    """
+    prefix = f"{schema}." if schema else ""
+    return f"{prefix}{name}{link or ''}"
+
+
 def fetchAgenMap(oracleConn, schema):
     # Fetch agen map from primary dsn's hdb tables (local, no link)
     agenMap = {}
     agenQuery = f"""
         SELECT agen_id, agen_name
-        FROM {schema}.hdb_agen
+        FROM {qualifyHdbObject('hdb_agen', schema)}
         ORDER BY agen_id
     """
 
@@ -66,7 +75,7 @@ def fetchCollectionMap(oracleConn, schema):
     collectionMap = {}
     collectionQuery = f"""
         SELECT collection_system_id, collection_system_name
-        FROM {schema}.hdb_collection_system
+        FROM {qualifyHdbObject('hdb_collection_system', schema)}
         ORDER BY collection_system_id
     """
 
@@ -85,7 +94,7 @@ def fetchLoadingMap(oracleConn, schema):
     loadingMap = {}
     loadingQuery = f"""
         SELECT loading_application_id, loading_application_name
-        FROM {schema}.hdb_loading_application
+        FROM {qualifyHdbObject('hdb_loading_application', schema)}
         ORDER BY loading_application_id
     """
 
@@ -104,7 +113,7 @@ def fetchMethodMap(oracleConn, schema):
     methodMap = {}
     methodQuery = f"""
         SELECT method_id, method_name
-        FROM {schema}.hdb_method
+        FROM {qualifyHdbObject('hdb_method', schema)}
         ORDER BY method_id
     """
 
@@ -122,7 +131,7 @@ def fetchComputationMap(oracleConn, schema, link):
     computationMap = {}
     computationQuery = f"""
         SELECT computation_id, computation_name
-        FROM {schema}.cp_computation{link}
+        FROM {qualifyHdbObject('cp_computation', schema, link)}
         ORDER BY computation_id
     """
 
@@ -323,8 +332,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
     if useDirect:
         dsn = svr
         link = ''
-        # Maps live on the same DB we're reading
-        schema = targetSchema
+        # Direct session: unqualified r_base / r_hour (synonyms / user schema).
+        # Linked: SCHEMA.r_base@dsn (e.g. LCHDBA.r_base@lchdb).
+        schema = ''
     else:
         dsn = primaryDsn
         link = f'@{svr}'
@@ -345,8 +355,25 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
     tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
 
     # Table names
-    baseTable = f'{targetSchema}.r_base{link}'  # Always r_base for metadata
-    dataTable = f'{targetSchema}.{table.lower()}_{tableSuffix.lower()}{link}' # r_hour or m_hour, etc.
+    # Direct: r_base / r_hour. Linked: LCHDBA.r_base@lchdb
+    dataRel = f'{table.lower()}_{tableSuffix.lower()}'
+    if useDirect:
+        baseTable = qualifyHdbObject('r_base')
+        dataTable = qualifyHdbObject(dataRel)
+        mapSchema = ''
+        compSchema = ''
+        compLink = ''
+    else:
+        baseTable = qualifyHdbObject('r_base', targetSchema, link)
+        dataTable = qualifyHdbObject(dataRel, targetSchema, link)
+        mapSchema = schema
+        compSchema = targetSchema
+        compLink = link
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"sqlRead: dsn={dsn} direct={useDirect} FROM {dataTable} / {baseTable}",
+        )
 
     # Parse dates with offset handling
     try:
@@ -407,11 +434,11 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
     if not isMrid:
         mapConn = Oracle.oracleConnection(dsn)
         mapConn.connect()
-        agenMap = fetchAgenMap(mapConn, schema)
-        collectionMap = fetchCollectionMap(mapConn, schema)
-        loadingMap = fetchLoadingMap(mapConn, schema)
-        methodMap = fetchMethodMap(mapConn, schema)
-        computationMap = fetchComputationMap(mapConn, targetSchema, link)
+        agenMap = fetchAgenMap(mapConn, mapSchema)
+        collectionMap = fetchCollectionMap(mapConn, mapSchema)
+        loadingMap = fetchLoadingMap(mapConn, mapSchema)
+        methodMap = fetchMethodMap(mapConn, mapSchema)
+        computationMap = fetchComputationMap(mapConn, compSchema, compLink)
         mapConn.close()
 
     # Determine timeCol for BETWEEN and matching

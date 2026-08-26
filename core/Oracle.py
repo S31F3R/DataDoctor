@@ -894,29 +894,19 @@ def ingestSqlnetLog() -> None:
 
 
 def _connectionAlive(conn) -> bool:
-    if conn is None:
-        return False
-    try:
-        ping = getattr(conn, "ping", None)
-        if callable(ping):
-            ping()
-            return True
-        cursor = conn.cursor()
-        try:
-            cursor.execute("SELECT 1 FROM DUAL")
-            cursor.fetchone()
-        finally:
-            cursor.close()
-        return True
-    except Exception:
-        return False
+    """
+    MCS sessions must not be ping-tested. A stale Windows cert/smart-card
+    cache can abort the process with 0x80100070 (SCARD_W_CACHE_ITEM_NOT_FOUND)
+    instead of a Python exception.
+    """
+    return conn is not None
 
 
 def _tryCloseOracle(conn) -> None:
     try:
         if conn is not None:
             conn.close()
-    except Exception:
+    except BaseException:
         pass
 
 
@@ -951,12 +941,9 @@ def acquireMcsConnection(dsn: str, connectFn):
     """
     pool = _mcsPoolFor(dsn)
     with pool.lock:
-        while pool.idle:
-            conn = pool.idle.pop()
-            if _connectionAlive(conn):
-                return conn
-            _tryCloseOracle(conn)
-            pool.liveCount = max(0, pool.liveCount - 1)
+        if pool.idle:
+            # Reuse without ping (MCS native ping can fatal 0x80100070).
+            return pool.idle.pop()
         waitForFirst = pool.firstStarted
         if not pool.firstStarted:
             pool.firstStarted = True
@@ -1117,6 +1104,9 @@ class oracleConnection:
             'NOT CONNECTED',
             'CONNECTION WAS CLOSED',
             'BROKEN PIPE',
+            '80100070',  # SCARD_W_CACHE_ITEM_NOT_FOUND (MCS / PIV)
+            'SCARD',
+            'CACHE_ITEM_NOT_FOUND',
         )
         return any(m in text for m in markers)
 

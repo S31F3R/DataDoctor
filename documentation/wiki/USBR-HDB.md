@@ -44,9 +44,9 @@ Internal Data Query only. Edited cells (magenta) and overlay auto-fills can be s
 
 ## Database links
 
-**UCHDB2 / LCHDB / YAOHDB** share database links. A mixed internal query among those three may use `@link` from the first of them. If that link fails, Data Doctor retries by connecting to the target DSN **directly**.
+**Internal SQL only:** **UCHDB2 / LCHDB / YAOHDB** share database links. A mixed query among those three may use `SCHEMA.r_base@dsn` (e.g. `LCHDBA.r_base@lchdb`) from the first of them. If that link fails, Data Doctor retries by connecting to the target DSN **directly** and querying unqualified `r_base` / `r_hour`.
 
-**KBOHDB, CUHDB, LBOHDB, and ECOHDB** are queried on their own worker with a **direct** connection (no `@link`), the same way USGS and Aquarius are separate from the USBR group.
+**KBOHDB, CUHDB, LBOHDB, and ECOHDB** (internal) each get their own worker and a **direct** connection: `FROM r_base`, never `@kbohdb`. Public USBR web queries stay a single USBR group (HTTP API, no Oracle links).
 
 ## Public USBR web (not HDB)
 
