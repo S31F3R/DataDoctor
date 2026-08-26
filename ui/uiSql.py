@@ -9,13 +9,13 @@ import json
 import threading
 from datetime import datetime
 
-from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal, QPointF, QSize, QEvent
-from PyQt6.QtGui import QPainter, QColor, QPixmap, QIcon, QPalette
+from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal, QPointF, QRect, QEvent
+from PyQt6.QtGui import QPainter, QColor, QPixmap, QPalette, QCursor
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QSplitterHandle, QTabWidget,
     QTabBar, QPlainTextEdit, QTableWidget, QTableWidgetItem, QListWidget,
     QComboBox, QPushButton, QLabel, QMenu, QMessageBox, QInputDialog, QDialog,
-    QDialogButtonBox, QSizePolicy, QAbstractItemView,
+    QDialogButtonBox, QSizePolicy, QAbstractItemView, QToolTip,
 )
 
 from core import Logic, Utils, Config
@@ -24,77 +24,220 @@ from core.Oracle import oracleConnection
 UNCATEGORIZED = "Uncategorized"
 HISTORY_MAX = 50
 SNIPPET_HANDLE_PX = 6
+PIN_ICON_PX = 16
+PIN_SLOT_PX = 22
 
 
-class IconHoverButton(QPushButton):
-    """Icon button with explicit normal / hover / pressed pixmaps (Pin vs Pinned)."""
+def _pinPixmap(iconName, kind, iconSize=PIN_ICON_PX):
+    if kind == "hover":
+        path = Logic.resourcePath(f"ui/icons/hoover/{iconName}.png")
+    elif kind == "pressed":
+        path = Logic.resourcePath(f"ui/icons/pressed/{iconName}.png")
+    else:
+        path = Logic.resourcePath(f"ui/icons/{iconName}.png")
+    pix = QPixmap(path)
+    if pix.isNull() and kind != "normal":
+        pix = QPixmap(Logic.resourcePath(f"ui/icons/{iconName}.png"))
+    if not pix.isNull() and iconSize:
+        pix = pix.scaled(
+            iconSize, iconSize,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+    return pix
+
+
+class ResultTabBar(QTabBar):
+    """
+    Result tabs paint Pin/Pinned in the close-X slot.
+
+    QTabBar.setTabButton widgets do not get hover or reliable clicks — Qt
+    handles that slot itself (same reason worksheet close-X uses QSS
+    QTabBar::close-button:hover, not a child QPushButton).
+    """
+
+    pinClicked = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._normal = QIcon()
-        self._hover = QIcon()
-        self._pressed = QIcon()
-        self.setFlat(True)
-        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setMouseTracking(True)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setStyleSheet(
-            "QPushButton { border: none; background: transparent; }"
-            "QPushButton:hover { background: transparent; }"
-            "QPushButton:pressed { background: transparent; }"
-        )
+        self._hoverIndex = -1
+        self._pressedIndex = -1
+        self._pix = {}
+        for name in ("Pin", "Pinned"):
+            self._pix[name] = {
+                "normal": _pinPixmap(name, "normal"),
+                "hover": _pinPixmap(name, "hover"),
+                "pressed": _pinPixmap(name, "pressed"),
+            }
 
-    def setIconSet(self, iconName, iconSize=16):
-        def load(kind):
-            if kind == "hover":
-                path = Logic.resourcePath(f"ui/icons/hoover/{iconName}.png")
-            elif kind == "pressed":
-                path = Logic.resourcePath(f"ui/icons/pressed/{iconName}.png")
+    def tabInserted(self, index):
+        super().tabInserted(index)
+        # Empty right-side widget so Qt reserves the close-X slot for text
+        # layout. Mouse-transparent: hover/click stay on this bar.
+        slot = QWidget(self)
+        slot.setFixedSize(PIN_ICON_PX + 4, PIN_ICON_PX + 4)
+        slot.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        slot.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setTabButton(index, QTabBar.ButtonPosition.RightSide, slot)
+
+    def _isPinned(self, index):
+        data = self.tabData(index) or {}
+        if isinstance(data, dict):
+            return bool(data.get("pinned"))
+        return False
+
+    def _pinRect(self, index):
+        slot = self.tabButton(index, QTabBar.ButtonPosition.RightSide)
+        if slot is not None:
+            g = slot.geometry()
+            if g.width() > 0 and g.height() > 0:
+                x = g.x() + (g.width() - PIN_ICON_PX) // 2
+                y = g.y() + (g.height() - PIN_ICON_PX) // 2
+                return QRect(x, y, PIN_ICON_PX, PIN_ICON_PX)
+        r = self.tabRect(index)
+        x = r.right() - PIN_SLOT_PX + (PIN_SLOT_PX - PIN_ICON_PX) // 2
+        y = r.y() + (r.height() - PIN_ICON_PX) // 2
+        return QRect(x, y, PIN_ICON_PX, PIN_ICON_PX)
+
+    def _pinHitRect(self, index):
+        slot = self.tabButton(index, QTabBar.ButtonPosition.RightSide)
+        if slot is not None:
+            g = slot.geometry()
+            if g.width() > 0 and g.height() > 0:
+                return g
+        return self._pinRect(index).adjusted(-3, -3, 3, 3)
+
+    def _indexAtPin(self, pos):
+        i = self.tabAt(pos)
+        if i < 0:
+            return -1
+        if self._pinHitRect(i).contains(pos):
+            return i
+        return -1
+
+    def _pinTip(self, index):
+        if self._isPinned(index):
+            return "Unpin result"
+        return "Pin result (next run opens a new tab)"
+
+    def _cursorPinIndex(self):
+        return self._indexAtPin(self.mapFromGlobal(QCursor.pos()))
+
+    def _syncHover(self, pos):
+        idx = self._indexAtPin(pos)
+        if idx == self._hoverIndex:
+            return
+        self._hoverIndex = idx
+        if idx >= 0:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+        else:
+            self.unsetCursor()
+        self.update()
+
+    def _clearHover(self):
+        # Tooltip popup steals hover; if the cursor is still on the pin, keep it.
+        if self._pressedIndex >= 0 or self._cursorPinIndex() >= 0:
+            return
+        if self._hoverIndex < 0:
+            return
+        self._hoverIndex = -1
+        self.unsetCursor()
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        for i in range(self.count()):
+            name = "Pinned" if self._isPinned(i) else "Pin"
+            if self._pressedIndex == i:
+                kind = "pressed"
+            elif self._hoverIndex == i:
+                kind = "hover"
             else:
-                path = Logic.resourcePath(f"ui/icons/{iconName}.png")
-            pix = QPixmap(path)
-            if pix.isNull() and kind != "normal":
-                pix = QPixmap(Logic.resourcePath(f"ui/icons/{iconName}.png"))
-            if not pix.isNull() and iconSize:
-                pix = pix.scaled(
-                    iconSize, iconSize,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            return QIcon(pix)
-
-        self._normal = load("normal")
-        self._hover = load("hover")
-        self._pressed = load("pressed")
-        if iconSize:
-            self.setIconSize(QSize(iconSize, iconSize))
-        self.setIcon(self._hover if self.underMouse() else self._normal)
+                kind = "normal"
+            pix = self._pix[name][kind]
+            if pix is None or pix.isNull():
+                continue
+            painter.drawPixmap(self._pinRect(i), pix)
 
     def event(self, event):
-        # Tab-bar buttons often get HoverEnter/Leave instead of enterEvent
         et = event.type()
-        if et == QEvent.Type.HoverEnter:
-            self.setIcon(self._hover)
+        if et == QEvent.Type.ToolTip:
+            idx = self._indexAtPin(event.pos())
+            if idx >= 0:
+                QToolTip.showText(
+                    event.globalPos(), self._pinTip(idx), self, self._pinHitRect(idx)
+                )
+                return True
+            return super().event(event)
+        if et in (QEvent.Type.HoverMove, QEvent.Type.HoverEnter):
+            self._syncHover(event.position().toPoint())
         elif et == QEvent.Type.HoverLeave:
-            self.setIcon(self._normal)
+            self._clearHover()
         return super().event(event)
 
-    def enterEvent(self, event):
-        self.setIcon(self._hover)
-        super().enterEvent(event)
+    def mouseMoveEvent(self, event):
+        self._syncHover(event.position().toPoint())
+        super().mouseMoveEvent(event)
 
     def leaveEvent(self, event):
-        self.setIcon(self._normal)
+        self._clearHover()
         super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.setIcon(self._pressed)
+            idx = self._indexAtPin(event.position().toPoint())
+            if idx >= 0:
+                self._pressedIndex = idx
+                self.setCurrentIndex(idx)
+                self.update()
+                event.accept()
+                return
         super().mousePressEvent(event)
 
     def mouseReleaseEvent(self, event):
-        self.setIcon(self._hover if self.underMouse() else self._normal)
+        if event.button() == Qt.MouseButton.LeftButton and self._pressedIndex >= 0:
+            idx = self._pressedIndex
+            self._pressedIndex = -1
+            if self._indexAtPin(event.position().toPoint()) == idx:
+                self.pinClicked.emit(idx)
+            self._hoverIndex = self._indexAtPin(event.position().toPoint())
+            if self._hoverIndex >= 0:
+                self.setCursor(Qt.CursorShape.PointingHandCursor)
+                if QToolTip.isVisible():
+                    QToolTip.showText(
+                        QCursor.pos(),
+                        self._pinTip(self._hoverIndex),
+                        self,
+                        self._pinHitRect(self._hoverIndex),
+                    )
+            else:
+                self.unsetCursor()
+            self.update()
+            event.accept()
+            return
         super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self._indexAtPin(event.position().toPoint()) >= 0:
+                event.accept()
+                return
+        super().mouseDoubleClickEvent(event)
+
+
+class ResultTabWidget(QTabWidget):
+    """Result tabs use ResultTabBar so Pin/Pinned hover, press, and toggle work."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTabBar(ResultTabBar(self))
+        self.setTabsClosable(False)
+        self.setMovable(False)
+        self.setDocumentMode(False)
 
 
 class SnippetPaneHandle(QSplitterHandle):
@@ -501,7 +644,6 @@ class SqlWorkbench:
         firstTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         resultTabs.addTab(self._wrapResult(firstTable, pinned=False), "Result")
         resultTabs.tabBar().setTabData(0, {"pinned": False})
-        self._installPinButton(resultTabs, 0)
         self.resultStack.addTab(resultTabs, "ws")
 
         # Top bar: Run, Stop, New query tab, History, database
@@ -592,15 +734,13 @@ class SqlWorkbench:
         self._applySnippetHidden(bool(Utils.loadConfig().get("sqlSnippetsHidden", False)))
 
     def _newResultTabs(self, parent):
-        tabs = QTabWidget(parent)
-        # Pin sits where the close X would be; worksheets keep X.
-        tabs.setTabsClosable(False)
-        tabs.setMovable(False)
+        tabs = ResultTabWidget(parent)
         bar = tabs.tabBar()
         bar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         bar.customContextMenuRequested.connect(
             lambda pos, t=tabs: self._resultTabMenu(t, pos)
         )
+        bar.pinClicked.connect(lambda i, t=tabs: self._togglePinAt(t, i))
         return tabs
 
     def _wrapResult(self, table, pinned=False):
@@ -698,7 +838,6 @@ class SqlWorkbench:
         table.horizontalHeader().setStretchLastSection(False)
         resultTabs.addTab(self._wrapResult(table, pinned=False), "Result")
         resultTabs.tabBar().setTabData(0, {"pinned": False})
-        self._installPinButton(resultTabs, 0)
         self.resultStack.addTab(resultTabs, "ws")
         self.worksheetTabs.setCurrentIndex(idx)
         if Config.debug:
@@ -723,7 +862,7 @@ class SqlWorkbench:
                     table.setColumnCount(0)
                 tabs.tabBar().setTabData(0, {"pinned": False})
                 tabs.setTabText(0, "Result")
-                self._installPinButton(tabs, 0)
+                tabs.tabBar().update()
             return
         w = self.worksheetTabs.widget(index)
         r = self.resultStack.widget(index)
@@ -785,38 +924,7 @@ class SqlWorkbench:
         table = tabs.widget(index)
         if table is not None:
             table.setProperty("sqlPinned", bool(pinned))
-        self._refreshPinButton(tabs, index)
-
-    def _installPinButton(self, tabs, index):
-        """Pin/Pinned control in the tab's close-button slot (result tabs only)."""
-        btn = IconHoverButton(tabs)
-        btn.setObjectName("btnResultPin")
-        btn.setFixedSize(18, 18)
-        btn.clicked.connect(lambda _checked=False, t=tabs, b=btn: self._togglePinFromButton(t, b))
-        tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, btn)
-        self._refreshPinButton(tabs, index)
-
-    def _togglePinFromButton(self, tabs, btn):
-        bar = tabs.tabBar()
-        for i in range(tabs.count()):
-            if bar.tabButton(i, QTabBar.ButtonPosition.RightSide) is btn:
-                self._togglePinAt(tabs, i)
-                return
-
-    def _refreshPinButton(self, tabs, index):
-        if tabs is None or index < 0 or index >= tabs.count():
-            return
-        btn = tabs.tabBar().tabButton(index, QTabBar.ButtonPosition.RightSide)
-        if btn is None:
-            return
-        pinned = self._isPinned(tabs, index)
-        if isinstance(btn, IconHoverButton):
-            btn.setIconSet("Pinned" if pinned else "Pin", iconSize=16)
-        else:
-            Utils.buttonStyle(btn, "Pinned" if pinned else "Pin", iconSize=16)
-        btn.setToolTip(
-            "Unpin result" if pinned else "Pin result (next run opens a new tab)"
-        )
+        tabs.tabBar().update()
 
     def _togglePinAt(self, tabs, index):
         if tabs is None or index < 0 or index >= tabs.count():
@@ -846,7 +954,6 @@ class SqlWorkbench:
         table.horizontalHeader().setStretchLastSection(False)
         idx = tabs.addTab(self._wrapResult(table, pinned=False), "Result")
         tabs.tabBar().setTabData(idx, {"pinned": False})
-        self._installPinButton(tabs, idx)
         tabs.setCurrentIndex(idx)
         return idx
 
@@ -859,7 +966,7 @@ class SqlWorkbench:
                 table.setColumnCount(0)
             tabs.setTabText(0, "Result")
             tabs.tabBar().setTabData(0, {"pinned": False})
-            self._installPinButton(tabs, 0)
+            tabs.tabBar().update()
             return
         w = tabs.widget(index)
         tabs.removeTab(index)
