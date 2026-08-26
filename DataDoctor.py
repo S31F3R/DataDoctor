@@ -18,6 +18,7 @@ from ui.uiOptions import uiOptions, warmKeyringCache
 from ui.uiQuery import uiQuery
 from ui.uiDetails import uiDetails
 from ui.uiGraph import GraphPanel
+from ui.uiSql import SqlWorkbench
 from core.Oracle import oracleConnection
 
 class detachedTabWindow(QMainWindow):
@@ -31,7 +32,7 @@ class detachedTabWindow(QMainWindow):
         self.mainWindow = mainWindow
         self.contentWidget = contentWidget
         self.tabTitle = title
-        self.key = key  # 'graph' | 'log'
+        self.key = key  # 'graph' | 'log' | 'sql'
         self._attaching = False
 
         self.setWindowTitle(f"Data Doctor — {title}")
@@ -185,8 +186,9 @@ class uiMain(QMainWindow):
         self.uploadBaselineReady = False
         self.uploadTrackingBlocked = False
 
-        # Detached floating windows for Graph / Log only ({'graph'|'log': detachedTabWindow})
+        # Detached floating windows ({'graph'|'log'|'sql': detachedTabWindow})
         self.detachedWindows = {}
+        self.sqlWorkbench = None
         self._appIcon = QIcon() # set from main after load (Windows re-apply)
         self._goatPlayer = None
         self._goatAudio = None
@@ -214,8 +216,6 @@ class uiMain(QMainWindow):
                         (self.btnRefresh, "Refresh", 36),
                         (self.btnUpload, "Upload", 36),
                         (self.btnRunQuery, "Play", 36),
-                        (self.btnSaveSnippet, "StarPlus", 36),
-                        (self.btnDeleteSnippet, "StarMinus", 36)
                       ]
 
         # Set button style        
@@ -239,8 +239,6 @@ class uiMain(QMainWindow):
             self.btnUndo: "Reset column sort to timestamp order",
             self.btnUpload: "Upload edited cells to HDB (MODIFY / DELETE)",
             self.btnRunQuery: "Run SQL query",
-            self.btnSaveSnippet: "Save SQL snippet",
-            self.btnDeleteSnippet: "Delete selected SQL snippet",
         }
 
         for btn, tip in mainTooltips.items():
@@ -296,16 +294,11 @@ class uiMain(QMainWindow):
         Upload.ensureHeaderSelectionSync(self)
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
 
-        # Graph + Log: right-click tab → Detach tab
+        # Graph + Log + SQL: right-click tab → Detach tab
         if self.tabWidget is not None:
             tabBar = self.tabWidget.tabBar()
             tabBar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             tabBar.customContextMenuRequested.connect(self.onMainTabBarContextMenu)
-        self.btnRunQuery.clicked.connect(self.runCustomQuery)
-        self.btnSaveSnippet.clicked.connect(self.saveSnippet)
-        if self.listSnippets is not None: self.listSnippets.doubleClicked.connect(self.loadSnippet)
-        if self.btnDeleteSnippet is not None: self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
-
         # SQL snippets: drag-reorder + context menu up/down; order in user.config
         # NOTE: empty QListWidget is falsy in PyQt6 (len==0) — always test is not None
         if self.listSnippets is not None:
@@ -326,8 +319,8 @@ class uiMain(QMainWindow):
         # Set up Data Query tab
         self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Stop table from stretching last column
-        self.sqlTable.horizontalHeader().setStretchLastSection(False)
+        if self.sqlTable is not None:
+            self.sqlTable.horizontalHeader().setStretchLastSection(False)
 
         if not self.tabMain.layout():
             layout = QGridLayout(self.tabMain)
@@ -374,86 +367,11 @@ class uiMain(QMainWindow):
                 Qt.ConnectionType.QueuedConnection,
             )
 
-        # Set up splitters and layout for tabSQL to enable resizing
+        # SQL Query Builder workbench (worksheets, pin, history, categories)
         if sqlTab:
-            self.lblDatabase = self.findChild(QLabel, 'lblDatabase')
-
-            # Top controls layout (horizontal, packed on left)
-            topLayout = QHBoxLayout()
-            topLayout.setSpacing(0)
-            topLayout.addWidget(self.btnRunQuery)
-            topLayout.addSpacing(10)
-            topLayout.addWidget(self.btnSaveSnippet)
-            topLayout.addSpacing(10)
-            topLayout.addWidget(self.btnDeleteSnippet)
-            topLayout.addSpacing(20)
-            topLayout.addWidget(self.lblDatabase)
-            topLayout.addSpacing(0)
-
-            # Wrap cbDatabase with spacing above to push it down
-            comboWidget = QWidget(sqlTab)
-            comboLayout = QVBoxLayout(comboWidget)
-            comboLayout.setContentsMargins(0, 0, 0, 0)
-            comboLayout.setSpacing(0)
-            comboLayout.addSpacing(4)
-            comboLayout.addWidget(self.cbDatabase)
-            topLayout.addWidget(comboWidget)
-            topLayout.addStretch()
-
-            # Vertical splitter for pteSQL (top) and sqlTable (bottom)
-            sqlSplitter = QSplitter(Qt.Orientation.Vertical, sqlTab)
-            sqlSplitter.setObjectName('sqlSplitter')
-            sqlSplitter.addWidget(self.pteSQL)
-            sqlSplitter.addWidget(self.sqlTable)            
-
-            # Set initial sizes based on .ui
-            sqlSplitter.setSizes([231, 291])
-
-            # Left widget: top layout + sqlSplitter
-            leftWidget = QWidget(sqlTab)
-            leftLayout = QVBoxLayout(leftWidget)
-            leftLayout.setContentsMargins(0, 0, 0, 0)
-            leftLayout.addLayout(topLayout)
-            leftLayout.addWidget(sqlSplitter)
-
-            # Horizontal splitter for left (editor/table) and right (snippets)
-            mainSplitter = QSplitter(Qt.Orientation.Horizontal, sqlTab)
-            mainSplitter.setObjectName('mainSplitter')
-            mainSplitter.addWidget(leftWidget)
-            mainSplitter.addWidget(self.listSnippets)
-
-            # Set initial sizes based on .ui
-            mainSplitter.setSizes([1281, 256])
-
-            # Main layout for tabSQL
-            if sqlTab.layout():
-                oldLayout = sqlTab.layout()
-
-                while oldLayout.count():
-                    item = oldLayout.takeAt(0)
-                    
-                    if item.widget():
-                        item.widget().deleteLater()
-            mainLayout = QVBoxLayout(sqlTab)
-            mainLayout.addWidget(mainSplitter)
-            mainLayout.setContentsMargins(0, 0, 0, 0)
-
-            # Load saved splitter sizes from config
-            config = Utils.loadConfig()
-
-            if 'sqlVerticalSizes' in config:
-                sqlSplitter.setSizes(config['sqlVerticalSizes'])
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Restored sqlVerticalSizes: {config['sqlVerticalSizes']}")
-            if 'sqlHorizontalSizes' in config:
-                mainSplitter.setSizes(config['sqlHorizontalSizes'])
-
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Restored sqlHorizontalSizes: {config['sqlHorizontalSizes']}")
-
+            self.sqlWorkbench = SqlWorkbench(self)
             if Config.debug:
-                Logic.logMessage("DEBUG", "Set up splitters and layout for tabSQL to handle resizing")
+                Logic.logMessage("DEBUG", "Set up SQL Query Builder workbench")
 
         if sqlIndex != -1:
             self.tabWidget.removeTab(sqlIndex)
@@ -596,28 +514,23 @@ class uiMain(QMainWindow):
                 pass
 
     def loadSnippets(self):
-        """Load SQL snippets from quickLook/sql into listSnippets (saved order first)."""
+        """Load SQL snippets (filtered by the workbench category combo)."""
+        if self.sqlWorkbench is not None:
+            self.sqlWorkbench.loadSnippets()
+            return
+        if self.listSnippets is None:
+            return
         try:
             sqlDir = Utils.getSqlSnippetDir()
-
-            if self.listSnippets is None:
-                if Config.debug:
-                    Logic.logMessage("WARN", "listSnippets not found, skipping loadSnippets")
-                return
-            self.listSnippets.clear()
             namesOnDisk = []
-            
             if os.path.isdir(sqlDir):
                 for file in os.listdir(sqlDir):
                     if file.endswith(".sql"):
                         namesOnDisk.append(file[:-4])
-
-            # Prefer user-saved order; append any new files alphabetically at end
             config = Utils.loadConfig()
             savedOrder = config.get('sqlSnippetOrder') or []
             ordered = []
             seen = set()
-
             for name in savedOrder:
                 if name in namesOnDisk and name not in seen:
                     ordered.append(name)
@@ -625,11 +538,9 @@ class uiMain(QMainWindow):
             for name in sorted(namesOnDisk, key=lambda s: s.lower()):
                 if name not in seen:
                     ordered.append(name)
-                    seen.add(name)
+            self.listSnippets.clear()
             for name in ordered:
                 self.listSnippets.addItem(name)
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Loaded {self.listSnippets.count()} SQL snippets")
         except Exception as e:
             Logic.logException("loadSnippets failed", e)
 
@@ -901,9 +812,15 @@ class uiMain(QMainWindow):
                 or (sqlIndex != -1 and self.tabWidget.currentIndex() == sqlIndex)
                 or (sqlTab is not None and currentWidget == sqlTab)
             )
+        if self.detachedWindows.get("sql") is not None:
+            isSqlTab = True
 
-        if isSqlTab and self.sqlTable is not None:
-            exportTable = self.sqlTable
+        if isSqlTab:
+            wb = getattr(self, "sqlWorkbench", None)
+            if wb is not None:
+                exportTable = wb.currentResultTable()
+            elif self.sqlTable is not None:
+                exportTable = self.sqlTable
             useSqlFormat = True
 
         if Config.debug:
@@ -1461,15 +1378,17 @@ class uiMain(QMainWindow):
             Logic.logMessage("DEBUG", f"onTabCloseRequested: Closed tab at index {index} ({name})")
 
     def tabKeyForWidget(self, widget):
-        """Return 'graph' / 'log' for detachable tabs, else None."""
+        """Return 'graph' / 'log' / 'sql' for detachable tabs, else None."""
         if widget is None: return None
         if self.tabGraph is not None and widget is self.tabGraph: return 'graph'
         if self.tabLog is not None and widget is self.tabLog: return 'log'
+        if self.tabSQL is not None and widget is self.tabSQL: return 'sql'
 
         # objectName fallback (reparent edge cases)
         name = widget.objectName() if hasattr(widget, 'objectName') else ''
         if name == 'tabGraph': return 'graph'
         if name == 'tabLog': return 'log'
+        if name == 'tabSQL': return 'sql'
         return None
 
     def graphInsertIndex(self):
@@ -1583,9 +1502,9 @@ class uiMain(QMainWindow):
 
     def detachTab(self, key):
         """
-        Pop Graph or Log into its own maximizable window (one window per tab).
+        Pop Graph, Log, or SQL into its own maximizable window (one window per tab).
         """
-        if key not in ('graph', 'log'): return
+        if key not in ('graph', 'log', 'sql'): return
         if self.detachedWindows.get(key) is not None:
             win = self.detachedWindows[key]
             win.show()
@@ -1595,6 +1514,12 @@ class uiMain(QMainWindow):
         if key == 'graph':
             content = self.ensureGraphPanel()
             title = self.graphTitle
+        elif key == 'sql':
+            content = self.tabSQL
+            title = self.sqlTitle
+            if content is None:
+                QMessageBox.warning(self, "Detach", "SQL tab is not available.")
+                return
         else:
             content = self.tabLog
             title = self.logTitle
@@ -1625,6 +1550,9 @@ class uiMain(QMainWindow):
         if key == 'graph':
             content = self.tabGraph or win.contentWidget
             title = self.graphTitle
+        elif key == 'sql':
+            content = self.tabSQL or win.contentWidget
+            title = self.sqlTitle
         else:
             content = self.tabLog or win.contentWidget
             title = self.logTitle
@@ -1643,11 +1571,15 @@ class uiMain(QMainWindow):
             self.tabGraph = content
             insertAt = self.graphInsertIndex()
             idx = self.tabWidget.insertTab(insertAt, content, title)
+        elif key == 'sql':
+            self.tabSQL = content
+            idx = self.tabWidget.insertTab(self.sqlInsertIndex(), content, title)
         else:
             # Log always last
             idx = self.tabWidget.addTab(content, title)
         self.tabWidget.setCurrentIndex(idx)
         if key == 'log': self.populateLogViewer()
+        if key == 'sql': self.refreshSqlTab()
         if Config.debug: Logic.logMessage("DEBUG", f"attachDetachedTab: attached {key!r} at index {idx}")
 
     def btnSQLPressed(self):
@@ -1655,6 +1587,13 @@ class uiMain(QMainWindow):
         # Empty QTabWidget is falsy in PyQt6 — never use bare `if self.tabWidget`
         if self.tabSQL is None or self.tabWidget is None:
             QMessageBox.warning(self, "SQL Query Builder", "SQL tab is not available.")
+            return
+        if self.detachedWindows.get('sql') is not None:
+            win = self.detachedWindows['sql']
+            win.show()
+            win.raise_()
+            win.activateWindow()
+            self.refreshSqlTab()
             return
         idx = self.tabWidget.indexOf(self.tabSQL)
 
@@ -1854,28 +1793,24 @@ class uiMain(QMainWindow):
         if Config.debug: Logic.logMessage("DEBUG", f"showOverlayCellDetails: Opened details for cell ({row}, {col})")
 
     def refreshSqlTab(self):
-        # Load saved splitter sizes from config
+        if self.sqlWorkbench is not None:
+            self.sqlWorkbench.refresh()
+            return
         config = Utils.loadConfig()
-
         sqlSplitter = self.findChild(QSplitter, 'sqlSplitter')
         mainSplitter = self.findChild(QSplitter, 'mainSplitter')
-
+        if sqlSplitter and 'sqlHorizontalSizes' in config:
+            pass
         if sqlSplitter and 'sqlVerticalSizes' in config:
             sqlSplitter.setSizes(config['sqlVerticalSizes'])
-            if Config.debug: Logic.logMessage("DEBUG", f"Restored sqlVerticalSizes: {config['sqlVerticalSizes']}")
         if mainSplitter and 'sqlHorizontalSizes' in config:
             mainSplitter.setSizes(config['sqlHorizontalSizes'])
-            if Config.debug: Logic.logMessage("DEBUG", f"Restored sqlHorizontalSizes: {config['sqlHorizontalSizes']}")
-
-        # Populate cbDatabase and load snippets if controls found
         if self.cbDatabase:
             Utils.loadDatabase(self.cbDatabase, 'sql')
             self.cbDatabase.setMinimumWidth(200)
-            self.cbDatabase.adjustSize()            
-            if Config.debug: Logic.logMessage("DEBUG", "Refreshed cbDatabase with sizing")
+            self.cbDatabase.adjustSize()
         if self.listSnippets is not None:
             self.loadSnippets()
-            if Config.debug: Logic.logMessage("DEBUG", "Refreshed snippets list")
 
 if __name__ == '__main__':
     app = None

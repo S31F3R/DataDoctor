@@ -17,7 +17,7 @@ Application name is **Data Doctor** (no organization folder). Config is **per us
 | `logs/app.log.1` … `.5` | Rotated backups (~1 MB each, newest `.1`) |
 | `logs/fault.log` | Native interpreter faults (not held open on `app.log`) |
 | `quickLook/query/` | Saved query lists (Quick Looks) |
-| `quickLook/sql/` | SQL Query Builder snippets |
+| `quickLook/sql/` | SQL Query Builder snippets (category assignment in `user.config`) |
 | `certs/` | Optional user-level Aquarius cert folder (created only if needed) |
 
 Passwords and API keys are **not** in `user.config`. They go to the OS keyring, service name `DataDoctor`:

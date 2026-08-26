@@ -43,7 +43,7 @@ Timestamps in the table: day / month / year / water-year use display formats (no
 ## Data Query vs SQL Query Builder
 
 - **Data Query** — the series table from Public/Internal Query (graph, overlay, upload, QAQC)
-- **SQL Query Builder** — custom Oracle SQL (internal). Toggle with the SQL button. Opens with **zero** tabs; add/run from there. Snippets save under [App Data](App-Data) `quickLook/sql/`
+- **SQL Query Builder** — custom Oracle SQL (internal). Toggle with the SQL button; the tab can Detach like Graph/Log. Worksheets (query tabs) each remember their database. Results are tabs under the worksheet; **Pin** keeps a result and the next run opens a new one. **Stop** cancels a running query. **History** reloads recent SQL (double-click). Snippets live in the right pane (categories, hide) under [App Data](App-Data) `quickLook/sql/`. Worksheets are session-only.
 
 **CSV** exports whichever of those two tables is active. See [CSV Export](CSV-Export).
 
