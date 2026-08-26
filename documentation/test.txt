@@ -24,33 +24,15 @@ Current Tests
      d. No GitHub token / password fields in Options.
      e. One Report click → one browser tab (not two).
 
-[ ] HDB database-link failure → direct connect fallback
+[ ] Log rotation + viewer reloads all app.log*
    Steps:
-     a. Internal query mixing UCHDB2 / LCHDB / YAOHDB (they share links).
-     b. If @link fails, retry connects directly to the target DSN.
-        Any worker error on a linked query now triggers that retry
-        (not only ORA-02019).
-     c. Query still returns data when the direct path works.
-     d. KBOHDB / CUHDB / LBOHDB / ECOHDB never use @link; each is its own
-        worker with a direct connection (same idea as USGS vs Aquarius).
-   Notes: RESPONSE said fallback was not working. sqlRead now retries
-     direct on any linked-query failure, resets primaryDsn each executeQuery,
-     and never sets primary from an isolated HDB.
-
-[ ] Isolated HDB queries (KBO / CU / LBO / ECO) — RETEST SQL FROM
-   Steps:
-     a. Internal query for KBOHDB (or CU/LBO/ECO). Same series that works on
-        public API should return data on SQL.
-     b. Direct SQL uses FROM r_base / r_hour (not SCHEMA.r_base@dsn).
-     c. Mixed internal LCHDB + KBOHDB: KBO is its own worker, no @kbohdb.
-     d. Public USBR API stays one USBR group (not split per HDB).
-
-[ ] sqlnet.log Fatals in app.log
-   Steps:
-     a. Cause an Oracle Fatal (bad TNS, refused connect, etc.) so sqlnet.log
-        is written (often cwd or TNS_ADMIN).
-     b. app.log has matching ERROR lines: sqlnet.log (...): Fatal ...
-        Same timestamp window as the failure.
+     a. Let app.log grow past ~1 MB (debug on + a few fat queries, or copy a
+        large app.log in place and log something).
+     b. logs/ has app.log plus app.log.1 (up to .5). New lines go in a small
+        app.log; the previous chunk is .1.
+     c. Log Viewer while open shows live lines. Close and reopen — those
+        lines are still there (merged from app.log + rotations, newest first).
+     d. Native crash dumps (if any) go to fault.log, not app.log.
 
 [ ] Windows package: empty certs/ + first-run applyUpdate.cmd
    Steps:
@@ -88,6 +70,9 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] HDB database-link failure → direct connect fallback
+[x] Isolated HDB queries (KBO / CU / LBO / ECO) — SQL FROM r_base
+[x] sqlnet.log Fatals in app.log
 [x] Query list right-click Delete
 [x] Save Quick Look prefills name + overwrite confirm
 [x] MCS Oracle credentials prompted once per session burst

@@ -18,3 +18,5 @@ resets this file to this template.
 - Internal direct HDB SQL uses unqualified r_base / r_hour (not SCHEMA.r_base@dsn)
 - Isolated HDB workers are internal-only; public USBR API stays one group
 - MCS pool no longer pings idle sessions (Windows 0x80100070 cert-cache fatal)
+- app.log rotation: faulthandler no longer locks the file; Windows copy+truncate
+  fallback; Log Viewer reloads app.log + app.log.1…5
