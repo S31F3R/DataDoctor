@@ -15,7 +15,7 @@ Current Tests
         OVERWRITE_FLAG='O'. The HDB value is replaced.
      c. Freehand SQL in SQL Query Builder is unchanged (no auto flag).
 
-[ ] Options Export / Import profile zip
+[x] Options Export / Import profile zip
    Steps:
      a. Options → General has Export… and Import….
      b. Export: checkboxes for Query Quick Looks, SQL Quick Looks, Config
@@ -24,7 +24,7 @@ Current Tests
         config reload refreshes Options + Quick Look combo + snippet list.
      d. Import a random/non-profile zip → error, nothing overwritten.
 
-[ ] sqlnet.log Fatals — only new, in app.log time order
+[x] sqlnet.log Fatals — only new, in app.log time order
    Steps:
      a. Existing sqlnet.log with old Fatals (hours earlier). Start Data Doctor
         and run a query that does not fail.

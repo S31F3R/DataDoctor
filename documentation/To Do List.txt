@@ -1,19 +1,35 @@
 ####### CURRENT TASKS #######
--Import of sql quick looks need to put them in the Uncagtorized section
+-Import of sql quick looks need to prompt user to import with or without categories
+-If there is ANY quick looks with same name, prompt a overwrite message with yes or no or rename
+-Validate how export to .csv works with multiple result tabs. Will it just export the tab in focus? This is what it needs to do
+-Oracle datatbase access list needs to be used on any internal queries and SQL query builder, meaning do not show databases they don't have checked
+    -Public query side show all databases, no matter the check
+-SQL Snippets need a right click delete Options
+    -Make this an option within catagories also
 
 ####### CURRENT BUGS #######
 -Windows System Default for appearance isn't setting properly. Dark mode system setting is setting light
     -Manually setting Dark mode works, it's just the system setting that isn't properly using system on Windows
+-When hitting the Historical button and double clicking one of the SQL queries in there, the button gets re-highlighted and stays that way until hoover event is triggered again
+-Hide/unhide button for masking is missing from USGS and is in the wrong spot on Oracle and Aquraius. On oracle and aquarius, it's in the middle behind the text control
+    -The alignment is also messed up in this area. For all sections that use the button, the text control is too high, partially covering the label
+        -This looks like it impacts controls below it also, giving them more horzintal space than normal
+    -Found the USGS hide/unhide, it's VERY hidden behind the text control, also in the middle. All the Hide/Unhide buttons need to be at the right end of the text control
+-On a failed oracle connection (tested on SQL Query Builder, not sure about the rest), with the messagte wrong username/password, it holds that and doesn't allow connections to any of the other Oracle databases, even if the user does have access
+    -It's holding the lock on ALL instead of the one it failed on. Need to only lock out the one on a failed attempt
+        -How long is the lock? It should have a timer. Currently the only way to get rid of the soft lock is restarting the program
+-SQL Query Builder background changes in the query tab and result tab on any NEW tabs. The tabs will be a draker background
+    -If I close orginal tab while new ones are open, all tabs will have that darker background and no way to get it back to the normal colored one
+    -This is a dark mode only issue, don't see any background differences on light mode
+    -I think that starting backgrounds are too light and the one it ends up as, the darker one, is how the control is supposed to work. The table is the darker background
+    -The snippet list area also has this issue, although I'm having a hard time duplicating it. One Windows machine I have it bugged as the darker version, the other one I have it as the lighter
+        -Snipped needs to be the dark version by default, same as the query table area
+-Import will wipe out any SQL quick look that was previously there. This needs to be a merge or user chosen overwrite/rename, not a complete replace with no user choice
+    -Same for query quick looks, give user a choice
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
     -Add a plot that graphs delta pair and overlays delta as a seperate line
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)
-
 -Get OAuth App for GitHub stuffs
-
-####### QUERY ENHANCEMENTS MODIFICATIONS #######
--Aquarius daily TZ offset (UC 2300 vs expected 0000)
-    -Data review tool shows 00:00; issue tied to location TZ vs UTC offset in query
-     meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
