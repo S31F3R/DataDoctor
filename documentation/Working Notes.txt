@@ -22,3 +22,10 @@ resets this file to this template.
   fallback; Log Viewer reloads app.log + app.log.1…5
 - sqlnet.log: ingest only bytes appended this process (no old Fatal dump);
   ERROR lines sit in the live app.log timeline
+- SQL Query Builder: detachable tab, worksheets + pinned results, Stop/History,
+  snippet categories, hide snippet pane (session worksheets, persisted history)
+- SQL pin uses Pin vs Pinned hover/press sets; snippet splitter is a thin dotted
+  grip; Categories dialog lists snippets and drag-moves them between groups
+- Result-tab Pin/Pinned is painted on the tab bar (hover, press, Pin↔Pinned);
+  setTabButton widgets never received those events. Pin tooltip uses Qt's
+  delayed ToolTip event (no grabMouse).

@@ -1,17 +1,4 @@
 ####### CURRENT TASKS #######
--Expand SQL Query Builder
-  -Need to make the SQL Query Builder tab detachable, just like graph and log
-  -Add a stop query button
-  -Need the ability to "hide" the sql quick looks
-  -Create a combobox at the top of the sql quick looks section. Give the user the ability to create catagories. The sql quick looks below will only show up if they are part of that catagories
-  -Query tabs where the SQL is written, should remember what database was used. When clicking from tab to tab on this level, make combo box reflect their last query on that tab
-  -Both horzonital sections need their own tab controls. Need to be able ot right click and rename tabs (this is just visual)
-  -Query result tab nees to have a "pin" to lock that result. Next query will create a new tab with new result. These results stick with parent "query tab"
-  -Current Save Snippet and Delete Snippet buttons need to move to move to the sql quick look side panel up top. We'll add a 3rd button for Catagories. Clicking the Catagories button is how a user can add/remove catagories. Catagories show up in the combobox
-    -New buttons will go in their old spot. Where the Save Snippet button was, we're going to add a Stop Query button. Use the Deny.png for that. Where the Delete Snippet was, we're going to add a History button. Use History.png for that
-      -History button I want to show the last queries, just like SQL Developer does. If a user double clicks, it loads that in, just like a sql quick look would
-  -Assests for this task are already created
-  -Need to take special note of the movement of all controls and how they were impacted by retro mode. This will need to be modified and tested again after the UI overhaul
 
 ####### CURRENT BUGS #######
 

@@ -14,6 +14,32 @@ Workflow:
 Current Tests
 --------------------------------------------------------------------------------
 
+[ ] SQL Query Builder workbench
+   Steps:
+     a. SQL tab detaches like Graph/Log (right-click tab → Detach; close re-attaches).
+     b. Top toolbar: Run, Stop (Deny), New query tab (Plus, left of History),
+        History. Save/Delete/Catagory are on the snippet panel.
+     c. Double-click the thin dotted splitter handle (tab/window color, dots
+        in the middle) to collapse snippets to the right. Handle stays visible;
+        double-click again to expand.
+     d. Category combo filters snippets. Existing snippets are Uncategorized.
+        Catagory → Snippet Categories: add/remove groups; click a group to see
+        its snippets; drag a snippet onto a category to move it. Save snippet
+        stores into the current combo category.
+     e. Result tab Pin uses Pin hover/press when unpinned, Pinned hover/press
+        when locked. Click toggles.
+     f. Plus / right-click → new query tab. Each tab keeps its database combo
+        value when switching. Right-click rename is visual only. Closing the
+        last query tab clears it instead of removing it. Worksheet tabs keep X.
+     g. Result tabs have Pin/Pinned where X would be (X stays on other tabs).
+        Pin locks that result; next Run adds a new result tab. Right-click
+        Close still removes a result tab. Pins are per result tab.
+     h. Stop cancels a running query. History lists recent SQL; double-click
+        loads it into the current worksheet. Worksheets are not restored after
+        restart (history is).
+     i. Retro mode: snippet list and buttons still usable (splitter layout,
+        no absolute SQL control moves).
+
 [ ] Crash / About Report on GitHub (option C, no stored login)
    Steps:
      a. Trigger or simulate an uncaught error — dialog has Report on GitHub,
