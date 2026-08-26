@@ -9,12 +9,13 @@ import json
 import threading
 from datetime import datetime
 
-from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
+from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal, QPointF, QSize, QEvent
+from PyQt6.QtGui import QPainter, QColor, QPixmap, QIcon
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QSplitterHandle, QTabWidget,
     QTabBar, QPlainTextEdit, QTableWidget, QTableWidgetItem, QListWidget,
     QComboBox, QPushButton, QLabel, QMenu, QMessageBox, QInputDialog, QDialog,
-    QDialogButtonBox, QSizePolicy,
+    QDialogButtonBox, QSizePolicy, QAbstractItemView,
 )
 
 from core import Logic, Utils, Config
@@ -22,11 +23,85 @@ from core.Oracle import oracleConnection
 
 UNCATEGORIZED = "Uncategorized"
 HISTORY_MAX = 50
-SNIPPET_HANDLE_PX = 10
+SNIPPET_HANDLE_PX = 6
+
+
+class IconHoverButton(QPushButton):
+    """Icon button with explicit normal / hover / pressed pixmaps (Pin vs Pinned)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._normal = QIcon()
+        self._hover = QIcon()
+        self._pressed = QIcon()
+        self.setFlat(True)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet(
+            "QPushButton { border: none; background: transparent; }"
+            "QPushButton:hover { background: transparent; }"
+            "QPushButton:pressed { background: transparent; }"
+        )
+
+    def setIconSet(self, iconName, iconSize=16):
+        def load(kind):
+            if kind == "hover":
+                path = Logic.resourcePath(f"ui/icons/hoover/{iconName}.png")
+            elif kind == "pressed":
+                path = Logic.resourcePath(f"ui/icons/pressed/{iconName}.png")
+            else:
+                path = Logic.resourcePath(f"ui/icons/{iconName}.png")
+            pix = QPixmap(path)
+            if pix.isNull() and kind != "normal":
+                pix = QPixmap(Logic.resourcePath(f"ui/icons/{iconName}.png"))
+            if not pix.isNull() and iconSize:
+                pix = pix.scaled(
+                    iconSize, iconSize,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            return QIcon(pix)
+
+        self._normal = load("normal")
+        self._hover = load("hover")
+        self._pressed = load("pressed")
+        if iconSize:
+            self.setIconSize(QSize(iconSize, iconSize))
+        self.setIcon(self._hover if self.underMouse() else self._normal)
+
+    def event(self, event):
+        # Tab-bar buttons often get HoverEnter/Leave instead of enterEvent
+        et = event.type()
+        if et == QEvent.Type.HoverEnter:
+            self.setIcon(self._hover)
+        elif et == QEvent.Type.HoverLeave:
+            self.setIcon(self._normal)
+        return super().event(event)
+
+    def enterEvent(self, event):
+        self.setIcon(self._hover)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.setIcon(self._normal)
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.setIcon(self._pressed)
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self.setIcon(self._hover if self.underMouse() else self._normal)
+        super().mouseReleaseEvent(event)
 
 
 class SnippetPaneHandle(QSplitterHandle):
-    """Vertical split grip: double-click collapses the snippet pane; grip stays visible."""
+    """
+    Thin splitter grip matching the query/result handle: window/tab color
+    with a short dotted grabber in the middle. Double-click collapses.
+    """
 
     def mouseDoubleClickEvent(self, event):
         sp = self.splitter()
@@ -35,10 +110,212 @@ class SnippetPaneHandle(QSplitterHandle):
             wb.toggleSnippets()
         event.accept()
 
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pal = self.palette()
+        bg = pal.window().color()
+        painter.fillRect(self.rect(), bg)
+        if Config.retroMode:
+            dot = QColor("#00FF00")
+        else:
+            dot = pal.mid().color()
+            if not dot.isValid() or dot == bg:
+                dot = pal.shadow().color()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(dot)
+        cx = self.width() / 2.0
+        cy = self.height() / 2.0
+        radius = 1.25
+        gap = 5.0
+        for i in range(-2, 3):
+            painter.drawEllipse(QPointF(cx, cy + i * gap), radius, radius)
+        painter.end()
+
 
 class SnippetPaneSplitter(QSplitter):
     def createHandle(self):
         return SnippetPaneHandle(self.orientation(), self)
+
+
+class _CategoryDropList(QListWidget):
+    """Left pane: drop a snippet name here to recategorize it."""
+
+    def __init__(self, onDrop, parent=None):
+        super().__init__(parent)
+        self._onDrop = onDrop
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        src = event.source()
+        if isinstance(src, QListWidget) and src is not self:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if self.itemAt(event.position().toPoint()) is not None:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        dest = self.itemAt(event.position().toPoint())
+        src = event.source()
+        if dest is None or not isinstance(src, QListWidget):
+            event.ignore()
+            return
+        snippet = src.currentItem()
+        if snippet is None:
+            event.ignore()
+            return
+        self._onDrop(snippet.text(), dest.text())
+        event.acceptProposedAction()
+
+
+class SnippetCategoryDialog(QDialog):
+    """Add/remove categories; click a category to see its snippets; drag a snippet onto a category to move it."""
+
+    def __init__(self, workbench):
+        super().__init__(workbench.win)
+        self.wb = workbench
+        self.setWindowTitle("Snippet Categories")
+        self.resize(560, 380)
+        config = Utils.loadConfig()
+        self.mapping = dict(config.get("sqlSnippetCategory") or {})
+        cats = list(config.get("sqlCategories") or [])
+        if UNCATEGORIZED not in cats:
+            cats = [UNCATEGORIZED] + [c for c in cats if c != UNCATEGORIZED]
+        self.cats = cats
+
+        root = QVBoxLayout(self)
+        panes = QHBoxLayout()
+        left = QVBoxLayout()
+        left.addWidget(QLabel("Categories"))
+        self.catList = _CategoryDropList(self._moveSnippet, self)
+        for c in self.cats:
+            self.catList.addItem(c)
+        self.catList.setCurrentRow(0)
+        left.addWidget(self.catList, 1)
+        btnRow = QHBoxLayout()
+        self.btnAdd = QPushButton("Add")
+        self.btnRemove = QPushButton("Remove")
+        btnRow.addWidget(self.btnAdd)
+        btnRow.addWidget(self.btnRemove)
+        left.addLayout(btnRow)
+
+        right = QVBoxLayout()
+        self.snipLabel = QLabel("Snippets")
+        right.addWidget(self.snipLabel)
+        self.snipList = QListWidget(self)
+        self.snipList.setDragEnabled(True)
+        self.snipList.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
+        self.snipList.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.snipList.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.snipList.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.snipList.customContextMenuRequested.connect(self._snippetMenu)
+        right.addWidget(self.snipList, 1)
+        hint = QLabel("Drag a snippet onto a category to move it.")
+        hint.setWordWrap(True)
+        right.addWidget(hint)
+
+        panes.addLayout(left, 1)
+        panes.addLayout(right, 2)
+        root.addLayout(panes, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.accept)
+        buttons.accepted.connect(self.accept)
+        root.addWidget(buttons)
+
+        self.catList.currentItemChanged.connect(lambda *_args: self._fillSnippets())
+        self.catList.currentItemChanged.connect(lambda *_args: self._syncRemoveEnabled())
+        self.btnAdd.clicked.connect(self._addCat)
+        self.btnRemove.clicked.connect(self._removeCat)
+        self._fillSnippets()
+        self._syncRemoveEnabled()
+
+    def _syncRemoveEnabled(self):
+        it = self.catList.currentItem()
+        self.btnRemove.setEnabled(it is not None and it.text() != UNCATEGORIZED)
+
+    def _snippetNames(self):
+        sqlDir = Utils.getSqlSnippetDir()
+        names = []
+        if os.path.isdir(sqlDir):
+            for file in os.listdir(sqlDir):
+                if file.endswith(".sql"):
+                    names.append(file[:-4])
+        return sorted(names, key=lambda s: s.lower())
+
+    def _catOf(self, name):
+        return self.mapping.get(name) or UNCATEGORIZED
+
+    def _fillSnippets(self):
+        it = self.catList.currentItem()
+        cat = it.text() if it is not None else UNCATEGORIZED
+        self.snipLabel.setText(f"Snippets in {cat}")
+        self.snipList.clear()
+        for name in self._snippetNames():
+            if self._catOf(name) == cat:
+                self.snipList.addItem(name)
+
+    def _moveSnippet(self, snippetName, category):
+        if not snippetName or not category:
+            return
+        self.mapping[snippetName] = category
+        self._save()
+        self._fillSnippets()
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Snippet {snippetName!r} → {category}")
+
+    def _addCat(self):
+        name, ok = QInputDialog.getText(self, "Add category", "Name:")
+        name = (name or "").strip()
+        if not ok or not name:
+            return
+        existing = [self.catList.item(i).text() for i in range(self.catList.count())]
+        if name in existing:
+            QMessageBox.information(self, "Categories", "That category already exists.")
+            return
+        self.catList.addItem(name)
+        self.cats.append(name)
+        self._save()
+        self.catList.setCurrentRow(self.catList.count() - 1)
+
+    def _removeCat(self):
+        it = self.catList.currentItem()
+        if it is None or it.text() == UNCATEGORIZED:
+            return
+        cat = it.text()
+        for name, mapped in list(self.mapping.items()):
+            if mapped == cat:
+                self.mapping[name] = UNCATEGORIZED
+        self.catList.takeItem(self.catList.row(it))
+        self.cats = [self.catList.item(i).text() for i in range(self.catList.count())]
+        self._save()
+        self.catList.setCurrentRow(0)
+        self._fillSnippets()
+
+    def _save(self):
+        cats = [self.catList.item(i).text() for i in range(self.catList.count())]
+        if UNCATEGORIZED not in cats:
+            cats = [UNCATEGORIZED] + cats
+        config = Utils.loadConfig()
+        config["sqlCategories"] = cats
+        config["sqlSnippetCategory"] = dict(self.mapping)
+        try:
+            with open(Utils.getConfigPath(), "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
+        except Exception as e:
+            Logic.logException("SnippetCategoryDialog: save failed", e)
+
+    def accept(self):
+        self._save()
+        super().accept()
+
+    def reject(self):
+        self._save()
+        super().reject()
 
 
 class sqlQuerySignals(QObject):
@@ -246,6 +523,7 @@ class SqlWorkbench:
         mainSplitter.setObjectName("mainSplitter")
         mainSplitter._sqlWorkbench = self
         mainSplitter.setHandleWidth(SNIPPET_HANDLE_PX)
+        # No solid-bar stylesheet — handle paints tab/window color + center dots.
         mainSplitter.setChildrenCollapsible(True)
         mainSplitter.setCollapsible(0, False)
         mainSplitter.setCollapsible(1, True)
@@ -268,7 +546,6 @@ class SqlWorkbench:
 
         self._wire()
         self._loadCategories()
-        self._styleSnippetHandle()
         handle = mainSplitter.handle(1)
         if handle is not None:
             handle.setToolTip("Double-click to collapse or expand SQL quick looks")
@@ -472,14 +749,9 @@ class SqlWorkbench:
 
     def _installPinButton(self, tabs, index):
         """Pin/Pinned control in the tab's close-button slot (result tabs only)."""
-        btn = QPushButton(tabs)
+        btn = IconHoverButton(tabs)
         btn.setObjectName("btnResultPin")
-        btn.setFlat(True)
-        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        Utils.buttonStyle(btn, "Pin", iconSize=16)
         btn.setFixedSize(18, 18)
-        btn.setToolTip("Pin result (next run opens a new tab)")
         btn.clicked.connect(lambda _checked=False, t=tabs, b=btn: self._togglePinFromButton(t, b))
         tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, btn)
         self._refreshPinButton(tabs, index)
@@ -498,7 +770,10 @@ class SqlWorkbench:
         if btn is None:
             return
         pinned = self._isPinned(tabs, index)
-        Utils.buttonStyle(btn, "Pinned" if pinned else "Pin", iconSize=16)
+        if isinstance(btn, IconHoverButton):
+            btn.setIconSet("Pinned" if pinned else "Pin", iconSize=16)
+        else:
+            Utils.buttonStyle(btn, "Pinned" if pinned else "Pin", iconSize=16)
         btn.setToolTip(
             "Unpin result" if pinned else "Pin result (next run opens a new tab)"
         )
@@ -732,26 +1007,6 @@ class SqlWorkbench:
         except Exception as e:
             Logic.logException("SqlWorkbench: save snippet collapse failed", e)
 
-    def _styleSnippetHandle(self):
-        if self.mainSplitter is None:
-            return
-        if Config.retroMode:
-            bg, hover = "#00AA00", "#00FF00"
-        else:
-            bg, hover = "#8a8a8a", "#5a9fd4"
-        self.mainSplitter.setHandleWidth(SNIPPET_HANDLE_PX)
-        self.mainSplitter.setStyleSheet(
-            f"QSplitter#mainSplitter::handle:horizontal {{"
-            f"  width: {SNIPPET_HANDLE_PX}px;"
-            f"  background: {bg};"
-            f"  margin: 0px;"
-            f"  border: none;"
-            f"}}"
-            f"QSplitter#mainSplitter::handle:horizontal:hover {{"
-            f"  background: {hover};"
-            f"}}"
-        )
-
     def _applySnippetHidden(self, hidden):
         """Collapse snippet pane to the right; the split handle stays on the edge."""
         if self.mainSplitter is None:
@@ -795,59 +1050,7 @@ class SqlWorkbench:
         self.loadSnippets()
 
     def manageCategories(self):
-        config = Utils.loadConfig()
-        cats = [c for c in (config.get("sqlCategories") or []) if c != UNCATEGORIZED]
-        dlg = QDialog(self.win)
-        dlg.setWindowTitle("Snippet categories")
-        dlg.resize(360, 320)
-        lay = QVBoxLayout(dlg)
-        lst = QListWidget(dlg)
-        lst.addItems(cats)
-        lay.addWidget(lst)
-        row = QHBoxLayout()
-        btnAdd = QPushButton("Add")
-        btnRemove = QPushButton("Remove")
-        row.addWidget(btnAdd)
-        row.addWidget(btnRemove)
-        lay.addLayout(row)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(dlg.reject)
-        buttons.accepted.connect(dlg.accept)
-        buttons.clicked.connect(dlg.accept)
-        lay.addWidget(buttons)
-
-        def addCat():
-            name, ok = QInputDialog.getText(dlg, "Add category", "Name:")
-            name = (name or "").strip()
-            if not ok or not name:
-                return
-            if name == UNCATEGORIZED or lst.findItems(name, Qt.MatchFlag.MatchExactly):
-                QMessageBox.information(dlg, "Categories", "That category already exists.")
-                return
-            lst.addItem(name)
-
-        def removeCat():
-            it = lst.currentItem()
-            if it is None:
-                return
-            lst.takeItem(lst.row(it))
-
-        btnAdd.clicked.connect(addCat)
-        btnRemove.clicked.connect(removeCat)
-        dlg.exec()
-        newCats = [lst.item(i).text() for i in range(lst.count())]
-        mapping = dict(config.get("sqlSnippetCategory") or {})
-        allowed = set(newCats)
-        for name, cat in list(mapping.items()):
-            if cat not in allowed:
-                mapping[name] = UNCATEGORIZED
-        config["sqlCategories"] = [UNCATEGORIZED] + newCats
-        config["sqlSnippetCategory"] = mapping
-        try:
-            with open(Utils.getConfigPath(), "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
-        except Exception as e:
-            Logic.logException("SqlWorkbench: save categories failed", e)
+        SnippetCategoryDialog(self).exec()
         self._loadCategories()
 
     def loadSnippets(self):
@@ -863,6 +1066,23 @@ class SqlWorkbench:
             config = Utils.loadConfig()
             savedOrder = config.get("sqlSnippetOrder") or []
             mapping = dict(config.get("sqlSnippetCategory") or {})
+            assigned = False
+            for name in namesOnDisk:
+                if not mapping.get(name):
+                    mapping[name] = UNCATEGORIZED
+                    assigned = True
+            if assigned:
+                config["sqlSnippetCategory"] = mapping
+                cats = list(config.get("sqlCategories") or [])
+                if UNCATEGORIZED not in cats:
+                    config["sqlCategories"] = [UNCATEGORIZED] + [
+                        c for c in cats if c != UNCATEGORIZED
+                    ]
+                try:
+                    with open(Utils.getConfigPath(), "w", encoding="utf-8") as f:
+                        json.dump(config, f, indent=2)
+                except Exception:
+                    pass
             currentCat = self.cbCategory.currentText() if self.cbCategory else UNCATEGORIZED
             ordered = []
             seen = set()
@@ -963,7 +1183,6 @@ class SqlWorkbench:
             self._snippetSizes = config["sqlHorizontalSizes"]
             if not bool(config.get("sqlSnippetsHidden", False)):
                 self.mainSplitter.setSizes(config["sqlHorizontalSizes"])
-        self._styleSnippetHandle()
         if self.cbDatabase is not None:
             Utils.loadDatabase(self.cbDatabase, "sql")
             self.cbDatabase.setMinimumWidth(200)
