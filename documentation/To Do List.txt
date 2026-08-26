@@ -5,72 +5,12 @@
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
-    -Add a plot that graphs delta pair and overlays delta as a seperate line    
--Expand options to add more config options to the entire program
-    -Maybe switch options to tree view or add vertical tabs
-    -Aquarius will need an opiton to use credential account or entra account
-        -Maybe default to entra, then if that doesn't exist then use credential if there? Need to research this
-    -USBR will need:
-        -Apply Overwrite Flag
--Add datatype as an option to add to labels
-  -Make it specific per database
--Need a profile tab in options. Allow export/import of quickLooks, override system dark/light mode, etc.
+    -Add a plot that graphs delta pair and overlays delta as a seperate line
+-Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)
+-Profile in Options: export/import Quick Looks
 -Get OAuth App for GitHub stuffs
 
 ####### QUERY ENHANCEMENTS MODIFICATIONS #######
 -Aquarius daily TZ offset (UC 2300 vs expected 0000)
     -Data review tool shows 00:00; issue tied to location TZ vs UTC offset in query
      meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
-
-####### WIKI IDEAS #######
-(Published — all of these have pages. Edit documentation/wiki/; pre-push updates GitHub.)
--QAQC and Data Dictionary → wiki/Data-Dictionary
--Aquarius link / certs → wiki/Aquarius
--BOP and EOP → wiki/USBR-HDB
--Overlay and delta + auto-mark for upload → wiki/Overlay-and-Delta
--CSV from Data Query or SQL Builder → wiki/CSV-Export
--Quick Looks save/load → wiki/Quick-Looks
--AppData locations → wiki/App-Data
--valuePrecision / precisionOverride → wiki/Data-Dictionary
--Header labels from the dictionary → wiki/Data-Dictionary
-
-####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
--Update readme
--Need documentation on different installers and pre req, maybe add in wiki or readme
--Provide links to stuff like requesting USGS API key, Reclamation website, USGS data browser, and documention on how to find USGS information to create dataID
--Document GitHub Releases: asset names (DataDoctor-Python.zip, DataDoctor-x86_64.AppImage),
-  tag = vMAJOR.MINOR.PATCH or vX.Y.Z-rc.N, check Pre-release for beta
-(Public README + wiki cover these. Retest in documentation/test.txt.)
-
-####### WORKFLOW (for Grok / Seifer) #######
--To Do List = backlog only (not currently being worked)
--When work starts on a bug: remove it from here, add it to documentation/test.txt with steps
--When Seifer confirms a test item: mark [x] in test.txt (and leave off this list)
--If a test fails: keep in test.txt with notes; do not put back on To Do until abandoned
--Clean up test.txt after confirmed [x] items (standard workflow): drop long steps for [x] into a short Confirmed list; keep retest items detailed
--Working Notes: documentation/Working Notes.txt
-  - Scratch file for unreleased changes. It has no version in the name because
-    the next tag is unknown (rc.N, beta.N, or a full vX.Y.Z) until publish.
-  - Grok adds one bullet per bug fix, feature, or TASK as they land. If a bug
-    is on GitHub, include the issue number. Do not create vVERSION.md early.
-  - Future GitHub issues that are fixed go in the commit message as well
-    (e.g. "Fix header Ctrl+click (#12)").
-  - python scripts/publishRelease.py names documentation/releases/vVERSION.md
-    when the channel is chosen. It copies Working Notes *bullets* under
-    ## Changes only (no "Working Notes" heading or instructions). Then it
-    resets the scratch file to the empty template.
-  - If vVERSION.md already exists at publish, that file is used as-is.
--Documentation: Grok may edit documentation/ as part of normal workflow (To Do, test.txt, notes, wiki, README, etc.)
--README.md and documentation/wiki/ are public. Write them for users / operators.
-  Do not put Seifer-only asides, "talking to you" notes, or Grok/Seifer chatter in them.
--Seifer-only / Grok-only talk goes in documentation/status.grok (gitignored, like secret.grok).
-  That includes release how-tos, OAuth leftovers, "do this on this machine", etc.
--Commits:
-    - Grok may auto-commit code paths (ui, core, scripts, requirements, sounds, icons, …)
-    - Grok may auto-commit README.md and documentation/wiki/
-    - Grok must NOT auto-commit other documentation/ (To Do, test.txt, notes, Working Notes) — Seifer commits those
-    - secret.grok and status.grok are gitignored; never commit them
--Wiki: documentation/wiki/ is the working copy. This machine uses
-  `git config core.hooksPath scripts/hooks` so Code-OSS Push also runs
-  scripts/publishWiki.py → https://github.com/S31F3R/DataDoctor.wiki.git
-  when those pages differ. Re-set hooksPath after a fresh clone.

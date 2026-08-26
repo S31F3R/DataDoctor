@@ -1,18 +1,30 @@
-TEST FILE — currently being worked / needing retest
+TEST FILE — tests to run
 ============================================================
-Workflow:
-  - To Do List.txt = backlog only
-  - This file = in-progress / Seifer tests here
-  - PASS → mark [x] here (stay off To Do); Grok may clean confirmed [x] items
-  - FAIL → note here; Grok re-fixes
-  - Grok may commit any non-documentation/ paths; documentation/ commits stay with Seifer
-    (README.md and other non-docs paths are fair game)
-  - After confirmed [x] items: drop long steps into Confirmed; keep retest items detailed
-  - Working Notes (documentation/Working Notes.txt) is a scratch file until
-    publish names vVERSION.md; only its bullets go under ## Changes
+Grok writes the steps. Mark [x] when it passes, or note a fail.
+Workflow / publish how-to: documentation/status.grok (gitignored).
 
 Current Tests
 --------------------------------------------------------------------------------
+
+[ ] Options left categories (Kate-style)
+   Steps:
+     a. Options is wider; left list: General, Appearance, Oracle, Aquarius,
+        USBR, USGS with Cog / Appearance / Oracle / Aquarius / USBR / USGS
+        icons. Whole row is clickable (not a separate icon button).
+     b. Each category’s first tab is named General.
+     c. General: UTC, Raw Data, QAQC, Debug, Beta updates. No Retro Mode here.
+     d. Appearance: Retro Mode + Color Theme combo (System / Light / Dark).
+        System follows the OS; Light/Dark override. Save applies theme.
+     e. Oracle General: TNS, user, password + eye, Update Password button.
+        Databases tab: Access List of USBR-* names only (no |SCHEMA), each
+        with a checkbox. New Config.py HDBs show up here, default checked.
+     f. Save does NOT push Oracle password to HDBs. Update Password does, and
+        only on checked Access List databases.
+     g. Aquarius / USGS General: same fields as before, plus
+        “Add Data Type to Labels”. USBR: HOUR timestamp radios, Overwrite Flag,
+        and Add Data Type to Labels. Uncheck Add Data Type → query headers
+        use commonName only for that source.
+     h. Retro mode still needs restart; checkbox lives under Appearance.
 
 [ ] SQL Query Builder workbench
    Steps:
@@ -225,7 +237,8 @@ Deferred / known
 --------------------------------------------------------------------------------
 [!] USGS monthly/yearly (OGC has no products)
 [!] Aquarius daily 2300 TZ
-[!] Features still backlog: advanced plot tool / quick-look plots, git/readme,
-    dataDictionary non-destructive bulk update, expanded Options tree
+[!] Features still backlog: advanced plot tool / quick-look plots,
+    dataDictionary non-destructive bulk update, Aquarius Entra login,
+    Options profile export/import
 [!] Windows first-load icon — improve-only
 [!] AppImage applyUpdate path not wired the same as launcher packages yet
