@@ -160,6 +160,8 @@ class uiAbout(QDialog):
         # the grey strip and made min/max buttons flicker.
         self.setMinimumSize(720, 383)
         self.resize(self._BASE_W, self._BASE_H)
+        self._lockingRatio = False
+        self._ratioLast = (self._BASE_W, self._BASE_H)
         self.setWindowTitle(self._TITLE_DEFAULT)
         pal = self.palette()
         pal.setColor(self.backgroundRole(), QColor(0, 0, 0))
@@ -190,6 +192,9 @@ class uiAbout(QDialog):
             self.textInfo.setFont(retroFontObj)
             self.textInfo.setOpenExternalLinks(True)
             self.textInfo.setStyleSheet("background-color: transparent; border: none;")
+            self.textInfo.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.textInfo.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.textInfo.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)
         self.setupSecretButton()
         self.mediaPlayer = None
         self.audioOutput = None
@@ -257,11 +262,18 @@ class uiAbout(QDialog):
         pad = max(24, int(round(50 * (pt / float(max(1, self._retroPt))))))
         html = (
             f'<html><body style="color: white; font-family: \'{fam}\'; '
-            f'font-size: {pt}pt; padding-left: {pad}px; white-space: nowrap; line-height: 2.2;">'
+            f'font-size: {pt}pt; padding-left: {pad}px; line-height: 2.2;">'
         )
         for label, content in getattr(self, "_aboutInfo", []):
             if str(content).startswith("http://") or str(content).startswith("https://"):
-                html += f'{label}: <a href="{content}" style="color: white;">{content}</a><br>'
+                shown = str(content)
+                if "issues" in shown:
+                    shown = "GitHub issue form"
+                elif len(shown) > 42:
+                    shown = shown.split("://", 1)[-1][:42] + "…"
+                html += (
+                    f'{label}: <a href="{content}" style="color: white;">{shown}</a><br>'
+                )
             else:
                 html += f'{label}: {content}<br>'
         html += '</body></html>'
@@ -569,13 +581,41 @@ class uiAbout(QDialog):
         y = max(0, (cover.height() - lh) // 2)
         label.setPixmap(cover.copy(x, y, lw, lh))
 
+    def _snapAboutRatio(self):
+        """Keep the stock About window at 900:479 unless maximized / full screen."""
+        if self._cabinetActive() or self.isMaximized() or self.isFullScreen():
+            return
+        if getattr(self, "_lockingRatio", False):
+            return
+        ratio = self._BASE_W / float(self._BASE_H)
+        w, h = self.width(), self.height()
+        if w < 2 or h < 2:
+            return
+        if abs((w / float(h)) - ratio) < 0.012:
+            self._ratioLast = (w, h)
+            return
+        lastW, lastH = getattr(self, "_ratioLast", (w, h))
+        dw, dh = abs(w - lastW), abs(h - lastH)
+        self._lockingRatio = True
+        try:
+            if dw >= dh:
+                nh = max(self.minimumHeight(), int(round(w / ratio)))
+                self.resize(w, nh)
+            else:
+                nw = max(self.minimumWidth(), int(round(h * ratio)))
+                self.resize(nw, h)
+        finally:
+            self._lockingRatio = False
+        self._ratioLast = (self.width(), self.height())
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self._cabinetActive():
             self._layoutCabinetChrome()
             self._syncSessionSize()
-        else:
-            self._layoutAboutChrome()
+            return
+        self._snapAboutRatio()
+        self._layoutAboutChrome()
 
     def changeEvent(self, event):
         super().changeEvent(event)
@@ -1045,6 +1085,8 @@ class uiAbout(QDialog):
             super().showEvent(event)
             return
         if not self._cabinetActive() and not self.isMaximized() and not self.isFullScreen():
+            if self.width() < self._BASE_W or self.height() < self._BASE_H:
+                self.resize(self._BASE_W, self._BASE_H)
             Utils.centerWindowToParent(self)
         if not self._cabinetMode and not self._playMode and not self._splashMode:
             if self.textInfo is not None:

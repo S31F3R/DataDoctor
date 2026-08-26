@@ -17,6 +17,10 @@ from core import Logic, Utils, Version
 REPO = Version.GITHUB_REPO
 # Keep the URL under typical browser limits; full log stays on disk / clipboard.
 _MAX_LOG_CHARS = 3500
+# GitHub + login?return_to doubles the URL. Long body= query strings 500 with
+# "Whoops, something went wrong!". Keep the opened URL short.
+_MAX_URL_CHARS = 1800
+_lastOpenIssue = (0.0, "")
 
 
 def logPath() -> str:
@@ -67,14 +71,41 @@ def issueBody(kind: str, summary: str = "", extra: str = "") -> str:
 
 
 def issueUrl(title: str, body: str, template: str | None = None) -> str:
-    q = {"title": title, "body": body}
+    """
+    Build issues/new URL.
+
+    GitHub issue *forms* (template=*.yml) ignore body= and combining them
+    can 500. Huge body= query strings also 500 ("Whoops, something went
+    wrong!") after login redirects. Prefer a short title-only (or form)
+    URL and put the full markdown on the clipboard.
+    """
+    shortTitle = (title or "Data Doctor issue")[:120]
     if template:
-        q["template"] = template
-    return f"https://github.com/{REPO}/issues/new?{urllib.parse.urlencode(q)}"
+        q = {"title": shortTitle, "template": template}
+        return f"https://github.com/{REPO}/issues/new?{urllib.parse.urlencode(q)}"
+
+    base = f"https://github.com/{REPO}/issues/new"
+    titleOnly = base + "?" + urllib.parse.urlencode({"title": shortTitle})
+    if not body:
+        return titleOnly
+    withBody = base + "?" + urllib.parse.urlencode({"title": shortTitle, "body": body})
+    if len(withBody) <= _MAX_URL_CHARS:
+        return withBody
+    return titleOnly
 
 
 def openIssue(title: str, body: str, template: str | None = None) -> str:
+    """Open GitHub issues/new. Debounced so one crash cannot open two tabs."""
+    import time
+
+    global _lastOpenIssue
     url = issueUrl(title, body, template=template)
+    now = time.time()
+    lastT, lastUrl = _lastOpenIssue
+    if lastUrl == url and (now - lastT) < 4.0:
+        Logic.logMessage("DEBUG", "Report.openIssue: skipped duplicate open")
+        return url
+    _lastOpenIssue = (now, url)
     try:
         webbrowser.open(url)
     except Exception as e:
@@ -156,7 +187,25 @@ def showCrashDialog(excType, excValue, excTb) -> None:
         box.exec()
         clicked = box.clickedButton()
         if clicked is reportBtn:
-            openIssue(crashTitle(excType, excValue), crashBody(excType, excValue, excTb))
+            # Full details on the clipboard. URL is a short crash form — a
+            # body= URL with the log tail was hitting GitHub "Whoops".
+            body = crashBody(excType, excValue, excTb)
+            copied = copyToClipboard(body)
+            openIssue(crashTitle(excType, excValue), "", template="crash.yml")
+            extra = QMessageBox(None)
+            extra.setIcon(QMessageBox.Icon.Information)
+            extra.setWindowTitle("Report on GitHub")
+            extra.setText(
+                "GitHub opened in your browser. You need a GitHub account.\n\n"
+                + (
+                    "The full crash report was copied to the clipboard — "
+                    "paste it into the issue form."
+                    if copied
+                    else "Paste the traceback from app.log into the issue form."
+                )
+            )
+            extra.addButton(QMessageBox.StandardButton.Ok)
+            extra.exec()
         elif clicked is copyBtn:
             tail = logTail(8000)
             copyToClipboard(tail or "(app.log empty or missing)")

@@ -5,18 +5,27 @@
 #   0.0.1  bug fixes
 #   0.1.0  minor / net feature
 #   1.0.0  major
-# Pre-release (beta / RC): 1.2.0-rc.1  or  1.2.0-beta.1
-#   - Always sorts *before* the final 1.2.0
-# GitHub: mark beta/RC releases as "Pre-release" so stable users skip them.
+# Pre-release: 1.2.0-beta.1  then  1.2.0-rc.1  then  1.2.0
+#   published > rc > beta   (same X.Y.Z)
+#   3.0.0-rc.2.1 > 3.0.0-rc.2 > 3.0.0-rc.1
+#   3.0.0-rc.1   > 3.0.0-beta.4
+# GitHub: mark beta/RC as Pre-release so stable users skip them.
 
 from __future__ import annotations
 import re
 
 # Bump this when cutting a release (tag should match: v3.0.0 or v3.0.0-rc.1)
-VERSION = "3.0.0"
+VERSION = "3.0.0-rc.2.3"
 
 # GitHub repo for release checks (owner/name)
 GITHUB_REPO = "S31F3R/DataDoctor"
+
+# Rank inside a pre-release label (higher = newer). Unknown labels sort below beta.
+_PRE_RANK = {
+    "alpha": 0,
+    "beta": 1,
+    "rc": 2,
+}
 
 _PRE_RE = re.compile(
     r"^v?"
@@ -39,7 +48,7 @@ def parseVersion(text: str):
     Parse 'v1.2.3', '1.2.3-rc.1', '1.2.3-beta.2' →
     (major, minor, patch, pre_tuple_or_None)
 
-    pre_tuple is comparable: ('rc', 1) or ('beta', 2).
+    pre_tuple is comparable: rc.2.1 → ((1, 'rc'), (0, 2), (0, 1)).
     Final releases have pre=None and sort after any pre of the same triple.
     """
     if not text:
@@ -67,15 +76,22 @@ def parseVersion(text: str):
 
 def versionKey(parsed):
     """
-    Sort key: final release > any pre-release of same X.Y.Z.
-    pre=None → (maj, min, pat, 1)  vs  pre present → (maj, min, pat, 0, preParts)
+    Sort key: published (final) > rc > beta, then numeric segments.
+    pre=None → (maj, min, pat, 1)
+    pre set  → (maj, min, pat, 0, rankedPre)
     """
     if parsed is None:
         return (0, 0, 0, 0)
     major, minor, patch, pre = parsed
     if pre is None:
         return (major, minor, patch, 1)
-    return (major, minor, patch, 0, pre)
+    ranked = []
+    for kind, val in pre:
+        if kind == 1:
+            ranked.append((1, _PRE_RANK.get(str(val), -1), str(val)))
+        else:
+            ranked.append((0, int(val)))
+    return (major, minor, patch, 0, tuple(ranked))
 
 
 def compareVersions(a: str, b: str) -> int:

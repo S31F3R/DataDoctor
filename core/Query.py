@@ -1285,6 +1285,9 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                 f"{startDateStr} → {endDateStr}",
             )
         timestamps = buildTimestamps(startDateStr, endDateStr, firstInterval)
+        # Each executeQuery picks a fresh linked-family primary (do not keep
+        # KBO/CU/LBO/ECO from a previous run as the @link source).
+        USBR.primaryDsn = None
 
         if not timestamps:
             progressDialog.cancel()
@@ -1308,12 +1311,19 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
                     interval = 'INSTANT:15'
                 elif db == 'AQUARIUS':
                     interval = 'INSTANT:1'
-            groupKey = (db.split('-')[0] if db.startswith('USBR-') else db, None, None)
+            if db.startswith('USBR-') and isInternal and USBR.hdbIsolatedDirect(db):
+                # Internal only: KBO/CU/LBO/ECO each get their own worker +
+                # direct Oracle session. Public API stays one USBR group.
+                groupKey = (db, None, None)
+            elif db.startswith('USBR-'):
+                groupKey = ('USBR', None, None)
+            else:
+                groupKey = (db, None, None)
             baseDataID = dataID.split('-')[0] if db.startswith('USBR-') and '-' in dataID else dataID
             groups[groupKey].append((origIndex, dataID, baseDataID, db, interval, mrid))
         pool = QThreadPool.globalInstance()
         resultQueue = queue.Queue()
-        maxDbThreads = 3
+        maxDbThreads = 8
         numGroups = len(groups)
         numThreads = min(maxDbThreads, numGroups)
 

@@ -31,9 +31,10 @@ hdbOracleDatabases = (
     'USBR-LCHDB|LCHDBA',
     'USBR-YAOHDB|YAOHDBA',
     'USBR-UCHDB2|UCHDBA',
-    'USBR-ECOHDB|ECOHDBA',
+    'USBR-ECOHDB|ECODBA',
     'USBR-LBOHDB|LBOHDBA',
     'USBR-KBOHDB|KBOHDBA',
+    'USBR-CUHDB|CUHDBA',
 )
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import logging
 import traceback
 import threading
 import faulthandler
+import shutil
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
 from PyQt6.QtCore import QThreadPool, QDir, QObject, pyqtSignal
@@ -22,6 +23,20 @@ exceptionHooksInstalled = False
 qtMessageHandlerInstalled = False
 qtMessageHandlerRef = None  # Must keep ref — PyQt GC's the handler otherwise
 logNotifier = None  # LogNotifier for live log viewer (created in initLogging)
+# True once the main window starts shutting down. Teardown RuntimeErrors
+# (deleted QTableWidget, etc.) must not open a crash dialog.
+appIsQuitting = False
+
+
+def isDeletedQtObjectError(excType, excValue) -> bool:
+    """True for PyQt 'wrapped C/C++ object of type X has been deleted'."""
+    if excType is None:
+        return False
+    name = getattr(excType, "__name__", "") or ""
+    if name != "RuntimeError" and excType is not RuntimeError:
+        return False
+    text = str(excValue or "")
+    return "wrapped C/C++ object" in text and "has been deleted" in text
 
 
 class LogNotifier(QObject):
@@ -322,6 +337,39 @@ def ensureAquariusPem():
     logMessage("WARN", "ensureAquariusPem: could not build aquarius.pem from certs/")
     return None
 
+class AppRotatingFileHandler(RotatingFileHandler):
+    """
+    1 MB × 5 backups (app.log, app.log.1 … app.log.5).
+
+    Windows cannot rename a file that another handle still holds. A failed
+    rollover used to abort emit(), so the live Log Viewer (Qt handler) kept
+    showing lines while disk stayed frozen on the old app.log. Copy + truncate
+    if rename fails so backups still appear.
+    """
+
+    def rotate(self, source, dest):
+        if not source or not os.path.exists(source):
+            return
+        try:
+            if os.path.exists(dest):
+                os.remove(dest)
+            os.rename(source, dest)
+            return
+        except OSError as renameErr:
+            try:
+                shutil.copyfile(source, dest)
+                with open(source, 'r+b') as f:
+                    f.truncate(0)
+                    f.flush()
+                    os.fsync(f.fileno())
+            except OSError as copyErr:
+                sys.stderr.write(
+                    f"[ERROR] app.log rollover failed "
+                    f"rename={renameErr!r} copy={copyErr!r}\n"
+                )
+                raise
+
+
 def initLogging():
     global loggingInitialized, logNotifier
 
@@ -344,7 +392,9 @@ def initLogging():
     
     # File handler: Log to rotating file with timestamps
     filePath = Utils.getLogPath('app.log')
-    fileHandler = RotatingFileHandler(filePath, maxBytes=1048576, backupCount=5, encoding='utf-8') # 1MB max, 5 backups
+    fileHandler = AppRotatingFileHandler(
+        filePath, maxBytes=1048576, backupCount=5, encoding='utf-8',
+    )
     fileHandler.setLevel(logging.DEBUG) # Log all
     fileFormatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
     fileHandler.setFormatter(fileFormatter)
@@ -363,8 +413,9 @@ def initLogging():
     
     loggingInitialized = True
 
-    # Capture hard crashes (segfaults, etc.) into the same log when possible
-    enableFaultHandler(filePath)
+    # Native faults go to a separate file so that handle does not lock app.log
+    # (Windows cannot rotate a log that faulthandler still has open).
+    enableFaultHandler()
 
     # Python warnings → same file/console/UI handlers as app logs
     enableWarningCapture()
@@ -381,13 +432,15 @@ def initLogging():
             )
         )
 
-def enableFaultHandler(filePath):
-    """Dump fatal interpreter/native faults into app.log (best-effort)."""
+def enableFaultHandler():
+    """Dump fatal interpreter/native faults to fault.log (not app.log)."""
     global faultLogFile
     try:
         if faultLogFile is not None:
             return
-        faultLogFile = open(filePath, 'a', encoding='utf-8')
+        faultPath = Utils.getLogPath('fault.log')
+        os.makedirs(os.path.dirname(faultPath), exist_ok=True)
+        faultLogFile = open(faultPath, 'a', encoding='utf-8')
         faulthandler.enable(file=faultLogFile, all_threads=True)
     except Exception:
         try:
@@ -669,9 +722,12 @@ def installExceptionHooks(showDialog=True):
         if issubclass(excType, (KeyboardInterrupt, SystemExit)):
             sys.__excepthook__(excType, excValue, excTb)
             return
+        duringQuit = bool(appIsQuitting)
+        deletedQt = isDeletedQtObjectError(excType, excValue)
         try:
             tbText = ''.join(traceback.format_exception(excType, excValue, excTb)).rstrip()
-            logMessage("CRITICAL", f"Uncaught exception:\n{tbText}")
+            level = "DEBUG" if duringQuit and deletedQt else "CRITICAL"
+            logMessage(level, f"Uncaught exception:\n{tbText}")
         except Exception:
             try:
                 sys.__excepthook__(excType, excValue, excTb)
@@ -679,7 +735,9 @@ def installExceptionHooks(showDialog=True):
                 pass
             return
 
-        if not showDialog:
+        # Closing the UI deletes Qt widgets while filters may still run.
+        # Logging is enough; a dialog during quit caused duplicate GitHub reports.
+        if duringQuit or not showDialog:
             return
         try:
             from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -738,8 +796,14 @@ def installExceptionHooks(showDialog=True):
                 )).rstrip()
                 obj = getattr(unraisable, 'object', None)
                 errMsg = getattr(unraisable, 'err_msg', None) or 'Unraisable exception'
+                duringQuit = bool(appIsQuitting)
+                deletedQt = isDeletedQtObjectError(
+                    getattr(unraisable, 'exc_type', None),
+                    getattr(unraisable, 'exc_value', None),
+                )
+                level = "DEBUG" if duringQuit and deletedQt else "ERROR"
                 logMessage(
-                    "ERROR",
+                    level,
                     f"{errMsg} (object={obj!r}):\n{tbText}",
                 )
             except Exception:
@@ -1078,6 +1142,18 @@ def loadQuickLook(cbQuickLook, listQueryList, chkbDelta=None, chkbOverlay=None):
                 logMessage("DEBUG", f"loadQuickLook: Converted legacy {userTxtPath} to .json and deleted .txt")
     except Exception as e:        
         logMessage("ERROR", "loadQuickLook: Failed to load Quick Look from {}: {}".format(quickLookPath, e))
+
+def quickLookExists(quickLookName) -> bool:
+    """True if a user or example Quick Look JSON already uses this name."""
+    name = (quickLookName or "").strip()
+    if not name:
+        return False
+    userPath = os.path.join(Utils.getQuickLookDir(), f"{name}.json")
+    if os.path.isfile(userPath):
+        return True
+    examplePath = resourcePath(f"quickLook/{name}.json")
+    return os.path.isfile(examplePath)
+
 
 def deleteQuickLook(quickLookName):
     if not quickLookName:        

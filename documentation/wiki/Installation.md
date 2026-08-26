@@ -30,21 +30,22 @@ Data Doctor.exe
 applyUpdate.cmd
 README.txt
 UPDATE.txt
-Update\
+Update\                 (includes a DataDoctor-Python-*.zip for first run)
 Project Files\
   DataDoctor.pyw
   core\          (live bunker.db stays here)
   ui\
   quickLook\
   oracle\
+  certs\         (empty; drop aquarius.pem / .cer here)
   scripts\
   temp\bunker.db (packaged dictionary for merge only)
 ```
 
 1. Unzip to a writable folder.
 2. Install Python 3.13 if needed (an installer may be in the zip). Enable **Add python.exe to PATH**.
-3. Double-click **Data Doctor.exe**.
-4. If a `Project Files\.venv` exists, that env is preferred; otherwise `pip install -r "Project Files\requirements.txt"`.
+3. Run **applyUpdate.cmd** once. Linux/mac virtualenvs cannot run on Windows, so the zip does not ship a `.venv`. applyUpdate creates `Project Files\.venv`, installs requirements, and applies the Python payload already in `Update\`.
+4. Double-click **Data Doctor.exe**.
 
 Do **not** overwrite `Project Files\core\bunker.db` with a zip’s copy if the dictionary has local edits. Updates merge via `applyUpdate.cmd`.
 
@@ -71,7 +72,9 @@ A portable zip can be built with `python scripts/packageMac.py`. A native `.app`
 
 ## Oracle Instant Client
 
-Packaged Windows/AppImage trees may include Instant Client under `oracle/` (or `Project Files\oracle\`). The app prefers that copy and falls back to a system Instant Client. Set **Options → USBR** to the `tnsnames.ora` path if TNS names are not in the default location.
+Packaged Windows / Linux / macOS trees may include Instant Client **Basic Lite** (raw library files, no extra Oracle installer) under `oracle/client` (or `Project Files\oracle\client`). The app prefers that copy and falls back to a system Instant Client. Set **Options → USBR** to the `tnsnames.ora` path if TNS names are not in the default location.
+
+The Python update zip does not include Instant Client (it is OS-specific).
 
 ## Next
 

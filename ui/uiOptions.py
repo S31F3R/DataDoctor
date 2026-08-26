@@ -617,6 +617,11 @@ class uiOptions(QDialog):
             except Exception as e:
                 Logic.logMessage("ERROR", "Failed to load user.config for save: {}".format(e))
         previousRetro = config.get('retroMode', True)
+        previousChannel = (config.get('updateChannel') or 'stable').strip().lower()
+        if previousChannel in ('beta', 'pre', 'prerelease', 'rc'):
+            previousChannel = 'beta'
+        else:
+            previousChannel = 'stable'
         newRetro = self.chkbRetroMode.isChecked()
         tnsPath = self.qleTNSNames.text()
 
@@ -758,6 +763,23 @@ class uiOptions(QDialog):
 
         # Close Options (we disconnected the UI auto-accept)
         super().accept()
+
+        # Beta checkbox: check GitHub after save so a first-time beta user
+        # is offered the RC, and unchecking reverts to the last published tag.
+        if previousChannel != updateChannel:
+            parent = self.winMain if self.winMain is not None else None
+            from core import Update
+
+            if updateChannel == 'beta':
+                QTimer.singleShot(
+                    0,
+                    lambda: Update.runUpdateCheckUi(parent, silentIfNone=False),
+                )
+            else:
+                QTimer.singleShot(
+                    0,
+                    lambda: Update.runRevertToPublishedUi(parent),
+                )
 
     def _startHdbPasswordChange(self, username, oldPassword, newPassword):
         """

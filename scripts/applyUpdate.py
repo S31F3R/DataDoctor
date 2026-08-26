@@ -27,6 +27,7 @@ Does NOT:
   - Touch user config / keyring / AppData
   - Delete user-added quickLook files (only overwrites same names)
   - Overwrite live core/bunker.db wholesale (merge only)
+  - Copy or replace Project Files/certs (user Aquarius certs stay)
 
 Run from install root:
   python applyUpdate.py
@@ -100,6 +101,43 @@ def resolvePython(projectFiles: Path) -> str:
     for c in candidates:
         if c.is_file():
             return str(c)
+    return sys.executable
+
+
+def ensureVenv(projectFiles: Path) -> str:
+    """
+    Return a Python executable inside Project Files/.venv, creating the
+    venv with the current interpreter if it is missing.
+
+    Linux and Windows venvs are not interchangeable (bin vs Scripts,
+    ELF vs PE extensions). This always creates a venv for *this* OS.
+    """
+    existing = resolvePython(projectFiles)
+    venvDir = projectFiles / ".venv"
+    winPy = venvDir / "Scripts" / "python.exe"
+    nixPy = venvDir / "bin" / "python"
+    nixPy3 = venvDir / "bin" / "python3"
+    if existing != sys.executable and (
+        Path(existing) == winPy or Path(existing) == nixPy or Path(existing) == nixPy3
+    ):
+        return existing
+
+    print(f"Creating virtualenv at {venvDir}")
+    rc = subprocess.call([sys.executable, "-m", "venv", str(venvDir)])
+    if rc != 0:
+        print(
+            f"WARN: python -m venv failed with {rc}; using {sys.executable}",
+            file=sys.stderr,
+        )
+        return sys.executable
+    for c in (winPy, nixPy, nixPy3):
+        if c.is_file():
+            print(f"Created {c}")
+            return str(c)
+    print(
+        f"WARN: venv created but no python found under {venvDir}; using {sys.executable}",
+        file=sys.stderr,
+    )
     return sys.executable
 
 
@@ -211,7 +249,6 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
             "ui",
             "core",
             "quickLook",
-            "certs",
             "oracle",
         )
         for tree in treeNames:
@@ -225,7 +262,23 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
                 copyTreeMerge(src, projectFiles / tree)
                 print(f"Updated {tree}/")
 
-        py = resolvePython(projectFiles)
+        # Never copy certs/ from the zip — a user Aquarius cert must survive
+        # updates. Create an empty folder only if the install has none.
+        certsDir = projectFiles / "certs"
+        if not certsDir.is_dir():
+            certsDir.mkdir(parents=True, exist_ok=True)
+            readme = certsDir / "README.txt"
+            if not readme.is_file():
+                readme.write_text(
+                    "Optional Aquarius TLS certificates.\n"
+                    "Place aquarius.pem or a .cer/.crt here. .pfx is not supported.\n",
+                    encoding="utf-8",
+                )
+            print("Created empty Project Files/certs/ (not overwritten on later updates)")
+        else:
+            print("Left Project Files/certs/ unchanged")
+
+        py = ensureVenv(projectFiles)
         print(f"Using Python: {py}")
 
         # Bunker merge: packaged DB is core/bunker.db in the raw Python zip.

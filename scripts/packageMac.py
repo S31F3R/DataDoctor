@@ -45,6 +45,8 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
+from oracleBundle import installOracleClient
+
 
 def projectRoot() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -106,8 +108,8 @@ See UPDATE.txt. Short version:
 
 AQUARIUS CERTIFICATES
 ---------------------
-Create Project Files/certs/ yourself if needed and place aquarius.pem or a
-.cer/.crt file there. The app never creates certs folders. .pfx is not supported.
+Project Files/certs/ is included (empty). Place aquarius.pem or a .cer/.crt
+there. Updates do not replace this folder. .pfx is not supported.
 
 SUPPORT NOTES
 -------------
@@ -188,14 +190,7 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
         src = root / name
         if src.exists():
             copyTree(src, projectFiles / name, ignoreNames={'.git', '__pycache__', 'client'})
-            if name == "oracle":
-                client = root / "oracle" / "client"
-                if client.exists():
-                    copyTree(
-                        client,
-                        projectFiles / "oracle" / "client",
-                        ignoreNames={'__pycache__'},
-                    )
+    installOracleClient(root, projectFiles / "oracle" / "client", "macos")
 
     pySrc = root / "DataDoctor.py"
     if pySrc.is_file():
@@ -232,6 +227,20 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
         shutil.copy2(applyUpdateSrc, scriptsDir / "applyUpdate.py")
     else:
         print("WARN: applyUpdate.py not found", file=sys.stderr)
+
+    certsDir = projectFiles / "certs"
+    certsDir.mkdir(parents=True, exist_ok=True)
+    certsSrc = root / "certs"
+    if certsSrc.is_dir():
+        copyTree(certsSrc, certsDir, ignoreNames={".git", "__pycache__"})
+    if not any(p.is_file() for p in certsDir.rglob("*")):
+        (certsDir / "README.txt").write_text(
+            "Optional Aquarius TLS certificates.\n"
+            "Place aquarius.pem or a .cer/.crt here. .pfx is not supported.\n"
+            "Updates never replace files in this folder.\n",
+            encoding="utf-8",
+        )
+    print("Packaged Project Files/certs/")
 
     bunkerSrc = root / "core" / "bunker.db"
     tempDir = projectFiles / "temp"
@@ -411,6 +420,13 @@ def buildApp(root: Path, outApp: Path, workPath: Path) -> int:
     if outApp.exists():
         shutil.rmtree(outApp)
     shutil.copytree(built, outApp)
+    dest = None
+    for sqlnet in outApp.rglob("sqlnet.ora"):
+        dest = sqlnet.parent.parent.parent / "client"
+        break
+    if dest is None:
+        dest = outApp / "Contents" / "Resources" / "oracle" / "client"
+    installOracleClient(root, dest, "macos")
     print(f"Wrote {outApp}")
     return 0
 

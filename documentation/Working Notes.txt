@@ -1,0 +1,24 @@
+Working Notes
+=============
+Scratch file for unreleased changes. Do not create vVERSION.md here —
+the version is unknown until publish (rc.N, beta.N, or full vX.Y.Z).
+
+Write one bullet per change (bug fix, feature, or TASK). Include a
+GitHub issue number when there is one.
+
+publishRelease.py copies these bullets under ## Changes in
+documentation/releases/vVERSION.md (no Working Notes heading), then
+resets this file to this template.
+
+- Query list right-click Delete (clicked row, or all selected)
+- Internal HDB: KBOHDB / CUHDB / LBOHDB / ECOHDB use their own worker and a
+  direct connection (no @link). UCHDB2 / LCHDB / YAOHDB still share links.
+- Linked HDB @link failures retry a direct connect on any worker error
+- Save Quick Look prefills the combo name and asks before overwrite
+- Internal direct HDB SQL uses unqualified r_base / r_hour (not SCHEMA.r_base@dsn)
+- Isolated HDB workers are internal-only; public USBR API stays one group
+- MCS pool no longer pings idle sessions (Windows 0x80100070 cert-cache fatal)
+- app.log rotation: faulthandler no longer locks the file; Windows copy+truncate
+  fallback; Log Viewer reloads app.log + app.log.1…5
+- sqlnet.log: ingest only bytes appended this process (no old Fatal dump);
+  ERROR lines sit in the live app.log timeline

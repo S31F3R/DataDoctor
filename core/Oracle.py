@@ -8,7 +8,7 @@ import time
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Any, Optional, Tuple, Dict
 from core import Logic, Config
@@ -23,6 +23,20 @@ authFailureMessage = None
 # longer than 32767 characters.
 clientInitLock = threading.Lock()
 clientInitialized = False
+
+# MCS (Microsoft Certificate Store) TLS: Windows prompts per *new* session.
+# Serialize the first connect per DSN, then reuse live sessions so later
+# threads/queries do not prompt again until the OS cache expires.
+_walletMethodCache = None
+_mcsConnectLock = threading.Lock()
+_mcsPoolsLock = threading.Lock()
+_mcsPools: Dict[str, "_McsPool"] = {}
+_sqlnetLogState: Dict[str, int] = {}
+_sqlnetProcessStart = time.time()
+_SQLNET_TIME_RE = re.compile(
+    r"Time:\s*(\d{1,2}-[A-Za-z]{3}-\d{4}\s+\d{1,2}:\d{2}:\d{2})",
+    re.IGNORECASE,
+)
 
 # Oracle docs: quoted passwords may not contain double-quote or return/newline.
 # Also reject other control characters (unsafe / non-printable).
@@ -635,20 +649,21 @@ def ensureOracleClientReady():
         if platform.architecture()[0] != "64bit":
             raise RuntimeError("Only 64-bit platforms supported.")
 
-        expectedFiles = {
+        # Packaged client is Instant Client Basic Lite (raw files, no installer).
+        # Full Basic library names still count as ready.
+        expectedAny = {
             "windows": ["oci.dll"],
-            "linux": ["libociei.so"],
-            "darwin": ["libociei.dylib"],
+            "linux": ["libociicus.so", "libociei.so"],
+            "darwin": ["libociicus.dylib", "libociei.dylib"],
         }
-        requiredFiles = expectedFiles.get(system)
-        if not requiredFiles:
+        requiredAny = expectedAny.get(system)
+        if not requiredAny:
             raise RuntimeError(f"Unsupported platform: {system}")
 
         clientDirPath = "oracle/client"
         clientDir = Path(Logic.resourcePath(clientDirPath))
-        packagedReady = (
-            clientDir.exists()
-            and all((clientDir / f).exists() for f in requiredFiles)
+        packagedReady = clientDir.exists() and any(
+            (clientDir / f).exists() for f in requiredAny
         )
 
         if packagedReady:
@@ -746,12 +761,279 @@ def ensureOracleClientReady():
                 )
 
         clientInitialized = True
+        ingestSqlnetLog()
+
+
+def sqlnetWalletMethod() -> Optional[str]:
+    """
+    METHOD from sqlnet.ora WALLET_LOCATION (MCS or FILE), or None.
+
+    Bundled sqlnet.ora uses METHOD = MCS (Windows certificate store).
+    """
+    global _walletMethodCache
+    if _walletMethodCache is not None:
+        return _walletMethodCache or None
+
+    candidates = []
+    envTns = os.environ.get("TNS_ADMIN")
+    if envTns:
+        candidates.append(os.path.join(envTns, "sqlnet.ora"))
+    try:
+        candidates.append(
+            os.path.join(Logic.resourcePath("oracle/network/admin"), "sqlnet.ora")
+        )
+    except Exception:
+        pass
+    method = None
+    for path in candidates:
+        if not path or not os.path.isfile(path):
+            continue
+        try:
+            text = Path(path).read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        # Strip comment lines so a commented WALLET_LOCATION is ignored
+        live = "\n".join(
+            ln for ln in text.splitlines() if not ln.lstrip().startswith("#")
+        )
+        m = re.search(r"METHOD\s*=\s*([A-Za-z0-9_]+)", live, re.IGNORECASE)
+        if m:
+            method = m.group(1).strip().upper()
+            break
+    _walletMethodCache = method or ""
+    return method
+
+
+def isMcsAuth() -> bool:
+    """True when sqlnet.ora asks Instant Client to use the Windows cert store."""
+    return sqlnetWalletMethod() == "MCS"
+
+
+def _sqlnetLogPaths() -> List[str]:
+    dirs = []
+    try:
+        dirs.append(os.getcwd())
+    except Exception:
+        pass
+    appRoot = getattr(Config, "appRoot", "") or ""
+    if appRoot:
+        dirs.append(appRoot)
+        parent = os.path.dirname(appRoot)
+        if parent:
+            dirs.append(parent)
+    tns = os.environ.get("TNS_ADMIN") or ""
+    if tns:
+        dirs.append(tns)
+        dirs.append(os.path.normpath(os.path.join(tns, "..", "log")))
+    try:
+        dirs.append(Logic.resourcePath("oracle/network/admin"))
+        dirs.append(Logic.resourcePath("oracle/network/log"))
+        dirs.append(Logic.resourcePath("oracle/client"))
+        dirs.append(Logic.resourcePath("."))
+    except Exception:
+        pass
+    seen = set()
+    out: List[str] = []
+    for d in dirs:
+        if not d:
+            continue
+        p = os.path.normpath(os.path.join(d, "sqlnet.log"))
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def _sqlnetBlockTime(block: str):
+    """Parse Instant Client 'Time: 25-AUG-2026 17:10:23' if present."""
+    m = _SQLNET_TIME_RE.search(block or "")
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    for fmt in ("%d-%b-%Y %H:%M:%S", "%d-%B-%Y %H:%M:%S"):
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _fatalSqlnetBlocks(text: str) -> List[str]:
+    if not text or not text.strip():
+        return []
+    chunks = re.split(r"\n{2,}", text.replace("\r\n", "\n"))
+    found = []
+    for chunk in chunks:
+        chunk = chunk.strip()
+        if chunk and re.search(r"\bfatal\b", chunk, re.IGNORECASE):
+            found.append(chunk)
+    if found:
+        return found
+    return [
+        ln.strip()
+        for ln in text.splitlines()
+        if re.search(r"\bfatal\b", ln, re.IGNORECASE)
+    ]
+
+
+def ingestSqlnetLog() -> None:
+    """
+    Copy Fatal entries that Instant Client appended *after this process started*
+    into app.log as ERROR, in the live log timeline.
+
+    First sight of a sqlnet.log is EOF only — never dump hours of old Fatals
+    into the current query. Blocks whose Oracle Time: is before process start
+    are skipped even if they sit in newly-read bytes (file truncated/rewritten).
+    """
+    cutoff = datetime.fromtimestamp(_sqlnetProcessStart) - timedelta(seconds=120)
+    for path in _sqlnetLogPaths():
+        if not os.path.isfile(path):
+            continue
+        try:
+            size = os.path.getsize(path)
+        except OSError:
+            continue
+        if path not in _sqlnetLogState:
+            # First sight: remember EOF; do not ingest history
+            _sqlnetLogState[path] = size
+            continue
+        prev = _sqlnetLogState[path]
+        if size < prev:
+            prev = 0
+        if size == prev:
+            continue
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                f.seek(prev)
+                newText = f.read()
+        except Exception:
+            continue
+        _sqlnetLogState[path] = size
+        for block in _fatalSqlnetBlocks(newText):
+            when = _sqlnetBlockTime(block)
+            if when is not None and when < cutoff:
+                continue
+            clipped = block if len(block) <= 4000 else block[:3997] + "..."
+            whenLabel = when.strftime("%H:%M:%S") if when is not None else ""
+            prefix = f"sqlnet.log {whenLabel}: " if whenLabel else "sqlnet.log: "
+            Logic.logMessage("ERROR", prefix + clipped)
+
+
+def _connectionAlive(conn) -> bool:
+    """
+    MCS sessions must not be ping-tested. A stale Windows cert/smart-card
+    cache can abort the process with 0x80100070 (SCARD_W_CACHE_ITEM_NOT_FOUND)
+    instead of a Python exception.
+    """
+    return conn is not None
+
+
+def _tryCloseOracle(conn) -> None:
+    try:
+        if conn is not None:
+            conn.close()
+    except BaseException:
+        pass
+
+
+class _McsPool:
+    """Idle MCS sessions for one DSN. Connections are not thread-safe."""
+
+    def __init__(self, dsn: str):
+        self.dsn = dsn
+        self.lock = threading.Lock()
+        self.firstStarted = False
+        self.firstDone = threading.Event()
+        self.idle: List[Any] = []
+        self.liveCount = 0
+        self.maxSize = 15
+
+
+def _mcsPoolFor(dsn: str) -> _McsPool:
+    key = (dsn or "").strip().lower()
+    with _mcsPoolsLock:
+        pool = _mcsPools.get(key)
+        if pool is None:
+            pool = _McsPool(key)
+            _mcsPools[key] = pool
+        return pool
+
+
+def acquireMcsConnection(dsn: str, connectFn):
+    """
+    Check out a live MCS session, or open one. First connect per DSN is
+    serialized so Windows only prompts once; later connects wait for that
+    handshake so the cert cache is warm.
+    """
+    pool = _mcsPoolFor(dsn)
+    with pool.lock:
+        if pool.idle:
+            # Reuse without ping (MCS native ping can fatal 0x80100070).
+            return pool.idle.pop()
+        waitForFirst = pool.firstStarted
+        if not pool.firstStarted:
+            pool.firstStarted = True
+            waitForFirst = False
+
+    if waitForFirst:
+        pool.firstDone.wait(timeout=180)
+
+    try:
+        with _mcsConnectLock:
+            conn = connectFn()
+    except Exception:
+        with pool.lock:
+            if not pool.firstDone.is_set():
+                pool.firstStarted = False
+            pool.firstDone.set()
+        raise
+
+    with pool.lock:
+        pool.liveCount += 1
+        pool.firstDone.set()
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"MCS pool: new session for {dsn} (live={pool.liveCount})",
+        )
+    return conn
+
+
+def releaseMcsConnection(dsn: str, conn) -> None:
+    if conn is None:
+        return
+    pool = _mcsPoolFor(dsn)
+    with pool.lock:
+        pool.idle.append(conn)
+
+
+def discardMcsConnection(dsn: str, conn) -> None:
+    _tryCloseOracle(conn)
+    pool = _mcsPoolFor(dsn)
+    with pool.lock:
+        pool.liveCount = max(0, pool.liveCount - 1)
+        pool.idle = [c for c in pool.idle if c is not conn]
+
 
 class oracleConnection:
     def __init__(self, dsn: str):
         self.dsn = dsn
         self.connection = None
+        self._fromMcsPool = False
         ensureOracleClientReady()
+
+    def _newSession(self) -> oracledb.Connection:
+        """Open a brand-new oracledb session (keyring user/password)."""
+        user = keyring.get_password("DataDoctor", "oracleUser") or ""
+        password = keyring.get_password("DataDoctor", "oraclePassword") or ""
+        if not user or not password:
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    "oracleConnection.connect: Missing Oracle credentials",
+                )
+            raise ValueError("Oracle username or password not set in keyring")
+        return oracledb.connect(user=user, password=password, dsn=self.dsn)
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""
@@ -762,23 +1044,30 @@ class oracleConnection:
             raise OracleAuthError(authFailureMessage)
 
         try:
-            user = keyring.get_password("DataDoctor", "oracleUser") or ''
-            password = keyring.get_password("DataDoctor", "oraclePassword") or ''
-
-            if not user or not password:
-                if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.connect: Missing Oracle credentials")
-                raise ValueError("Oracle username or password not set in keyring")
-            
-            self.connection = oracledb.connect(user=user, password=password, dsn=self.dsn)
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.connect: Connection established to {self.dsn}")
-            # Successful login clears any prior auth block
+            if isMcsAuth():
+                self.connection = acquireMcsConnection(self.dsn, self._newSession)
+                self._fromMcsPool = True
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"oracleConnection.connect: MCS pooled session for {self.dsn}",
+                    )
+            else:
+                self._fromMcsPool = False
+                self.connection = self._newSession()
+                if Config.debug:
+                    Logic.logMessage(
+                        "DEBUG",
+                        f"oracleConnection.connect: Connection established to {self.dsn}",
+                    )
             authFailureMessage = None
-            user = None
-            password = None
+            ingestSqlnetLog()
             return self.connection
         except OracleAuthError:
+            ingestSqlnetLog()
             raise
         except oracledb.Error as e:
+            ingestSqlnetLog()
             if isPasswordExpiredError(e):
                 authFailureMessage = passwordExpiredMessage()
                 Logic.logMessage(
@@ -791,10 +1080,9 @@ class oracleConnection:
                 Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
                 raise OracleAuthError(authFailureMessage) from e
             Logic.logException(f"oracleConnection.connect: Error connecting to Oracle ({self.dsn})", e)
-            user = None
-            password = None
             raise
         except Exception as e:
+            ingestSqlnetLog()
             if isPasswordExpiredError(e):
                 authFailureMessage = passwordExpiredMessage()
                 Logic.logMessage(
@@ -807,18 +1095,21 @@ class oracleConnection:
                 Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
                 raise OracleAuthError(authFailureMessage) from e
             Logic.logException(f"oracleConnection.connect: Unexpected error ({self.dsn})", e)
-            user = None
-            password = None
             raise
 
     def reconnect(self) -> oracledb.Connection:
         """Close any existing session and open a new one (same DSN/credentials)."""
-        try:
-            if self.connection is not None:
-                self.connection.close()
-        except Exception:
-            pass
+        conn = self.connection
         self.connection = None
+        if getattr(self, "_fromMcsPool", False) and conn is not None:
+            discardMcsConnection(self.dsn, conn)
+            self._fromMcsPool = False
+        else:
+            try:
+                if conn is not None:
+                    conn.close()
+            except Exception:
+                pass
         return self.connect()
 
     def isConnectionError(self, exc) -> bool:
@@ -839,6 +1130,9 @@ class oracleConnection:
             'NOT CONNECTED',
             'CONNECTION WAS CLOSED',
             'BROKEN PIPE',
+            '80100070',  # SCARD_W_CACHE_ITEM_NOT_FOUND (MCS / PIV)
+            'SCARD',
+            'CACHE_ITEM_NOT_FOUND',
         )
         return any(m in text for m in markers)
 
@@ -880,6 +1174,7 @@ class oracleConnection:
         try:
             return self.runQueryOnCursor(cursor, query, params, fetchAll, startTime)
         except oracledb.Error as e:
+            ingestSqlnetLog()
             if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Oracle error: {e}")
             raise
         finally:
@@ -1093,15 +1388,26 @@ class oracleConnection:
             )
 
     def close(self):
-        """Close connection and clean up TNS_ADMIN directory."""
+        """Return MCS sessions to the pool; otherwise close the Oracle handle."""
+        conn = self.connection
+        self.connection = None
+        if getattr(self, "_fromMcsPool", False) and conn is not None:
+            releaseMcsConnection(self.dsn, conn)
+            self._fromMcsPool = False
+            if Config.debug:
+                Logic.logMessage("DEBUG", "oracleConnection.close: MCS session returned to pool")
+            return
         try:
-            if self.connection:
-                self.connection.close()
-                if Config.debug: Logic.logMessage("DEBUG", "oracleConnection.close: Connection closed.")
+            if conn is not None:
+                conn.close()
+                if Config.debug:
+                    Logic.logMessage("DEBUG", "oracleConnection.close: Connection closed.")
         except oracledb.Error as e:
-            if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.close: Error closing connection: {e}")
-        finally:
-            pass # No temp dir to clean
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"oracleConnection.close: Error closing connection: {e}",
+                )
 
     def testConnection(self):
         if Config.debug: Logic.logMessage("DEBUG", f"oracleConnection.testConnection: Testing connection to {self.dsn}")       

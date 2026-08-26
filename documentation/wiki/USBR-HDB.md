@@ -2,7 +2,18 @@
 
 Internal queries talk to Reclamation Hydrologic Databases over **Oracle** (`oracledb`). Set **Options → USBR** user and password (OS keyring). Point at `tnsnames.ora` if needed.
 
-Regional / office DSN names you will see (examples): `lchdb`, `uchdb2`, `yaohdb`, `ecohdb`, `lbohdb`, `kbohdb`, `pnhyd`, `gphyd`.
+Regional / office DSN names:
+
+| DSN | Office |
+|-----|--------|
+| `lchdb` | Lower Colorado Regional Office |
+| `uchdb2` | Upper Colorado Regional Office |
+| `yaohdb` | Yuma Area Office |
+| `ecohdb` | Eastern Colorado Area Office |
+| `lbohdb` | Lahontan Basin Area Office |
+| `kbohdb` | Klamath Basin Area Office |
+| `pnhyd` | Pacific Northwest Regional Office |
+| `gphyd` | Great Plains Regional Office |
 
 DataIDs are **site datatype IDs (SDID)**. A model-run suffix is allowed: `SDID-MRID`. When MRID is `0` or omitted, the header second line is just the SDID.
 
@@ -33,10 +44,19 @@ Internal Data Query only. Edited cells (magenta) and overlay auto-fills can be s
 
 ## Database links
 
-A multi-DB internal query may use `@link` from the primary. If the link fails (`ORA-02019` and similar), Data Doctor retries by connecting to the target DSN **directly**.
+**Internal SQL only:** **UCHDB2 / LCHDB / YAOHDB** share database links. A mixed query among those three may use `SCHEMA.r_base@dsn` (e.g. `LCHDBA.r_base@lchdb`) from the first of them. If that link fails, Data Doctor retries by connecting to the target DSN **directly** and querying unqualified `r_base` / `r_hour`.
+
+**KBOHDB, CUHDB, LBOHDB, and ECOHDB** (internal) each get their own worker and a **direct** connection: `FROM r_base`, never `@kbohdb`. Public USBR web queries stay a single USBR group (HTTP API, no Oracle links).
 
 ## Public USBR web (not HDB)
 
-Public USBR series (when offered in the database list) use the Reclamation web API, not your Oracle login. Parameters look like `svr`, `sdi`, `tstp` (`IN`/`HR`/`DY`/`MN`), `t1`/`t2`. That path is read-only.
+Public USBR series (when offered in the database list) use the Reclamation web API, not an Oracle login. That path is read-only.
+
+| Parameter | Meaning |
+|-----------|---------|
+| `svr` | HDB name (`lchdb`, `uchdb2`, …) |
+| `sdi` | Site datatype ID; multiple IDs may be comma-separated |
+| `tstp` | `IN` instant, `HR` hourly, `DY` daily, `MN` monthly |
+| `t1` / `t2` | Start and end. Dates: `MM-DD-YYYY` or `YYYY-MM-DDTHH:mm`. Integers are a timestep offset from today (`t1=-7`, `t2=0` on daily = last 7 days). |
 
 Reclamation: https://www.usbr.gov/

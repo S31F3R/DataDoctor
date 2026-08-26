@@ -1,8 +1,19 @@
 ####### CURRENT TASKS #######
-(none)
+-Expand SQL Query Builder
+  -Need to make the SQL Query Builder tab detachable, just like graph and log
+  -Add a stop query button
+  -Need the ability to "hide" the sql quick looks
+  -Create a combobox at the top of the sql quick looks section. Give the user the ability to create catagories. The sql quick looks below will only show up if they are part of that catagories
+  -Query tabs where the SQL is written, should remember what database was used. When clicking from tab to tab on this level, make combo box reflect their last query on that tab
+  -Both horzonital sections need their own tab controls. Need to be able ot right click and rename tabs (this is just visual)
+  -Query result tab nees to have a "pin" to lock that result. Next query will create a new tab with new result. These results stick with parent "query tab"
+  -Current Save Snippet and Delete Snippet buttons need to move to move to the sql quick look side panel up top. We'll add a 3rd button for Catagories. Clicking the Catagories button is how a user can add/remove catagories. Catagories show up in the combobox
+    -New buttons will go in their old spot. Where the Save Snippet button was, we're going to add a Stop Query button. Use the Deny.png for that. Where the Delete Snippet was, we're going to add a History button. Use History.png for that
+      -History button I want to show the last queries, just like SQL Developer does. If a user double clicks, it loads that in, just like a sql quick look would
+  -Assests for this task are already created
+  -Need to take special note of the movement of all controls and how they were impacted by retro mode. This will need to be modified and tested again after the UI overhaul
 
 ####### CURRENT BUGS #######
-(none — moved to documentation/test.txt)
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
@@ -15,6 +26,7 @@
     -USBR will need:
         -Apply Overwrite Flag
 -Add datatype as an option to add to labels
+  -Make it specific per database
 -Need a profile tab in options. Allow export/import of quickLooks, override system dark/light mode, etc.
 -Get OAuth App for GitHub stuffs
 
@@ -24,17 +36,16 @@
      meaning UTC-6 queried as UTC-7 will display a daily at 2300 instead of 0000
 
 ####### WIKI IDEAS #######
-(Live wiki is DataDoctor.wiki.git. Edit documentation/wiki/; pre-push publishes.)
--QAQC and how it works with Data Dictionary
--Aquarius link, what is required
--Explanation of BOP and EOP for USBR
--Overlay and delta explanation
--Overlay auto marked for edits/upload
--CSV dumps based on Data Query tab or SQL Build tab
--Diffrent quicklooks, how to save/use them
--AppData, what is stored and where
--dataDictionary valuePrecision and precisionOverride explanation
--Expladin how header labels from data dictionary are created 
+(Published — all of these have pages. Edit documentation/wiki/; pre-push updates GitHub.)
+-QAQC and Data Dictionary → wiki/Data-Dictionary
+-Aquarius link / certs → wiki/Aquarius
+-BOP and EOP → wiki/USBR-HDB
+-Overlay and delta + auto-mark for upload → wiki/Overlay-and-Delta
+-CSV from Data Query or SQL Builder → wiki/CSV-Export
+-Quick Looks save/load → wiki/Quick-Looks
+-AppData locations → wiki/App-Data
+-valuePrecision / precisionOverride → wiki/Data-Dictionary
+-Header labels from the dictionary → wiki/Data-Dictionary
 
 ####### GIT MODIFICATIONS BEFORE 3.0 RELASE #######
 -Update readme
@@ -50,6 +61,18 @@
 -When Seifer confirms a test item: mark [x] in test.txt (and leave off this list)
 -If a test fails: keep in test.txt with notes; do not put back on To Do until abandoned
 -Clean up test.txt after confirmed [x] items (standard workflow): drop long steps for [x] into a short Confirmed list; keep retest items detailed
+-Working Notes: documentation/Working Notes.txt
+  - Scratch file for unreleased changes. It has no version in the name because
+    the next tag is unknown (rc.N, beta.N, or a full vX.Y.Z) until publish.
+  - Grok adds one bullet per bug fix, feature, or TASK as they land. If a bug
+    is on GitHub, include the issue number. Do not create vVERSION.md early.
+  - Future GitHub issues that are fixed go in the commit message as well
+    (e.g. "Fix header Ctrl+click (#12)").
+  - python scripts/publishRelease.py names documentation/releases/vVERSION.md
+    when the channel is chosen. It copies Working Notes *bullets* under
+    ## Changes only (no "Working Notes" heading or instructions). Then it
+    resets the scratch file to the empty template.
+  - If vVERSION.md already exists at publish, that file is used as-is.
 -Documentation: Grok may edit documentation/ as part of normal workflow (To Do, test.txt, notes, wiki, README, etc.)
 -README.md and documentation/wiki/ are public. Write them for users / operators.
   Do not put Seifer-only asides, "talking to you" notes, or Grok/Seifer chatter in them.
@@ -58,7 +81,7 @@
 -Commits:
     - Grok may auto-commit code paths (ui, core, scripts, requirements, sounds, icons, …)
     - Grok may auto-commit README.md and documentation/wiki/
-    - Grok must NOT auto-commit other documentation/ (To Do, test.txt, notes) — Seifer commits those
+    - Grok must NOT auto-commit other documentation/ (To Do, test.txt, notes, Working Notes) — Seifer commits those
     - secret.grok and status.grok are gitignored; never commit them
 -Wiki: documentation/wiki/ is the working copy. This machine uses
   `git config core.hooksPath scripts/hooks` so Code-OSS Push also runs

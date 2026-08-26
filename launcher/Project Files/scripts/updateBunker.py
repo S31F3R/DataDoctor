@@ -4,8 +4,10 @@ Merge a packaged bunker.db into the user's bunker.db without wiping user edits.
 
 Rules (per To Do List):
   - Match rows on dataID + siteID
-  - Only update fields: dataType, siteName, valuePrecision, database
-    (and only when those differ — never replace other user columns)
+  - Update from packaged: datatype, siteName, database (when packaged differs)
+  - Fill blanks only (never override user values): valuePrecision,
+    precisionOverride, expectedMin, expectedMax, cuttoffMin, cutoffMax,
+    rateOfChange
   - Insert rows that exist only in the packaged DB
   - Never delete user-only rows
 
@@ -33,12 +35,22 @@ import os
 import shutil
 import sqlite3
 import sys
-from datetime import datetime
+
 from pathlib import Path
 
 
-# Only these columns are written from packaged → user on match
-MERGE_FIELDS = ("dataType", "siteName", "valuePrecision", "database")
+# Always update these from packaged when packaged has a non-empty different value
+UPDATE_FIELDS = ("datatype", "dataType", "siteName", "database")
+# Fill user blanks only — never replace a value the user already set
+FILL_BLANK_FIELDS = (
+    "valuePrecision",
+    "precisionOverride",
+    "expectedMin",
+    "expectedMax",
+    "cuttoffMin",
+    "cutoffMax",
+    "rateOfChange",
+)
 # Match keys (case-insensitive column resolve)
 MATCH_KEYS = ("dataID", "siteID")
 
@@ -145,11 +157,15 @@ def merge(packagedPath: Path, userPath: Path, dryRun: bool = False) -> int:
         )
         return 1
 
-    # Backup user DB
+    # One backup only — drop prior bunker.db.bak* then write bunker.db.bak
     if not dryRun:
-        backup = userPath.with_suffix(
-            userPath.suffix + f".bak-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        )
+        for old in userPath.parent.glob(userPath.name + ".bak*"):
+            try:
+                old.unlink()
+                print(f"Removed old backup: {old}")
+            except OSError as e:
+                print(f"WARN: could not remove {old}: {e}", file=sys.stderr)
+        backup = userPath.with_suffix(userPath.suffix + ".bak")
         shutil.copy2(userPath, backup)
         print(f"Backup: {backup}")
 
@@ -167,9 +183,16 @@ def merge(packagedPath: Path, userPath: Path, dryRun: bool = False) -> int:
             print("ERROR: dataID/siteID columns missing in one of the databases", file=sys.stderr)
             return 1
 
-        # Map merge field names in each DB
-        pkgFields = {f: col(pkgMap, f) for f in MERGE_FIELDS}
-        usrFields = {f: col(usrMap, f) for f in MERGE_FIELDS}
+        mergeFieldNames = []
+        seenLower = set()
+        for f in list(UPDATE_FIELDS) + list(FILL_BLANK_FIELDS):
+            if f.lower() in seenLower:
+                continue
+            seenLower.add(f.lower())
+            mergeFieldNames.append(f)
+        pkgFields = {f: col(pkgMap, f) for f in mergeFieldNames}
+        usrFields = {f: col(usrMap, f) for f in mergeFieldNames}
+        fillBlankLower = {f.lower() for f in FILL_BLANK_FIELDS}
 
         pkgRows = pkg.execute("SELECT * FROM dataDictionary").fetchall()
         updated = 0
@@ -189,21 +212,24 @@ def merge(packagedPath: Path, userPath: Path, dryRun: bool = False) -> int:
             ).fetchone()
 
             if existing is not None:
-                # Update only allowed fields when packaged has a non-empty value
+                # Update labels from packaged; QAQC/precision fields fill blanks only
                 sets = []
                 params = []
-                for field in MERGE_FIELDS:
+                for field in mergeFieldNames:
                     pCol = pkgFields.get(field)
                     uCol = usrFields.get(field)
                     if not pCol or not uCol:
                         continue
                     newVal = row[pCol]
                     oldVal = existing[uCol]
-                    # Only push packaged value when it is non-empty and different
                     if newVal is None or str(newVal).strip() == "":
                         continue
                     if oldVal is not None and str(oldVal) == str(newVal):
                         continue
+                    fillBlank = field.lower() in fillBlankLower
+                    if fillBlank:
+                        if oldVal is not None and str(oldVal).strip() != "":
+                            continue
                     sets.append(f"{uCol} = ?")
                     params.append(newVal)
                 if sets:

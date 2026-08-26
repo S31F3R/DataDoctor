@@ -33,11 +33,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import platform
 import shutil
 import sys
 import zipfile
 from datetime import datetime
 from pathlib import Path
+
+from oracleBundle import installOracleClient
 
 
 def projectRoot() -> Path:
@@ -103,11 +106,15 @@ REQUIREMENTS
 FIRST RUN
 ---------
 1) Unzip this package to a folder you can write to (e.g. Documents\\DataDoctor).
-3) Prefer: double-click "Data Doctor.exe" (VB launcher).
-   Or: open Project Files and run DataDoctor.pyw with Python 3.13.
-4) If dependencies are missing and you use a Project Files\\.venv, that env is
-   preferred. Otherwise install from Project Files\\requirements.txt:
-       python -m pip install -r "Project Files\\requirements.txt"
+3) Install Python 3.13 if needed (step 2). Enable "Add python.exe to PATH".
+4) Run applyUpdate.cmd once. A Linux .venv cannot run on Windows, so this
+   package does not ship one. applyUpdate.cmd:
+     - Uses the DataDoctor-Python-*.zip already in Update\\
+     - Creates Project Files\\.venv for Windows
+     - pip installs requirements
+     - Merges the data dictionary
+5) Double-click "Data Doctor.exe" (VB launcher).
+   Or: run Project Files\\DataDoctor.pyw with the venv Python.
 
 UPDATING AN EXISTING INSTALL
 ----------------------------
@@ -121,8 +128,8 @@ See UPDATE.txt next to this file. Short version:
 
 AQUARIUS CERTIFICATES
 ---------------------
-Create Project Files\\certs\\ yourself if needed and place aquarius.pem or a
-.cer/.crt file there. The app never creates certs folders. .pfx is not supported.
+Project Files\\certs\\ is included (empty). Place aquarius.pem or a .cer/.crt
+there. Updates do not replace this folder. .pfx is not supported.
 
 SUPPORT NOTES
 -------------
@@ -224,11 +231,7 @@ def main():
         src = root / name
         if src.exists():
             copyTree(src, projectFiles / name, ignoreNames={'.git', '__pycache__', 'client'})
-            # oracle/client is large / platform-specific — include if present
-            if name == "oracle":
-                client = root / "oracle" / "client"
-                if client.exists():
-                    copyTree(client, projectFiles / "oracle" / "client", ignoreNames={'__pycache__'})
+    installOracleClient(root, projectFiles / "oracle" / "client", "windows")
 
     # DataDoctor.py → DataDoctor.pyw
     pySrc = root / "DataDoctor.py"
@@ -275,6 +278,21 @@ def main():
         "Drop a DataDoctor-Python-*.zip here (from packagePython.py), then run applyUpdate.cmd from the install root.\n",
         encoding="utf-8",
     )
+
+    # Empty certs/ so users have the right folder without creating it
+    certsDir = projectFiles / "certs"
+    certsDir.mkdir(parents=True, exist_ok=True)
+    certsSrc = root / "certs"
+    if certsSrc.is_dir():
+        copyTree(certsSrc, certsDir, ignoreNames={".git", "__pycache__"})
+    if not any(p.is_file() for p in certsDir.rglob("*")):
+        (certsDir / "README.txt").write_text(
+            "Optional Aquarius TLS certificates.\n"
+            "Place aquarius.pem or a .cer/.crt here. .pfx is not supported.\n"
+            "Updates never replace files in this folder.\n",
+            encoding="utf-8",
+        )
+    print("Packaged Project Files/certs/")
 
     # Packaged bunker.db for merge → Project Files/temp/ (live user DB is core/)
     bunkerSrc = root / "core" / "bunker.db"
@@ -339,9 +357,17 @@ def main():
     writeReadme(stage, hasInstaller, installerName)
     writeUpdateReadme(stage)
 
-    # .venv optional
+    # .venv is OS-specific (Linux bin/ + .so vs Windows Scripts/ + .pyd).
+    # Never copy a non-Windows venv into a Windows zip.
     venv = root / ".venv"
-    if not args.skipVenv and venv.is_dir():
+    hostIsWindows = platform.system() == "Windows"
+    if not hostIsWindows:
+        print(
+            "Skipping .venv (this host is not Windows; "
+            "a Linux/mac venv cannot run on Windows). First-run applyUpdate.cmd "
+            "creates Project Files\\.venv from the Python zip in Update\\."
+        )
+    elif not args.skipVenv and venv.is_dir():
         print("Copying .venv (this may take a while)...")
         copyTree(
             venv,
@@ -352,6 +378,38 @@ def main():
         print("Skipping .venv (--skip-venv)")
     else:
         print("WARN: .venv not found; package will need a local Python env", file=sys.stderr)
+
+    # First-install payload: same layout as packagePython.py so applyUpdate.cmd
+    # can create the Windows venv and pip-install without a second download.
+    pyZip = updateDrop / "DataDoctor-Python.zip"
+    print(f"Writing first-install payload {pyZip.name} ...")
+    with zipfile.ZipFile(pyZip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        pyw = projectFiles / "DataDoctor.pyw"
+        if pyw.is_file():
+            zf.write(pyw, "DataDoctor.py")
+        reqPf = projectFiles / "requirements.txt"
+        if reqPf.is_file():
+            zf.write(reqPf, "requirements.txt")
+        licensePf = stage / "LICENSE"
+        if licensePf.is_file():
+            zf.write(licensePf, "LICENSE")
+        for tree in ("core", "ui", "quickLook", "oracle", "certs"):
+            srcTree = projectFiles / tree
+            if not srcTree.exists():
+                continue
+            for dirPath, dirNames, fileNames in os.walk(srcTree):
+                # Instant Client stays in Project Files/oracle/client only —
+                # do not also stuff it into the Update python zip.
+                dirNames[:] = [
+                    d for d in dirNames
+                    if d != "__pycache__" and not (tree == "oracle" and d == "client")
+                ]
+                for fileName in fileNames:
+                    if fileName.endswith((".pyc", ".pyo")):
+                        continue
+                    full = Path(dirPath) / fileName
+                    rel = full.relative_to(projectFiles).as_posix()
+                    zf.write(full, rel)
 
     # Zip it
     if outZip.exists():

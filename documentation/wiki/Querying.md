@@ -12,7 +12,7 @@ Both open the same Query window. The window title / `queryType` decides what is 
 ## Building a query list
 
 1. Pick **database**, **DataID**, **interval**, and a time range.
-2. **Add Query** (or **Insert Above / Insert Below** from the list context menu).
+2. **Add Query** (or **Insert Above / Insert Below / Delete** from the list context menu).
 3. Repeat for more series.
 4. Optional: **Delta** and/or **Overlay** (see [Overlay and Delta](Overlay-and-Delta)).
 5. **Query**.

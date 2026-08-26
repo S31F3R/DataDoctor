@@ -12,7 +12,7 @@ Entra vs credential-account login is not implemented. Username and password are 
 
 ## TLS certificates
 
-The app never creates a `certs/` folder. Create one and place the server cert:
+Windows and macOS launcher zips include an empty `Project Files/certs/` folder. Updates never replace files there. Place the server cert:
 
 | File | Behavior |
 |------|----------|

@@ -205,11 +205,14 @@ def _pickAsset(assets: list, kind: str) -> dict | None:
     return find(lambda n: n.endswith(".zip"))
 
 
-def fetchLatestRelease(channel: str | None = None) -> dict | None:
+def fetchLatestRelease(channel: str | None = None, requireNewer: bool = True) -> dict | None:
     """
     Return a dict:
       version, tag, name, prerelease, html_url, asset_name, asset_url, body
     or None if nothing suitable / network error / no releases yet.
+
+    requireNewer: default True (startup check). False is used when reverting
+    from beta/RC to the latest published tag, which may be an older triple.
     """
     channel = channel or getUpdateChannel()
     try:
@@ -247,11 +250,19 @@ def fetchLatestRelease(channel: str | None = None) -> dict | None:
     candidates.sort(key=lambda t: t[0], reverse=True)
     _key, rel, ver, isPre = candidates[0]
 
-    if not Version.isNewer(ver, Version.VERSION):
+    if requireNewer:
+        if not Version.isNewer(ver, Version.VERSION):
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    f"Update check: up to date local={Version.VERSION} remote={ver}",
+                )
+            return None
+    elif Version.compareVersions(ver, Version.VERSION) == 0:
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
-                f"Update check: up to date local={Version.VERSION} remote={ver}",
+                f"Update check: already on remote={ver}",
             )
         return None
 
@@ -559,6 +570,65 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
         Logic.logMessage("DEBUG", f"scheduleStartupUpdateCheck: {e}")
 
 
+def runRevertToPublishedUi(parent=None) -> None:
+    """
+    After the user turns Beta updates off: offer the latest published
+    (non alpha/beta/rc) release even if it is older than the current RC.
+    """
+    from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
+    from PyQt6.QtWidgets import QApplication, QMessageBox
+
+    class _Signals(QObject):
+        done = pyqtSignal(object)
+
+    class _Worker(QRunnable):
+        def __init__(self, signals):
+            super().__init__()
+            self.signals = signals
+
+        def run(self):
+            try:
+                info = fetchLatestRelease(channel="stable", requireNewer=False)
+            except Exception as e:
+                Logic.logMessage("INFO", f"Revert-to-published check: {e}")
+                info = None
+            self.signals.done.emit(info)
+
+    def onDone(info):
+        if info is None:
+            QMessageBox.information(
+                parent,
+                "Updates",
+                "No published (non-beta / non-RC) GitHub release was found.\n\n"
+                "Stay on this build, or publish a stable tag to revert to.",
+            )
+            return
+        local = Version.displayVersion()
+        ver = info.get("version") or "?"
+        box = QMessageBox(parent)
+        box.setWindowTitle("Revert to published")
+        box.setText(
+            "Beta updates were turned off.\n\n"
+            f"Installed:  {local}\n"
+            f"Published:  {ver}\n\n"
+            "Download the published build and restart to leave the beta/RC channel?"
+        )
+        downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(downloadBtn)
+        box.exec()
+        if box.clickedButton() is downloadBtn:
+            _downloadAndOfferApply(parent, info)
+
+    signals = _Signals()
+    app = QApplication.instance()
+    holder = parent or app
+    if holder is not None:
+        holder._updateRevertSignals = signals  # type: ignore[attr-defined]
+    signals.done.connect(onDone)
+    QThreadPool.globalInstance().start(_Worker(signals))
+
+
 def runUpdateCheckUi(parent=None, silentIfNone: bool = True) -> None:
     """
     Background-fetch latest release; if newer, prompt the user.
@@ -642,8 +712,8 @@ def _promptUpdate(parent, info: dict) -> None:
     elif kind == "launcher":
         lines.append("")
         lines.append(
-            "Download will place a Python zip in Update/. After download, close "
-            "Data Doctor and run applyUpdate (applyUpdate.cmd / applyUpdate.sh)."
+            "Download will place a Python zip in Update/. Restart Data Doctor "
+            "to apply the update."
         )
     else:
         lines.append("")
@@ -667,14 +737,38 @@ def _promptUpdate(parent, info: dict) -> None:
 
 def _downloadAndOfferApply(parent, info: dict) -> None:
     from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
-    from PyQt6.QtWidgets import QApplication, QMessageBox, QProgressDialog
     from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import (
+        QApplication, QMessageBox, QDialog, QVBoxLayout, QLabel,
+        QProgressBar, QPushButton,
+    )
 
-    progress = QProgressDialog("Downloading update…", "Cancel", 0, 0, parent)
+    progress = QDialog(parent)
     progress.setWindowTitle("Update")
     progress.setWindowModality(Qt.WindowModality.WindowModal)
-    progress.setMinimumDuration(0)
-    progress.setValue(0)
+    progress.setModal(True)
+    boxLay = QVBoxLayout(progress)
+    boxLay.setContentsMargins(20, 16, 20, 16)
+    boxLay.setSpacing(12)
+    progLabel = QLabel("Downloading update…")
+    progLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    progBar = QProgressBar()
+    progBar.setRange(0, 0)
+    progBar.setTextVisible(False)
+    progBar.setMinimumWidth(320)
+    progCancel = QPushButton("Cancel")
+    progCancel.setAutoDefault(False)
+    cancelled = {"flag": False}
+
+    def _cancelDownload():
+        cancelled["flag"] = True
+        progress.reject()
+
+    progCancel.clicked.connect(_cancelDownload)
+    boxLay.addWidget(progLabel)
+    boxLay.addWidget(progBar)
+    boxLay.addWidget(progCancel, alignment=Qt.AlignmentFlag.AlignHCenter)
+    progress.resize(400, progress.sizeHint().height())
     progress.show()
 
     class _Signals(QObject):
@@ -732,16 +826,12 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                     )
             return
 
-        # Launcher / dev — applyUpdate on disk
-        apply = launcherApplyScript()
-        applyHint = str(apply) if apply else "applyUpdate.cmd / applyUpdate.sh"
+        # Launcher / dev — Windows exe applies the zip from Update/ on next start
         QMessageBox.information(
             parent,
             "Download complete",
             f"Downloaded:\n{path}\n\n"
-            "Close Data Doctor, then run:\n"
-            f"  {applyHint}\n\n"
-            "That merges code + bunker.db and installs requirements into .venv.",
+            "Restart Data Doctor to apply the update.",
         )
 
     signals = _Signals()

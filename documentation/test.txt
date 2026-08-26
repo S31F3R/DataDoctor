@@ -7,103 +7,65 @@ Workflow:
   - FAIL → note here; Grok re-fixes
   - Grok may commit any non-documentation/ paths; documentation/ commits stay with Seifer
     (README.md and other non-docs paths are fair game)
+  - After confirmed [x] items: drop long steps into Confirmed; keep retest items detailed
+  - Working Notes (documentation/Working Notes.txt) is a scratch file until
+    publish names vVERSION.md; only its bullets go under ## Changes
 
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Child windows minimize to the taskbar (not a tiny title bar) — RETEST About
-   Steps:
-     a. Open Data Dictionary. Minimize it. Expect a taskbar / dock entry (same
-        pattern as a detached Graph), not a shaded title bar in the corner.
-     b. Restore from that entry. Window comes back normally.
-     c. Open Public/Internal Query. Minimize — same taskbar behavior.
-     d. Detached Graph still minimizes to the taskbar as before.
-     e. Open About (info button). Minimize — taskbar / dock entry, not a
-        shaded title bar. Restore works. Main window stays usable (About is
-        no longer application-modal).
-     f. Close the main window — Data Dictionary / Query / About close with it.
-   Notes: Qt parent made these transient; GNOME shade-minimizes those.
-     Data Dictionary / Query confirmed. About was still parented + exec() modal.
-   Fix: Utils.bindIndependentWindow; uiAbout constructed with parent=None,
-     NonModal, shown via show() (not exec()).
-
-[ ] Header multi-select (Shift / Ctrl like cells) — RETEST Ctrl + Shift origin
-   Steps:
-     a. Click column header A → whole column selected + header highlight.
-     b. Shift+click header D → columns A–D all selected (full columns).
-     c. Ctrl+click header B (when B is selected) → B deselects; others stay.
-        No flash off-then-on.
-     d. Ctrl+click an unselected header → adds that full column (stays highlighted).
-     e. After a Ctrl+click, Shift+click still extends from the last *plain*
-        click (A), not from the Ctrl-clicked column. Plain-click a new column
-        first if you want a new Shift range.
-     f. Ctrl+Shift+click extends range from the plain-click origin and adds
-        it to the existing selection.
-     g. Cell multi-select (shift/ctrl in body) still works; headers still highlight
-        every selected column.
-     h. Header right-click Graph graphs all selected columns.
-     i. Dragging a header edge still resizes the column.
-   Notes: Qt C++ sectionPressed→selectColumn survived Python disconnect
-     (Ctrl flash). Ctrl also stole the Shift origin.
-   Fix: header event filter owns left-clicks; headerSelectPlan keeps Shift
-     origin on last plain click only.
-
 [ ] Crash / About Report on GitHub (option C, no stored login)
    Steps:
      a. Trigger or simulate an uncaught error — dialog has Report on GitHub,
-        Copy log, Open log folder. Report opens a pre-filled new-issue page
-        (needs a GitHub account; GitHub's own login).
-     b. About → Report issue link opens /issues/new/choose (bug / crash forms).
-     c. No GitHub token / password fields in Options.
+        Copy log, Open log folder. Report opens a short GitHub crash form
+        (needs a GitHub account; GitHub's own login). Must NOT 500/"Whoops".
+     b. Full crash text is on the clipboard (paste into the form).
+     c. About → Report issue link opens /issues/new/choose (bug / crash forms).
+     d. No GitHub token / password fields in Options.
+     e. One Report click → one browser tab (not two).
 
-[ ] publishRelease.py dry-run + build-only
+[ ] sqlnet.log Fatals — only new, in app.log time order
    Steps:
-     a. python scripts/publishRelease.py --channel rc --number 1 --dry-run
-        prints plan; does not write Version.py or build.
-     b. python scripts/publishRelease.py --channel published --build-only --skip-appimage --yes
-        writes versioned zips under dist/ (Python, Windows --skip-venv, macOS --skip-venv).
-     c. Asset names contain vMAJOR.MINOR.PATCH and *python* / .AppImage as Update.py expects.
+     a. Existing sqlnet.log with old Fatals (hours earlier). Start Data Doctor
+        and run a query that does not fail.
+     b. app.log / Log Viewer must NOT dump those old Fatals at query time.
+     c. Cause a new Oracle Fatal during a query. A sqlnet.log ERROR line appears
+        among the other lines from that query (same minute), not as a blob of
+        older Instant Client history.
 
-[ ] GitHub README + wiki first pass
+[ ] Log rotation + viewer reloads all app.log*
    Steps:
-     a. Open https://github.com/S31F3R/DataDoctor — README shows install options,
-        config paths, certs, packaging table, wiki/releases/issues links.
-     b. Wiki is live (pre-push from documentation/wiki/). Home + sidebar list
-        Installation, Updates, App Data, Querying, Data Dictionary,
-        Overlay/Delta, USGS, USBR HDB, Aquarius, Quick Looks, Graph, CSV Export.
-     c. Public pages should read as user docs (no Seifer-only asides).
-        Operator notes live in documentation/status.grok.
+     a. Let app.log grow past ~1 MB (debug on + a few fat queries, or copy a
+        large app.log in place and log something).
+     b. logs/ has app.log plus app.log.1 (up to .5). New lines go in a small
+        app.log; the previous chunk is .1.
+     c. Log Viewer while open shows live lines. Close and reopen — those
+        lines are still there (merged from app.log + rotations, newest first).
+     d. Native crash dumps (if any) go to fault.log, not app.log.
 
-[ ] HDB password change UI only shows useful outcomes
+[ ] Windows package: empty certs/ + first-run applyUpdate.cmd
    Steps:
-     a. Change Oracle password in Options → USBR (user that exists on some HDBs).
-     b. Popup lists successes; wrong-password DBs get per-DB prompt; locked accounts listed.
-     c. Missing users and TNS/network noise stay out of the popup (still in app.log).
-     d. On per-DB wrong-password prompt: Cancel is labeled Skip — skips that DB and
-        continues remaining HDBs (listed under "Skipped" in summary, not as errors).
-   Notes: status 'locked' shown; 'error'/'missing' silent in UI.
-   Fix: Cancel → Skip continues queue; skipped DBs separate from errors.
+     a. Unzip DataDoctor-Windows-*.zip. Project Files\certs\ exists
+        (README ok; empty is fine).
+     b. Update\ contains DataDoctor-Python.zip. No Linux .venv in the zip.
+     c. After Python 3.13 is on PATH: run applyUpdate.cmd → creates
+        Project Files\.venv, pip installs, app starts via Data Doctor.exe.
+     d. Put a dummy aquarius.pem in certs\, run applyUpdate again — pem still there.
 
-[ ] HDB database-link failure → direct connect fallback
+[ ] Beta updates checkbox after Save
    Steps:
-     a. Internal multi-DB query where primary uses @link to another HDB.
-     b. If link fails (ORA-02019 etc.), retry by connecting to the target DSN directly.
-     c. Query still returns data when direct path works.
-   Notes: USBR.sqlRead detects link errors and re-runs without link.
+     a. Options → check Beta updates → Save. GitHub check runs (pre-releases
+        included). If an RC is newer, the update dialog appears.
+     b. Uncheck Beta updates → Save. Offers the latest published (non-RC)
+        release even if this install is an RC. Cancel leaves the current build.
 
 [ ] Mac package script
    Steps:
      a. From project root: python scripts/packageMac.py --skip-venv
      b. dist/DataDoctor-macOS-YYYYMMDD.zip contains Data Doctor.command + Project Files/
-        + Update/ + applyUpdate.sh
+        + Update/ + applyUpdate.sh + Project Files/certs/
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
-
-[ ] Update check works with no GitHub releases yet
-   Steps:
-     a. Start app with network; no popup (silent — nothing published yet is OK).
-     b. About shows version from core/Version.py (currently 3.0.0).
-     c. Options → General: "Beta updates" checkbox off by default; save persists updateChannel.
 
 [ ] Update check after a real release (when you publish one)
    Steps:
@@ -117,6 +79,27 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] HDB database-link failure → direct connect fallback
+[x] Isolated HDB queries (KBO / CU / LBO / ECO) — SQL FROM r_base
+[x] sqlnet.log Fatals in app.log
+[x] Query list right-click Delete
+[x] Save Quick Look prefills name + overwrite confirm
+[x] MCS Oracle credentials prompted once per session burst
+[x] bunker merge fills blanks only (QAQC / precision)
+[x] Close Data Doctor (Windows) — no deleted-QTableWidget crash
+[x] Data Dictionary combobox — one text only
+[x] USBR CSV → bunker.db
+[x] Update dialogs: restart, not applyUpdate.cmd
+[x] applyUpdate keeps a single bunker.db.bak
+[x] Header multi-select Ctrl add (viewport filter; Shift origin not stolen)
+[x] HDB password change UI only shows useful outcomes (Skip vs errors)
+[x] About: no scrollbars; ratio lock; maximize still works
+[x] Child windows minimize to the taskbar (About + Dictionary + Query)
+[x] publishRelease.py dry-run + build-only
+[x] publishRelease re-upload same tag (no 422)
+[x] publishRelease --upload without gh CLI
+[x] GitHub README + wiki first pass
+[x] Update check silent when nothing newer (incl. no releases)
 [x] applyUpdate writes DataDoctor.pyw (Windows / existing .pyw)
 [x] Graph hover shows table values (raw when raw is on); axis stays clean
 [x] Query finish selects Data Query tab

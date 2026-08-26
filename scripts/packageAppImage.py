@@ -44,6 +44,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from oracleBundle import installOracleClient
+
 
 def projectRoot() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -380,6 +382,7 @@ def main() -> int:
     usrBin.mkdir(parents=True)
     usrTree = appDir / "usr" / "DataDoctor"
     shutil.copytree(built, usrTree, symlinks=True)
+    installOracleClient(root, usrTree / "oracle" / "client", "linux")
     link = usrBin / "DataDoctor"
     try:
         link.symlink_to(os.path.relpath(usrTree / "DataDoctor", usrBin))
