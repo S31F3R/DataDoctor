@@ -493,9 +493,12 @@ def changePasswordOnAllHdb(
     username: str,
     oldPassword: str,
     newPassword: str,
+    databases: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Change the Oracle password on every HDB database in parallel (one thread each).
+    Change the Oracle password on HDB databases in parallel (one thread each).
+
+    databases: display names to update (USBR-LCHDB). None → all in Config.
 
     Returns:
       {
@@ -508,7 +511,12 @@ def changePasswordOnAllHdb(
     """
     rawDatabases = list(getattr(Config, 'hdbOracleDatabases', ()) or ())
     # Normalize to display labels only (strip |SCHEMA)
-    databases = [hdbDisplayName(db) for db in rawDatabases if hdbDisplayName(db)]
+    allNames = [hdbDisplayName(db) for db in rawDatabases if hdbDisplayName(db)]
+    if databases:
+        wanted = {hdbDisplayName(n) for n in databases if n}
+        databases = [n for n in allNames if n in wanted]
+    else:
+        databases = allNames
     success: List[str] = []
     errors: List[Tuple[str, str]] = []
     authFailed: List[str] = []

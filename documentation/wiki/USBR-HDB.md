@@ -1,6 +1,6 @@
 # USBR HDB
 
-Internal queries talk to Reclamation Hydrologic Databases over **Oracle** (`oracledb`). Set **Options → USBR** user and password (OS keyring). Point at `tnsnames.ora` if needed.
+Internal queries talk to Reclamation Hydrologic Databases over **Oracle** (`oracledb`). Set **Options → Oracle** user and password (OS keyring). Point at `tnsnames.ora` if needed. Hourly BOP/EOP and the overwrite flag are under **Options → USBR**.
 
 Regional / office DSN names:
 
@@ -26,7 +26,7 @@ Hourly HDB values are **period** values. Data Doctor needs to know whether the t
 | **EOP** (end of period) | Display time is the *end* of the hour | START = display − 1h, END = display |
 | **BOP** (beginning of period) | Display time is the *start* of the hour | START = display, END = display + 1h |
 
-This is **Options → USBR → timestamp method** (`hourTimestampMethod` in `user.config`). It affects both how hourly data is interpreted and how `MODIFY_R_BASE` / `DELETE_R_BASE` are called on upload.
+This is **Options → USBR → HOUR Timestamp Method** (`hourTimestampMethod` in `user.config`). It affects both how hourly data is interpreted and how `MODIFY_R_BASE` / `DELETE_R_BASE` are called on upload.
 
 Daily / instant series do not use that hour window the same way.
 

@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Options chrome is built at runtime in uiOptions.py (left nav + stacked tabs). -->
 <ui version="4.0">
  <class>Dialog</class>
  <widget class="QDialog" name="Dialog">
@@ -6,8 +7,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>520</width>
-    <height>340</height>
+    <width>840</width>
+    <height>560</height>
    </rect>
   </property>
   <property name="windowTitle">

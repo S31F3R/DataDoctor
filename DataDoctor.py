@@ -1889,6 +1889,7 @@ if __name__ == '__main__':
 
         # Apply styles and fonts
         Utils.applyStylesAndFonts(app, winMain.mainTable, winQuery.listQueryList)
+        Utils.applyColorTheme()
 
         # Load data dictionary and quick looks (best-effort; do not block startup)
         # ensureDataDictionarySchema runs inside load/build (valuePrecision + precisionOverride)

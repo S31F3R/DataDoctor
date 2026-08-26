@@ -56,14 +56,6 @@ controlLayouts = {
         'btnRefresh': (4, 6, 32, 32),
         'btnUndo': (40, 6, 32, 32),
         'btnUpload': (76, 6, 32, 32),
-        # winOptions
-        'chkbRawData': (74, 60, 21, 22),
-        'chkbQAQC': (156, 90, 21, 22),
-        'chkbRetroMode': (88, 120, 21, 22),
-        'chkbDebug': (96, 150, 21, 22),
-        'chkbBetaUpdates': (100, 180, 21, 22),      # match winOptions.ui non-retro (after "Beta updates:")
-        'rbBOP': (210, 0, 141, 22),                 # .ui
-        'rbEOP': (350, 0, 131, 22),                 # .ui
         # winQuery
         'btnDataIdInfo': (376, 5, 31, 20),
         'btnIntervalInfo': (100, 76, 31, 20),
@@ -75,13 +67,6 @@ controlLayouts = {
         'btnRefresh': (38, 8, 32, 32),
         'btnUndo': (74, 8, 32, 32),
         'btnUpload': (110, 8, 32, 32),
-        'chkbRawData': (108, 60, 21, 22),
-        'chkbQAQC': (261, 88, 21, 22),              # was 259; RESPONSE +2 x
-        'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
-        'chkbDebug': (130, 149, 21, 22),
-        'chkbBetaUpdates': (150, 179, 21, 22),      # Press Start wider "Beta updates:" (-20 x)
-        'rbBOP': (193, 0, 141, 22),                 # was 199; -6 x
-        'rbEOP': (350, 0, 131, 22),
         'btnDataIdInfo': (406, 5, 31, 20),
         'btnIntervalInfo': (164, 76, 31, 20),
         'btnQueryOptionsInfo': (164, 401, 31, 20),
@@ -1475,6 +1460,11 @@ def loadConfig():
         'lastQuickLook': '',
         # stable = GitHub full releases only; beta = include pre-releases (-rc / -beta)
         'updateChannel': 'stable',
+        'colorTheme': 'system',
+        'labelDataTypeUSBR': True,
+        'labelDataTypeAquarius': True,
+        'labelDataTypeUSGS': True,
+        'hdbOverwriteFlag': False,
     }
 
     if os.path.exists(configPath):
@@ -1687,6 +1677,57 @@ def convertConfigToJson():
     elif Config.debug:
         Logic.logMessage("DEBUG", "No config.ini found or user.config exists, skipping conversion")
 
+def applyColorTheme(theme=None):
+    """Follow Options → Appearance Color Theme (system / light / dark)."""
+    name = theme if theme is not None else getattr(Config, 'colorTheme', 'system')
+    name = str(name or 'system').strip().lower()
+    if name not in ('system', 'light', 'dark'):
+        name = 'system'
+    Config.colorTheme = name
+    app = QApplication.instance()
+    if app is None:
+        return
+    hints = app.styleHints()
+    if hints is None or not hasattr(hints, 'setColorScheme'):
+        return
+    if name == 'dark':
+        scheme = Qt.ColorScheme.Dark
+    elif name == 'light':
+        scheme = Qt.ColorScheme.Light
+    else:
+        scheme = Qt.ColorScheme.Unknown
+    try:
+        hints.setColorScheme(scheme)
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"applyColorTheme({name}) failed: {e}")
+
+
+def includeDataTypeInLabel(database):
+    """Options per-source 'Add Data Type to Labels' (dict headers)."""
+    db = (database or '').strip().upper()
+    if db.startswith('USBR'):
+        return bool(getattr(Config, 'labelDataTypeUSBR', True))
+    if db.startswith('AQUARIUS') or db == 'AQUARIUS':
+        return bool(getattr(Config, 'labelDataTypeAquarius', True))
+    if db.startswith('USGS'):
+        return bool(getattr(Config, 'labelDataTypeUSGS', True))
+    return True
+
+
+def hdbAccessDisplayNames():
+    """USBR-LCHDB from Config.hdbOracleDatabases entries (drop |SCHEMA)."""
+    names = []
+    for entry in getattr(Config, 'hdbOracleDatabases', ()) or ():
+        raw = str(entry or '').strip()
+        if not raw:
+            continue
+        name = raw.split('|', 1)[0].strip()
+        if name:
+            names.append(name)
+    return names
+
+
 def reloadGlobals():
     """
     Refresh runtime flags from user.config.
@@ -1701,6 +1742,14 @@ def reloadGlobals():
     Config.periodOffset = resolvePeriodOffset(settings)
     Config.qaqcEnabled = settings['qaqc']
     Config.rawData = settings['rawData']
+    theme = str(settings.get('colorTheme') or 'system').strip().lower()
+    if theme not in ('system', 'light', 'dark'):
+        theme = 'system'
+    Config.colorTheme = theme
+    Config.labelDataTypeUSBR = bool(settings.get('labelDataTypeUSBR', True))
+    Config.labelDataTypeAquarius = bool(settings.get('labelDataTypeAquarius', True))
+    Config.labelDataTypeUSGS = bool(settings.get('labelDataTypeUSGS', True))
+    Config.hdbOverwriteFlag = 'O' if settings.get('hdbOverwriteFlag') else None
 
     if Config.debug:
         Logic.logMessage(

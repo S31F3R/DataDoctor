@@ -16,8 +16,12 @@ appRoot = ""
 deltaChecked = False
 overlayChecked = False
 systemTextColor = ""
+colorTheme = "system"  # system | light | dark (Options → Appearance)
+labelDataTypeUSBR = True
+labelDataTypeAquarius = True
+labelDataTypeUSGS = True
 
-# Oracle / HDB credential policy (Options → USBR password change)
+# Oracle / HDB credential policy (Options → Oracle password change)
 # Pre-12.2 Oracle max was 30 characters; keep 30 for HDB compatibility.
 oraclePasswordMinLength = 12
 oraclePasswordMaxLength = 30

@@ -6,11 +6,12 @@ import json
 import keyring
 from PyQt6.QtWidgets import (
     QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox,
-    QPushButton, QTabWidget, QMessageBox, QWidget, QVBoxLayout, QLabel,
+    QPushButton, QTabWidget, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QListWidget, QListWidgetItem, QStackedWidget, QAbstractItemView,
+    QSizePolicy,
 )
-from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal, Qt
-from PyQt6.QtGui import QIcon
-from PyQt6 import uic
+from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal, Qt, QSize
+from PyQt6.QtGui import QIcon, QPixmap
 from core import Logic, Utils, Config
 
 # Keyring cold-start is slow (Secret Service / Windows Credential Manager).
@@ -68,12 +69,13 @@ class hdbPasswordChangeWorker(QRunnable):
     Run changePasswordOnAllHdb off the UI thread (first parallel pass).
     Passwords are held only for this run and never logged.
     """
-    def __init__(self, username, oldPassword, newPassword, signals):
+    def __init__(self, username, oldPassword, newPassword, signals, databases=None):
         super().__init__()
         self.username = username
         self.oldPassword = oldPassword
         self.newPassword = newPassword
         self.signals = signals
+        self.databases = list(databases) if databases else None
 
     def run(self):
         result = {'success': [], 'errors': [], 'authFailed': []}
@@ -83,6 +85,7 @@ class hdbPasswordChangeWorker(QRunnable):
                 username=self.username,
                 oldPassword=self.oldPassword,
                 newPassword=self.newPassword,
+                databases=self.databases,
             )
         except Exception as e:
             Logic.logException("hdbPasswordChangeWorker failed", e)
@@ -135,66 +138,36 @@ class hdbSinglePasswordChangeWorker(QRunnable):
 
 class uiOptions(QDialog):
     """Options editor: Stores database connection information and application settings."""
+
+    _NAV = (
+        ("General", "Cog"),
+        ("Appearance", "Appearance"),
+        ("Oracle", "Oracle"),
+        ("Aquarius", "Aquarius"),
+        ("USBR", "USBR"),
+        ("USGS", "USGS"),
+    )
+
     def __init__(self, winMain=None):
         super().__init__(parent=winMain)
-        uic.loadUi(Logic.resourcePath('ui/winOptions.ui'), self)
         self.winMain = winMain
         self._passwordChangeSignals = None  # keep alive while worker runs
+        self.setWindowTitle("Options")
+        self.setWindowIcon(QIcon(Logic.resourcePath("ui/icons/Options.png")))
+        self.resize(840, 560)
+        self.setMinimumSize(760, 500)
+        self._buildUi()
 
-        # Define controls
-        self.cbUTCOffset = self.findChild(QComboBox, 'cbUTCOffset')
-        self.qleAQServer = self.findChild(QLineEdit, 'qleAQServer')
-        self.qleAQUser = self.findChild(QLineEdit, 'qleAQUser')
-        # Faded format hint when blank (cursor still starts at front on focus)
-        if self.qleAQServer is not None:
-            self.qleAQServer.setPlaceholderText("https://yourserverlink.com")
-
-        # Options tabs use absolute geometry (no layouts). Swap plain QLineEdits
-        # for customPasswordEdit in place — geometry path is expected, not an error.
-        self.qleAQPassword = self._replaceWithPasswordEdit(
-            'qleAQPassword',
-            maxLength=None,
-        )
-        self.qleTNSNames = self.findChild(QLineEdit, 'qleTNSNames')
-        self.rbBOP = self.findChild(QRadioButton, 'rbBOP')
-        self.rbEOP = self.findChild(QRadioButton, 'rbEOP')
-        self.btnbOptions = self.findChild(QDialogButtonBox, 'btnbOptions')
-        self.chkbRetroMode = self.findChild(QCheckBox, 'chkbRetroMode')
-        self.chkbQAQC = self.findChild(QCheckBox, 'chkbQAQC')
-        self.chkbRawData = self.findChild(QCheckBox, 'chkbRawData')
-        self.chkbDebug = self.findChild(QCheckBox, 'chkbDebug')
-        self.chkbBetaUpdates = self.findChild(QCheckBox, 'chkbBetaUpdates')
-        self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
-        self.btnShowPassword = self.findChild(QPushButton, 'btnShowPassword')
-        self.btnShowOraclePassword = self.findChild(QPushButton, 'btnShowOraclePassword')
-        self.qleOracleUser = self.findChild(QLineEdit, 'qleOracleUser')
-
-        self.qleOraclePassword = self._replaceWithPasswordEdit(
-            'qleOraclePassword',
-            maxLength=int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30),
-        )
-        self.qleUSGSAPIKey = self._replaceWithPasswordEdit(
-            'qleUSGSAPIKey',
-            maxLength=None,
-        )
-
-        self.btnShowUSGSKey = self.findChild(QPushButton, 'btnShowUSGSKey')
-
-        # Set button style
         Utils.buttonStyle(self.btnShowPassword, None, None)
         Utils.buttonStyle(self.btnShowUSGSKey, None, None)
         Utils.buttonStyle(self.btnShowOraclePassword, None, None)
 
-        # Create events — own the Save path so validation can cancel close
-        # (winOptions.ui also connects accepted → accept; disconnect that first)
-        try:
-            self.btnbOptions.accepted.disconnect()
-        except TypeError:
-            pass
         self.btnbOptions.accepted.connect(self.onSavePressed)
         self.btnShowPassword.clicked.connect(self.togglePasswordVisibility)
         self.btnShowUSGSKey.clicked.connect(self.toggleUSGSKeyVisibility)
         self.btnShowOraclePassword.clicked.connect(self.toggleOraclePasswordVisibility)
+        self.btnUpdatePassword.clicked.connect(self.onUpdatePasswordPressed)
+        self.listOptionsNav.currentRowChanged.connect(self._onNavChanged)
 
         # Populate UTC offset combobox
         self.cbUTCOffset.addItem("UTC-12:00 | Baker Island")
@@ -237,13 +210,292 @@ class uiOptions(QDialog):
         self.cbUTCOffset.addItem("UTC+14:00 | Kiritimati")
         self.cbUTCOffset.setCurrentIndex(14)
 
-        # Tab order + focus first control when switching tabs
         self.setupOptionsTabOrder()
-        if self.tabWidget is not None:
-            self.tabWidget.currentChanged.connect(self.onOptionsTabChanged)
+        for tabs in (
+            self.tabsGeneral, self.tabsAppearance, self.tabsOracle,
+            self.tabsAquarius, self.tabsUSBR, self.tabsUSGS,
+        ):
+            tabs.currentChanged.connect(lambda _i: self.onOptionsTabChanged())
 
         if Config.debug:
             Logic.logMessage("DEBUG", "uiOptions initialized")
+
+    def _navIcon(self, iconName):
+        path = Logic.resourcePath(f"ui/icons/{iconName}.png")
+        pix = QPixmap(path)
+        if pix.isNull():
+            return QIcon()
+        return QIcon(pix)
+
+    def _labeledCheck(self, text, objectName, tooltip=None):
+        row = QWidget()
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(0, 4, 0, 4)
+        lay.setSpacing(8)
+        lbl = QLabel(text)
+        cb = QCheckBox()
+        cb.setObjectName(objectName)
+        if tooltip:
+            lbl.setToolTip(tooltip)
+            cb.setToolTip(tooltip)
+        lay.addWidget(lbl)
+        lay.addWidget(cb)
+        lay.addStretch()
+        return row, cb
+
+    def _passwordRow(self, objectName, btnName, maxLength=None):
+        row = QWidget()
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        edit = Utils.customPasswordEdit(row)
+        edit.setObjectName(objectName)
+        if maxLength is not None:
+            edit.setMaxLength(int(maxLength))
+        btn = QPushButton(row)
+        btn.setObjectName(btnName)
+        btn.setFixedSize(41, 31)
+        btn.setFlat(True)
+        btn.setIcon(QIcon(Logic.resourcePath("ui/icons/Hidden.png")))
+        btn.setIconSize(QSize(24, 24))
+        lay.addWidget(edit, 1)
+        lay.addWidget(btn)
+        return row, edit, btn
+
+    def _labeledField(self, label, widget):
+        box = QWidget()
+        lay = QVBoxLayout(box)
+        lay.setContentsMargins(0, 0, 0, 8)
+        lay.setSpacing(2)
+        lay.addWidget(QLabel(label))
+        lay.addWidget(widget)
+        return box
+
+    def _pageTabs(self, extraTabs=None):
+        """A category page: QTabWidget whose first tab is always General."""
+        wrap = QWidget()
+        outer = QVBoxLayout(wrap)
+        outer.setContentsMargins(0, 0, 0, 0)
+        tabs = QTabWidget(wrap)
+        general = QWidget()
+        generalLay = QVBoxLayout(general)
+        generalLay.setContentsMargins(10, 10, 10, 10)
+        generalLay.setSpacing(4)
+        tabs.addTab(general, "General")
+        extra = extraTabs or []
+        extraPages = []
+        for title in extra:
+            page = QWidget()
+            pageLay = QVBoxLayout(page)
+            pageLay.setContentsMargins(10, 10, 10, 10)
+            pageLay.setSpacing(4)
+            tabs.addTab(page, title)
+            extraPages.append((page, pageLay))
+        outer.addWidget(tabs)
+        return wrap, tabs, generalLay, extraPages
+
+    def _buildUi(self):
+        root = QVBoxLayout(self)
+        root.setContentsMargins(8, 8, 8, 8)
+        root.setSpacing(8)
+
+        body = QHBoxLayout()
+        body.setSpacing(8)
+
+        self.listOptionsNav = QListWidget(self)
+        self.listOptionsNav.setObjectName("listOptionsNav")
+        self.listOptionsNav.setFixedWidth(176)
+        self.listOptionsNav.setIconSize(QSize(28, 28))
+        self.listOptionsNav.setSpacing(2)
+        self.listOptionsNav.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.listOptionsNav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.listOptionsNav.setMovement(QListWidget.Movement.Static)
+        for label, iconName in self._NAV:
+            item = QListWidgetItem(self._navIcon(iconName), label)
+            item.setSizeHint(QSize(160, 40))
+            self.listOptionsNav.addItem(item)
+
+        self.optionsStack = QStackedWidget(self)
+        self.optionsStack.setObjectName("optionsStack")
+
+        # --- General ---
+        pageG, self.tabsGeneral, gLay, _ = self._pageTabs()
+        self.cbUTCOffset = QComboBox()
+        self.cbUTCOffset.setObjectName("cbUTCOffset")
+        gLay.addWidget(self._labeledField("UTC Offset", self.cbUTCOffset))
+        rawRow, self.chkbRawData = self._labeledCheck("Raw Data:", "chkbRawData")
+        gLay.addWidget(rawRow)
+        qcRow, self.chkbQAQC = self._labeledCheck("Quality Control Checks:", "chkbQAQC")
+        gLay.addWidget(qcRow)
+        dbgRow, self.chkbDebug = self._labeledCheck("Debug Mode:", "chkbDebug")
+        gLay.addWidget(dbgRow)
+        betaRow, self.chkbBetaUpdates = self._labeledCheck(
+            "Beta updates:",
+            "chkbBetaUpdates",
+            tooltip="When checked, update checks include GitHub pre-releases (beta / RC). Off = stable only.",
+        )
+        gLay.addWidget(betaRow)
+        gLay.addStretch()
+        self.optionsStack.addWidget(pageG)
+
+        # --- Appearance ---
+        pageA, self.tabsAppearance, aLay, _ = self._pageTabs()
+        retroRow, self.chkbRetroMode = self._labeledCheck("Retro Mode:", "chkbRetroMode")
+        aLay.addWidget(retroRow)
+        self.cbColorTheme = QComboBox()
+        self.cbColorTheme.setObjectName("cbColorTheme")
+        self.cbColorTheme.addItem("System", "system")
+        self.cbColorTheme.addItem("Light", "light")
+        self.cbColorTheme.addItem("Dark", "dark")
+        aLay.addWidget(self._labeledField("Color Theme", self.cbColorTheme))
+        aLay.addStretch()
+        self.optionsStack.addWidget(pageA)
+
+        # --- Oracle ---
+        pageO, self.tabsOracle, oLay, extraO = self._pageTabs(extraTabs=["Databases"])
+        self.qleTNSNames = QLineEdit()
+        self.qleTNSNames.setObjectName("qleTNSNames")
+        oLay.addWidget(self._labeledField("TNS Names Location", self.qleTNSNames))
+        self.qleOracleUser = QLineEdit()
+        self.qleOracleUser.setObjectName("qleOracleUser")
+        oLay.addWidget(self._labeledField("User Name", self.qleOracleUser))
+        pwdRow, self.qleOraclePassword, self.btnShowOraclePassword = self._passwordRow(
+            "qleOraclePassword",
+            "btnShowOraclePassword",
+            maxLength=int(getattr(Config, "oraclePasswordMaxLength", 30) or 30),
+        )
+        oLay.addWidget(self._labeledField("Password", pwdRow))
+        self.btnUpdatePassword = QPushButton("Update Password")
+        self.btnUpdatePassword.setObjectName("btnUpdatePassword")
+        self.btnUpdatePassword.setToolTip(
+            "Change this password on the HDB databases checked under Databases"
+        )
+        oLay.addWidget(self.btnUpdatePassword)
+        oLay.addStretch()
+        dbPage, dbLay = extraO[0]
+        dbLay.addWidget(QLabel("Access List"))
+        self.listHdbAccess = QListWidget()
+        self.listHdbAccess.setObjectName("listHdbAccess")
+        self.listHdbAccess.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        dbLay.addWidget(self.listHdbAccess, 1)
+        self.optionsStack.addWidget(pageO)
+
+        # --- Aquarius ---
+        pageAq, self.tabsAquarius, aqLay, _ = self._pageTabs()
+        self.qleAQServer = QLineEdit()
+        self.qleAQServer.setObjectName("qleAQServer")
+        self.qleAQServer.setPlaceholderText("https://yourserverlink.com")
+        aqLay.addWidget(self._labeledField("Server Link", self.qleAQServer))
+        self.qleAQUser = QLineEdit()
+        self.qleAQUser.setObjectName("qleAQUser")
+        aqLay.addWidget(self._labeledField("User Name", self.qleAQUser))
+        aqPwdRow, self.qleAQPassword, self.btnShowPassword = self._passwordRow(
+            "qleAQPassword", "btnShowPassword"
+        )
+        aqLay.addWidget(self._labeledField("Password", aqPwdRow))
+        dtAq, self.chkbLabelDataTypeAquarius = self._labeledCheck(
+            "Add Data Type to Labels", "chkbLabelDataTypeAquarius"
+        )
+        aqLay.addWidget(dtAq)
+        aqLay.addStretch()
+        self.optionsStack.addWidget(pageAq)
+
+        # --- USBR ---
+        pageU, self.tabsUSBR, uLay, _ = self._pageTabs()
+        tsRow = QWidget()
+        tsLay = QHBoxLayout(tsRow)
+        tsLay.setContentsMargins(0, 4, 0, 4)
+        tsLay.addWidget(QLabel("HOUR Timestamp Method:"))
+        self.rbBOP = QRadioButton("Beginning of Period")
+        self.rbBOP.setObjectName("rbBOP")
+        self.rbEOP = QRadioButton("End of Period")
+        self.rbEOP.setObjectName("rbEOP")
+        self.rbEOP.setChecked(True)
+        tsLay.addWidget(self.rbBOP)
+        tsLay.addWidget(self.rbEOP)
+        tsLay.addStretch()
+        uLay.addWidget(tsRow)
+        owRow, self.chkbOverwriteFlag = self._labeledCheck(
+            "Overwrite Flag",
+            "chkbOverwriteFlag",
+            tooltip="When checked, HDB uploads pass OVERWRITE_FLAG = O",
+        )
+        uLay.addWidget(owRow)
+        dtU, self.chkbLabelDataTypeUSBR = self._labeledCheck(
+            "Add Data Type to Labels", "chkbLabelDataTypeUSBR"
+        )
+        uLay.addWidget(dtU)
+        uLay.addStretch()
+        self.optionsStack.addWidget(pageU)
+
+        # --- USGS ---
+        pageGages, self.tabsUSGS, usgsLay, _ = self._pageTabs()
+        usgsPwdRow, self.qleUSGSAPIKey, self.btnShowUSGSKey = self._passwordRow(
+            "qleUSGSAPIKey", "btnShowUSGSKey"
+        )
+        usgsLay.addWidget(self._labeledField("API Key", usgsPwdRow))
+        dtS, self.chkbLabelDataTypeUSGS = self._labeledCheck(
+            "Add Data Type to Labels", "chkbLabelDataTypeUSGS"
+        )
+        usgsLay.addWidget(dtS)
+        usgsLay.addStretch()
+        self.optionsStack.addWidget(pageGages)
+
+        body.addWidget(self.listOptionsNav)
+        body.addWidget(self.optionsStack, 1)
+        root.addLayout(body, 1)
+
+        self.btnbOptions = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.btnbOptions.setObjectName("btnbOptions")
+        self.btnbOptions.setCenterButtons(True)
+        self.btnbOptions.rejected.connect(self.reject)
+        root.addWidget(self.btnbOptions)
+
+        self.tabWidget = self.tabsGeneral  # first-focus helper
+        self.listOptionsNav.setCurrentRow(0)
+
+    def _onNavChanged(self, index):
+        if index < 0:
+            return
+        self.optionsStack.setCurrentIndex(index)
+        page = self.optionsStack.widget(index)
+        tabs = page.findChild(QTabWidget) if page is not None else None
+        self.tabWidget = tabs if tabs is not None else self.tabsGeneral
+        self.onOptionsTabChanged()
+
+    def _checkedHdbAccess(self):
+        names = []
+        for i in range(self.listHdbAccess.count()):
+            item = self.listHdbAccess.item(i)
+            if item is not None and item.checkState() == Qt.CheckState.Checked:
+                names.append(item.text())
+        return names
+
+    def _uncheckedHdbAccess(self):
+        names = []
+        for i in range(self.listHdbAccess.count()):
+            item = self.listHdbAccess.item(i)
+            if item is not None and item.checkState() != Qt.CheckState.Checked:
+                names.append(item.text())
+        return names
+
+    def _fillHdbAccessList(self, uncheckedNames):
+        """New Config databases default checked; only saved unchecked names stay off."""
+        self.listHdbAccess.clear()
+        unchecked = set(uncheckedNames or [])
+        for name in Utils.hdbAccessDisplayNames():
+            item = QListWidgetItem(name)
+            item.setFlags(
+                item.flags()
+                | Qt.ItemFlag.ItemIsUserCheckable
+                | Qt.ItemFlag.ItemIsEnabled
+            )
+            item.setCheckState(
+                Qt.CheckState.Unchecked if name in unchecked else Qt.CheckState.Checked
+            )
+            self.listHdbAccess.addItem(item)
 
     def _replaceWithPasswordEdit(self, objectName, maxLength=None):
         """
@@ -299,87 +551,82 @@ class uiOptions(QDialog):
         Explicit Tab key order per page (top → bottom).
         Geometry-based UI files often leave z-order wrong for keyboard navigation.
         """
-        # General
-        chain = [
+        def chain(widgets):
+            items = [w for w in widgets if w is not None]
+            for a, b in zip(items, items[1:]):
+                self.setTabOrder(a, b)
+
+        chain([
             self.cbUTCOffset,
             self.chkbRawData,
             self.chkbQAQC,
-            self.chkbRetroMode,
             self.chkbDebug,
             self.chkbBetaUpdates,
-        ]
-        for a, b in zip(chain, chain[1:]):
-            if a is not None and b is not None:
-                self.setTabOrder(a, b)
-
-        # Aquarius
-        aq = [
-            self.qleAQServer,
-            self.qleAQUser,
-            getattr(self, 'qleAQPassword', None),
-            self.btnShowPassword,
-        ]
-        for a, b in zip(aq, aq[1:]):
-            if a is not None and b is not None:
-                self.setTabOrder(a, b)
-
-        # USGS
-        usgs = [
-            getattr(self, 'qleUSGSAPIKey', None),
-            self.btnShowUSGSKey,
-        ]
-        for a, b in zip(usgs, usgs[1:]):
-            if a is not None and b is not None:
-                self.setTabOrder(a, b)
-
-        # USBR
-        usbr = [
-            self.rbBOP,
-            self.rbEOP,
+        ])
+        chain([self.chkbRetroMode, self.cbColorTheme])
+        chain([
             self.qleTNSNames,
             self.qleOracleUser,
             getattr(self, 'qleOraclePassword', None),
             self.btnShowOraclePassword,
-        ]
-        for a, b in zip(usbr, usbr[1:]):
-            if a is not None and b is not None:
-                self.setTabOrder(a, b)
+            self.btnUpdatePassword,
+            self.listHdbAccess,
+        ])
+        chain([
+            self.qleAQServer,
+            self.qleAQUser,
+            getattr(self, 'qleAQPassword', None),
+            self.btnShowPassword,
+            self.chkbLabelDataTypeAquarius,
+        ])
+        chain([
+            self.rbBOP,
+            self.rbEOP,
+            self.chkbOverwriteFlag,
+            self.chkbLabelDataTypeUSBR,
+        ])
+        chain([
+            getattr(self, 'qleUSGSAPIKey', None),
+            self.btnShowUSGSKey,
+            self.chkbLabelDataTypeUSGS,
+        ])
 
-    def firstFocusWidgetForTab(self, index):
-        """First interactive control on the given Options tab."""
-        # Prefer named first field per tab; fall back to tab page children
-        byIndex = {
+    def firstFocusWidgetForTab(self, index=None):
+        """First interactive control on the visible Options page."""
+        nav = self.listOptionsNav.currentRow() if self.listOptionsNav is not None else 0
+        byNav = {
             0: self.cbUTCOffset,
-            1: self.qleAQServer,
-            2: getattr(self, 'qleUSGSAPIKey', None),
-            3: self.rbBOP,
+            1: self.chkbRetroMode,
+            2: self.qleTNSNames,
+            3: self.qleAQServer,
+            4: self.rbBOP,
+            5: getattr(self, 'qleUSGSAPIKey', None),
         }
-        w = byIndex.get(index)
+        w = byNav.get(nav)
         if w is not None and w.isEnabled() and w.isVisible():
             return w
-        if self.tabWidget is None:
+        tabs = getattr(self, 'tabWidget', None)
+        if tabs is None:
             return None
-        page = self.tabWidget.widget(index)
+        page = tabs.currentWidget() if index is None else tabs.widget(index)
         if page is None:
             return None
-        from PyQt6.QtWidgets import QAbstractButton, QComboBox, QLineEdit, QAbstractSpinBox
+        from PyQt6.QtWidgets import QAbstractButton, QComboBox, QLineEdit, QAbstractSpinBox, QListWidget
         for child in page.findChildren(QWidget):
             if not child.isEnabled() or not child.isVisible():
                 continue
-            if isinstance(child, (QLineEdit, QComboBox, QAbstractSpinBox, QAbstractButton)):
-                # Skip pure labels masquerading as empty checkboxes if any
+            if isinstance(child, (QLineEdit, QComboBox, QAbstractSpinBox, QAbstractButton, QListWidget)):
                 if child.focusPolicy() == Qt.FocusPolicy.NoFocus:
                     continue
                 return child
         return None
 
-    def onOptionsTabChanged(self, index):
-        """When user clicks a tab, put the cursor on the first field."""
+    def onOptionsTabChanged(self, index=None):
+        """When user clicks a category or tab, put the cursor on the first field."""
         def focusFirst():
             w = self.firstFocusWidgetForTab(index)
             if w is not None:
                 w.setFocus(Qt.FocusReason.TabFocusReason)
-        # Defer until the page is shown (layout ready)
         QTimer.singleShot(0, focusFirst)
 
     def showEvent(self, event):
@@ -391,11 +638,11 @@ class uiOptions(QDialog):
         Utils.applyModeControlLayouts(root=self)
         Utils.applyRoleFonts(root=self)
         self.loadSettings()
-        self.tabWidget.setCurrentIndex(0)
+        self.listOptionsNav.setCurrentRow(0)
+        self._onNavChanged(0)
         # Always start with secrets masked when the dialog opens
         self.maskSensitiveFields()
-        # Cursor on first General control
-        self.onOptionsTabChanged(0)
+        self.onOptionsTabChanged()
 
         if Config.debug:
             Logic.logMessage("DEBUG", "uiOptions showEvent")
@@ -539,6 +786,16 @@ class uiOptions(QDialog):
             self.rbBOP.setChecked(True)
         if Config.debug:
             Logic.logMessage("DEBUG", "Set hourTimestampMethod to: {}".format(hourMethod))
+        theme = str(config.get('colorTheme') or 'system').strip().lower()
+        idx = self.cbColorTheme.findData(theme)
+        if idx < 0:
+            idx = self.cbColorTheme.findText(theme.capitalize())
+        self.cbColorTheme.setCurrentIndex(idx if idx >= 0 else 0)
+        self.chkbOverwriteFlag.setChecked(bool(config.get('hdbOverwriteFlag')))
+        self.chkbLabelDataTypeUSBR.setChecked(bool(config.get('labelDataTypeUSBR', True)))
+        self.chkbLabelDataTypeAquarius.setChecked(bool(config.get('labelDataTypeAquarius', True)))
+        self.chkbLabelDataTypeUSGS.setChecked(bool(config.get('labelDataTypeUSGS', True)))
+        self._fillHdbAccessList(config.get('hdbAccessUnchecked'))
         try:
             creds = loadKeyringCredentials(force=False)
             self.qleAQServer.setText(creds.get("aqServer") or "")
@@ -593,18 +850,6 @@ class uiOptions(QDialog):
                 QMessageBox.warning(self, "Invalid Oracle Password", errMsg)
                 return  # keep Options open; do not save
 
-        # Password-only change on existing account → push to all HDB databases.
-        # Skip when username changed, or when user/password were previously blank
-        # (first-time credential entry is local keyring only, not a multi-DB alter).
-        hdbPasswordChangeRequested = (
-            bool(priorUserStripped)
-            and bool(priorOraclePassword)
-            and bool(newOracleUser)
-            and newOracleUser == priorUserStripped
-            and bool(newOraclePassword)
-            and newOraclePassword != priorOraclePassword
-        )
-
         configPath = Utils.getConfigPath()
         config = {}
 
@@ -623,6 +868,7 @@ class uiOptions(QDialog):
         else:
             previousChannel = 'stable'
         newRetro = self.chkbRetroMode.isChecked()
+        colorTheme = self.cbColorTheme.currentData() or 'system'
         tnsPath = self.qleTNSNames.text()
 
         if '%AppRoot%' in tnsPath:
@@ -644,7 +890,13 @@ class uiOptions(QDialog):
             'hourTimestampMethod': hourMethod,
             # Keep periodOffset in sync: EOP = True (end-of-period), BOP = False
             'periodOffset': hourMethod == 'EOP',
-            'lastExportPath': config.get('lastExportPath', '')
+            'lastExportPath': config.get('lastExportPath', ''),
+            'colorTheme': colorTheme,
+            'hdbOverwriteFlag': bool(self.chkbOverwriteFlag.isChecked()),
+            'labelDataTypeUSBR': bool(self.chkbLabelDataTypeUSBR.isChecked()),
+            'labelDataTypeAquarius': bool(self.chkbLabelDataTypeAquarius.isChecked()),
+            'labelDataTypeUSGS': bool(self.chkbLabelDataTypeUSGS.isChecked()),
+            'hdbAccessUnchecked': self._uncheckedHdbAccess(),
         })
 
         with open(configPath, 'w', encoding='utf-8') as configFile:
@@ -656,6 +908,7 @@ class uiOptions(QDialog):
         sessionRetro = bool(Config.retroMode)
         Utils.reloadGlobals()
         Config.retroMode = sessionRetro
+        Utils.applyColorTheme(colorTheme)
 
         if newRetro != previousRetro:
             # Never partially apply retro mid-session (Query showEvent, table
@@ -738,29 +991,6 @@ class uiOptions(QDialog):
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"clearAuthFailure skipped: {e}")
 
-        # Multi-DB HDB password update (parallel); uses prior password to authenticate
-        if hdbPasswordChangeRequested:
-            reply = QMessageBox.question(
-                self,
-                "Update HDB Password",
-                "Oracle password update detected.\n\n"
-                "Update this password on all USBR HDB databases?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
-            )
-            if reply == QMessageBox.StandardButton.Yes:
-                self._startHdbPasswordChange(
-                    username=newOracleUser,
-                    oldPassword=priorOraclePassword,
-                    newPassword=newOraclePassword,
-                )
-            else:
-                Logic.logMessage(
-                    "INFO",
-                    "HDB password change declined by user "
-                    "(local Options credentials were still saved)",
-                )
-
         # Close Options (we disconnected the UI auto-accept)
         super().accept()
 
@@ -781,7 +1011,73 @@ class uiOptions(QDialog):
                     lambda: Update.runRevertToPublishedUi(parent),
                 )
 
-    def _startHdbPasswordChange(self, username, oldPassword, newPassword):
+    def onUpdatePasswordPressed(self):
+        """Change the Oracle password on checked Access List databases only."""
+        newOracleUser = (self.qleOracleUser.text() or "").strip()
+        newOraclePassword = self.qleOraclePassword.text() or ""
+        if not newOracleUser:
+            QMessageBox.warning(self, "Update Password", "Enter an Oracle user name first.")
+            return
+        if not newOraclePassword:
+            QMessageBox.warning(self, "Update Password", "Enter the new Oracle password first.")
+            return
+        try:
+            from core.Oracle import validateOraclePassword
+            ok, errMsg = validateOraclePassword(newOraclePassword)
+        except Exception as e:
+            ok, errMsg = False, f"Could not validate Oracle password: {e}"
+        if not ok:
+            QMessageBox.warning(self, "Invalid Oracle Password", errMsg)
+            return
+        targets = self._checkedHdbAccess()
+        if not targets:
+            QMessageBox.warning(
+                self,
+                "Update Password",
+                "Check at least one database on the Databases tab (Access List).",
+            )
+            return
+        try:
+            priorOraclePassword = keyring.get_password("DataDoctor", "oraclePassword") or ""
+        except Exception:
+            priorOraclePassword = ""
+        if not priorOraclePassword:
+            QMessageBox.information(
+                self,
+                "Update Password",
+                "No current password is stored in Options. "
+                "You will be asked for the current password on each database that needs it.",
+            )
+            priorOraclePassword = ""
+        listed = ", ".join(targets)
+        reply = QMessageBox.question(
+            self,
+            "Update HDB Password",
+            f"Change the password for user {newOracleUser} on:\n\n{listed}\n\n"
+            "The new password is saved in Options either way.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            keyring.set_password("DataDoctor", "oracleUser", newOracleUser)
+            keyring.set_password("DataDoctor", "oraclePassword", newOraclePassword)
+            updateKeyringCache("oracleUser", newOracleUser)
+            updateKeyringCache("oraclePassword", newOraclePassword)
+            from core.Oracle import clearAuthFailure
+            clearAuthFailure()
+        except Exception as e:
+            QMessageBox.warning(self, "Credential Save Error", f"Failed to save Oracle credentials: {e}")
+            return
+        self._startHdbPasswordChange(
+            username=newOracleUser,
+            oldPassword=priorOraclePassword,
+            newPassword=newOraclePassword,
+            databases=targets,
+        )
+
+    def _startHdbPasswordChange(self, username, oldPassword, newPassword, databases=None):
         """
         Kick off HDB password updates:
           1) Parallel pass with Options-stored old password
@@ -846,10 +1142,15 @@ class uiOptions(QDialog):
                 uiOptions._finalizeHdbPasswordChange(state)
 
         signals.finished.connect(onFirstPassFinished)
-        worker = hdbPasswordChangeWorker(username, oldPassword, newPassword, signals)
+        worker = hdbPasswordChangeWorker(
+            username, oldPassword, newPassword, signals, databases=databases
+        )
+        targetNote = (
+            ", ".join(databases) if databases else "all USBR databases"
+        )
         Logic.logMessage(
             "INFO",
-            f"Starting HDB password change for user {username} on all USBR databases",
+            f"Starting HDB password change for user {username} on {targetNote}",
         )
         QThreadPool.globalInstance().start(worker)
 
@@ -1123,7 +1424,7 @@ class uiOptions(QDialog):
                 "\n\nYour previous password was restored in Options."
                 if passwordReverted
                 else "\n\nCould not restore the previous password automatically; "
-                     "re-enter it in Options → USBR if needed."
+                     "re-enter it in Options → Oracle if needed."
             )
             QMessageBox.information(
                 parent,

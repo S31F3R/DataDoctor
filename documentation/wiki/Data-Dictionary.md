@@ -22,7 +22,7 @@ commonName-datatype
 <second line depends on source>
 ```
 
-No spaces around the dash. If `datatype` is blank, the first line is just `commonName`.
+No spaces around the dash. If `datatype` is blank, or **Options → USBR / Aquarius / USGS → Add Data Type to Labels** is off for that source, the first line is just `commonName`.
 
 | Source | Second line |
 |--------|-------------|
