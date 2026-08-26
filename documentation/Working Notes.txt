@@ -15,3 +15,6 @@ resets this file to this template.
   direct connection (no @link). UCHDB2 / LCHDB / YAOHDB still share links.
 - Linked HDB @link failures retry a direct connect on any worker error
 - Save Quick Look prefills the combo name and asks before overwrite
+- Internal direct HDB SQL uses unqualified r_base / r_hour (not SCHEMA.r_base@dsn)
+- Isolated HDB workers are internal-only; public USBR API stays one group
+- MCS pool no longer pings idle sessions (Windows 0x80100070 cert-cache fatal)

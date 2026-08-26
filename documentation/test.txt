@@ -37,35 +37,13 @@ Current Tests
      direct on any linked-query failure, resets primaryDsn each executeQuery,
      and never sets primary from an isolated HDB.
 
-[ ] Query list right-click Delete
+[ ] Isolated HDB queries (KBO / CU / LBO / ECO) — RETEST SQL FROM
    Steps:
-     a. Right-click a list row → Insert Above / Below (when DataID set) and Delete.
-     b. Delete removes the clicked row. If the click is inside a multi-selection,
-        Delete removes all selected rows.
-     c. Toolbar remove still works.
-
-[ ] Isolated HDB queries (KBO / CU / LBO / ECO)
-   Steps:
-     a. Internal query with LCHDB + KBOHDB (and/or CU, LBO, ECO) together.
-     b. KBO/CU/LBO/ECO each run as their own group (progress can show
-        USBR-KBOHDB etc.), direct connect, no @kbohdb from LCHDB.
-     c. UC/LC/YAO can still share one USBR worker and use links.
-
-[ ] Save Quick Look prefills name + overwrite confirm
-   Steps:
-     a. Load or select a Quick Look so the combo has a name. Save Quick Look
-        — the name box is already that name.
-     b. Save as an existing name → "already exists. Overwrite?" Yes writes,
-        No leaves the file unchanged.
-     c. New unique name saves without that prompt.
-
-[ ] MCS Oracle credentials prompted once per session burst
-   Steps:
-     a. sqlnet.ora WALLET_LOCATION METHOD=MCS (Windows). Run a multi-SDID HDB query.
-     b. Windows cert/credential prompt should happen for the first new session,
-        not once per worker thread. Follow-up queries while the app stays open
-        should reuse pooled sessions (no new prompt until OS cache expires).
-     c. FILE wallet / non-MCS path unchanged.
+     a. Internal query for KBOHDB (or CU/LBO/ECO). Same series that works on
+        public API should return data on SQL.
+     b. Direct SQL uses FROM r_base / r_hour (not SCHEMA.r_base@dsn).
+     c. Mixed internal LCHDB + KBOHDB: KBO is its own worker, no @kbohdb.
+     d. Public USBR API stays one USBR group (not split per HDB).
 
 [ ] sqlnet.log Fatals in app.log
    Steps:
@@ -82,14 +60,6 @@ Current Tests
      c. After Python 3.13 is on PATH: run applyUpdate.cmd → creates
         Project Files\.venv, pip installs, app starts via Data Doctor.exe.
      d. Put a dummy aquarius.pem in certs\, run applyUpdate again — pem still there.
-
-[ ] bunker merge fills blanks only (QAQC / precision)
-   Steps:
-     a. User bunker row has valuePrecision / expectedMax set; packaged row
-        has different valuePrecision and a new expectedMin.
-     b. python "Project Files/scripts/updateBunker.py" --dry-run then merge.
-     c. valuePrecision unchanged; expectedMin filled; siteName/datatype/database
-        still update from packaged.
 
 [ ] Beta updates checkbox after Save
    Steps:
@@ -118,6 +88,10 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Query list right-click Delete
+[x] Save Quick Look prefills name + overwrite confirm
+[x] MCS Oracle credentials prompted once per session burst
+[x] bunker merge fills blanks only (QAQC / precision)
 [x] Close Data Doctor (Windows) — no deleted-QTableWidget crash
 [x] Data Dictionary combobox — one text only
 [x] USBR CSV → bunker.db
