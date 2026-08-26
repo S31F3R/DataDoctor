@@ -8,6 +8,8 @@ Workflow:
   - Grok may commit any non-documentation/ paths; documentation/ commits stay with Seifer
     (README.md and other non-docs paths are fair game)
   - After confirmed [x] items: drop long steps into Confirmed; keep retest items detailed
+  - Working Notes (documentation/Working Notes.txt) is a scratch file until
+    publish names vVERSION.md; only its bullets go under ## Changes
 
 Current Tests
 --------------------------------------------------------------------------------
@@ -22,26 +24,40 @@ Current Tests
      d. No GitHub token / password fields in Options.
      e. One Report click → one browser tab (not two).
 
-[x] Close Data Doctor (Windows) — no deleted-QTableWidget crash
-   Steps:
-     a. Open a query so the main table has columns, then close the app.
-     b. No Unexpected Error dialog. app.log may have a DEBUG teardown line;
-        must not pop Report on GitHub.
-
-[x] Data Dictionary combobox — one text only
-   Steps:
-     a. Open Data Dictionary. Click a database cell and a valuePrecision cell.
-     b. While the dropdown is open, the cell shows the combo text once
-        (no ghost of the previous value behind/over the combo).
-     c. Pick a value, click away — cell shows that value only.
-
 [ ] HDB database-link failure → direct connect fallback
    Steps:
-     a. Internal multi-DB query where primary uses @link to another HDB.
-     b. If link fails (ORA-02019 etc.), retry by connecting to the target DSN directly.
-     c. Query still returns data when direct path works.
-   Notes: USBR.sqlRead detects link errors and re-runs without link.
-   RESPONSE: I don't think this is working at all. 
+     a. Internal query mixing UCHDB2 / LCHDB / YAOHDB (they share links).
+     b. If @link fails, retry connects directly to the target DSN.
+        Any worker error on a linked query now triggers that retry
+        (not only ORA-02019).
+     c. Query still returns data when the direct path works.
+     d. KBOHDB / CUHDB / LBOHDB / ECOHDB never use @link; each is its own
+        worker with a direct connection (same idea as USGS vs Aquarius).
+   Notes: RESPONSE said fallback was not working. sqlRead now retries
+     direct on any linked-query failure, resets primaryDsn each executeQuery,
+     and never sets primary from an isolated HDB.
+
+[ ] Query list right-click Delete
+   Steps:
+     a. Right-click a list row → Insert Above / Below (when DataID set) and Delete.
+     b. Delete removes the clicked row. If the click is inside a multi-selection,
+        Delete removes all selected rows.
+     c. Toolbar remove still works.
+
+[ ] Isolated HDB queries (KBO / CU / LBO / ECO)
+   Steps:
+     a. Internal query with LCHDB + KBOHDB (and/or CU, LBO, ECO) together.
+     b. KBO/CU/LBO/ECO each run as their own group (progress can show
+        USBR-KBOHDB etc.), direct connect, no @kbohdb from LCHDB.
+     c. UC/LC/YAO can still share one USBR worker and use links.
+
+[ ] Save Quick Look prefills name + overwrite confirm
+   Steps:
+     a. Load or select a Quick Look so the combo has a name. Save Quick Look
+        — the name box is already that name.
+     b. Save as an existing name → "already exists. Overwrite?" Yes writes,
+        No leaves the file unchanged.
+     c. New unique name saves without that prompt.
 
 [ ] MCS Oracle credentials prompted once per session burst
    Steps:
@@ -75,14 +91,6 @@ Current Tests
      c. valuePrecision unchanged; expectedMin filled; siteName/datatype/database
         still update from packaged.
 
-[x] USBR CSV → bunker.db
-   Steps:
-     a. From project root: python scripts/updateBunkerFromCsv.py FILE.csv --dry-run
-     b. SITE_DATATYPE_ID/SITE_ID insert-only; SITE_NAME and DATATYPE_NAME update;
-        SITE_COMMON_NAME fills blank only; DB_SITE_CODE maps (LC→USBR-LCHDB,
-        UC→USBR-UCHDB2, CU→USBR-CUHDB, YAO, KBO, LBO, ECO).
-     c. valuePrecision and QAQC columns untouched.
-
 [ ] Beta updates checkbox after Save
    Steps:
      a. Options → check Beta updates → Save. GitHub check runs (pre-releases
@@ -110,6 +118,9 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Close Data Doctor (Windows) — no deleted-QTableWidget crash
+[x] Data Dictionary combobox — one text only
+[x] USBR CSV → bunker.db
 [x] Update dialogs: restart, not applyUpdate.cmd
 [x] applyUpdate keeps a single bunker.db.bak
 [x] Header multi-select Ctrl add (viewport filter; Shift origin not stolen)

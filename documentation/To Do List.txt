@@ -1,10 +1,4 @@
 ####### CURRENT TASKS #######
--In query list, have a right click delete option
--Verified UCHDB, LCHDB, and YAOHDB have links between each other
-    -For internal queriest, do not attempt to run a database link on KBOHDB, CUHDB, LBOHDB, and ECOHDB
-      -These need to be run on their OWN thread with their own connections, similar to how AQUARIUS, USGS-NWIS, and USBR are seperated
--When hitting Save Quick Look and there is already a quick look name in the combo box, auto fill in the Quick Look Name with that name
-  -If a quickLook with the same name exists, prompt it exists and confirm Overwrite via message box with yes or no
 
 ####### CURRENT BUGS #######
 
@@ -55,13 +49,17 @@
 -If a test fails: keep in test.txt with notes; do not put back on To Do until abandoned
 -Clean up test.txt after confirmed [x] items (standard workflow): drop long steps for [x] into a short Confirmed list; keep retest items detailed
 -Working Notes: documentation/Working Notes.txt
-  - Grok adds bug fixes, features, and TASKS here as they land (do not guess the
-    GitHub release file name). If a bug is on GitHub, include the issue number.
+  - Scratch file for unreleased changes. It has no version in the name because
+    the next tag is unknown (rc.N, beta.N, or a full vX.Y.Z) until publish.
+  - Grok adds one bullet per bug fix, feature, or TASK as they land. If a bug
+    is on GitHub, include the issue number. Do not create vVERSION.md early.
   - Future GitHub issues that are fixed go in the commit message as well
     (e.g. "Fix header Ctrl+click (#12)").
-  - Seifer copies Working Notes into documentation/releases/vVERSION.md
-  - python scripts/publishRelease.py on a packaged release seeds an empty
-    vVERSION.md from Working Notes if needed, then clears Working Notes
+  - python scripts/publishRelease.py names documentation/releases/vVERSION.md
+    when the channel is chosen. It copies Working Notes *bullets* under
+    ## Changes only (no "Working Notes" heading or instructions). Then it
+    resets the scratch file to the empty template.
+  - If vVERSION.md already exists at publish, that file is used as-is.
 -Documentation: Grok may edit documentation/ as part of normal workflow (To Do, test.txt, notes, wiki, README, etc.)
 -README.md and documentation/wiki/ are public. Write them for users / operators.
   Do not put Seifer-only asides, "talking to you" notes, or Grok/Seifer chatter in them.

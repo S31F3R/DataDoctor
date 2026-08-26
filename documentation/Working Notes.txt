@@ -1,6 +1,17 @@
 Working Notes
 =============
-Cleared after packaged release. Add bug fixes, GitHub issue numbers,
-and features/tasks here. Seifer copies these into the versioned
-release notes (documentation/releases/vVERSION.md) before the next publish.
+Scratch file for unreleased changes. Do not create vVERSION.md here —
+the version is unknown until publish (rc.N, beta.N, or full vX.Y.Z).
 
+Write one bullet per change (bug fix, feature, or TASK). Include a
+GitHub issue number when there is one.
+
+publishRelease.py copies these bullets under ## Changes in
+documentation/releases/vVERSION.md (no Working Notes heading), then
+resets this file to this template.
+
+- Query list right-click Delete (clicked row, or all selected)
+- Internal HDB: KBOHDB / CUHDB / LBOHDB / ECOHDB use their own worker and a
+  direct connection (no @link). UCHDB2 / LCHDB / YAOHDB still share links.
+- Linked HDB @link failures retry a direct connect on any worker error
+- Save Quick Look prefills the combo name and asks before overwrite
