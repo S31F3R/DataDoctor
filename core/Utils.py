@@ -11,9 +11,12 @@ from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
     QListWidget, QTreeView, QPushButton, QCheckBox, QRadioButton, QComboBox,
-    QApplication, QHeaderView,
+    QApplication, QHeaderView, QStyleFactory,
 )
-from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon, QPixmap
+from PyQt6.QtGui import (
+    QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon,
+    QPixmap, QPalette, QColor,
+)
 from core import Logic, Config, Utils
 
 # Bundled fonts (cross-platform):
@@ -1677,8 +1680,106 @@ def convertConfigToJson():
     elif Config.debug:
         Logic.logMessage("DEBUG", "No config.ini found or user.config exists, skipping conversion")
 
+_savedStyleName = None  # native style key before a Light/Dark Fusion override
+
+
+def _paletteIsDark(pal):
+    bg = pal.color(QPalette.ColorRole.Window)
+    lum = 0.2126 * bg.redF() + 0.7152 * bg.greenF() + 0.0722 * bg.blueF()
+    return lum < 0.45
+
+
+def _forcedSchemePalette(dark):
+    """Fusion-like palette so Light/Dark do not depend on the OS theme."""
+    pal = QPalette()
+    if dark:
+        window, base, alt = QColor(53, 53, 53), QColor(35, 35, 35), QColor(66, 66, 66)
+        text, button = QColor(255, 255, 255), QColor(53, 53, 53)
+        highlight, disabled = QColor(42, 130, 218), QColor(127, 127, 127)
+        placeholder = QColor(160, 160, 160)
+        tooltipBg, tooltipFg = QColor(53, 53, 53), QColor(255, 255, 255)
+    else:
+        window, base, alt = QColor(239, 239, 239), QColor(255, 255, 255), QColor(247, 247, 247)
+        text, button = QColor(0, 0, 0), QColor(239, 239, 239)
+        highlight, disabled = QColor(48, 140, 198), QColor(120, 120, 120)
+        placeholder = QColor(128, 128, 128)
+        tooltipBg, tooltipFg = QColor(255, 255, 220), QColor(0, 0, 0)
+    pal.setColor(QPalette.ColorRole.Window, window)
+    pal.setColor(QPalette.ColorRole.WindowText, text)
+    pal.setColor(QPalette.ColorRole.Base, base)
+    pal.setColor(QPalette.ColorRole.AlternateBase, alt)
+    pal.setColor(QPalette.ColorRole.ToolTipBase, tooltipBg)
+    pal.setColor(QPalette.ColorRole.ToolTipText, tooltipFg)
+    pal.setColor(QPalette.ColorRole.Text, text)
+    pal.setColor(QPalette.ColorRole.Button, button)
+    pal.setColor(QPalette.ColorRole.ButtonText, text)
+    pal.setColor(QPalette.ColorRole.BrightText, QColor(255, 0, 0))
+    pal.setColor(QPalette.ColorRole.Highlight, highlight)
+    pal.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
+    pal.setColor(QPalette.ColorRole.PlaceholderText, placeholder)
+    pal.setColor(QPalette.ColorRole.Link, highlight)
+    for role in (
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.ButtonText,
+    ):
+        pal.setColor(QPalette.ColorGroup.Disabled, role, disabled)
+    return pal
+
+
+def _styleKey(app):
+    st = app.style()
+    if st is None:
+        return ''
+    return (st.objectName() or '').strip()
+
+
+def _setAppStyle(app, key):
+    if not key:
+        return
+    style = QStyleFactory.create(key)
+    if style is not None:
+        app.setStyle(style)
+
+
+def _applyHintScheme(app, scheme):
+    hints = app.styleHints()
+    if hints is None or not hasattr(hints, 'setColorScheme'):
+        return
+    try:
+        hints.setColorScheme(scheme)
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"setColorScheme failed: {e}")
+
+
+def _pushPalette(app, pal):
+    """Make this palette what every widget (and Config.systemTextColor) sees."""
+    app.setPalette(pal)
+    Config.systemTextColor = pal.color(QPalette.ColorRole.Text)
+    try:
+        widgets = list(app.allWidgets())
+    except Exception:
+        widgets = list(app.topLevelWidgets())
+    for w in widgets:
+        try:
+            w.setPalette(pal)
+            w.update()
+        except Exception:
+            pass
+
+
 def applyColorTheme(theme=None):
-    """Follow Options → Appearance Color Theme (system / light / dark)."""
+    """
+    Light/Dark pretend the OS is in that mode.
+
+    Qt's setColorScheme is only a hint — native GTK and Windows styles often
+    keep the real system palette (labels/tables stay dark). We set the hint so
+    colorScheme() matches, then install a light or dark palette as the app
+    palette (Fusion if the native style still serves the old colors). System
+    restores the original style and palette.
+    """
+    global _savedStyleName
     name = theme if theme is not None else getattr(Config, 'colorTheme', 'system')
     name = str(name or 'system').strip().lower()
     if name not in ('system', 'light', 'dark'):
@@ -1687,20 +1788,38 @@ def applyColorTheme(theme=None):
     app = QApplication.instance()
     if app is None:
         return
-    hints = app.styleHints()
-    if hints is None or not hasattr(hints, 'setColorScheme'):
+    if not _savedStyleName:
+        _savedStyleName = _styleKey(app)
+
+    if name == 'system':
+        _applyHintScheme(app, Qt.ColorScheme.Unknown)
+        current = _styleKey(app)
+        if _savedStyleName and current.lower() != _savedStyleName.lower():
+            _setAppStyle(app, _savedStyleName)
+        # Empty constructor is a baked light palette, not "follow OS".
+        _pushPalette(app, app.style().standardPalette())
         return
-    if name == 'dark':
-        scheme = Qt.ColorScheme.Dark
-    elif name == 'light':
-        scheme = Qt.ColorScheme.Light
-    else:
-        scheme = Qt.ColorScheme.Unknown
-    try:
-        hints.setColorScheme(scheme)
-    except Exception as e:
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"applyColorTheme({name}) failed: {e}")
+
+    wantDark = name == 'dark'
+    scheme = Qt.ColorScheme.Dark if wantDark else Qt.ColorScheme.Light
+    _applyHintScheme(app, scheme)
+    pal = app.style().standardPalette()
+    if _paletteIsDark(pal) != wantDark:
+        current = _styleKey(app)
+        if current.lower() != 'fusion':
+            _setAppStyle(app, 'Fusion')
+            _applyHintScheme(app, scheme)
+            pal = app.style().standardPalette()
+        if _paletteIsDark(pal) != wantDark:
+            pal = _forcedSchemePalette(wantDark)
+    _pushPalette(app, pal)
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"applyColorTheme {name} style={_styleKey(app)!r} "
+            f"darkPalette={_paletteIsDark(app.palette())} "
+            f"text={Config.systemTextColor.name() if hasattr(Config.systemTextColor, 'name') else Config.systemTextColor}",
+        )
 
 
 def includeDataTypeInLabel(database):
