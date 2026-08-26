@@ -10,7 +10,7 @@ import threading
 from datetime import datetime
 
 from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal, QPointF, QSize, QEvent
-from PyQt6.QtGui import QPainter, QColor, QPixmap, QIcon
+from PyQt6.QtGui import QPainter, QColor, QPixmap, QIcon, QPalette
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QSplitterHandle, QTabWidget,
     QTabBar, QPlainTextEdit, QTableWidget, QTableWidgetItem, QListWidget,
@@ -110,18 +110,42 @@ class SnippetPaneHandle(QSplitterHandle):
             wb.toggleSnippets()
         event.accept()
 
+    def _chromePalette(self):
+        """Tab-strip / button-face palette (lighter than the pane in dark mode)."""
+        from PyQt6.QtWidgets import QApplication
+        sp = self.splitter()
+        wb = getattr(sp, "_sqlWorkbench", None) if sp is not None else None
+        ref = None
+        if wb is not None:
+            wt = getattr(wb, "worksheetTabs", None)
+            if wt is not None:
+                ref = wt.tabBar()
+            if ref is None:
+                ref = getattr(wb, "btnRun", None)
+        if ref is not None:
+            return ref.palette()
+        app = QApplication.instance()
+        return app.palette() if app is not None else self.palette()
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        pal = self.palette()
-        bg = pal.window().color()
+        pal = self._chromePalette()
+        # Button = control chrome behind tabs and toolbar buttons
+        bg = pal.color(QPalette.ColorRole.Button)
+        window = pal.color(QPalette.ColorRole.Window)
+        if bg.lightness() <= window.lightness():
+            midlight = pal.color(QPalette.ColorRole.Midlight)
+            if midlight.lightness() > bg.lightness():
+                bg = midlight
         painter.fillRect(self.rect(), bg)
         if Config.retroMode:
             dot = QColor("#00FF00")
         else:
-            dot = pal.mid().color()
-            if not dot.isValid() or dot == bg:
-                dot = pal.shadow().color()
+            dot = pal.color(QPalette.ColorRole.Mid)
+            if abs(dot.lightness() - bg.lightness()) < 35:
+                dot = pal.color(QPalette.ColorRole.WindowText)
+                dot.setAlpha(150)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(dot)
         cx = self.width() / 2.0
@@ -258,6 +282,22 @@ class SnippetCategoryDialog(QDialog):
         for name in self._snippetNames():
             if self._catOf(name) == cat:
                 self.snipList.addItem(name)
+
+    def _snippetMenu(self, pos):
+        item = self.snipList.itemAt(pos)
+        if item is None:
+            return
+        menu = QMenu(self)
+        moveMenu = menu.addMenu("Move to")
+        current = self._catOf(item.text())
+        for i in range(self.catList.count()):
+            cat = self.catList.item(i).text()
+            act = moveMenu.addAction(cat)
+            act.setEnabled(cat != current)
+            act.triggered.connect(
+                lambda _c=False, n=item.text(), k=cat: self._moveSnippet(n, k)
+            )
+        menu.exec(self.snipList.mapToGlobal(pos))
 
     def _moveSnippet(self, snippetName, category):
         if not snippetName or not category:
