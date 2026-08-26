@@ -366,7 +366,6 @@ class SqlWorkbench:
                 self._syncingDb = False
         self.win.pteSQL = editor
         self.win.sqlTable = self.currentResultTable()
-        self._syncPinButton()
 
     def addWorksheet(self):
         self._wsSeq += 1
