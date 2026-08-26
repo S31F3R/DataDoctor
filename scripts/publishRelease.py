@@ -6,9 +6,13 @@ Version lives in core/Version.py (About reads that — not winAbout.ui).
 Auto-update matches GitHub Release tags + asset names from this script.
 
   python scripts/publishRelease.py
+  python scripts/publishRelease.py --channel rc --number 2.5 --upload --yes
+  python scripts/publishRelease.py --channel published --upload --yes
   python scripts/publishRelease.py --channel published --build-only
-  python scripts/publishRelease.py --channel rc --number 2.1 --upload
   python scripts/publishRelease.py --channel beta --number 1 --dry-run
+
+--yes skips every prompt and tags/pushes the branch you are on.
+Without --yes, "Tag which branch / commit?" defaults to that branch (Enter).
 
 Release notes: documentation/releases/vX.Y.Z.md (created if missing).
 That file is the GitHub Release body. Version.py is committed when it changes.
@@ -683,7 +687,7 @@ def parseArgs() -> argparse.Namespace:
     p.add_argument(
         "--yes",
         action="store_true",
-        help="do not prompt (use flags / defaults)",
+        help="do not prompt (current branch, flags / defaults)",
     )
     p.add_argument(
         "--skip-appimage",
