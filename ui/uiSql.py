@@ -10,12 +10,11 @@ import threading
 from datetime import datetime
 
 from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QTabWidget, QPlainTextEdit,
-    QTableWidget, QTableWidgetItem, QListWidget, QComboBox, QPushButton,
-    QLabel, QMenu, QMessageBox, QInputDialog, QDialog, QDialogButtonBox,
-    QAbstractItemView, QSizePolicy, QHeaderView,
+    QWidget, QVBoxLayout, QHBoxLayout, QSplitter, QSplitterHandle, QTabWidget,
+    QTabBar, QPlainTextEdit, QTableWidget, QTableWidgetItem, QListWidget,
+    QComboBox, QPushButton, QLabel, QMenu, QMessageBox, QInputDialog, QDialog,
+    QDialogButtonBox, QSizePolicy,
 )
 
 from core import Logic, Utils, Config
@@ -23,6 +22,23 @@ from core.Oracle import oracleConnection
 
 UNCATEGORIZED = "Uncategorized"
 HISTORY_MAX = 50
+SNIPPET_HANDLE_PX = 10
+
+
+class SnippetPaneHandle(QSplitterHandle):
+    """Vertical split grip: double-click collapses the snippet pane; grip stays visible."""
+
+    def mouseDoubleClickEvent(self, event):
+        sp = self.splitter()
+        wb = getattr(sp, "_sqlWorkbench", None) if sp is not None else None
+        if wb is not None:
+            wb.toggleSnippets()
+        event.accept()
+
+
+class SnippetPaneSplitter(QSplitter):
+    def createHandle(self):
+        return SnippetPaneHandle(self.orientation(), self)
 
 
 class sqlQuerySignals(QObject):
@@ -117,12 +133,6 @@ class SqlWorkbench:
         self.btnCatagory = QPushButton(sqlTab)
         self.btnCatagory.setObjectName("btnSqlCatagory")
         self.btnCatagory.setToolTip("Add or remove snippet categories")
-        self.btnHideSnippets = QPushButton(sqlTab)
-        self.btnHideSnippets.setObjectName("btnHideSnippets")
-        self.btnHideSnippets.setToolTip("Hide SQL quick looks")
-        self.btnPin = QPushButton(sqlTab)
-        self.btnPin.setObjectName("btnSqlPin")
-        self.btnPin.setToolTip("Pin result (next run opens a new tab)")
         self.btnNewWorksheet = QPushButton(sqlTab)
         self.btnNewWorksheet.setObjectName("btnNewSqlWorksheet")
         self.btnNewWorksheet.setToolTip("New query tab")
@@ -138,9 +148,7 @@ class SqlWorkbench:
             (self.btnSaveSnippet, "StarPlus", 36),
             (self.btnDeleteSnippet, "StarMinus", 36),
             (self.btnCatagory, "Catagory", 36),
-            (self.btnHideSnippets, "Hidden", 36),
-            (self.btnPin, "Pin", 28),
-            (self.btnNewWorksheet, "Plus", 24),
+            (self.btnNewWorksheet, "Plus", 36),
         ):
             if btn is not None:
                 Utils.buttonStyle(btn, icon, iconSize=size)
@@ -152,7 +160,6 @@ class SqlWorkbench:
         self.worksheetTabs.setTabsClosable(True)
         self.worksheetTabs.setMovable(False)
         self.worksheetTabs.setDocumentMode(False)
-        self.worksheetTabs.setCornerWidget(self.btnNewWorksheet, Qt.Corner.TopRightCorner)
 
         self.resultStack = QTabWidget(sqlTab)
         self.resultStack.setObjectName("sqlResultHost")
@@ -177,15 +184,18 @@ class SqlWorkbench:
         firstTable.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         resultTabs.addTab(self._wrapResult(firstTable, pinned=False), "Result")
         resultTabs.tabBar().setTabData(0, {"pinned": False})
+        self._installPinButton(resultTabs, 0)
         self.resultStack.addTab(resultTabs, "ws")
 
-        # Top bar: Run, Stop, History, database
+        # Top bar: Run, Stop, New query tab, History, database
         topLayout = QHBoxLayout()
         topLayout.setSpacing(0)
         topLayout.setContentsMargins(4, 4, 4, 2)
         topLayout.addWidget(self.btnRun)
         topLayout.addSpacing(10)
         topLayout.addWidget(self.btnStop)
+        topLayout.addSpacing(10)
+        topLayout.addWidget(self.btnNewWorksheet)
         topLayout.addSpacing(10)
         topLayout.addWidget(self.btnHistory)
         topLayout.addSpacing(20)
@@ -205,7 +215,6 @@ class SqlWorkbench:
         sqlSplitter.addWidget(self.worksheetTabs)
         sqlSplitter.addWidget(self.resultStack)
         sqlSplitter.setSizes([231, 291])
-        resultTabs.setCornerWidget(self.btnPin, Qt.Corner.TopRightCorner)
 
         leftWidget = QWidget(sqlTab)
         leftLay = QVBoxLayout(leftWidget)
@@ -222,7 +231,6 @@ class SqlWorkbench:
         snippetTop.addWidget(self.btnDeleteSnippet)
         snippetTop.addWidget(self.btnCatagory)
         snippetTop.addStretch()
-        snippetTop.addWidget(self.btnHideSnippets)
 
         snippetPanel = QWidget(sqlTab)
         snippetPanel.setObjectName("sqlSnippetPanel")
@@ -234,8 +242,14 @@ class SqlWorkbench:
         if self.listSnippets is not None:
             snippetLay.addWidget(self.listSnippets, 1)
 
-        mainSplitter = QSplitter(Qt.Orientation.Horizontal, sqlTab)
+        mainSplitter = SnippetPaneSplitter(Qt.Orientation.Horizontal, sqlTab)
         mainSplitter.setObjectName("mainSplitter")
+        mainSplitter._sqlWorkbench = self
+        mainSplitter.setHandleWidth(SNIPPET_HANDLE_PX)
+        mainSplitter.setChildrenCollapsible(True)
+        mainSplitter.setCollapsible(0, False)
+        mainSplitter.setCollapsible(1, True)
+        snippetPanel.setMinimumWidth(0)
         mainSplitter.addWidget(leftWidget)
         mainSplitter.addWidget(snippetPanel)
         mainSplitter.setSizes([1281, 256])
@@ -254,14 +268,17 @@ class SqlWorkbench:
 
         self._wire()
         self._loadCategories()
-        self._applySnippetHidden(Utils.loadConfig().get("sqlSnippetsHidden", False))
+        self._styleSnippetHandle()
+        handle = mainSplitter.handle(1)
+        if handle is not None:
+            handle.setToolTip("Double-click to collapse or expand SQL quick looks")
+        self._applySnippetHidden(bool(Utils.loadConfig().get("sqlSnippetsHidden", False)))
 
     def _newResultTabs(self, parent):
         tabs = QTabWidget(parent)
-        tabs.setTabsClosable(True)
+        # Pin sits where the close X would be; worksheets keep X.
+        tabs.setTabsClosable(False)
         tabs.setMovable(False)
-        tabs.tabCloseRequested.connect(lambda i, t=tabs: self._closeResultTab(t, i))
-        tabs.currentChanged.connect(lambda _i: self._syncPinButton())
         bar = tabs.tabBar()
         bar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         bar.customContextMenuRequested.connect(
@@ -280,8 +297,6 @@ class SqlWorkbench:
         self.btnSaveSnippet.clicked.connect(self.saveSnippet)
         self.btnDeleteSnippet.clicked.connect(self.deleteSnippet)
         self.btnCatagory.clicked.connect(self.manageCategories)
-        self.btnHideSnippets.clicked.connect(self.toggleSnippets)
-        self.btnPin.clicked.connect(self.togglePin)
         self.btnNewWorksheet.clicked.connect(self.addWorksheet)
         self.worksheetTabs.tabCloseRequested.connect(self.closeWorksheet)
         self.worksheetTabs.currentChanged.connect(self._onWorksheetChanged)
@@ -335,9 +350,6 @@ class SqlWorkbench:
         if index < 0:
             return
         self.resultStack.setCurrentIndex(index)
-        tabs = self.currentResultTabs()
-        if tabs is not None:
-            tabs.setCornerWidget(self.btnPin, Qt.Corner.TopRightCorner)
         editor = self.currentEditor()
         db = self._worksheetDatabase(editor)
         if self.cbDatabase is not None:
@@ -370,6 +382,7 @@ class SqlWorkbench:
         table.horizontalHeader().setStretchLastSection(False)
         resultTabs.addTab(self._wrapResult(table, pinned=False), "Result")
         resultTabs.tabBar().setTabData(0, {"pinned": False})
+        self._installPinButton(resultTabs, 0)
         self.resultStack.addTab(resultTabs, "ws")
         self.worksheetTabs.setCurrentIndex(idx)
         if Config.debug:
@@ -394,7 +407,7 @@ class SqlWorkbench:
                     table.setColumnCount(0)
                 tabs.tabBar().setTabData(0, {"pinned": False})
                 tabs.setTabText(0, "Result")
-            self._syncPinButton()
+                self._installPinButton(tabs, 0)
             return
         w = self.worksheetTabs.widget(index)
         r = self.resultStack.widget(index)
@@ -428,12 +441,14 @@ class SqlWorkbench:
         menu = QMenu(self.win)
         actRename = menu.addAction("Rename")
         actPin = menu.addAction("Unpin" if pinned else "Pin")
+        actClose = menu.addAction("Close")
         chosen = menu.exec(bar.mapToGlobal(pos))
         if chosen == actRename:
             self._renameTab(tabs, idx)
         elif chosen == actPin:
-            tabs.setCurrentIndex(idx)
-            self.togglePin()
+            self._togglePinAt(tabs, idx)
+        elif chosen == actClose:
+            self._closeResultTab(tabs, idx)
 
     def _renameTab(self, tabs, index):
         current = tabs.tabText(index)
@@ -454,17 +469,45 @@ class SqlWorkbench:
         table = tabs.widget(index)
         if table is not None:
             table.setProperty("sqlPinned", bool(pinned))
-        self._syncPinButton()
+        self._refreshPinButton(tabs, index)
 
-    def _syncPinButton(self):
-        tabs = self.currentResultTabs()
-        pinned = False
-        if tabs is not None:
-            pinned = self._isPinned(tabs, tabs.currentIndex())
-        Utils.buttonStyle(self.btnPin, "Pinned" if pinned else "Pin", iconSize=28)
-        self.btnPin.setToolTip(
+    def _installPinButton(self, tabs, index):
+        """Pin/Pinned control in the tab's close-button slot (result tabs only)."""
+        btn = QPushButton(tabs)
+        btn.setObjectName("btnResultPin")
+        btn.setFlat(True)
+        btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        Utils.buttonStyle(btn, "Pin", iconSize=16)
+        btn.setFixedSize(18, 18)
+        btn.setToolTip("Pin result (next run opens a new tab)")
+        btn.clicked.connect(lambda _checked=False, t=tabs, b=btn: self._togglePinFromButton(t, b))
+        tabs.tabBar().setTabButton(index, QTabBar.ButtonPosition.RightSide, btn)
+        self._refreshPinButton(tabs, index)
+
+    def _togglePinFromButton(self, tabs, btn):
+        bar = tabs.tabBar()
+        for i in range(tabs.count()):
+            if bar.tabButton(i, QTabBar.ButtonPosition.RightSide) is btn:
+                self._togglePinAt(tabs, i)
+                return
+
+    def _refreshPinButton(self, tabs, index):
+        if tabs is None or index < 0 or index >= tabs.count():
+            return
+        btn = tabs.tabBar().tabButton(index, QTabBar.ButtonPosition.RightSide)
+        if btn is None:
+            return
+        pinned = self._isPinned(tabs, index)
+        Utils.buttonStyle(btn, "Pinned" if pinned else "Pin", iconSize=16)
+        btn.setToolTip(
             "Unpin result" if pinned else "Pin result (next run opens a new tab)"
         )
+
+    def _togglePinAt(self, tabs, index):
+        if tabs is None or index < 0 or index >= tabs.count():
+            return
+        self._setPinned(tabs, index, not self._isPinned(tabs, index))
 
     def togglePin(self):
         tabs = self.currentResultTabs()
@@ -473,7 +516,7 @@ class SqlWorkbench:
         i = tabs.currentIndex()
         if i < 0:
             return
-        self._setPinned(tabs, i, not self._isPinned(tabs, i))
+        self._togglePinAt(tabs, i)
 
     def _targetResultTab(self, tabs):
         """Reuse the current unpinned tab, else add a new result tab."""
@@ -489,6 +532,7 @@ class SqlWorkbench:
         table.horizontalHeader().setStretchLastSection(False)
         idx = tabs.addTab(self._wrapResult(table, pinned=False), "Result")
         tabs.tabBar().setTabData(idx, {"pinned": False})
+        self._installPinButton(tabs, idx)
         tabs.setCurrentIndex(idx)
         return idx
 
@@ -501,13 +545,12 @@ class SqlWorkbench:
                 table.setColumnCount(0)
             tabs.setTabText(0, "Result")
             tabs.tabBar().setTabData(0, {"pinned": False})
-            self._syncPinButton()
+            self._installPinButton(tabs, 0)
             return
         w = tabs.widget(index)
         tabs.removeTab(index)
         if w is not None:
             w.deleteLater()
-        self._syncPinButton()
 
     def runQuery(self):
         if self.running:
@@ -676,31 +719,57 @@ class SqlWorkbench:
                 finally:
                     self._syncingDb = False
 
+    def _snippetsCollapsed(self):
+        sizes = self.mainSplitter.sizes() if self.mainSplitter is not None else []
+        return len(sizes) >= 2 and sizes[1] <= SNIPPET_HANDLE_PX + 2
+
     def toggleSnippets(self):
-        hidden = self.snippetPanel.isVisible()
-        self._applySnippetHidden(hidden)
+        self._applySnippetHidden(not self._snippetsCollapsed())
         config = Utils.loadConfig()
-        config["sqlSnippetsHidden"] = hidden
+        config["sqlSnippetsHidden"] = self._snippetsCollapsed()
         try:
             with open(Utils.getConfigPath(), "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
         except Exception as e:
-            Logic.logException("SqlWorkbench: save snippet hide failed", e)
+            Logic.logException("SqlWorkbench: save snippet collapse failed", e)
+
+    def _styleSnippetHandle(self):
+        if self.mainSplitter is None:
+            return
+        if Config.retroMode:
+            bg, hover = "#00AA00", "#00FF00"
+        else:
+            bg, hover = "#8a8a8a", "#5a9fd4"
+        self.mainSplitter.setHandleWidth(SNIPPET_HANDLE_PX)
+        self.mainSplitter.setStyleSheet(
+            f"QSplitter#mainSplitter::handle:horizontal {{"
+            f"  width: {SNIPPET_HANDLE_PX}px;"
+            f"  background: {bg};"
+            f"  margin: 0px;"
+            f"  border: none;"
+            f"}}"
+            f"QSplitter#mainSplitter::handle:horizontal:hover {{"
+            f"  background: {hover};"
+            f"}}"
+        )
 
     def _applySnippetHidden(self, hidden):
+        """Collapse snippet pane to the right; the split handle stays on the edge."""
+        if self.mainSplitter is None:
+            return
+        sizes = self.mainSplitter.sizes()
+        total = sum(sizes) if sizes else self.mainSplitter.width()
+        if total <= 0:
+            total = 1537
         if hidden:
-            sizes = self.mainSplitter.sizes()
-            if len(sizes) >= 2 and sizes[1] > 0:
+            if len(sizes) >= 2 and sizes[1] > SNIPPET_HANDLE_PX + 8:
                 self._snippetSizes = sizes
-            self.snippetPanel.hide()
-            Utils.buttonStyle(self.btnHideSnippets, "Visible", iconSize=36)
-            self.btnHideSnippets.setToolTip("Show SQL quick looks")
+            self.mainSplitter.setSizes([max(total - SNIPPET_HANDLE_PX, 1), 0])
         else:
-            self.snippetPanel.show()
-            if self._snippetSizes:
-                self.mainSplitter.setSizes(self._snippetSizes)
-            Utils.buttonStyle(self.btnHideSnippets, "Hidden", iconSize=36)
-            self.btnHideSnippets.setToolTip("Hide SQL quick looks")
+            restored = self._snippetSizes
+            if not restored or restored[1] < 80:
+                restored = [max(total - 256, 1), 256]
+            self.mainSplitter.setSizes(restored)
 
     def _loadCategories(self):
         config = Utils.loadConfig()
@@ -892,9 +961,10 @@ class SqlWorkbench:
         if self.sqlSplitter is not None and "sqlVerticalSizes" in config:
             self.sqlSplitter.setSizes(config["sqlVerticalSizes"])
         if self.mainSplitter is not None and "sqlHorizontalSizes" in config:
-            if self.snippetPanel.isVisible():
+            self._snippetSizes = config["sqlHorizontalSizes"]
+            if not bool(config.get("sqlSnippetsHidden", False)):
                 self.mainSplitter.setSizes(config["sqlHorizontalSizes"])
-                self._snippetSizes = config["sqlHorizontalSizes"]
+        self._styleSnippetHandle()
         if self.cbDatabase is not None:
             Utils.loadDatabase(self.cbDatabase, "sql")
             self.cbDatabase.setMinimumWidth(200)
