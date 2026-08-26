@@ -658,7 +658,11 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
                 else ''
             )
             displayMeta['Validation'] = mergedRow.get('VALIDATION', '') or ''
-            displayMeta['Overwrite Flag'] = mergedRow.get('OVERWRITE_FLAG', '') or ''
+            displayMeta['Overwrite Flag'] = (
+                mergedRow.get('OVERWRITE_FLAG')
+                or mergedRow.get('overwrite_flag')
+                or ''
+            )
             displayMeta['Method'] = methodMap.get(mergedRow.get('METHOD_ID'), '') or ''
             displayMeta['Agency Name'] = agenMap.get(mergedRow.get('AGEN_ID'), '') or ''
             displayMeta['Collection System'] = collectionMap.get(mergedRow.get('COLLECTION_SYSTEM_ID'), '') or ''

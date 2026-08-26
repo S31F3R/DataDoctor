@@ -42,9 +42,10 @@ hdbOracleDatabases = (
 )
 
 # ---------------------------------------------------------------------------
-# HDB MODIFY_R_BASE write defaults (Options UI later for some of these)
+# HDB MODIFY_R_BASE write defaults
+# OVERWRITE_FLAG comes from Options → USBR → Overwrite Flag ('O' or None/NULL).
 # DO_UPDATE_Y_OR_N is always 'Y' (not exposed).
-# OVERWRITE_FLAG / DATA_FLAGS / TIME_ZONE default None → Oracle NULL for now.
+# DATA_FLAGS / TIME_ZONE default None → Oracle NULL.
 # AGEN_ID will become a combo; TIME_ZONE needs HDB research.
 # ---------------------------------------------------------------------------
 hdbAgenId = 7
@@ -54,6 +55,6 @@ hdbLoadingApplicationId = 33
 hdbComputationId = 1
 hdbValidation = 'Z'
 hdbDoUpdateYorN = 'Y'
-hdbOverwriteFlag = None   # None → NULL; future option may pass 'O'
+hdbOverwriteFlag = None   # 'O' when Options Overwrite Flag is on; else NULL
 hdbDataFlags = None       # None → NULL; future option
 hdbTimeZone = None        # None → NULL; research later

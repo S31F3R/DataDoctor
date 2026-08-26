@@ -1010,6 +1010,7 @@ def applyStylesAndFonts(app, mainTable, queryList):
     Config.utcOffset = config['utcOffset']
     Config.periodOffset = resolvePeriodOffset(config)
     Config.retroMode = config.get('retroMode', True)
+    Config.hdbOverwriteFlag = 'O' if config.get('hdbOverwriteFlag') else None
 
     # Pre-register the font for the active mode (and About always wants Press Start)
     if Config.retroMode:
@@ -1832,6 +1833,35 @@ def includeDataTypeInLabel(database):
     if db.startswith('USGS'):
         return bool(getattr(Config, 'labelDataTypeUSGS', True))
     return True
+
+
+def hdbOverwriteFlagValue():
+    """
+    MODIFY_R_BASE OVERWRITE_FLAG from Options → USBR → Overwrite Flag.
+    'O' allows replacing an existing HDB value; None binds Oracle NULL.
+    """
+    val = getattr(Config, 'hdbOverwriteFlag', None)
+    if val in (None, False, 0, '', 'N', 'n'):
+        return None
+    if val in (True, 1, '1', 'O', 'o', 'Y', 'y'):
+        return 'O'
+    return 'O'
+
+
+def refreshHdbOverwriteFlag():
+    """Re-read Overwrite Flag from user.config (once per upload, not per row)."""
+    try:
+        path = getConfigPath()
+        if not os.path.isfile(path):
+            Config.hdbOverwriteFlag = None
+            return None
+        with open(path, encoding='utf-8') as f:
+            settings = json.load(f)
+        Config.hdbOverwriteFlag = 'O' if settings.get('hdbOverwriteFlag') else None
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"refreshHdbOverwriteFlag failed: {e}")
+    return hdbOverwriteFlagValue()
 
 
 def hdbAccessDisplayNames():

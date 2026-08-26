@@ -37,6 +37,7 @@ Internal Data Query only. Edited cells (magenta) and overlay auto-fills can be s
 - `MODIFY_R_BASE` for values
 - `DELETE_R_BASE` for blanks (Delete key can clear a multi-cell selection)
 - Overlay secondary-only fills are flagged automatically; changing the cell yourself clears the auto flag
+- **Options → USBR → Overwrite Flag** sets `MODIFY_R_BASE` `OVERWRITE_FLAG` to `O` when checked, or NULL when off. Existing HDB values are only replaced when that box is checked. Freehand SQL in the Query Builder does not get this flag — it is for the upload write path.
 
 ## Password change
 
