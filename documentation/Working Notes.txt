@@ -10,16 +10,3 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
-- Options uses a left category list (General / Appearance / Oracle / Aquarius /
-  USBR / USGS) with Kate-style icon+label rows
-- Appearance: Retro Mode and Color Theme (System / Light / Dark)
-- Oracle credentials and TNS moved off USBR; Databases Access List; Update
-  Password only hits checked HDBs (Save no longer starts a password change)
-- USBR Overwrite Flag; Add Data Type to Labels is per USBR / Aquarius / USGS
-- Options Color Theme Light/Dark installs that scheme's palette (Fusion fallback)
-  so tables and labels match a real system light/dark session
-- Options UI lives in winOptions.ui again (Designer can edit it)
-- Options General Export/Import profile zip (query Quick Looks, SQL snippets,
-  user.config; no keyring)
-- Options → USBR Overwrite Flag is passed as MODIFY_R_BASE OVERWRITE_FLAG ('O' or NULL)
-
