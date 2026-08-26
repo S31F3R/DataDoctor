@@ -1,6 +1,9 @@
 ####### CURRENT TASKS #######
+-Import of sql quick looks need to put them in the Uncagtorized section
 
 ####### CURRENT BUGS #######
+-Windows System Default for appearance isn't setting properly. Dark mode system setting is setting light
+    -Manually setting Dark mode works, it's just the system setting that isn't properly using system on Windows
 
 ####### NEW FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
