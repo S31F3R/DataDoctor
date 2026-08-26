@@ -6,61 +6,23 @@ Workflow / publish how-to: documentation/status.grok (gitignored).
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Options left categories (Kate-style)
+[ ] USBR Overwrite Flag on upload
    Steps:
-     a. Options is wider; left list: General, Appearance, Oracle, Aquarius,
-        USBR, USGS with Cog / Appearance / Oracle / Aquarius / USBR / USGS
-        icons. Whole row is clickable (not a separate icon button).
-     b. Each category’s first tab is named General.
-     c. General: UTC, Raw Data, QAQC, Debug, Beta updates. No Retro Mode here.
-     d. Appearance: Retro Mode + Color Theme combo (System / Light / Dark).
-        System follows the OS; Light/Dark override. Save applies theme.
-     e. Oracle General: TNS, user, password + eye, Update Password button.
-        Databases tab: Access List of USBR-* names only (no |SCHEMA), each
-        with a checkbox. New Config.py HDBs show up here, default checked.
-     f. Save does NOT push Oracle password to HDBs. Update Password does, and
-        only on checked Access List databases.
-     g. Aquarius / USGS General: same fields as before, plus
-        “Add Data Type to Labels”. USBR: HOUR timestamp radios, Overwrite Flag,
-        and Add Data Type to Labels. Uncheck Add Data Type → query headers
-        use commonName only for that source.
-     h. Retro mode still needs restart; checkbox lives under Appearance.
+     a. Options → USBR → Overwrite Flag off → Save. Edit an existing HDB value
+        and Upload. Debug/log: OVERWRITE_FLAG NULL. Existing HDB value is not
+        replaced (HDB keeps the old value or the proc no-ops).
+     b. Check Overwrite Flag → Save. Upload the same cell again. Log says
+        OVERWRITE_FLAG='O'. The HDB value is replaced.
+     c. Freehand SQL in SQL Query Builder is unchanged (no auto flag).
 
-[ ] SQL Query Builder workbench
+[ ] Options Export / Import profile zip
    Steps:
-     a. SQL tab detaches like Graph/Log (right-click tab → Detach; close re-attaches).
-     b. Top toolbar: Run, Stop (Deny), New query tab (Plus, left of History),
-        History. Save/Delete/Catagory are on the snippet panel.
-     c. Double-click the thin dotted splitter handle (tab/window color, dots
-        in the middle) to collapse snippets to the right. Handle stays visible;
-        double-click again to expand.
-     d. Category combo filters snippets. Existing snippets are Uncategorized.
-        Catagory → Snippet Categories: add/remove groups; click a group to see
-        its snippets; drag a snippet onto a category to move it. Save snippet
-        stores into the current combo category.
-     e. Result tab Pin uses Pin hover/press when unpinned, Pinned hover/press
-        when locked. Click toggles.
-     f. Plus / right-click → new query tab. Each tab keeps its database combo
-        value when switching. Right-click rename is visual only. Closing the
-        last query tab clears it instead of removing it. Worksheet tabs keep X.
-     g. Result tabs have Pin/Pinned where X would be (X stays on other tabs).
-        Pin locks that result; next Run adds a new result tab. Right-click
-        Close still removes a result tab. Pins are per result tab.
-     h. Stop cancels a running query. History lists recent SQL; double-click
-        loads it into the current worksheet. Worksheets are not restored after
-        restart (history is).
-     i. Retro mode: snippet list and buttons still usable (splitter layout,
-        no absolute SQL control moves).
-
-[ ] Crash / About Report on GitHub (option C, no stored login)
-   Steps:
-     a. Trigger or simulate an uncaught error — dialog has Report on GitHub,
-        Copy log, Open log folder. Report opens a short GitHub crash form
-        (needs a GitHub account; GitHub's own login). Must NOT 500/"Whoops".
-     b. Full crash text is on the clipboard (paste into the form).
-     c. About → Report issue link opens /issues/new/choose (bug / crash forms).
-     d. No GitHub token / password fields in Options.
-     e. One Report click → one browser tab (not two).
+     a. Options → General has Export… and Import….
+     b. Export: checkboxes for Query Quick Looks, SQL Quick Looks, Config
+        (at least one); save-as zip (name does not matter).
+     c. Import that zip: files land in user Quick Looks / SQL snippets;
+        config reload refreshes Options + Quick Look combo + snippet list.
+     d. Import a random/non-profile zip → error, nothing overwritten.
 
 [ ] sqlnet.log Fatals — only new, in app.log time order
    Steps:
@@ -71,16 +33,6 @@ Current Tests
         among the other lines from that query (same minute), not as a blob of
         older Instant Client history.
 
-[ ] Log rotation + viewer reloads all app.log*
-   Steps:
-     a. Let app.log grow past ~1 MB (debug on + a few fat queries, or copy a
-        large app.log in place and log something).
-     b. logs/ has app.log plus app.log.1 (up to .5). New lines go in a small
-        app.log; the previous chunk is .1.
-     c. Log Viewer while open shows live lines. Close and reopen — those
-        lines are still there (merged from app.log + rotations, newest first).
-     d. Native crash dumps (if any) go to fault.log, not app.log.
-
 [ ] Windows package: empty certs/ + first-run applyUpdate.cmd
    Steps:
      a. Unzip DataDoctor-Windows-*.zip. Project Files\certs\ exists
@@ -89,13 +41,6 @@ Current Tests
      c. After Python 3.13 is on PATH: run applyUpdate.cmd → creates
         Project Files\.venv, pip installs, app starts via Data Doctor.exe.
      d. Put a dummy aquarius.pem in certs\, run applyUpdate again — pem still there.
-
-[ ] Beta updates checkbox after Save
-   Steps:
-     a. Options → check Beta updates → Save. GitHub check runs (pre-releases
-        included). If an RC is newer, the update dialog appears.
-     b. Uncheck Beta updates → Save. Offers the latest published (non-RC)
-        release even if this install is an RC. Cancel leaves the current build.
 
 [ ] Mac package script
    Steps:
@@ -117,6 +62,11 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Options left categories (Kate-style) + Light/Dark as real palettes
+[x] SQL Query Builder workbench (worksheets, pin, snippets, history, stop)
+[x] Crash / About Report on GitHub (option C, no stored login)
+[x] Log rotation + viewer reloads all app.log*
+[x] Beta updates checkbox after Save (RC offer / revert to published)
 [x] HDB database-link failure → direct connect fallback
 [x] Isolated HDB queries (KBO / CU / LBO / ECO) — SQL FROM r_base
 [x] sqlnet.log Fatals in app.log
@@ -238,7 +188,6 @@ Deferred / known
 [!] USGS monthly/yearly (OGC has no products)
 [!] Aquarius daily 2300 TZ
 [!] Features still backlog: advanced plot tool / quick-look plots,
-    dataDictionary non-destructive bulk update, Aquarius Entra login,
-    Options profile export/import
+    dataDictionary non-destructive bulk update, Aquarius Entra login
 [!] Windows first-load icon — improve-only
 [!] AppImage applyUpdate path not wired the same as launcher packages yet

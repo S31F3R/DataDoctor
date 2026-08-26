@@ -1680,7 +1680,12 @@ class uiMain(QMainWindow):
             'DEBUG': QColor(108, 113, 120),
         }
 
-        defaultColor = QColor(200, 200, 200) if Config.retroMode else QColor(40, 40, 40)
+        if Config.retroMode:
+            defaultColor = QColor(200, 200, 200)
+        elif isinstance(Config.systemTextColor, QColor) and Config.systemTextColor.isValid():
+            defaultColor = QColor(Config.systemTextColor)
+        else:
+            defaultColor = QColor(40, 40, 40)
 
         # Role 'log' is intentionally larger than UI (especially in retro)
         mono = Utils.makeFontForRole('log')
@@ -1836,6 +1841,13 @@ if __name__ == '__main__':
         # hide existing user.config + quickLooks (regression from taskbar work).
         app.setApplicationName("Data Doctor")
 
+        # Color theme before any widgets (and before systemTextColor): Light/Dark
+        # must look like the OS is in that mode, not a half-applied hint.
+        try:
+            Utils.applyColorTheme(Utils.loadConfig().get('colorTheme', 'system'))
+        except Exception:
+            pass
+
         # Taskbar / window icon (Windows + Linux desktop shells that honor it)
         appIcon = QIcon()
 
@@ -1872,7 +1884,8 @@ if __name__ == '__main__':
             except Exception:
                 pass
 
-        # Grab system font color and save as global
+        # Text color the rest of the app uses (tables, deltas). Must be after
+        # applyColorTheme so Light/Dark is what we see, not the real OS scheme.
         Config.systemTextColor = app.palette().color(QPalette.ColorRole.Text)
 
         # Create instances
@@ -1889,6 +1902,7 @@ if __name__ == '__main__':
 
         # Apply styles and fonts
         Utils.applyStylesAndFonts(app, winMain.mainTable, winQuery.listQueryList)
+        # Stylesheet can leave widgets on the old palette — re-assert theme.
         Utils.applyColorTheme()
 
         # Load data dictionary and quick looks (best-effort; do not block startup)

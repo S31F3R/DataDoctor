@@ -4,15 +4,22 @@ import os
 import sys
 import json
 import keyring
+import zipfile
+import shutil
+import tempfile
 from PyQt6.QtWidgets import (
     QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox,
     QPushButton, QTabWidget, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QListWidget, QListWidgetItem, QStackedWidget, QAbstractItemView,
-    QSizePolicy,
+    QSizePolicy, QFileDialog,
 )
 from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6 import uic
 from core import Logic, Utils, Config
+
+PROFILE_MANIFEST = "datadoctor-profile.json"
+PROFILE_KIND = "DataDoctorProfile"
 
 # Keyring cold-start is slow (Secret Service / Windows Credential Manager).
 # Cache after first read so Options opens fast after warm-up.
@@ -152,22 +159,37 @@ class uiOptions(QDialog):
         super().__init__(parent=winMain)
         self.winMain = winMain
         self._passwordChangeSignals = None  # keep alive while worker runs
-        self.setWindowTitle("Options")
-        self.setWindowIcon(QIcon(Logic.resourcePath("ui/icons/Options.png")))
-        self.resize(840, 560)
-        self.setMinimumSize(760, 500)
-        self._buildUi()
+        uic.loadUi(Logic.resourcePath("ui/winOptions.ui"), self)
+        self._bindLoadedWidgets()
+        self.qleAQPassword = self._replaceWithPasswordEdit("qleAQPassword")
+        self.qleOraclePassword = self._replaceWithPasswordEdit(
+            "qleOraclePassword",
+            maxLength=int(getattr(Config, "oraclePasswordMaxLength", 30) or 30),
+        )
+        self.qleUSGSAPIKey = self._replaceWithPasswordEdit("qleUSGSAPIKey")
+        self._applyNavIcons()
+        for i, key in enumerate(("system", "light", "dark")):
+            if i < self.cbColorTheme.count():
+                self.cbColorTheme.setItemData(i, key)
 
         Utils.buttonStyle(self.btnShowPassword, None, None)
         Utils.buttonStyle(self.btnShowUSGSKey, None, None)
         Utils.buttonStyle(self.btnShowOraclePassword, None, None)
 
+        try:
+            self.btnbOptions.accepted.disconnect()
+        except TypeError:
+            pass
         self.btnbOptions.accepted.connect(self.onSavePressed)
         self.btnShowPassword.clicked.connect(self.togglePasswordVisibility)
         self.btnShowUSGSKey.clicked.connect(self.toggleUSGSKeyVisibility)
         self.btnShowOraclePassword.clicked.connect(self.toggleOraclePasswordVisibility)
         self.btnUpdatePassword.clicked.connect(self.onUpdatePasswordPressed)
         self.listOptionsNav.currentRowChanged.connect(self._onNavChanged)
+        if self.btnExportProfile is not None:
+            self.btnExportProfile.clicked.connect(self.onExportProfile)
+        if self.btnImportProfile is not None:
+            self.btnImportProfile.clicked.connect(self.onImportProfile)
 
         # Populate UTC offset combobox
         self.cbUTCOffset.addItem("UTC-12:00 | Baker Island")
@@ -227,234 +249,57 @@ class uiOptions(QDialog):
             return QIcon()
         return QIcon(pix)
 
-    def _labeledCheck(self, text, objectName, tooltip=None):
-        row = QWidget()
-        lay = QHBoxLayout(row)
-        lay.setContentsMargins(0, 4, 0, 4)
-        lay.setSpacing(8)
-        lbl = QLabel(text)
-        cb = QCheckBox()
-        cb.setObjectName(objectName)
-        if tooltip:
-            lbl.setToolTip(tooltip)
-            cb.setToolTip(tooltip)
-        lay.addWidget(lbl)
-        lay.addWidget(cb)
-        lay.addStretch()
-        return row, cb
+    def _bindLoadedWidgets(self):
+        """Hook Designer object names from winOptions.ui."""
+        self.listOptionsNav = self.findChild(QListWidget, "listOptionsNav")
+        self.optionsStack = self.findChild(QStackedWidget, "optionsStack")
+        self.tabsGeneral = self.findChild(QTabWidget, "tabsGeneral")
+        self.tabsAppearance = self.findChild(QTabWidget, "tabsAppearance")
+        self.tabsOracle = self.findChild(QTabWidget, "tabsOracle")
+        self.tabsAquarius = self.findChild(QTabWidget, "tabsAquarius")
+        self.tabsUSBR = self.findChild(QTabWidget, "tabsUSBR")
+        self.tabsUSGS = self.findChild(QTabWidget, "tabsUSGS")
+        self.cbUTCOffset = self.findChild(QComboBox, "cbUTCOffset")
+        self.chkbRawData = self.findChild(QCheckBox, "chkbRawData")
+        self.chkbQAQC = self.findChild(QCheckBox, "chkbQAQC")
+        self.chkbDebug = self.findChild(QCheckBox, "chkbDebug")
+        self.chkbBetaUpdates = self.findChild(QCheckBox, "chkbBetaUpdates")
+        self.btnExportProfile = self.findChild(QPushButton, "btnExportProfile")
+        self.btnImportProfile = self.findChild(QPushButton, "btnImportProfile")
+        self.chkbRetroMode = self.findChild(QCheckBox, "chkbRetroMode")
+        self.cbColorTheme = self.findChild(QComboBox, "cbColorTheme")
+        self.qleTNSNames = self.findChild(QLineEdit, "qleTNSNames")
+        self.qleOracleUser = self.findChild(QLineEdit, "qleOracleUser")
+        self.qleOraclePassword = self.findChild(QLineEdit, "qleOraclePassword")
+        self.btnShowOraclePassword = self.findChild(QPushButton, "btnShowOraclePassword")
+        self.btnUpdatePassword = self.findChild(QPushButton, "btnUpdatePassword")
+        self.listHdbAccess = self.findChild(QListWidget, "listHdbAccess")
+        self.qleAQServer = self.findChild(QLineEdit, "qleAQServer")
+        self.qleAQUser = self.findChild(QLineEdit, "qleAQUser")
+        self.qleAQPassword = self.findChild(QLineEdit, "qleAQPassword")
+        self.btnShowPassword = self.findChild(QPushButton, "btnShowPassword")
+        self.chkbLabelDataTypeAquarius = self.findChild(QCheckBox, "chkbLabelDataTypeAquarius")
+        self.rbBOP = self.findChild(QRadioButton, "rbBOP")
+        self.rbEOP = self.findChild(QRadioButton, "rbEOP")
+        self.chkbOverwriteFlag = self.findChild(QCheckBox, "chkbOverwriteFlag")
+        self.chkbLabelDataTypeUSBR = self.findChild(QCheckBox, "chkbLabelDataTypeUSBR")
+        self.qleUSGSAPIKey = self.findChild(QLineEdit, "qleUSGSAPIKey")
+        self.btnShowUSGSKey = self.findChild(QPushButton, "btnShowUSGSKey")
+        self.chkbLabelDataTypeUSGS = self.findChild(QCheckBox, "chkbLabelDataTypeUSGS")
+        self.btnbOptions = self.findChild(QDialogButtonBox, "btnbOptions")
+        self.tabWidget = self.tabsGeneral
 
-    def _passwordRow(self, objectName, btnName, maxLength=None):
-        row = QWidget()
-        lay = QHBoxLayout(row)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(4)
-        edit = Utils.customPasswordEdit(row)
-        edit.setObjectName(objectName)
-        if maxLength is not None:
-            edit.setMaxLength(int(maxLength))
-        btn = QPushButton(row)
-        btn.setObjectName(btnName)
-        btn.setFixedSize(41, 31)
-        btn.setFlat(True)
-        btn.setIcon(QIcon(Logic.resourcePath("ui/icons/Hidden.png")))
-        btn.setIconSize(QSize(24, 24))
-        lay.addWidget(edit, 1)
-        lay.addWidget(btn)
-        return row, edit, btn
-
-    def _labeledField(self, label, widget):
-        box = QWidget()
-        lay = QVBoxLayout(box)
-        lay.setContentsMargins(0, 0, 0, 8)
-        lay.setSpacing(2)
-        lay.addWidget(QLabel(label))
-        lay.addWidget(widget)
-        return box
-
-    def _pageTabs(self, extraTabs=None):
-        """A category page: QTabWidget whose first tab is always General."""
-        wrap = QWidget()
-        outer = QVBoxLayout(wrap)
-        outer.setContentsMargins(0, 0, 0, 0)
-        tabs = QTabWidget(wrap)
-        general = QWidget()
-        generalLay = QVBoxLayout(general)
-        generalLay.setContentsMargins(10, 10, 10, 10)
-        generalLay.setSpacing(4)
-        tabs.addTab(general, "General")
-        extra = extraTabs or []
-        extraPages = []
-        for title in extra:
-            page = QWidget()
-            pageLay = QVBoxLayout(page)
-            pageLay.setContentsMargins(10, 10, 10, 10)
-            pageLay.setSpacing(4)
-            tabs.addTab(page, title)
-            extraPages.append((page, pageLay))
-        outer.addWidget(tabs)
-        return wrap, tabs, generalLay, extraPages
-
-    def _buildUi(self):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(8, 8, 8, 8)
-        root.setSpacing(8)
-
-        body = QHBoxLayout()
-        body.setSpacing(8)
-
-        self.listOptionsNav = QListWidget(self)
-        self.listOptionsNav.setObjectName("listOptionsNav")
-        self.listOptionsNav.setFixedWidth(176)
+    def _applyNavIcons(self):
+        if self.listOptionsNav is None:
+            return
         self.listOptionsNav.setIconSize(QSize(28, 28))
-        self.listOptionsNav.setSpacing(2)
-        self.listOptionsNav.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.listOptionsNav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.listOptionsNav.setMovement(QListWidget.Movement.Static)
-        for label, iconName in self._NAV:
-            item = QListWidgetItem(self._navIcon(iconName), label)
+        for i, (_label, iconName) in enumerate(self._NAV):
+            item = self.listOptionsNav.item(i)
+            if item is None:
+                item = QListWidgetItem(_label)
+                self.listOptionsNav.addItem(item)
+            item.setIcon(self._navIcon(iconName))
             item.setSizeHint(QSize(160, 40))
-            self.listOptionsNav.addItem(item)
-
-        self.optionsStack = QStackedWidget(self)
-        self.optionsStack.setObjectName("optionsStack")
-
-        # --- General ---
-        pageG, self.tabsGeneral, gLay, _ = self._pageTabs()
-        self.cbUTCOffset = QComboBox()
-        self.cbUTCOffset.setObjectName("cbUTCOffset")
-        gLay.addWidget(self._labeledField("UTC Offset", self.cbUTCOffset))
-        rawRow, self.chkbRawData = self._labeledCheck("Raw Data:", "chkbRawData")
-        gLay.addWidget(rawRow)
-        qcRow, self.chkbQAQC = self._labeledCheck("Quality Control Checks:", "chkbQAQC")
-        gLay.addWidget(qcRow)
-        dbgRow, self.chkbDebug = self._labeledCheck("Debug Mode:", "chkbDebug")
-        gLay.addWidget(dbgRow)
-        betaRow, self.chkbBetaUpdates = self._labeledCheck(
-            "Beta updates:",
-            "chkbBetaUpdates",
-            tooltip="When checked, update checks include GitHub pre-releases (beta / RC). Off = stable only.",
-        )
-        gLay.addWidget(betaRow)
-        gLay.addStretch()
-        self.optionsStack.addWidget(pageG)
-
-        # --- Appearance ---
-        pageA, self.tabsAppearance, aLay, _ = self._pageTabs()
-        retroRow, self.chkbRetroMode = self._labeledCheck("Retro Mode:", "chkbRetroMode")
-        aLay.addWidget(retroRow)
-        self.cbColorTheme = QComboBox()
-        self.cbColorTheme.setObjectName("cbColorTheme")
-        self.cbColorTheme.addItem("System", "system")
-        self.cbColorTheme.addItem("Light", "light")
-        self.cbColorTheme.addItem("Dark", "dark")
-        aLay.addWidget(self._labeledField("Color Theme", self.cbColorTheme))
-        aLay.addStretch()
-        self.optionsStack.addWidget(pageA)
-
-        # --- Oracle ---
-        pageO, self.tabsOracle, oLay, extraO = self._pageTabs(extraTabs=["Databases"])
-        self.qleTNSNames = QLineEdit()
-        self.qleTNSNames.setObjectName("qleTNSNames")
-        oLay.addWidget(self._labeledField("TNS Names Location", self.qleTNSNames))
-        self.qleOracleUser = QLineEdit()
-        self.qleOracleUser.setObjectName("qleOracleUser")
-        oLay.addWidget(self._labeledField("User Name", self.qleOracleUser))
-        pwdRow, self.qleOraclePassword, self.btnShowOraclePassword = self._passwordRow(
-            "qleOraclePassword",
-            "btnShowOraclePassword",
-            maxLength=int(getattr(Config, "oraclePasswordMaxLength", 30) or 30),
-        )
-        oLay.addWidget(self._labeledField("Password", pwdRow))
-        self.btnUpdatePassword = QPushButton("Update Password")
-        self.btnUpdatePassword.setObjectName("btnUpdatePassword")
-        self.btnUpdatePassword.setToolTip(
-            "Change this password on the HDB databases checked under Databases"
-        )
-        oLay.addWidget(self.btnUpdatePassword)
-        oLay.addStretch()
-        dbPage, dbLay = extraO[0]
-        dbLay.addWidget(QLabel("Access List"))
-        self.listHdbAccess = QListWidget()
-        self.listHdbAccess.setObjectName("listHdbAccess")
-        self.listHdbAccess.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        dbLay.addWidget(self.listHdbAccess, 1)
-        self.optionsStack.addWidget(pageO)
-
-        # --- Aquarius ---
-        pageAq, self.tabsAquarius, aqLay, _ = self._pageTabs()
-        self.qleAQServer = QLineEdit()
-        self.qleAQServer.setObjectName("qleAQServer")
-        self.qleAQServer.setPlaceholderText("https://yourserverlink.com")
-        aqLay.addWidget(self._labeledField("Server Link", self.qleAQServer))
-        self.qleAQUser = QLineEdit()
-        self.qleAQUser.setObjectName("qleAQUser")
-        aqLay.addWidget(self._labeledField("User Name", self.qleAQUser))
-        aqPwdRow, self.qleAQPassword, self.btnShowPassword = self._passwordRow(
-            "qleAQPassword", "btnShowPassword"
-        )
-        aqLay.addWidget(self._labeledField("Password", aqPwdRow))
-        dtAq, self.chkbLabelDataTypeAquarius = self._labeledCheck(
-            "Add Data Type to Labels", "chkbLabelDataTypeAquarius"
-        )
-        aqLay.addWidget(dtAq)
-        aqLay.addStretch()
-        self.optionsStack.addWidget(pageAq)
-
-        # --- USBR ---
-        pageU, self.tabsUSBR, uLay, _ = self._pageTabs()
-        tsRow = QWidget()
-        tsLay = QHBoxLayout(tsRow)
-        tsLay.setContentsMargins(0, 4, 0, 4)
-        tsLay.addWidget(QLabel("HOUR Timestamp Method:"))
-        self.rbBOP = QRadioButton("Beginning of Period")
-        self.rbBOP.setObjectName("rbBOP")
-        self.rbEOP = QRadioButton("End of Period")
-        self.rbEOP.setObjectName("rbEOP")
-        self.rbEOP.setChecked(True)
-        tsLay.addWidget(self.rbBOP)
-        tsLay.addWidget(self.rbEOP)
-        tsLay.addStretch()
-        uLay.addWidget(tsRow)
-        owRow, self.chkbOverwriteFlag = self._labeledCheck(
-            "Overwrite Flag",
-            "chkbOverwriteFlag",
-            tooltip="When checked, HDB uploads pass OVERWRITE_FLAG = O",
-        )
-        uLay.addWidget(owRow)
-        dtU, self.chkbLabelDataTypeUSBR = self._labeledCheck(
-            "Add Data Type to Labels", "chkbLabelDataTypeUSBR"
-        )
-        uLay.addWidget(dtU)
-        uLay.addStretch()
-        self.optionsStack.addWidget(pageU)
-
-        # --- USGS ---
-        pageGages, self.tabsUSGS, usgsLay, _ = self._pageTabs()
-        usgsPwdRow, self.qleUSGSAPIKey, self.btnShowUSGSKey = self._passwordRow(
-            "qleUSGSAPIKey", "btnShowUSGSKey"
-        )
-        usgsLay.addWidget(self._labeledField("API Key", usgsPwdRow))
-        dtS, self.chkbLabelDataTypeUSGS = self._labeledCheck(
-            "Add Data Type to Labels", "chkbLabelDataTypeUSGS"
-        )
-        usgsLay.addWidget(dtS)
-        usgsLay.addStretch()
-        self.optionsStack.addWidget(pageGages)
-
-        body.addWidget(self.listOptionsNav)
-        body.addWidget(self.optionsStack, 1)
-        root.addLayout(body, 1)
-
-        self.btnbOptions = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        self.btnbOptions.setObjectName("btnbOptions")
-        self.btnbOptions.setCenterButtons(True)
-        self.btnbOptions.rejected.connect(self.reject)
-        root.addWidget(self.btnbOptions)
-
-        self.tabWidget = self.tabsGeneral  # first-focus helper
-        self.listOptionsNav.setCurrentRow(0)
 
     def _onNavChanged(self, index):
         if index < 0:
@@ -562,6 +407,8 @@ class uiOptions(QDialog):
             self.chkbQAQC,
             self.chkbDebug,
             self.chkbBetaUpdates,
+            self.btnExportProfile,
+            self.btnImportProfile,
         ])
         chain([self.chkbRetroMode, self.cbColorTheme])
         chain([
@@ -1010,6 +857,226 @@ class uiOptions(QDialog):
                     0,
                     lambda: Update.runRevertToPublishedUi(parent),
                 )
+
+    def _zipDir(self, zf, srcDir, arcPrefix, extensions):
+        if not os.path.isdir(srcDir):
+            return 0
+        n = 0
+        for name in os.listdir(srcDir):
+            path = os.path.join(srcDir, name)
+            if not os.path.isfile(path):
+                continue
+            if extensions and not name.endswith(extensions):
+                continue
+            zf.write(path, f"{arcPrefix}/{name}")
+            n += 1
+        return n
+
+    def onExportProfile(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Export")
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel("Include:"))
+        ckQuery = QCheckBox("Query Quick Looks")
+        ckSql = QCheckBox("SQL Quick Looks")
+        ckCfg = QCheckBox("Config")
+        ckQuery.setChecked(True)
+        ckSql.setChecked(True)
+        ckCfg.setChecked(True)
+        for c in (ckQuery, ckSql, ckCfg):
+            lay.addWidget(c)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        lay.addWidget(buttons)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        parts = []
+        if ckQuery.isChecked():
+            parts.append("queryQuickLooks")
+        if ckSql.isChecked():
+            parts.append("sqlQuickLooks")
+        if ckCfg.isChecked():
+            parts.append("config")
+        if not parts:
+            QMessageBox.warning(self, "Export", "Check at least one item to export.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save profile zip", "DataDoctor-profile.zip", "Zip (*.zip)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".zip"):
+            path += ".zip"
+        try:
+            manifest = {
+                "app": "DataDoctor",
+                "kind": PROFILE_KIND,
+                "version": 1,
+                "parts": list(parts),
+            }
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr(PROFILE_MANIFEST, json.dumps(manifest, indent=2))
+                if "queryQuickLooks" in parts:
+                    self._zipDir(
+                        zf, Utils.getQuickLookDir(), "queryQuickLooks", (".json", ".txt")
+                    )
+                if "sqlQuickLooks" in parts:
+                    self._zipDir(
+                        zf, Utils.getSqlSnippetDir(), "sqlQuickLooks", (".sql",)
+                    )
+                if "config" in parts:
+                    cfg = Utils.getConfigPath()
+                    if os.path.isfile(cfg):
+                        zf.write(cfg, "config/user.config")
+        except Exception as e:
+            Logic.logException("export profile failed", e)
+            QMessageBox.warning(self, "Export", f"Could not export:\n{e}")
+            return
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Exported profile to {path} parts={parts}")
+        QMessageBox.information(self, "Export", f"Saved {path}")
+
+    def onImportProfile(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import profile zip", "", "Zip (*.zip);;All files (*)"
+        )
+        if not path:
+            return
+        try:
+            imported = self._importProfilePath(path)
+        except ValueError as e:
+            QMessageBox.warning(self, "Import", str(e))
+            return
+        except Exception as e:
+            Logic.logException("import profile failed", e)
+            QMessageBox.warning(self, "Import", f"Could not import:\n{e}")
+            return
+        self._refreshAfterImport()
+        QMessageBox.information(self, "Import", "Imported:\n" + "\n".join(imported))
+
+    def _importProfilePath(self, path):
+        if os.path.isdir(path):
+            return self._importProfileDir(path)
+        if not zipfile.is_zipfile(path):
+            raise ValueError("That file is not a zip archive.")
+        tmp = tempfile.mkdtemp(prefix="dd-profile-")
+        try:
+            with zipfile.ZipFile(path, "r") as zf:
+                rootReal = os.path.realpath(tmp) + os.sep
+                for info in zf.infolist():
+                    dest = os.path.realpath(os.path.join(tmp, info.filename))
+                    if not (dest + os.sep).startswith(rootReal) and dest != os.path.realpath(tmp):
+                        raise ValueError("Zip contains invalid paths.")
+                zf.extractall(tmp)
+            return self._importProfileDir(tmp)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def _profileRoot(self, folder):
+        if os.path.isfile(os.path.join(folder, PROFILE_MANIFEST)):
+            return folder
+        names = [n for n in os.listdir(folder) if not n.startswith(".")]
+        if len(names) == 1:
+            inner = os.path.join(folder, names[0])
+            if os.path.isdir(inner):
+                if os.path.isfile(os.path.join(inner, PROFILE_MANIFEST)):
+                    return inner
+                return inner
+        for name in ("queryQuickLooks", "sqlQuickLooks", "config"):
+            if os.path.isdir(os.path.join(folder, name)):
+                return folder
+        if os.path.isfile(os.path.join(folder, "user.config")):
+            return folder
+        return None
+
+    def _importProfileDir(self, folder):
+        root = self._profileRoot(folder)
+        if root is None:
+            raise ValueError(
+                "This is not a Data Doctor profile zip "
+                "(no query Quick Looks, SQL Quick Looks, or config)."
+            )
+        manPath = os.path.join(root, PROFILE_MANIFEST)
+        parts = []
+        if os.path.isfile(manPath):
+            with open(manPath, encoding="utf-8") as f:
+                man = json.load(f)
+            if not isinstance(man, dict):
+                raise ValueError("Profile manifest is not valid.")
+            if man.get("kind") != PROFILE_KIND and man.get("app") != "DataDoctor":
+                raise ValueError("This zip is not a Data Doctor profile.")
+            parts = list(man.get("parts") or [])
+        if not parts:
+            if os.path.isdir(os.path.join(root, "queryQuickLooks")):
+                parts.append("queryQuickLooks")
+            if os.path.isdir(os.path.join(root, "sqlQuickLooks")):
+                parts.append("sqlQuickLooks")
+            if os.path.isdir(os.path.join(root, "config")) or os.path.isfile(
+                os.path.join(root, "user.config")
+            ):
+                parts.append("config")
+        if not parts:
+            raise ValueError("This zip has nothing to import.")
+        imported = []
+        if "queryQuickLooks" in parts:
+            src = os.path.join(root, "queryQuickLooks")
+            if os.path.isdir(src):
+                dest = Utils.getQuickLookDir()
+                os.makedirs(dest, exist_ok=True)
+                n = 0
+                for name in os.listdir(src):
+                    if name.endswith((".json", ".txt")):
+                        shutil.copy2(os.path.join(src, name), os.path.join(dest, name))
+                        n += 1
+                imported.append(f"Query Quick Looks ({n})")
+        if "sqlQuickLooks" in parts:
+            src = os.path.join(root, "sqlQuickLooks")
+            if os.path.isdir(src):
+                dest = Utils.getSqlSnippetDir()
+                os.makedirs(dest, exist_ok=True)
+                n = 0
+                for name in os.listdir(src):
+                    if name.endswith(".sql"):
+                        shutil.copy2(os.path.join(src, name), os.path.join(dest, name))
+                        n += 1
+                imported.append(f"SQL Quick Looks ({n})")
+        if "config" in parts:
+            src = os.path.join(root, "config", "user.config")
+            if not os.path.isfile(src):
+                src = os.path.join(root, "user.config")
+            if os.path.isfile(src):
+                with open(src, encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, dict):
+                    raise ValueError("Config in the zip is not valid.")
+                shutil.copy2(src, Utils.getConfigPath())
+                imported.append("Config")
+        if not imported:
+            raise ValueError("This zip has nothing to import.")
+        return imported
+
+    def _refreshAfterImport(self):
+        Utils.reloadGlobals()
+        Utils.applyColorTheme()
+        self.loadSettings()
+        win = self.winMain
+        if win is None:
+            return
+        try:
+            q = getattr(win, "winQuery", None)
+            cb = getattr(q, "cbQuickLook", None) if q is not None else None
+            if cb is not None:
+                Utils.loadQuickLooks(cb)
+        except Exception as e:
+            Logic.logException("import profile: refresh Quick Looks failed", e)
+        try:
+            if hasattr(win, "loadSnippets"):
+                win.loadSnippets()
+        except Exception as e:
+            Logic.logException("import profile: refresh SQL snippets failed", e)
 
     def onUpdatePasswordPressed(self):
         """Change the Oracle password on checked Access List databases only."""
