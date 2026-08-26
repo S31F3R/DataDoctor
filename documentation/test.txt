@@ -24,6 +24,15 @@ Current Tests
      d. No GitHub token / password fields in Options.
      e. One Report click → one browser tab (not two).
 
+[ ] sqlnet.log Fatals — only new, in app.log time order
+   Steps:
+     a. Existing sqlnet.log with old Fatals (hours earlier). Start Data Doctor
+        and run a query that does not fail.
+     b. app.log / Log Viewer must NOT dump those old Fatals at query time.
+     c. Cause a new Oracle Fatal during a query. A sqlnet.log ERROR line appears
+        among the other lines from that query (same minute), not as a blob of
+        older Instant Client history.
+
 [ ] Log rotation + viewer reloads all app.log*
    Steps:
      a. Let app.log grow past ~1 MB (debug on + a few fat queries, or copy a

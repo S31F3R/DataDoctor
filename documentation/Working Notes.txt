@@ -20,3 +20,5 @@ resets this file to this template.
 - MCS pool no longer pings idle sessions (Windows 0x80100070 cert-cache fatal)
 - app.log rotation: faulthandler no longer locks the file; Windows copy+truncate
   fallback; Log Viewer reloads app.log + app.log.1…5
+- sqlnet.log: ingest only bytes appended this process (no old Fatal dump);
+  ERROR lines sit in the live app.log timeline
