@@ -9,6 +9,7 @@ import logging
 import traceback
 import threading
 import faulthandler
+import shutil
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
 from PyQt6.QtCore import QThreadPool, QDir, QObject, pyqtSignal
@@ -336,6 +337,39 @@ def ensureAquariusPem():
     logMessage("WARN", "ensureAquariusPem: could not build aquarius.pem from certs/")
     return None
 
+class AppRotatingFileHandler(RotatingFileHandler):
+    """
+    1 MB × 5 backups (app.log, app.log.1 … app.log.5).
+
+    Windows cannot rename a file that another handle still holds. A failed
+    rollover used to abort emit(), so the live Log Viewer (Qt handler) kept
+    showing lines while disk stayed frozen on the old app.log. Copy + truncate
+    if rename fails so backups still appear.
+    """
+
+    def rotate(self, source, dest):
+        if not source or not os.path.exists(source):
+            return
+        try:
+            if os.path.exists(dest):
+                os.remove(dest)
+            os.rename(source, dest)
+            return
+        except OSError as renameErr:
+            try:
+                shutil.copyfile(source, dest)
+                with open(source, 'r+b') as f:
+                    f.truncate(0)
+                    f.flush()
+                    os.fsync(f.fileno())
+            except OSError as copyErr:
+                sys.stderr.write(
+                    f"[ERROR] app.log rollover failed "
+                    f"rename={renameErr!r} copy={copyErr!r}\n"
+                )
+                raise
+
+
 def initLogging():
     global loggingInitialized, logNotifier
 
@@ -358,7 +392,9 @@ def initLogging():
     
     # File handler: Log to rotating file with timestamps
     filePath = Utils.getLogPath('app.log')
-    fileHandler = RotatingFileHandler(filePath, maxBytes=1048576, backupCount=5, encoding='utf-8') # 1MB max, 5 backups
+    fileHandler = AppRotatingFileHandler(
+        filePath, maxBytes=1048576, backupCount=5, encoding='utf-8',
+    )
     fileHandler.setLevel(logging.DEBUG) # Log all
     fileFormatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
     fileHandler.setFormatter(fileFormatter)
@@ -377,8 +413,9 @@ def initLogging():
     
     loggingInitialized = True
 
-    # Capture hard crashes (segfaults, etc.) into the same log when possible
-    enableFaultHandler(filePath)
+    # Native faults go to a separate file so that handle does not lock app.log
+    # (Windows cannot rotate a log that faulthandler still has open).
+    enableFaultHandler()
 
     # Python warnings → same file/console/UI handlers as app logs
     enableWarningCapture()
@@ -395,13 +432,15 @@ def initLogging():
             )
         )
 
-def enableFaultHandler(filePath):
-    """Dump fatal interpreter/native faults into app.log (best-effort)."""
+def enableFaultHandler():
+    """Dump fatal interpreter/native faults to fault.log (not app.log)."""
     global faultLogFile
     try:
         if faultLogFile is not None:
             return
-        faultLogFile = open(filePath, 'a', encoding='utf-8')
+        faultPath = Utils.getLogPath('fault.log')
+        os.makedirs(os.path.dirname(faultPath), exist_ok=True)
+        faultLogFile = open(faultPath, 'a', encoding='utf-8')
         faulthandler.enable(file=faultLogFile, all_threads=True)
     except Exception:
         try:
