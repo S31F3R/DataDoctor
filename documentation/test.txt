@@ -6,28 +6,14 @@ Workflow / publish how-to: documentation/status.grok (gitignored).
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Windows System Default appearance (dark OS → dark app)
-   Steps:
-     a. Windows: set Settings → Personalization → Colors → Choose your mode
-        (or apps mode) to Dark. Data Doctor Options → Appearance → Color Theme
-        = System → Save.
-     b. App chrome, tables, and Options match Dark (not Light).
-     c. Switch Windows to Light with Theme still System → app is light.
-     d. Manual Dark / Light still override the OS.
-
 [ ] SQL History button hover after double-click
    Steps:
      a. SQL Query Builder → History → double-click a saved query.
      b. Dialog closes. History icon is the normal (not hover/pressed) art
         until the pointer actually goes back over the button.
-
-[ ] Hide/Unhide password buttons (Oracle, Aquarius, USGS)
-   Steps:
-     a. Options → Oracle, Aquarius, USGS. Each secret field has Hide/Unhide
-        at the RIGHT end of the text box (not behind it, not in the middle).
-     b. The field sits under its label, not covering it. Rows below are not
-        stretched sideways.
-     c. Click Hide/Unhide: mask/reveal works. Re-open Options: secrets masked.
+      RESPONSE: Still stays highlighted like it's on the hoover
+      (retest — fake Enter after the dialog was applying hover even when
+      the pointer was not on the button)
 
 [ ] Oracle auth lock is per-database + timed
    Steps:
@@ -36,14 +22,6 @@ Current Tests
      b. Retrying the failed DB is blocked with a remaining-time note (~5 min).
      c. After 5 minutes, or after saving Oracle credentials in Options, that
         DB can be tried again. Restart is not required.
-
-[ ] SQL Query Builder dark-mode pane color (Windows)
-   Steps:
-     a. Dark theme (System-dark or Dark). Open SQL Query Builder.
-     b. Query editor, result table, and snippet list use the darker Base
-        fill (same as a new query tab). Light theme unchanged.
-     c. New query tabs / result tabs match that darker pane. Closing the
-        first tab does not leave mixed colors.
 
 [ ] Profile import merge / overwrite / rename + SQL categories
    Steps:
@@ -54,26 +32,6 @@ Current Tests
      c. SQL zip: choose With categories vs Without. Without → new snippets
         Uncategorized. With → zip folder assignments apply.
      d. Random/non-profile zip still errors and changes nothing.
-
-[ ] CSV export = focused SQL result tab
-   Steps:
-     a. SQL Query Builder: pin a result, run another query so two result
-        tabs exist. Click one, Export CSV. Only that tab's grid is in the
-        file.
-     b. Data Query tab still exports the series table.
-
-[ ] Oracle Access List filters Internal + SQL, not Public
-   Steps:
-     a. Options → Oracle → uncheck one HDB → Save.
-     b. Internal Query and SQL Query Builder combos omit that HDB.
-     c. Public Query still lists it. Data Dictionary still lists it.
-
-[ ] SQL snippet right-click Delete (pane + Categories)
-   Steps:
-     a. SQL snippet list → right-click a snippet → Delete → confirm → file
-        gone and list updates.
-     b. Categories dialog → right-click a snippet in a category → Delete
-        works the same. Move Up/Down still there.
 
 [ ] USBR Overwrite Flag on upload
    Steps:
@@ -113,6 +71,12 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Windows System Default appearance (dark OS → dark app)
+[x] Hide/Unhide password buttons (Oracle, Aquarius, USGS)
+[x] SQL Query Builder dark-mode pane color (Windows)
+[x] CSV export = focused SQL result tab
+[x] Oracle Access List filters Internal + SQL, not Public
+[x] SQL snippet right-click Delete (pane + Categories)
 [x] Options Export / Import profile zip
 [x] sqlnet.log Fatals — only new, in app.log time order
 [x] Options left categories (Kate-style) + Light/Dark as real palettes
