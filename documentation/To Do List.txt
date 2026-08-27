@@ -1,10 +1,6 @@
 ####### CURRENT TASKS #######
 
 ####### CURRENT BUGS #######
-
-####### NEW FEATURES #######
--Create a plot tool that allows users to build different data plots and save that plot config as a quick look
-    -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
-    -Add a plot that graphs delta pair and overlays delta as a seperate line
--Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)
--Get OAuth App for GitHub stuffs
+-Getting these warnings in log:
+    2026-08-27 06:27:53,271 [WARNING] Qt [default]: QSplitter::setCollapsible: Index 1 out of range
+    2026-08-27 06:27:53,270 [WARNING] Qt [default]: QSplitter::setCollapsible: Index 0 out of range
