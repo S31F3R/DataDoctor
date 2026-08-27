@@ -10,14 +10,3 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
-- Windows System appearance follows OS dark/light (AppsUseLightTheme)
-- SQL History / Categories buttons no longer stay in hover after a dialog
-  (retest: ignore fake Enter after the modal unless the cursor is on the button)
-- Options Hide/Unhide sits at the right of Oracle, Aquarius, and USGS secret fields
-- Oracle auth fail-fast is per database with a 5-minute pause (not all HDBs)
-- SQL Query Builder dark panes use Base (editor, results, snippet list)
-- Profile import merges Quick Looks with overwrite / skip / rename; SQL categories optional
-- CSV export uses the focused SQL result tab
-- Oracle Access List filters Internal Query and SQL Query Builder (Public still shows all)
-- SQL snippets: right-click Delete in the pane and in Categories
-

@@ -6,16 +6,22 @@ Workflow / publish how-to: documentation/status.grok (gitignored).
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] SQL History button hover after double-click
+[x] Graph Ctrl + mouse wheel zoom
    Steps:
-     a. SQL Query Builder → History → double-click a saved query.
-     b. Dialog closes. History icon is the normal (not hover/pressed) art
-        until the pointer actually goes back over the button.
-      RESPONSE: Still stays highlighted like it's on the hoover
-      (retest — fake Enter after the dialog was applying hover even when
-      the pointer was not on the button)
+     a. Plot a Data Query series (Graph). Hold Ctrl and scroll the wheel over
+        the plot. Time axis zooms toward the pointer. Y refits to visible data.
+     b. Wheel without Ctrl does not zoom. Zoom stays inside the data range
+        (cannot pan/zoom past the series). Back/Home still work.
 
-[ ] Oracle auth lock is per-database + timed
+[x] AppImage tab close buttons
+   Steps:
+     a. Run the Linux AppImage (not the venv). Main tabs (Data Query, SQL,
+        Graph, Log) show the close X. Hover/press still swap the icon.
+     b. SQL Query Builder query tabs still show close. Retro close icons too
+        if retro is on.
+     c. Dev/venv and Windows zip still show close buttons (not AppImage-only).
+
+[x] Oracle auth lock is per-database + timed
    Steps:
      a. SQL Query Builder: pick an HDB you cannot log into → Run. Wrong
         username/password dialog. Other HDBs in the combo still run.
@@ -23,7 +29,7 @@ Current Tests
      c. After 5 minutes, or after saving Oracle credentials in Options, that
         DB can be tried again. Restart is not required.
 
-[ ] Profile import merge / overwrite / rename + SQL categories
+[x] Profile import merge / overwrite / rename + SQL categories
    Steps:
      a. Export SQL Quick Looks (and Query Quick Looks). Import into a profile
         that already has some of those names.
@@ -33,7 +39,7 @@ Current Tests
         Uncategorized. With → zip folder assignments apply.
      d. Random/non-profile zip still errors and changes nothing.
 
-[ ] USBR Overwrite Flag on upload
+[x] USBR Overwrite Flag on upload
    Steps:
      a. Options → USBR → Overwrite Flag off → Save. Edit an existing HDB value
         and Upload. Debug/log: OVERWRITE_FLAG NULL. Existing HDB value is not
@@ -42,7 +48,7 @@ Current Tests
         OVERWRITE_FLAG='O'. The HDB value is replaced.
      c. Freehand SQL in SQL Query Builder is unchanged (no auto flag).
 
-[ ] Windows package: empty certs/ + first-run applyUpdate.cmd
+[x] Windows package: empty certs/ + first-run applyUpdate.cmd
    Steps:
      a. Unzip DataDoctor-Windows-*.zip. Project Files\certs\ exists
         (README ok; empty is fine).
@@ -71,6 +77,7 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] SQL History button hover after double-click
 [x] Windows System Default appearance (dark OS → dark app)
 [x] Hide/Unhide password buttons (Oracle, Aquarius, USGS)
 [x] SQL Query Builder dark-mode pane color (Windows)
