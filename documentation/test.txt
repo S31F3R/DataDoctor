@@ -65,7 +65,7 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[ ] Update check after a real release (when you publish one)
+[x] Update check after a real release (when you publish one)
    Steps:
      a. Bump Version.VERSION lower than a published tag OR publish a higher tag with assets:
         - Launcher: DataDoctor-Python.zip (or *python*.zip)
