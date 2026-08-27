@@ -1160,8 +1160,10 @@ class SqlWorkbench:
 
         buttons.accepted.connect(loadCurrent)
         lst.itemDoubleClicked.connect(lambda _i: loadCurrent())
-        dlg.exec()
-        Utils.resetStyledButtonHover(self.btnHistory)
+        try:
+            dlg.exec()
+        finally:
+            Utils.resetStyledButtonHover(self.btnHistory)
 
     def _applyHistory(self, entry):
         editor = self.currentEditor()
@@ -1236,8 +1238,10 @@ class SqlWorkbench:
         self.loadSnippets()
 
     def manageCategories(self):
-        SnippetCategoryDialog(self).exec()
-        Utils.resetStyledButtonHover(self.btnCatagory)
+        try:
+            SnippetCategoryDialog(self).exec()
+        finally:
+            Utils.resetStyledButtonHover(self.btnCatagory)
         self._loadCategories()
 
     def loadSnippets(self):

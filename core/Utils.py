@@ -1209,6 +1209,18 @@ def loadDatabase(comboBox, queryType=None):
         if Config.debug:
             Logic.logMessage("ERROR", "cbDatabase is None, cannot populate")
 
+def _iconButtonCursorOver(widget):
+    """True if the cursor is inside widget. Do not use underMouse() — it sticks after modals."""
+    if widget is None:
+        return False
+    try:
+        if not widget.isVisible() or not widget.isEnabled():
+            return False
+        return widget.rect().contains(widget.mapFromGlobal(QCursor.pos()))
+    except Exception:
+        return False
+
+
 def buttonStyle(button, iconName=None, iconSize=None):
     """Apply flat, borderless style to a QPushButton with hover/press effects using resized icons if iconName provided."""
     if iconName:
@@ -1238,35 +1250,49 @@ def buttonStyle(button, iconName=None, iconSize=None):
             pressedPixmap = pressedPixmap.scaled(iconSize, iconSize, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             button.setIconSize(QSize(iconSize, iconSize))  # For icon-only buttons
 
-        # Set initial icon
-        button.setIcon(QIcon(normalPixmap))
+        normalIcon = QIcon(normalPixmap)
+        hoverIcon = QIcon(hoverPixmap)
+        pressedIcon = QIcon(pressedPixmap)
+        button._ddNormalIcon = normalIcon
+        button._ddHoverIcon = hoverIcon
+        button._ddPressedIcon = pressedIcon
+        button.setIcon(normalIcon)
+        button.setFlat(True)
+        button.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
         # Define local event filter for state swaps
         class ButtonEventFilter(QObject):
             def eventFilter(self, obj, event):
                 et = event.type()
-                if et == QEvent.Type.Enter:
-                    obj.setIcon(QIcon(hoverPixmap))
-                elif et in (QEvent.Type.Leave, QEvent.Type.Hide):
-                    obj.setIcon(QIcon(normalPixmap))
+                if et in (QEvent.Type.Enter, QEvent.Type.HoverEnter):
+                    # Windows posts a fake Enter after a modal (History). Only
+                    # hover if the cursor is actually over the button.
+                    if _iconButtonCursorOver(obj):
+                        obj.setIcon(hoverIcon)
+                    else:
+                        obj.setIcon(normalIcon)
+                        obj.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+                elif et in (
+                    QEvent.Type.Leave,
+                    QEvent.Type.HoverLeave,
+                    QEvent.Type.Hide,
+                ):
+                    obj.setIcon(normalIcon)
                 elif et == QEvent.Type.MouseButtonPress:
-                    obj.setIcon(QIcon(pressedPixmap))
+                    obj.setIcon(pressedIcon)
                 elif et == QEvent.Type.MouseButtonRelease:
-                    # Modal dialogs (History, Categories) can leave underMouse()
-                    # stuck True on Windows until a later hover. Sync from cursor.
                     def syncIcon():
                         try:
-                            pos = obj.mapFromGlobal(QCursor.pos())
-                            if (
-                                obj.isVisible()
-                                and obj.isEnabled()
-                                and obj.rect().contains(pos)
-                            ):
-                                obj.setIcon(QIcon(hoverPixmap))
+                            if _iconButtonCursorOver(obj):
+                                obj.setIcon(hoverIcon)
                             else:
-                                obj.setIcon(QIcon(normalPixmap))
+                                obj.setIcon(normalIcon)
+                                obj.setAttribute(
+                                    Qt.WidgetAttribute.WA_UnderMouse, False
+                                )
                         except Exception:
-                            obj.setIcon(QIcon(normalPixmap))
+                            obj.setIcon(normalIcon)
+                    syncIcon()
                     QTimer.singleShot(0, syncIcon)
                 return super().eventFilter(obj, event)
 
@@ -1891,12 +1917,29 @@ def resetStyledButtonHover(button):
     """Clear a stuck hover/pressed icon after a modal dialog (Windows)."""
     if button is None:
         return
-    try:
-        button.setDown(False)
-        button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
-        QApplication.sendEvent(button, QEvent(QEvent.Type.Leave))
-    except Exception:
-        pass
+
+    def apply():
+        try:
+            over = _iconButtonCursorOver(button)
+            button.setDown(False)
+            if not over:
+                button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+            icon = getattr(
+                button, '_ddHoverIcon' if over else '_ddNormalIcon', None
+            )
+            if icon is not None:
+                button.setIcon(icon)
+            st = button.style()
+            if st is not None:
+                st.unpolish(button)
+                st.polish(button)
+            button.update()
+        except Exception:
+            pass
+
+    apply()
+    QTimer.singleShot(0, apply)
+    QTimer.singleShot(50, apply)
 
 
 def _restoreNativePalette(app):
