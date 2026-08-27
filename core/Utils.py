@@ -707,17 +707,25 @@ def applyCompactListStyle(listWidget):
     if name not in compactListObjectNames:
         return
     try:
+        existing = listWidget.styleSheet() or ''
+        panePrefix = ''
+        if '/*sql-pane-base*/' in existing:
+            panePrefix = (
+                "/*sql-pane-base*/\n"
+                "background-color: palette(base);\n"
+                "color: palette(text);\n"
+            )
         if Config.retroMode:
-            # Clear widget-local override so app-level retro list padding applies
-            # (don't wipe thick scrollbar styles if any were set only here)
-            existing = listWidget.styleSheet() or ''
-            if '/*compact-list*/' in existing:
-                listWidget.setStyleSheet('')
+            # Clear compact-list override so app-level retro padding applies.
+            # Keep sql-pane-base so the snippet list stays Base in dark mode.
+            listWidget.setStyleSheet(panePrefix)
             listWidget.setSpacing(0)
             return
         if sys.platform == 'win32':
             listWidget.setSpacing(0)
-            listWidget.setStyleSheet("""
+            listWidget.setStyleSheet(
+                panePrefix
+                + """
                 /*compact-list*/
                 QListWidget::item {
                     padding-top: 0px;
@@ -726,13 +734,13 @@ def applyCompactListStyle(listWidget):
                     padding-right: 2px;
                     min-height: 0px;
                 }
-            """)
+            """
+            )
         else:
             # Linux/macOS non-retro: leave native metrics (looked correct)
             listWidget.setSpacing(0)
-            existing = listWidget.styleSheet() or ''
             if '/*compact-list*/' in existing:
-                listWidget.setStyleSheet('')
+                listWidget.setStyleSheet(panePrefix)
     except Exception as e:
         if Config.debug:
             Logic.logMessage("DEBUG", f"applyCompactListStyle({name}) failed: {e}")
