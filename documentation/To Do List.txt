@@ -1,6 +1,40 @@
 ####### CURRENT TASKS #######
+-Make the save button keep the options window open
+    -Cancel button should say Close if there were no changes made. If there were changes made, make the text on the button say Cancel
+-Data ID Search needs the siteID in there
+-Wiki needs a section that defines what a dataID is, siteID, etc. This is different depending on the database
+    -dataID for USBR = SDIDs
+    -dataID for Aquarius = timeseries UID
+-dataID and siteID sorting seem to be sorting based on text. There is a mixture of text and numbers in there. maybe we can sort by number first then sort by text? not sure if that's possible but would be nice  
+-Add a label to the left of import/export buttons that says Profile:
+-In the query window, need the ability to select multiple rows in query list to either delete, move up or down with the buttons
+    -No insert above or below when multiple are selected. I think that would get too confusing for the logic to work cleanly
+    -When moving up, the top most item needs to be the "stopper" when moving up the list. If it hits the edge, make sure it doesn't break the code
+        -For the bottom, use the bottom for the same reason
+-Add another row in the query window under Query Options. Going to add 2 more check boxes, one for Raw Data and the other for QAQC
+    -This means in the Options window, we're moving where Raw Data and Quality Control Checks are at
+    -These 2 options also need to be remembered and forgotten the same way overlay and deltas are in quicklooks
+        -Default is everything unchecked, the same code that exists now for deltas and overlay
+    -Update wiki and query options info with this new change
+-Have quick looks remember if previous day to current or previous 7 days to current is selected
+    -Make these use the same refresh code, meaning we're not storying the query dates, just knowing thoe are the 2 selections and how far to go back from current time
+    -If custom was selected, use the normal custom logic. Custom will also be the default
 
 ####### CURRENT BUGS #######
 -Getting these warnings in log:
     2026-08-27 06:27:53,271 [WARNING] Qt [default]: QSplitter::setCollapsible: Index 1 out of range
     2026-08-27 06:27:53,270 [WARNING] Qt [default]: QSplitter::setCollapsible: Index 0 out of range
+-On a machine without oracle installed, but a valid TNS names, the packaged oracle is being used and it's trying to load the tnsnames from the packaged oracle
+    -Options shows TNS Names Location as: C:\Program Files\Oracle\Network\Admin
+    -Error is looking: c:\program files\data doctor\project files\oracle\client\network\admin\
+    -This makes me think machines with Oracle installed are using that Oracle and not the packaged oracle
+    -Packaged oracle should always be used. TNS names priority is use env variable one. If not in there, then use one that's in the packaged oracle
+        -We don't package tnsnames.ora so the user would have to place one there. Make sure this is in the wiki
+        -sqlnet.ora also comes from the same location the tnsnames.ora. Same rules
+-Issue from yesterday where dark mode background would be lighter for the default SQL Builder tables but change to darker on new ones is happening on Light mode, but with the background of the buttons on Light mode
+    -This isn't 100%. I can't duplicate it but a fresh install of the program on anothers computer using System mode with system set to light is producting weird behavior on radio and check box buttons. Dark background and unable to tell if it's checked
+        -The computer this was happening on doesn't have the issue with dark mode
+    -Other than seperate computers, the system are identical so not sure what the cause could be
+-Previous issue with the SQL Query Build History button holding the hoover image is happening on multiple buttons. I'm not sure if it's the button code or where the issue is Attach
+    -Confirmed buttons that have this bug are the info buttons, data table refresh button. I'd assume data table upload and reset button have it all
+        -Might be best to assume all buttons could have this and look at the difference in there code and the changes made to the History button to fix it
