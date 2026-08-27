@@ -3,10 +3,12 @@
 import os
 import sys
 import json
+import re
 import configparser
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
@@ -886,6 +888,44 @@ def retroSpacingStylesheet():
     """
 
 
+_QSS_URL_RE = re.compile(r'url\(\s*[\'"]?([^)\'"]+)[\'"]?\s*\)')
+
+
+def resolveStylesheetUrls(qss):
+    """
+    Rewrite QSS url(...) to absolute paths.
+
+    Relative urls (ui/icons/Tab-close-dark.png) are resolved from CWD, which
+    is wrong in an AppImage / frozen launch. resourcePath stays valid.
+    """
+    if not qss:
+        return qss
+
+    def repl(match):
+        raw = (match.group(1) or '').strip()
+        if not raw:
+            return match.group(0)
+        lower = raw.lower()
+        if lower.startswith('file:') or lower.startswith('qrc:'):
+            return match.group(0)
+        if raw.startswith('/') or (len(raw) > 1 and raw[1] == ':'):
+            try:
+                posix = Path(raw).as_posix()
+            except Exception:
+                posix = raw.replace('\\', '/')
+            return f'url("{posix}")'
+        path = Logic.resourcePath(raw)
+        try:
+            posix = Path(path).resolve().as_posix()
+        except Exception:
+            posix = str(path).replace('\\', '/')
+        if Config.debug and not os.path.isfile(path):
+            Logic.logMessage("DEBUG", f"QSS url missing: {raw} -> {path}")
+        return f'url("{posix}")'
+
+    return _QSS_URL_RE.sub(repl, qss)
+
+
 def readBaseStylesheet():
     """
     Base qss (hover, tab close) + mode/platform item spacing.
@@ -899,7 +939,9 @@ def readBaseStylesheet():
     except Exception as e:
         Logic.logMessage("ERROR", f"Could not read stylesheet {path}: {e}")
         base = ""
-    return base + "\n" + retroSpacingStylesheet() + "\n" + nonRetroPlatformStylesheet()
+    return resolveStylesheetUrls(
+        base + "\n" + retroSpacingStylesheet() + "\n" + nonRetroPlatformStylesheet()
+    )
 
 
 def propagateUiFont(app, font=None):
