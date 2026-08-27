@@ -701,7 +701,10 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             dataTypeCol = getColByName(dataDictionaryTable, 'dataType')
             dataTypeItem = dataDictionaryTable.item(dictRow, dataTypeCol) if dataTypeCol != -1 else None
             dataType = dataTypeItem.text().strip() if dataTypeItem and dataTypeItem.text().strip() else ''
-            nameLabel = f"{baseLabel}-{dataType}" if dataType else baseLabel
+            if dataType and Utils.includeDataTypeInLabel(database):
+                nameLabel = f"{baseLabel}-{dataType}"
+            else:
+                nameLabel = baseLabel
 
             if database == 'USGS-NWIS':
                 # Dictionary hit with a real commonName: "commonName-datatype" on top,

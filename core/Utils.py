@@ -3,17 +3,22 @@
 import os
 import sys
 import json
+import re
 import configparser
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
     QListWidget, QTreeView, QPushButton, QCheckBox, QRadioButton, QComboBox,
-    QApplication, QHeaderView,
+    QApplication, QHeaderView, QStyleFactory,
 )
-from PyQt6.QtGui import QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon, QPixmap
+from PyQt6.QtGui import (
+    QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon,
+    QPixmap, QPalette, QColor, QCursor,
+)
 from core import Logic, Config, Utils
 
 # Bundled fonts (cross-platform):
@@ -56,14 +61,6 @@ controlLayouts = {
         'btnRefresh': (4, 6, 32, 32),
         'btnUndo': (40, 6, 32, 32),
         'btnUpload': (76, 6, 32, 32),
-        # winOptions
-        'chkbRawData': (74, 60, 21, 22),
-        'chkbQAQC': (156, 90, 21, 22),
-        'chkbRetroMode': (88, 120, 21, 22),
-        'chkbDebug': (96, 150, 21, 22),
-        'chkbBetaUpdates': (100, 180, 21, 22),      # match winOptions.ui non-retro (after "Beta updates:")
-        'rbBOP': (210, 0, 141, 22),                 # .ui
-        'rbEOP': (350, 0, 131, 22),                 # .ui
         # winQuery
         'btnDataIdInfo': (376, 5, 31, 20),
         'btnIntervalInfo': (100, 76, 31, 20),
@@ -75,13 +72,6 @@ controlLayouts = {
         'btnRefresh': (38, 8, 32, 32),
         'btnUndo': (74, 8, 32, 32),
         'btnUpload': (110, 8, 32, 32),
-        'chkbRawData': (108, 60, 21, 22),
-        'chkbQAQC': (261, 88, 21, 22),              # was 259; RESPONSE +2 x
-        'chkbRetroMode': (130, 119, 21, 22),        # was 132; RESPONSE -2 x
-        'chkbDebug': (130, 149, 21, 22),
-        'chkbBetaUpdates': (150, 179, 21, 22),      # Press Start wider "Beta updates:" (-20 x)
-        'rbBOP': (193, 0, 141, 22),                 # was 199; -6 x
-        'rbEOP': (350, 0, 131, 22),
         'btnDataIdInfo': (406, 5, 31, 20),
         'btnIntervalInfo': (164, 76, 31, 20),
         'btnQueryOptionsInfo': (164, 401, 31, 20),
@@ -719,17 +709,25 @@ def applyCompactListStyle(listWidget):
     if name not in compactListObjectNames:
         return
     try:
+        existing = listWidget.styleSheet() or ''
+        panePrefix = ''
+        if '/*sql-pane-base*/' in existing:
+            panePrefix = (
+                "/*sql-pane-base*/\n"
+                "background-color: palette(base);\n"
+                "color: palette(text);\n"
+            )
         if Config.retroMode:
-            # Clear widget-local override so app-level retro list padding applies
-            # (don't wipe thick scrollbar styles if any were set only here)
-            existing = listWidget.styleSheet() or ''
-            if '/*compact-list*/' in existing:
-                listWidget.setStyleSheet('')
+            # Clear compact-list override so app-level retro padding applies.
+            # Keep sql-pane-base so the snippet list stays Base in dark mode.
+            listWidget.setStyleSheet(panePrefix)
             listWidget.setSpacing(0)
             return
         if sys.platform == 'win32':
             listWidget.setSpacing(0)
-            listWidget.setStyleSheet("""
+            listWidget.setStyleSheet(
+                panePrefix
+                + """
                 /*compact-list*/
                 QListWidget::item {
                     padding-top: 0px;
@@ -738,13 +736,13 @@ def applyCompactListStyle(listWidget):
                     padding-right: 2px;
                     min-height: 0px;
                 }
-            """)
+            """
+            )
         else:
             # Linux/macOS non-retro: leave native metrics (looked correct)
             listWidget.setSpacing(0)
-            existing = listWidget.styleSheet() or ''
             if '/*compact-list*/' in existing:
-                listWidget.setStyleSheet('')
+                listWidget.setStyleSheet(panePrefix)
     except Exception as e:
         if Config.debug:
             Logic.logMessage("DEBUG", f"applyCompactListStyle({name}) failed: {e}")
@@ -890,6 +888,44 @@ def retroSpacingStylesheet():
     """
 
 
+_QSS_URL_RE = re.compile(r'url\(\s*[\'"]?([^)\'"]+)[\'"]?\s*\)')
+
+
+def resolveStylesheetUrls(qss):
+    """
+    Rewrite QSS url(...) to absolute paths.
+
+    Relative urls (ui/icons/Tab-close-dark.png) are resolved from CWD, which
+    is wrong in an AppImage / frozen launch. resourcePath stays valid.
+    """
+    if not qss:
+        return qss
+
+    def repl(match):
+        raw = (match.group(1) or '').strip()
+        if not raw:
+            return match.group(0)
+        lower = raw.lower()
+        if lower.startswith('file:') or lower.startswith('qrc:'):
+            return match.group(0)
+        if raw.startswith('/') or (len(raw) > 1 and raw[1] == ':'):
+            try:
+                posix = Path(raw).as_posix()
+            except Exception:
+                posix = raw.replace('\\', '/')
+            return f'url("{posix}")'
+        path = Logic.resourcePath(raw)
+        try:
+            posix = Path(path).resolve().as_posix()
+        except Exception:
+            posix = str(path).replace('\\', '/')
+        if Config.debug and not os.path.isfile(path):
+            Logic.logMessage("DEBUG", f"QSS url missing: {raw} -> {path}")
+        return f'url("{posix}")'
+
+    return _QSS_URL_RE.sub(repl, qss)
+
+
 def readBaseStylesheet():
     """
     Base qss (hover, tab close) + mode/platform item spacing.
@@ -903,7 +939,9 @@ def readBaseStylesheet():
     except Exception as e:
         Logic.logMessage("ERROR", f"Could not read stylesheet {path}: {e}")
         base = ""
-    return base + "\n" + retroSpacingStylesheet() + "\n" + nonRetroPlatformStylesheet()
+    return resolveStylesheetUrls(
+        base + "\n" + retroSpacingStylesheet() + "\n" + nonRetroPlatformStylesheet()
+    )
 
 
 def propagateUiFont(app, font=None):
@@ -1022,6 +1060,7 @@ def applyStylesAndFonts(app, mainTable, queryList):
     Config.utcOffset = config['utcOffset']
     Config.periodOffset = resolvePeriodOffset(config)
     Config.retroMode = config.get('retroMode', True)
+    Config.hdbOverwriteFlag = 'O' if config.get('hdbOverwriteFlag') else None
 
     # Pre-register the font for the active mode (and About always wants Press Start)
     if Config.retroMode:
@@ -1135,7 +1174,16 @@ def hdbSchemaForDatabase(dbName):
     return dsn.upper() + 'A'
 
 
-def programDatabases(queryType=None):
+def hdbAccessUncheckedNames():
+    """Display names the user turned off in Options → Oracle Access List."""
+    try:
+        names = loadConfig().get('hdbAccessUnchecked') or []
+    except Exception:
+        names = []
+    return set(str(n).strip() for n in names if str(n).strip())
+
+
+def programDatabases(queryType=None, applyAccessList=None):
     """
     Ordered list of database labels used by query combos / data dictionary.
 
@@ -1143,6 +1191,10 @@ def programDatabases(queryType=None):
       'internal' — include AQUARIUS + HDBs + public sources
       'sql'      — HDBs only (Oracle targets)
       None / other — public-style: HDBs + USGS + PNHYD + GPHYD (no AQUARIUS)
+
+    applyAccessList (default True for internal/sql, False otherwise):
+      skip HDBs the user unchecked. Public query always shows every HDB.
+      Data Dictionary should pass False so every source stays editable.
     """
     names = []
     seen = set()
@@ -1153,11 +1205,18 @@ def programDatabases(queryType=None):
             names.append(n)
             seen.add(n)
 
+    if applyAccessList is None:
+        applyAccessList = queryType in ('internal', 'sql')
+    unchecked = hdbAccessUncheckedNames() if applyAccessList else set()
+
     if queryType == 'internal':
         add('AQUARIUS')
 
     for entry in getattr(Config, 'hdbOracleDatabases', ()) or ():
-        add(hdbDatabaseLabel(entry))
+        label = hdbDatabaseLabel(entry)
+        if applyAccessList and label in unchecked:
+            continue
+        add(label)
 
     # Fallback if config empty
     if not any(n.startswith('USBR-') and n not in ('USBR-PNHYD', 'USBR-GPHYD') for n in names):
@@ -1165,6 +1224,8 @@ def programDatabases(queryType=None):
             'USBR-LCHDB', 'USBR-YAOHDB', 'USBR-UCHDB2',
             'USBR-ECOHDB', 'USBR-LBOHDB', 'USBR-KBOHDB',
         ):
+            if applyAccessList and name in unchecked:
+                continue
             add(name)
 
     if queryType != 'sql':
@@ -1189,6 +1250,18 @@ def loadDatabase(comboBox, queryType=None):
     else:
         if Config.debug:
             Logic.logMessage("ERROR", "cbDatabase is None, cannot populate")
+
+def _iconButtonCursorOver(widget):
+    """True if the cursor is inside widget. Do not use underMouse() — it sticks after modals."""
+    if widget is None:
+        return False
+    try:
+        if not widget.isVisible() or not widget.isEnabled():
+            return False
+        return widget.rect().contains(widget.mapFromGlobal(QCursor.pos()))
+    except Exception:
+        return False
+
 
 def buttonStyle(button, iconName=None, iconSize=None):
     """Apply flat, borderless style to a QPushButton with hover/press effects using resized icons if iconName provided."""
@@ -1219,25 +1292,59 @@ def buttonStyle(button, iconName=None, iconSize=None):
             pressedPixmap = pressedPixmap.scaled(iconSize, iconSize, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             button.setIconSize(QSize(iconSize, iconSize))  # For icon-only buttons
 
-        # Set initial icon
-        button.setIcon(QIcon(normalPixmap))
+        normalIcon = QIcon(normalPixmap)
+        hoverIcon = QIcon(hoverPixmap)
+        pressedIcon = QIcon(pressedPixmap)
+        button._ddNormalIcon = normalIcon
+        button._ddHoverIcon = hoverIcon
+        button._ddPressedIcon = pressedIcon
+        button.setIcon(normalIcon)
+        button.setFlat(True)
+        button.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
 
         # Define local event filter for state swaps
         class ButtonEventFilter(QObject):
             def eventFilter(self, obj, event):
-                if event.type() == QEvent.Type.Enter:
-                    obj.setIcon(QIcon(hoverPixmap))
-                elif event.type() == QEvent.Type.Leave:
-                    obj.setIcon(QIcon(normalPixmap))
-                elif event.type() == QEvent.Type.MouseButtonPress:
-                    obj.setIcon(QIcon(pressedPixmap))
-                elif event.type() == QEvent.Type.MouseButtonRelease:
-                    obj.setIcon(QIcon(hoverPixmap if obj.underMouse() else normalPixmap))
+                et = event.type()
+                if et in (QEvent.Type.Enter, QEvent.Type.HoverEnter):
+                    # Windows posts a fake Enter after a modal (History). Only
+                    # hover if the cursor is actually over the button.
+                    if _iconButtonCursorOver(obj):
+                        obj.setIcon(hoverIcon)
+                    else:
+                        obj.setIcon(normalIcon)
+                        obj.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+                elif et in (
+                    QEvent.Type.Leave,
+                    QEvent.Type.HoverLeave,
+                    QEvent.Type.Hide,
+                ):
+                    obj.setIcon(normalIcon)
+                elif et == QEvent.Type.MouseButtonPress:
+                    obj.setIcon(pressedIcon)
+                elif et == QEvent.Type.MouseButtonRelease:
+                    def syncIcon():
+                        try:
+                            if _iconButtonCursorOver(obj):
+                                obj.setIcon(hoverIcon)
+                            else:
+                                obj.setIcon(normalIcon)
+                                obj.setAttribute(
+                                    Qt.WidgetAttribute.WA_UnderMouse, False
+                                )
+                        except Exception:
+                            obj.setIcon(normalIcon)
+                    syncIcon()
+                    QTimer.singleShot(0, syncIcon)
                 return super().eventFilter(obj, event)
 
         # Install filter (remove any existing to avoid duplicates)
-        button.removeEventFilter(button)
-        button.installEventFilter(ButtonEventFilter(button))
+        oldFilt = getattr(button, '_ddIconFilter', None)
+        if oldFilt is not None:
+            button.removeEventFilter(oldFilt)
+        filt = ButtonEventFilter(button)
+        button._ddIconFilter = filt
+        button.installEventFilter(filt)
 
         # Apply flat stylesheet
         button.setStyleSheet("""
@@ -1475,6 +1582,11 @@ def loadConfig():
         'lastQuickLook': '',
         # stable = GitHub full releases only; beta = include pre-releases (-rc / -beta)
         'updateChannel': 'stable',
+        'colorTheme': 'system',
+        'labelDataTypeUSBR': True,
+        'labelDataTypeAquarius': True,
+        'labelDataTypeUSGS': True,
+        'hdbOverwriteFlag': False,
     }
 
     if os.path.exists(configPath):
@@ -1687,6 +1799,312 @@ def convertConfigToJson():
     elif Config.debug:
         Logic.logMessage("DEBUG", "No config.ini found or user.config exists, skipping conversion")
 
+_savedStyleName = None  # native style key before a Light/Dark Fusion override
+
+
+def _paletteIsDark(pal):
+    bg = pal.color(QPalette.ColorRole.Window)
+    lum = 0.2126 * bg.redF() + 0.7152 * bg.greenF() + 0.0722 * bg.blueF()
+    return lum < 0.45
+
+
+def _forcedSchemePalette(dark):
+    """Fusion-like palette so Light/Dark do not depend on the OS theme."""
+    pal = QPalette()
+    if dark:
+        window, base, alt = QColor(53, 53, 53), QColor(35, 35, 35), QColor(66, 66, 66)
+        text, button = QColor(255, 255, 255), QColor(53, 53, 53)
+        highlight, disabled = QColor(42, 130, 218), QColor(127, 127, 127)
+        placeholder = QColor(160, 160, 160)
+        tooltipBg, tooltipFg = QColor(53, 53, 53), QColor(255, 255, 255)
+    else:
+        window, base, alt = QColor(239, 239, 239), QColor(255, 255, 255), QColor(247, 247, 247)
+        text, button = QColor(0, 0, 0), QColor(239, 239, 239)
+        highlight, disabled = QColor(48, 140, 198), QColor(120, 120, 120)
+        placeholder = QColor(128, 128, 128)
+        tooltipBg, tooltipFg = QColor(255, 255, 220), QColor(0, 0, 0)
+    pal.setColor(QPalette.ColorRole.Window, window)
+    pal.setColor(QPalette.ColorRole.WindowText, text)
+    pal.setColor(QPalette.ColorRole.Base, base)
+    pal.setColor(QPalette.ColorRole.AlternateBase, alt)
+    pal.setColor(QPalette.ColorRole.ToolTipBase, tooltipBg)
+    pal.setColor(QPalette.ColorRole.ToolTipText, tooltipFg)
+    pal.setColor(QPalette.ColorRole.Text, text)
+    pal.setColor(QPalette.ColorRole.Button, button)
+    pal.setColor(QPalette.ColorRole.ButtonText, text)
+    pal.setColor(QPalette.ColorRole.BrightText, QColor(255, 0, 0))
+    pal.setColor(QPalette.ColorRole.Highlight, highlight)
+    pal.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
+    pal.setColor(QPalette.ColorRole.PlaceholderText, placeholder)
+    pal.setColor(QPalette.ColorRole.Link, highlight)
+    for role in (
+        QPalette.ColorRole.WindowText,
+        QPalette.ColorRole.Text,
+        QPalette.ColorRole.ButtonText,
+    ):
+        pal.setColor(QPalette.ColorGroup.Disabled, role, disabled)
+    return pal
+
+
+def _styleKey(app):
+    st = app.style()
+    if st is None:
+        return ''
+    return (st.objectName() or '').strip()
+
+
+def _setAppStyle(app, key):
+    if not key:
+        return
+    style = QStyleFactory.create(key)
+    if style is not None:
+        app.setStyle(style)
+
+
+def _applyHintScheme(app, scheme):
+    hints = app.styleHints()
+    if hints is None or not hasattr(hints, 'setColorScheme'):
+        return
+    try:
+        hints.setColorScheme(scheme)
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"setColorScheme failed: {e}")
+
+
+def _pushPalette(app, pal):
+    """Make this palette what every widget (and Config.systemTextColor) sees."""
+    app.setPalette(pal)
+    Config.systemTextColor = pal.color(QPalette.ColorRole.Text)
+    try:
+        widgets = list(app.allWidgets())
+    except Exception:
+        widgets = list(app.topLevelWidgets())
+    for w in widgets:
+        try:
+            w.setPalette(pal)
+            w.update()
+        except Exception:
+            pass
+
+
+def _windowsAppsUseDark():
+    """True if Windows apps are in dark mode; None if unknown / not Windows."""
+    if sys.platform != 'win32':
+        return None
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        return int(value) == 0
+    except Exception:
+        return None
+
+
+def applyBasePaneBackground(widget):
+    """
+    Fill editors / tables / lists with palette Base.
+
+    On Windows the first SQL widgets (from the .ui) often paint Window (too
+    light in dark mode) while later tabs use Base. Mark the widget so a later
+    theme change can restyle it.
+    """
+    if widget is None:
+        return
+    try:
+        widget.setProperty("sqlPane", True)
+        widget.setBackgroundRole(QPalette.ColorRole.Base)
+        widget.setAutoFillBackground(True)
+        app = QApplication.instance()
+        if app is not None:
+            pal = app.palette()
+            widget.setPalette(pal)
+            vp = getattr(widget, "viewport", None)
+            if callable(vp):
+                view = vp()
+                if view is not None:
+                    view.setPalette(pal)
+                    view.setBackgroundRole(QPalette.ColorRole.Base)
+                    view.setAutoFillBackground(True)
+        existing = widget.styleSheet() or ""
+        if "/*sql-pane-base*/" not in existing:
+            widget.setStyleSheet(
+                "/*sql-pane-base*/\n"
+                "background-color: palette(base);\n"
+                "color: palette(text);\n"
+                + existing
+            )
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"applyBasePaneBackground failed: {e}")
+
+
+def _restyleMarkedPanes(app):
+    try:
+        widgets = list(app.allWidgets())
+    except Exception:
+        return
+    for w in widgets:
+        try:
+            if w.property("sqlPane"):
+                applyBasePaneBackground(w)
+        except Exception:
+            pass
+
+
+def resetStyledButtonHover(button):
+    """Clear a stuck hover/pressed icon after a modal dialog (Windows)."""
+    if button is None:
+        return
+
+    def apply():
+        try:
+            over = _iconButtonCursorOver(button)
+            button.setDown(False)
+            if not over:
+                button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+            icon = getattr(
+                button, '_ddHoverIcon' if over else '_ddNormalIcon', None
+            )
+            if icon is not None:
+                button.setIcon(icon)
+            st = button.style()
+            if st is not None:
+                st.unpolish(button)
+                st.polish(button)
+            button.update()
+        except Exception:
+            pass
+
+    apply()
+    QTimer.singleShot(0, apply)
+    QTimer.singleShot(50, apply)
+
+
+def _restoreNativePalette(app):
+    _applyHintScheme(app, Qt.ColorScheme.Unknown)
+    current = _styleKey(app)
+    if _savedStyleName and current.lower() != _savedStyleName.lower():
+        _setAppStyle(app, _savedStyleName)
+    # Empty QPalette() is a baked light palette, not "follow OS".
+    _pushPalette(app, app.style().standardPalette())
+
+
+def _applyForcedTheme(app, wantDark):
+    scheme = Qt.ColorScheme.Dark if wantDark else Qt.ColorScheme.Light
+    _applyHintScheme(app, scheme)
+    pal = app.style().standardPalette()
+    if _paletteIsDark(pal) != wantDark:
+        current = _styleKey(app)
+        if current.lower() != 'fusion':
+            _setAppStyle(app, 'Fusion')
+            _applyHintScheme(app, scheme)
+            pal = app.style().standardPalette()
+        if _paletteIsDark(pal) != wantDark:
+            pal = _forcedSchemePalette(wantDark)
+    _pushPalette(app, pal)
+
+
+def applyColorTheme(theme=None):
+    """
+    Light/Dark pretend the OS is in that mode.
+
+    Qt's setColorScheme is only a hint — native GTK and Windows styles often
+    keep the real system palette (labels/tables stay dark). We set the hint so
+    colorScheme() matches, then install a light or dark palette as the app
+    palette (Fusion if the native style still serves the old colors). System
+    restores the original style and palette on Linux/macOS. On Windows, System
+    follows AppsUseLightTheme with the same Light/Dark palettes — the native
+    Windows style does not pick up OS dark mode.
+    """
+    global _savedStyleName
+    name = theme if theme is not None else getattr(Config, 'colorTheme', 'system')
+    name = str(name or 'system').strip().lower()
+    if name not in ('system', 'light', 'dark'):
+        name = 'system'
+    Config.colorTheme = name
+    app = QApplication.instance()
+    if app is None:
+        return
+    if not _savedStyleName:
+        _savedStyleName = _styleKey(app)
+
+    if name == 'system':
+        osDark = _windowsAppsUseDark()
+        if osDark is None:
+            _restoreNativePalette(app)
+        else:
+            _applyForcedTheme(app, wantDark=osDark)
+    else:
+        _applyForcedTheme(app, wantDark=(name == 'dark'))
+
+    _restyleMarkedPanes(app)
+    if Config.debug:
+        Logic.logMessage(
+            "DEBUG",
+            f"applyColorTheme {name} style={_styleKey(app)!r} "
+            f"darkPalette={_paletteIsDark(app.palette())} "
+            f"text={Config.systemTextColor.name() if hasattr(Config.systemTextColor, 'name') else Config.systemTextColor}",
+        )
+
+
+def includeDataTypeInLabel(database):
+    """Options per-source 'Add Data Type to Labels' (dict headers)."""
+    db = (database or '').strip().upper()
+    if db.startswith('USBR'):
+        return bool(getattr(Config, 'labelDataTypeUSBR', True))
+    if db.startswith('AQUARIUS') or db == 'AQUARIUS':
+        return bool(getattr(Config, 'labelDataTypeAquarius', True))
+    if db.startswith('USGS'):
+        return bool(getattr(Config, 'labelDataTypeUSGS', True))
+    return True
+
+
+def hdbOverwriteFlagValue():
+    """
+    MODIFY_R_BASE OVERWRITE_FLAG from Options → USBR → Overwrite Flag.
+    'O' allows replacing an existing HDB value; None binds Oracle NULL.
+    """
+    val = getattr(Config, 'hdbOverwriteFlag', None)
+    if val in (None, False, 0, '', 'N', 'n'):
+        return None
+    if val in (True, 1, '1', 'O', 'o', 'Y', 'y'):
+        return 'O'
+    return 'O'
+
+
+def refreshHdbOverwriteFlag():
+    """Re-read Overwrite Flag from user.config (once per upload, not per row)."""
+    try:
+        path = getConfigPath()
+        if not os.path.isfile(path):
+            Config.hdbOverwriteFlag = None
+            return None
+        with open(path, encoding='utf-8') as f:
+            settings = json.load(f)
+        Config.hdbOverwriteFlag = 'O' if settings.get('hdbOverwriteFlag') else None
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"refreshHdbOverwriteFlag failed: {e}")
+    return hdbOverwriteFlagValue()
+
+
+def hdbAccessDisplayNames():
+    """USBR-LCHDB from Config.hdbOracleDatabases entries (drop |SCHEMA)."""
+    names = []
+    for entry in getattr(Config, 'hdbOracleDatabases', ()) or ():
+        raw = str(entry or '').strip()
+        if not raw:
+            continue
+        name = raw.split('|', 1)[0].strip()
+        if name:
+            names.append(name)
+    return names
+
+
 def reloadGlobals():
     """
     Refresh runtime flags from user.config.
@@ -1701,6 +2119,14 @@ def reloadGlobals():
     Config.periodOffset = resolvePeriodOffset(settings)
     Config.qaqcEnabled = settings['qaqc']
     Config.rawData = settings['rawData']
+    theme = str(settings.get('colorTheme') or 'system').strip().lower()
+    if theme not in ('system', 'light', 'dark'):
+        theme = 'system'
+    Config.colorTheme = theme
+    Config.labelDataTypeUSBR = bool(settings.get('labelDataTypeUSBR', True))
+    Config.labelDataTypeAquarius = bool(settings.get('labelDataTypeAquarius', True))
+    Config.labelDataTypeUSGS = bool(settings.get('labelDataTypeUSGS', True))
+    Config.hdbOverwriteFlag = 'O' if settings.get('hdbOverwriteFlag') else None
 
     if Config.debug:
         Logic.logMessage(

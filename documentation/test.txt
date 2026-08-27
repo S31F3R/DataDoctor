@@ -1,49 +1,54 @@
-TEST FILE — currently being worked / needing retest
+TEST FILE — tests to run
 ============================================================
-Workflow:
-  - To Do List.txt = backlog only
-  - This file = in-progress / Seifer tests here
-  - PASS → mark [x] here (stay off To Do); Grok may clean confirmed [x] items
-  - FAIL → note here; Grok re-fixes
-  - Grok may commit any non-documentation/ paths; documentation/ commits stay with Seifer
-    (README.md and other non-docs paths are fair game)
-  - After confirmed [x] items: drop long steps into Confirmed; keep retest items detailed
-  - Working Notes (documentation/Working Notes.txt) is a scratch file until
-    publish names vVERSION.md; only its bullets go under ## Changes
+Grok writes the steps. Mark [x] when it passes, or note a fail.
+Workflow / publish how-to: documentation/status.grok (gitignored).
 
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Crash / About Report on GitHub (option C, no stored login)
+[x] Graph Ctrl + mouse wheel zoom
    Steps:
-     a. Trigger or simulate an uncaught error — dialog has Report on GitHub,
-        Copy log, Open log folder. Report opens a short GitHub crash form
-        (needs a GitHub account; GitHub's own login). Must NOT 500/"Whoops".
-     b. Full crash text is on the clipboard (paste into the form).
-     c. About → Report issue link opens /issues/new/choose (bug / crash forms).
-     d. No GitHub token / password fields in Options.
-     e. One Report click → one browser tab (not two).
+     a. Plot a Data Query series (Graph). Hold Ctrl and scroll the wheel over
+        the plot. Time axis zooms toward the pointer. Y refits to visible data.
+     b. Wheel without Ctrl does not zoom. Zoom stays inside the data range
+        (cannot pan/zoom past the series). Back/Home still work.
 
-[ ] sqlnet.log Fatals — only new, in app.log time order
+[x] AppImage tab close buttons
    Steps:
-     a. Existing sqlnet.log with old Fatals (hours earlier). Start Data Doctor
-        and run a query that does not fail.
-     b. app.log / Log Viewer must NOT dump those old Fatals at query time.
-     c. Cause a new Oracle Fatal during a query. A sqlnet.log ERROR line appears
-        among the other lines from that query (same minute), not as a blob of
-        older Instant Client history.
+     a. Run the Linux AppImage (not the venv). Main tabs (Data Query, SQL,
+        Graph, Log) show the close X. Hover/press still swap the icon.
+     b. SQL Query Builder query tabs still show close. Retro close icons too
+        if retro is on.
+     c. Dev/venv and Windows zip still show close buttons (not AppImage-only).
 
-[ ] Log rotation + viewer reloads all app.log*
+[x] Oracle auth lock is per-database + timed
    Steps:
-     a. Let app.log grow past ~1 MB (debug on + a few fat queries, or copy a
-        large app.log in place and log something).
-     b. logs/ has app.log plus app.log.1 (up to .5). New lines go in a small
-        app.log; the previous chunk is .1.
-     c. Log Viewer while open shows live lines. Close and reopen — those
-        lines are still there (merged from app.log + rotations, newest first).
-     d. Native crash dumps (if any) go to fault.log, not app.log.
+     a. SQL Query Builder: pick an HDB you cannot log into → Run. Wrong
+        username/password dialog. Other HDBs in the combo still run.
+     b. Retrying the failed DB is blocked with a remaining-time note (~5 min).
+     c. After 5 minutes, or after saving Oracle credentials in Options, that
+        DB can be tried again. Restart is not required.
 
-[ ] Windows package: empty certs/ + first-run applyUpdate.cmd
+[x] Profile import merge / overwrite / rename + SQL categories
+   Steps:
+     a. Export SQL Quick Looks (and Query Quick Looks). Import into a profile
+        that already has some of those names.
+     b. Same-name prompt: Overwrite, Skip, Rename (Overwrite all / Skip all
+        when more than one clash). Existing names not in the zip stay.
+     c. SQL zip: choose With categories vs Without. Without → new snippets
+        Uncategorized. With → zip folder assignments apply.
+     d. Random/non-profile zip still errors and changes nothing.
+
+[x] USBR Overwrite Flag on upload
+   Steps:
+     a. Options → USBR → Overwrite Flag off → Save. Edit an existing HDB value
+        and Upload. Debug/log: OVERWRITE_FLAG NULL. Existing HDB value is not
+        replaced (HDB keeps the old value or the proc no-ops).
+     b. Check Overwrite Flag → Save. Upload the same cell again. Log says
+        OVERWRITE_FLAG='O'. The HDB value is replaced.
+     c. Freehand SQL in SQL Query Builder is unchanged (no auto flag).
+
+[x] Windows package: empty certs/ + first-run applyUpdate.cmd
    Steps:
      a. Unzip DataDoctor-Windows-*.zip. Project Files\certs\ exists
         (README ok; empty is fine).
@@ -51,13 +56,6 @@ Current Tests
      c. After Python 3.13 is on PATH: run applyUpdate.cmd → creates
         Project Files\.venv, pip installs, app starts via Data Doctor.exe.
      d. Put a dummy aquarius.pem in certs\, run applyUpdate again — pem still there.
-
-[ ] Beta updates checkbox after Save
-   Steps:
-     a. Options → check Beta updates → Save. GitHub check runs (pre-releases
-        included). If an RC is newer, the update dialog appears.
-     b. Uncheck Beta updates → Save. Offers the latest published (non-RC)
-        release even if this install is an RC. Cancel leaves the current build.
 
 [ ] Mac package script
    Steps:
@@ -79,6 +77,20 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] SQL History button hover after double-click
+[x] Windows System Default appearance (dark OS → dark app)
+[x] Hide/Unhide password buttons (Oracle, Aquarius, USGS)
+[x] SQL Query Builder dark-mode pane color (Windows)
+[x] CSV export = focused SQL result tab
+[x] Oracle Access List filters Internal + SQL, not Public
+[x] SQL snippet right-click Delete (pane + Categories)
+[x] Options Export / Import profile zip
+[x] sqlnet.log Fatals — only new, in app.log time order
+[x] Options left categories (Kate-style) + Light/Dark as real palettes
+[x] SQL Query Builder workbench (worksheets, pin, snippets, history, stop)
+[x] Crash / About Report on GitHub (option C, no stored login)
+[x] Log rotation + viewer reloads all app.log*
+[x] Beta updates checkbox after Save (RC offer / revert to published)
 [x] HDB database-link failure → direct connect fallback
 [x] Isolated HDB queries (KBO / CU / LBO / ECO) — SQL FROM r_base
 [x] sqlnet.log Fatals in app.log
@@ -199,7 +211,7 @@ Deferred / known
 --------------------------------------------------------------------------------
 [!] USGS monthly/yearly (OGC has no products)
 [!] Aquarius daily 2300 TZ
-[!] Features still backlog: advanced plot tool / quick-look plots, git/readme,
-    dataDictionary non-destructive bulk update, expanded Options tree
+[!] Features still backlog: advanced plot tool / quick-look plots,
+    dataDictionary non-destructive bulk update, Aquarius Entra login
 [!] Windows first-load icon — improve-only
 [!] AppImage applyUpdate path not wired the same as launcher packages yet

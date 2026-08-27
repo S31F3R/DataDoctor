@@ -1354,14 +1354,15 @@ def buildModifyRBaseParams(uploadRow):
     """
     Build positional param list for MODIFY_R_BASE from one upload row.
 
-    Defaults come from Config (AGEN_ID, OVERWRITE_FLAG, DATA_FLAGS, TIME_ZONE
-    are designed to become Options-driven later; None → Oracle NULL).
+    Defaults come from Config. OVERWRITE_FLAG is Options → USBR → Overwrite Flag
+    ('O' or Oracle NULL). DATA_FLAGS / TIME_ZONE stay NULL until those Options exist.
     """
+    from core import Utils
+
     interval, startDt, endDt, sdid = resolveUploadDateTimes(uploadRow)
     value = parseUploadValue(uploadRow.get('value'))
 
-    # Future Options: overwrite / data flags / time zone / agen
-    overwrite = Config.hdbOverwriteFlag
+    overwrite = Utils.hdbOverwriteFlagValue()
     dataFlags = Config.hdbDataFlags
     timeZone = Config.hdbTimeZone
     agenId = Config.hdbAgenId
@@ -1506,8 +1507,9 @@ def writeHdbRows(uploadRows):
             oracleConn = None
             tasksDone = 0
             try:
-                if getattr(Oracle, 'authFailureMessage', None):
-                    raise Oracle.OracleAuthError(Oracle.authFailureMessage)
+                blocked = Oracle.authFailureFor(dsn)
+                if blocked:
+                    raise Oracle.OracleAuthError(blocked)
 
                 oracleConn = Oracle.oracleConnection(dsn)
                 oracleConn.connect()
@@ -1854,15 +1856,23 @@ def runUpload(mainWindow):
             if not isHdbDb(r['database']) and not isAquariusDb(r['database'])
         ]
 
+        from core import Utils
+        overwrite = Utils.refreshHdbOverwriteFlag()
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
                 f"Upload.runUpload: total={len(uploadRows)} hdb={len(hdbRows)} "
                 f"aquarius={len(aquariusRows)} other={len(otherRows)} "
                 f"periodOffset(EOP)={Config.periodOffset} "
-                f"agenId={Config.hdbAgenId} overwrite={Config.hdbOverwriteFlag!r} "
+                f"agenId={Config.hdbAgenId} overwrite={overwrite!r} "
                 f"dataFlags={Config.hdbDataFlags!r} timeZone={Config.hdbTimeZone!r}",
             )
+        Logic.logMessage(
+            "INFO",
+            "Upload HDB overwrite flag is "
+            + ("ON (MODIFY_R_BASE OVERWRITE_FLAG='O')" if overwrite == 'O'
+               else "OFF (OVERWRITE_FLAG NULL; existing values are not replaced)"),
+        )
 
         if otherRows:
             for r in otherRows:

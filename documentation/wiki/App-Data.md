@@ -12,12 +12,12 @@ Application name is **Data Doctor** (no organization folder). Config is **per us
 
 | Item | Purpose |
 |------|---------|
-| `user.config` | JSON settings: UTC offset, raw/QAQC/retro/debug, last Quick Look, export path, graph save folder, SQL snippet order, update channel, … |
+| `user.config` | JSON settings: UTC offset, raw/QAQC/retro/debug, last Quick Look, export path, graph save folder, SQL snippet order/categories, update channel, Oracle access list, … |
 | `logs/app.log` | Current Python + Qt log (Log Viewer tab) |
 | `logs/app.log.1` … `.5` | Rotated backups (~1 MB each, newest `.1`) |
 | `logs/fault.log` | Native interpreter faults (not held open on `app.log`) |
 | `quickLook/query/` | Saved query lists (Quick Looks) |
-| `quickLook/sql/` | SQL Query Builder snippets |
+| `quickLook/sql/` | SQL Query Builder snippets (category assignment in `user.config`) |
 | `certs/` | Optional user-level Aquarius cert folder (created only if needed) |
 
 Passwords and API keys are **not** in `user.config`. They go to the OS keyring, service name `DataDoctor`:

@@ -9,6 +9,8 @@ Two query doors on the main window:
 
 Both open the same Query window. The window title / `queryType` decides what is allowed (internal can upload; public cells stay locked).
 
+**Options → Oracle → Access List** hides unchecked HDB names from **Internal Query** and **SQL Query Builder**. **Public Query** still lists every database. Data Dictionary is not filtered.
+
 ## Building a query list
 
 1. Pick **database**, **DataID**, **interval**, and a time range.
@@ -43,7 +45,7 @@ Timestamps in the table: day / month / year / water-year use display formats (no
 ## Data Query vs SQL Query Builder
 
 - **Data Query** — the series table from Public/Internal Query (graph, overlay, upload, QAQC)
-- **SQL Query Builder** — custom Oracle SQL (internal). Toggle with the SQL button. Opens with **zero** tabs; add/run from there. Snippets save under [App Data](App-Data) `quickLook/sql/`
+- **SQL Query Builder** — custom Oracle SQL (internal). Toggle with the SQL button; the tab can Detach like Graph/Log. Worksheets (query tabs) each remember their database. Results are tabs under the worksheet; the **pin** on a result tab (where close would be) keeps that grid and the next run opens a new one. **Stop** cancels a running query. **History** reloads recent SQL (double-click). Snippets live in the right pane (categories). Existing snippets start in Uncategorized; **Categories** lets you add/remove groups and drag a snippet onto a category to move it. Right-click a snippet (in the pane or in Categories) to **Delete**. Double-click the thin dotted splitter handle to collapse/expand that pane (the handle stays visible). Worksheets are session-only.
 
 **CSV** exports whichever of those two tables is active. See [CSV Export](CSV-Export).
 

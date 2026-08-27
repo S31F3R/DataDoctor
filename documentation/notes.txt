@@ -22,4 +22,4 @@ git commit -m "Remove __pycache__ from tracking"
 
 
 
-python ./publishRelease.py --channel rc --number 2.1 --upload --yes
+python scripts/publishRelease.py --channel rc --number 2.1 --upload --yes

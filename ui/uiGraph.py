@@ -8,7 +8,7 @@ import os
 import re
 from datetime import datetime
 import numpy as np
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QEvent
 from PyQt6.QtGui import QPalette, QCursor
 from PyQt6.QtWidgets import (
     QApplication, QVBoxLayout, QWidget, QSizePolicy, QLabel, QToolTip,
@@ -1424,6 +1424,7 @@ class GraphPanel(QWidget):
         self.canvas = FigureCanvasQTAgg(fig)
         self.canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.canvas.installEventFilter(self)
         ToolbarCls = _makeGraphToolbarClass() or NavigationToolbar2QT
         self.toolbar = ToolbarCls(self.canvas, self)
         self.toolbar.setObjectName('graphToolbar')
@@ -1601,6 +1602,100 @@ class GraphPanel(QWidget):
                 f"theme={theme}, tsFmt={self._tsDisplayFmt!r}",
             )
         return True, note
+
+    def eventFilter(self, obj, event):
+        """Ctrl + mouse wheel zooms the time axis toward the pointer."""
+        if (
+            obj is self.canvas
+            and event is not None
+            and event.type() == QEvent.Type.Wheel
+            and bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        ):
+            if self._zoomXFromWheel(event):
+                return True
+        return super().eventFilter(obj, event)
+
+    def _wheelDataX(self, qevent):
+        """X data coordinate under the wheel pointer, or None."""
+        if self._ax is None or self.canvas is None or qevent is None:
+            return None
+        try:
+            pos = qevent.position()
+            if hasattr(self.canvas, 'mouseEventCoords'):
+                xdisp, ydisp = self.canvas.mouseEventCoords(pos)
+            else:
+                xdisp = float(pos.x())
+                height = float(self.canvas.height())
+                ydisp = height - float(pos.y())
+            inv = self._ax.transData.inverted()
+            xdata, _ydata = inv.transform((xdisp, ydisp))
+            return float(xdata)
+        except Exception:
+            return None
+
+    def _zoomXFromWheel(self, qevent):
+        """Zoom X around the cursor. Y refits via xlim_changed autoscale."""
+        if self._ax is None or self.canvas is None:
+            return False
+        delta = 0
+        try:
+            delta = int(qevent.angleDelta().y())
+        except Exception:
+            pass
+        if delta == 0:
+            try:
+                delta = int(qevent.pixelDelta().y())
+            except Exception:
+                pass
+        if delta == 0:
+            return False
+        factor = 0.85 if delta > 0 else (1.0 / 0.85)
+        try:
+            x0, x1 = self._ax.get_xlim()
+        except Exception:
+            return False
+        span = x1 - x0
+        if not np.isfinite(span) or span == 0:
+            return False
+        xdata = self._wheelDataX(qevent)
+        if xdata is None or not np.isfinite(xdata):
+            xdata = (x0 + x1) / 2.0
+        rel = (xdata - x0) / span
+        if not np.isfinite(rel):
+            rel = 0.5
+        rel = min(max(float(rel), 0.0), 1.0)
+        newSpan = span * factor
+        dataLim = self._xDataLim
+        if dataLim is not None:
+            d0, d1 = dataLim
+            if d1 < d0:
+                d0, d1 = d1, d0
+            dataSpan = d1 - d0
+            if np.isfinite(dataSpan) and dataSpan > 0:
+                if newSpan >= dataSpan:
+                    nx0, nx1 = d0, d1
+                else:
+                    nx0 = xdata - rel * newSpan
+                    nx1 = nx0 + newSpan
+                    if nx0 < d0:
+                        nx0, nx1 = d0, d0 + newSpan
+                    if nx1 > d1:
+                        nx1, nx0 = d1, d1 - newSpan
+            else:
+                nx0 = xdata - rel * newSpan
+                nx1 = nx0 + newSpan
+        else:
+            nx0 = xdata - rel * newSpan
+            nx1 = nx0 + newSpan
+        if abs(nx1 - nx0) <= 0 or not (np.isfinite(nx0) and np.isfinite(nx1)):
+            return False
+        try:
+            if self.toolbar is not None and hasattr(self.toolbar, 'push_current'):
+                self.toolbar.push_current()
+        except Exception:
+            pass
+        self._ax.set_xlim(nx0, nx1)
+        return True
 
     def keyPressEvent(self, event):
         """Arrow keys pan the graph when the panel has focus."""

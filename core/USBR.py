@@ -528,8 +528,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
                 "DEBUG",
                 f"Thread {threadId} processing task for SDID {SDID}, range {subStartStr} to {subEndStr}",
             )
-        if getattr(Oracle, 'authFailureMessage', None):
-            raise Oracle.OracleAuthError(Oracle.authFailureMessage)
+        blocked = Oracle.authFailureFor(getattr(oracleConn, 'dsn', None) or '')
+        if blocked:
+            raise Oracle.OracleAuthError(blocked)
 
         # Data params
         dataParams = [SDID, subStartStr, subEndStr]
@@ -658,7 +659,11 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
                 else ''
             )
             displayMeta['Validation'] = mergedRow.get('VALIDATION', '') or ''
-            displayMeta['Overwrite Flag'] = mergedRow.get('OVERWRITE_FLAG', '') or ''
+            displayMeta['Overwrite Flag'] = (
+                mergedRow.get('OVERWRITE_FLAG')
+                or mergedRow.get('overwrite_flag')
+                or ''
+            )
             displayMeta['Method'] = methodMap.get(mergedRow.get('METHOD_ID'), '') or ''
             displayMeta['Agency Name'] = agenMap.get(mergedRow.get('AGEN_ID'), '') or ''
             displayMeta['Collection System'] = collectionMap.get(mergedRow.get('COLLECTION_SYSTEM_ID'), '') or ''
@@ -699,8 +704,9 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
         oracleConn = None
         tasksDone = 0
         try:
-            if getattr(Oracle, 'authFailureMessage', None):
-                raise Oracle.OracleAuthError(Oracle.authFailureMessage)
+            blocked = Oracle.authFailureFor(dsn)
+            if blocked:
+                raise Oracle.OracleAuthError(blocked)
 
             oracleConn = Oracle.oracleConnection(dsn)
             oracleConn.connect()

@@ -63,13 +63,15 @@ More detail: [Installation](https://github.com/S31F3R/DataDoctor/wiki/Installati
 
 ## First-run setup
 
-Open **Options** and set the sources that apply:
+Open **Options** (left categories, General tab on each) and set the sources that apply:
 
-| Tab | What to set |
-|-----|-------------|
-| General | Raw data, QAQC, retro font, debug, **Beta updates** |
+| Category | What to set |
+|----------|-------------|
+| General | Raw data, QAQC, debug, **Beta updates** |
+| Appearance | Retro mode, color theme (System / Light / Dark) |
+| Oracle | TNS names path, user / password; Databases access list |
 | USGS | API key (optional, stored in the OS keyring) |
-| USBR | Oracle user / password; TNS names path if needed |
+| USBR | Hour timestamp method (BOP/EOP), overwrite flag |
 | Aquarius | Server URL, user, password |
 
 Credentials are stored in the OS keyring (`DataDoctor` service), not in `user.config`.

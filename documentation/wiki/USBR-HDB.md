@@ -1,6 +1,8 @@
 # USBR HDB
 
-Internal queries talk to Reclamation Hydrologic Databases over **Oracle** (`oracledb`). Set **Options → USBR** user and password (OS keyring). Point at `tnsnames.ora` if needed.
+Internal queries talk to Reclamation Hydrologic Databases over **Oracle** (`oracledb`). Set **Options → Oracle** user and password (OS keyring). Point at `tnsnames.ora` if needed. Hourly BOP/EOP and the overwrite flag are under **Options → USBR**.
+
+**Options → Oracle → Access List** is which HDBs you actually use. Unchecked names drop out of Internal Query and SQL Query Builder. Public Query still shows every database. A wrong password on one HDB pauses **that** database for five minutes (or until you save new credentials) so the others stay usable.
 
 Regional / office DSN names:
 
@@ -26,7 +28,7 @@ Hourly HDB values are **period** values. Data Doctor needs to know whether the t
 | **EOP** (end of period) | Display time is the *end* of the hour | START = display − 1h, END = display |
 | **BOP** (beginning of period) | Display time is the *start* of the hour | START = display, END = display + 1h |
 
-This is **Options → USBR → timestamp method** (`hourTimestampMethod` in `user.config`). It affects both how hourly data is interpreted and how `MODIFY_R_BASE` / `DELETE_R_BASE` are called on upload.
+This is **Options → USBR → HOUR Timestamp Method** (`hourTimestampMethod` in `user.config`). It affects both how hourly data is interpreted and how `MODIFY_R_BASE` / `DELETE_R_BASE` are called on upload.
 
 Daily / instant series do not use that hour window the same way.
 
@@ -37,6 +39,7 @@ Internal Data Query only. Edited cells (magenta) and overlay auto-fills can be s
 - `MODIFY_R_BASE` for values
 - `DELETE_R_BASE` for blanks (Delete key can clear a multi-cell selection)
 - Overlay secondary-only fills are flagged automatically; changing the cell yourself clears the auto flag
+- **Options → USBR → Overwrite Flag** sets `MODIFY_R_BASE` `OVERWRITE_FLAG` to `O` when checked, or NULL when off. Existing HDB values are only replaced when that box is checked. Freehand SQL in the Query Builder does not get this flag — it is for the upload write path.
 
 ## Password change
 

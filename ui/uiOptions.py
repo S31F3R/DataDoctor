@@ -4,14 +4,22 @@ import os
 import sys
 import json
 import keyring
+import zipfile
+import shutil
+import tempfile
 from PyQt6.QtWidgets import (
     QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox,
-    QPushButton, QTabWidget, QMessageBox, QWidget, QVBoxLayout, QLabel,
+    QPushButton, QTabWidget, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QListWidget, QListWidgetItem, QStackedWidget, QAbstractItemView,
+    QSizePolicy, QFileDialog, QInputDialog,
 )
-from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal, Qt
-from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal, Qt, QSize
+from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6 import uic
 from core import Logic, Utils, Config
+
+PROFILE_MANIFEST = "datadoctor-profile.json"
+PROFILE_KIND = "DataDoctorProfile"
 
 # Keyring cold-start is slow (Secret Service / Windows Credential Manager).
 # Cache after first read so Options opens fast after warm-up.
@@ -68,12 +76,13 @@ class hdbPasswordChangeWorker(QRunnable):
     Run changePasswordOnAllHdb off the UI thread (first parallel pass).
     Passwords are held only for this run and never logged.
     """
-    def __init__(self, username, oldPassword, newPassword, signals):
+    def __init__(self, username, oldPassword, newPassword, signals, databases=None):
         super().__init__()
         self.username = username
         self.oldPassword = oldPassword
         self.newPassword = newPassword
         self.signals = signals
+        self.databases = list(databases) if databases else None
 
     def run(self):
         result = {'success': [], 'errors': [], 'authFailed': []}
@@ -83,6 +92,7 @@ class hdbPasswordChangeWorker(QRunnable):
                 username=self.username,
                 oldPassword=self.oldPassword,
                 newPassword=self.newPassword,
+                databases=self.databases,
             )
         except Exception as e:
             Logic.logException("hdbPasswordChangeWorker failed", e)
@@ -135,58 +145,44 @@ class hdbSinglePasswordChangeWorker(QRunnable):
 
 class uiOptions(QDialog):
     """Options editor: Stores database connection information and application settings."""
+
+    _NAV = (
+        ("General", "Cog"),
+        ("Appearance", "Appearance"),
+        ("Oracle", "Oracle"),
+        ("Aquarius", "Aquarius"),
+        ("USBR", "USBR"),
+        ("USGS", "USGS"),
+    )
+
     def __init__(self, winMain=None):
         super().__init__(parent=winMain)
-        uic.loadUi(Logic.resourcePath('ui/winOptions.ui'), self)
         self.winMain = winMain
         self._passwordChangeSignals = None  # keep alive while worker runs
-
-        # Define controls
-        self.cbUTCOffset = self.findChild(QComboBox, 'cbUTCOffset')
-        self.qleAQServer = self.findChild(QLineEdit, 'qleAQServer')
-        self.qleAQUser = self.findChild(QLineEdit, 'qleAQUser')
-        # Faded format hint when blank (cursor still starts at front on focus)
-        if self.qleAQServer is not None:
-            self.qleAQServer.setPlaceholderText("https://yourserverlink.com")
-
-        # Options tabs use absolute geometry (no layouts). Swap plain QLineEdits
-        # for customPasswordEdit in place — geometry path is expected, not an error.
-        self.qleAQPassword = self._replaceWithPasswordEdit(
-            'qleAQPassword',
-            maxLength=None,
-        )
-        self.qleTNSNames = self.findChild(QLineEdit, 'qleTNSNames')
-        self.rbBOP = self.findChild(QRadioButton, 'rbBOP')
-        self.rbEOP = self.findChild(QRadioButton, 'rbEOP')
-        self.btnbOptions = self.findChild(QDialogButtonBox, 'btnbOptions')
-        self.chkbRetroMode = self.findChild(QCheckBox, 'chkbRetroMode')
-        self.chkbQAQC = self.findChild(QCheckBox, 'chkbQAQC')
-        self.chkbRawData = self.findChild(QCheckBox, 'chkbRawData')
-        self.chkbDebug = self.findChild(QCheckBox, 'chkbDebug')
-        self.chkbBetaUpdates = self.findChild(QCheckBox, 'chkbBetaUpdates')
-        self.tabWidget = self.findChild(QTabWidget, 'tabWidget')
-        self.btnShowPassword = self.findChild(QPushButton, 'btnShowPassword')
-        self.btnShowOraclePassword = self.findChild(QPushButton, 'btnShowOraclePassword')
-        self.qleOracleUser = self.findChild(QLineEdit, 'qleOracleUser')
-
+        uic.loadUi(Logic.resourcePath("ui/winOptions.ui"), self)
+        self._bindLoadedWidgets()
+        self.qleAQPassword = self._replaceWithPasswordEdit("qleAQPassword")
         self.qleOraclePassword = self._replaceWithPasswordEdit(
-            'qleOraclePassword',
-            maxLength=int(getattr(Config, 'oraclePasswordMaxLength', 30) or 30),
+            "qleOraclePassword",
+            maxLength=int(getattr(Config, "oraclePasswordMaxLength", 30) or 30),
         )
-        self.qleUSGSAPIKey = self._replaceWithPasswordEdit(
-            'qleUSGSAPIKey',
-            maxLength=None,
-        )
+        self.qleUSGSAPIKey = self._replaceWithPasswordEdit("qleUSGSAPIKey")
+        self._applyNavIcons()
+        for i, key in enumerate(("system", "light", "dark")):
+            if i < self.cbColorTheme.count():
+                self.cbColorTheme.setItemData(i, key)
 
-        self.btnShowUSGSKey = self.findChild(QPushButton, 'btnShowUSGSKey')
-
-        # Set button style
         Utils.buttonStyle(self.btnShowPassword, None, None)
         Utils.buttonStyle(self.btnShowUSGSKey, None, None)
         Utils.buttonStyle(self.btnShowOraclePassword, None, None)
+        for btn in (
+            self.btnShowPassword,
+            self.btnShowUSGSKey,
+            self.btnShowOraclePassword,
+        ):
+            if btn is not None:
+                btn.raise_()
 
-        # Create events — own the Save path so validation can cancel close
-        # (winOptions.ui also connects accepted → accept; disconnect that first)
         try:
             self.btnbOptions.accepted.disconnect()
         except TypeError:
@@ -195,6 +191,12 @@ class uiOptions(QDialog):
         self.btnShowPassword.clicked.connect(self.togglePasswordVisibility)
         self.btnShowUSGSKey.clicked.connect(self.toggleUSGSKeyVisibility)
         self.btnShowOraclePassword.clicked.connect(self.toggleOraclePasswordVisibility)
+        self.btnUpdatePassword.clicked.connect(self.onUpdatePasswordPressed)
+        self.listOptionsNav.currentRowChanged.connect(self._onNavChanged)
+        if self.btnExportProfile is not None:
+            self.btnExportProfile.clicked.connect(self.onExportProfile)
+        if self.btnImportProfile is not None:
+            self.btnImportProfile.clicked.connect(self.onImportProfile)
 
         # Populate UTC offset combobox
         self.cbUTCOffset.addItem("UTC-12:00 | Baker Island")
@@ -237,20 +239,141 @@ class uiOptions(QDialog):
         self.cbUTCOffset.addItem("UTC+14:00 | Kiritimati")
         self.cbUTCOffset.setCurrentIndex(14)
 
-        # Tab order + focus first control when switching tabs
         self.setupOptionsTabOrder()
-        if self.tabWidget is not None:
-            self.tabWidget.currentChanged.connect(self.onOptionsTabChanged)
+        for tabs in (
+            self.tabsGeneral, self.tabsAppearance, self.tabsOracle,
+            self.tabsAquarius, self.tabsUSBR, self.tabsUSGS,
+        ):
+            tabs.currentChanged.connect(lambda _i: self.onOptionsTabChanged())
 
         if Config.debug:
             Logic.logMessage("DEBUG", "uiOptions initialized")
+
+    def _navIcon(self, iconName):
+        path = Logic.resourcePath(f"ui/icons/{iconName}.png")
+        pix = QPixmap(path)
+        if pix.isNull():
+            return QIcon()
+        return QIcon(pix)
+
+    def _bindLoadedWidgets(self):
+        """Hook Designer object names from winOptions.ui."""
+        self.listOptionsNav = self.findChild(QListWidget, "listOptionsNav")
+        self.optionsStack = self.findChild(QStackedWidget, "optionsStack")
+        self.tabsGeneral = self.findChild(QTabWidget, "tabsGeneral")
+        self.tabsAppearance = self.findChild(QTabWidget, "tabsAppearance")
+        self.tabsOracle = self.findChild(QTabWidget, "tabsOracle")
+        self.tabsAquarius = self.findChild(QTabWidget, "tabsAquarius")
+        self.tabsUSBR = self.findChild(QTabWidget, "tabsUSBR")
+        self.tabsUSGS = self.findChild(QTabWidget, "tabsUSGS")
+        self.cbUTCOffset = self.findChild(QComboBox, "cbUTCOffset")
+        self.chkbRawData = self.findChild(QCheckBox, "chkbRawData")
+        self.chkbQAQC = self.findChild(QCheckBox, "chkbQAQC")
+        self.chkbDebug = self.findChild(QCheckBox, "chkbDebug")
+        self.chkbBetaUpdates = self.findChild(QCheckBox, "chkbBetaUpdates")
+        self.btnExportProfile = self.findChild(QPushButton, "btnExportProfile")
+        self.btnImportProfile = self.findChild(QPushButton, "btnImportProfile")
+        self.chkbRetroMode = self.findChild(QCheckBox, "chkbRetroMode")
+        self.cbColorTheme = self.findChild(QComboBox, "cbColorTheme")
+        self.qleTNSNames = self.findChild(QLineEdit, "qleTNSNames")
+        self.qleOracleUser = self.findChild(QLineEdit, "qleOracleUser")
+        self.qleOraclePassword = self.findChild(QLineEdit, "qleOraclePassword")
+        self.btnShowOraclePassword = self.findChild(QPushButton, "btnShowOraclePassword")
+        self.btnUpdatePassword = self.findChild(QPushButton, "btnUpdatePassword")
+        self.listHdbAccess = self.findChild(QListWidget, "listHdbAccess")
+        self.qleAQServer = self.findChild(QLineEdit, "qleAQServer")
+        self.qleAQUser = self.findChild(QLineEdit, "qleAQUser")
+        self.qleAQPassword = self.findChild(QLineEdit, "qleAQPassword")
+        self.btnShowPassword = self.findChild(QPushButton, "btnShowPassword")
+        self.chkbLabelDataTypeAquarius = self.findChild(QCheckBox, "chkbLabelDataTypeAquarius")
+        self.rbBOP = self.findChild(QRadioButton, "rbBOP")
+        self.rbEOP = self.findChild(QRadioButton, "rbEOP")
+        self.chkbOverwriteFlag = self.findChild(QCheckBox, "chkbOverwriteFlag")
+        self.chkbLabelDataTypeUSBR = self.findChild(QCheckBox, "chkbLabelDataTypeUSBR")
+        self.qleUSGSAPIKey = self.findChild(QLineEdit, "qleUSGSAPIKey")
+        self.btnShowUSGSKey = self.findChild(QPushButton, "btnShowUSGSKey")
+        self.chkbLabelDataTypeUSGS = self.findChild(QCheckBox, "chkbLabelDataTypeUSGS")
+        self.btnbOptions = self.findChild(QDialogButtonBox, "btnbOptions")
+        self.tabWidget = self.tabsGeneral
+
+    def _applyNavIcons(self):
+        if self.listOptionsNav is None:
+            return
+        self.listOptionsNav.setIconSize(QSize(28, 28))
+        for i, (_label, iconName) in enumerate(self._NAV):
+            item = self.listOptionsNav.item(i)
+            if item is None:
+                item = QListWidgetItem(_label)
+                self.listOptionsNav.addItem(item)
+            item.setIcon(self._navIcon(iconName))
+            item.setSizeHint(QSize(160, 40))
+
+    def _onNavChanged(self, index):
+        if index < 0:
+            return
+        self.optionsStack.setCurrentIndex(index)
+        page = self.optionsStack.widget(index)
+        tabs = page.findChild(QTabWidget) if page is not None else None
+        self.tabWidget = tabs if tabs is not None else self.tabsGeneral
+        self.onOptionsTabChanged()
+
+    def _checkedHdbAccess(self):
+        names = []
+        for i in range(self.listHdbAccess.count()):
+            item = self.listHdbAccess.item(i)
+            if item is not None and item.checkState() == Qt.CheckState.Checked:
+                names.append(item.text())
+        return names
+
+    def _uncheckedHdbAccess(self):
+        names = []
+        for i in range(self.listHdbAccess.count()):
+            item = self.listHdbAccess.item(i)
+            if item is not None and item.checkState() != Qt.CheckState.Checked:
+                names.append(item.text())
+        return names
+
+    def _fillHdbAccessList(self, uncheckedNames):
+        """New Config databases default checked; only saved unchecked names stay off."""
+        self.listHdbAccess.clear()
+        unchecked = set(uncheckedNames or [])
+        for name in Utils.hdbAccessDisplayNames():
+            item = QListWidgetItem(name)
+            item.setFlags(
+                item.flags()
+                | Qt.ItemFlag.ItemIsUserCheckable
+                | Qt.ItemFlag.ItemIsEnabled
+            )
+            item.setCheckState(
+                Qt.CheckState.Unchecked if name in unchecked else Qt.CheckState.Checked
+            )
+            self.listHdbAccess.addItem(item)
+
+    def _layoutContaining(self, layout, widget):
+        """Find the (possibly nested) QLayout that owns widget."""
+        if layout is None or widget is None:
+            return None
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            if item.widget() is widget:
+                return layout
+            child = item.layout()
+            if child is not None:
+                found = self._layoutContaining(child, widget)
+                if found is not None:
+                    return found
+        return None
 
     def _replaceWithPasswordEdit(self, objectName, maxLength=None):
         """
         Swap a plain QLineEdit from the .ui for customPasswordEdit.
 
-        winOptions tabs use absolute geometry (no layout on the parent page), so
-        the geometry path is normal — not a warning.
+        Options pages nest the field in a label + HBox (field | hide button).
+        Parent.layout().indexOf(old) is -1 for nested layouts, which used to
+        fall through to absolute geometry and park the edit on top of the
+        label and hide/unhide button.
         """
         old = self.findChild(QLineEdit, objectName)
         if old is None:
@@ -270,18 +393,21 @@ class uiOptions(QDialog):
         newEdit.setAlignment(old.alignment())
         newEdit.setStyleSheet(old.styleSheet())
         newEdit.setEnabled(old.isEnabled())
+        newEdit.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
 
-        layout = parent.layout() if parent is not None else None
-        if layout is not None:
-            index = layout.indexOf(old)
-            if index != -1:
-                layout.replaceWidget(old, newEdit)
-                old.deleteLater()
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Replaced {objectName} via layout")
-                return newEdit
+        pageLayout = parent.layout() if parent is not None else None
+        found = self._layoutContaining(pageLayout, old)
+        if found is not None:
+            found.replaceWidget(old, newEdit)
+            old.deleteLater()
+            newEdit.show()
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Replaced {objectName} via nested layout")
+            return newEdit
 
-        # Expected path for geometry-based Options tabs
+        # Fallback for a geometry-only page (no layout chain)
         newEdit.setGeometry(geom)
         old.hide()
         old.deleteLater()
@@ -299,87 +425,84 @@ class uiOptions(QDialog):
         Explicit Tab key order per page (top → bottom).
         Geometry-based UI files often leave z-order wrong for keyboard navigation.
         """
-        # General
-        chain = [
+        def chain(widgets):
+            items = [w for w in widgets if w is not None]
+            for a, b in zip(items, items[1:]):
+                self.setTabOrder(a, b)
+
+        chain([
             self.cbUTCOffset,
             self.chkbRawData,
             self.chkbQAQC,
-            self.chkbRetroMode,
             self.chkbDebug,
             self.chkbBetaUpdates,
-        ]
-        for a, b in zip(chain, chain[1:]):
-            if a is not None and b is not None:
-                self.setTabOrder(a, b)
-
-        # Aquarius
-        aq = [
-            self.qleAQServer,
-            self.qleAQUser,
-            getattr(self, 'qleAQPassword', None),
-            self.btnShowPassword,
-        ]
-        for a, b in zip(aq, aq[1:]):
-            if a is not None and b is not None:
-                self.setTabOrder(a, b)
-
-        # USGS
-        usgs = [
-            getattr(self, 'qleUSGSAPIKey', None),
-            self.btnShowUSGSKey,
-        ]
-        for a, b in zip(usgs, usgs[1:]):
-            if a is not None and b is not None:
-                self.setTabOrder(a, b)
-
-        # USBR
-        usbr = [
-            self.rbBOP,
-            self.rbEOP,
+            self.btnExportProfile,
+            self.btnImportProfile,
+        ])
+        chain([self.chkbRetroMode, self.cbColorTheme])
+        chain([
             self.qleTNSNames,
             self.qleOracleUser,
             getattr(self, 'qleOraclePassword', None),
             self.btnShowOraclePassword,
-        ]
-        for a, b in zip(usbr, usbr[1:]):
-            if a is not None and b is not None:
-                self.setTabOrder(a, b)
+            self.btnUpdatePassword,
+            self.listHdbAccess,
+        ])
+        chain([
+            self.qleAQServer,
+            self.qleAQUser,
+            getattr(self, 'qleAQPassword', None),
+            self.btnShowPassword,
+            self.chkbLabelDataTypeAquarius,
+        ])
+        chain([
+            self.rbBOP,
+            self.rbEOP,
+            self.chkbOverwriteFlag,
+            self.chkbLabelDataTypeUSBR,
+        ])
+        chain([
+            getattr(self, 'qleUSGSAPIKey', None),
+            self.btnShowUSGSKey,
+            self.chkbLabelDataTypeUSGS,
+        ])
 
-    def firstFocusWidgetForTab(self, index):
-        """First interactive control on the given Options tab."""
-        # Prefer named first field per tab; fall back to tab page children
-        byIndex = {
+    def firstFocusWidgetForTab(self, index=None):
+        """First interactive control on the visible Options page."""
+        nav = self.listOptionsNav.currentRow() if self.listOptionsNav is not None else 0
+        byNav = {
             0: self.cbUTCOffset,
-            1: self.qleAQServer,
-            2: getattr(self, 'qleUSGSAPIKey', None),
-            3: self.rbBOP,
+            1: self.chkbRetroMode,
+            2: self.qleTNSNames,
+            3: self.qleAQServer,
+            4: self.rbBOP,
+            5: getattr(self, 'qleUSGSAPIKey', None),
         }
-        w = byIndex.get(index)
+        w = byNav.get(nav)
         if w is not None and w.isEnabled() and w.isVisible():
             return w
-        if self.tabWidget is None:
+        tabs = getattr(self, 'tabWidget', None)
+        if tabs is None:
             return None
-        page = self.tabWidget.widget(index)
+        page = tabs.currentWidget() if index is None else tabs.widget(index)
         if page is None:
             return None
-        from PyQt6.QtWidgets import QAbstractButton, QComboBox, QLineEdit, QAbstractSpinBox
+        from PyQt6.QtWidgets import QAbstractButton, QComboBox, QLineEdit, QAbstractSpinBox, QListWidget
         for child in page.findChildren(QWidget):
             if not child.isEnabled() or not child.isVisible():
                 continue
-            if isinstance(child, (QLineEdit, QComboBox, QAbstractSpinBox, QAbstractButton)):
-                # Skip pure labels masquerading as empty checkboxes if any
+            if isinstance(child, (QLineEdit, QComboBox, QAbstractSpinBox, QAbstractButton, QListWidget)):
                 if child.focusPolicy() == Qt.FocusPolicy.NoFocus:
                     continue
                 return child
         return None
 
-    def onOptionsTabChanged(self, index):
-        """When user clicks a tab, put the cursor on the first field."""
+    def onOptionsTabChanged(self, index=None):
+        """When user clicks a category or tab, put the cursor on the first field."""
         def focusFirst():
             w = self.firstFocusWidgetForTab(index)
             if w is not None:
                 w.setFocus(Qt.FocusReason.TabFocusReason)
-        # Defer until the page is shown (layout ready)
         QTimer.singleShot(0, focusFirst)
 
     def showEvent(self, event):
@@ -391,11 +514,11 @@ class uiOptions(QDialog):
         Utils.applyModeControlLayouts(root=self)
         Utils.applyRoleFonts(root=self)
         self.loadSettings()
-        self.tabWidget.setCurrentIndex(0)
+        self.listOptionsNav.setCurrentRow(0)
+        self._onNavChanged(0)
         # Always start with secrets masked when the dialog opens
         self.maskSensitiveFields()
-        # Cursor on first General control
-        self.onOptionsTabChanged(0)
+        self.onOptionsTabChanged()
 
         if Config.debug:
             Logic.logMessage("DEBUG", "uiOptions showEvent")
@@ -539,6 +662,16 @@ class uiOptions(QDialog):
             self.rbBOP.setChecked(True)
         if Config.debug:
             Logic.logMessage("DEBUG", "Set hourTimestampMethod to: {}".format(hourMethod))
+        theme = str(config.get('colorTheme') or 'system').strip().lower()
+        idx = self.cbColorTheme.findData(theme)
+        if idx < 0:
+            idx = self.cbColorTheme.findText(theme.capitalize())
+        self.cbColorTheme.setCurrentIndex(idx if idx >= 0 else 0)
+        self.chkbOverwriteFlag.setChecked(bool(config.get('hdbOverwriteFlag')))
+        self.chkbLabelDataTypeUSBR.setChecked(bool(config.get('labelDataTypeUSBR', True)))
+        self.chkbLabelDataTypeAquarius.setChecked(bool(config.get('labelDataTypeAquarius', True)))
+        self.chkbLabelDataTypeUSGS.setChecked(bool(config.get('labelDataTypeUSGS', True)))
+        self._fillHdbAccessList(config.get('hdbAccessUnchecked'))
         try:
             creds = loadKeyringCredentials(force=False)
             self.qleAQServer.setText(creds.get("aqServer") or "")
@@ -593,18 +726,6 @@ class uiOptions(QDialog):
                 QMessageBox.warning(self, "Invalid Oracle Password", errMsg)
                 return  # keep Options open; do not save
 
-        # Password-only change on existing account → push to all HDB databases.
-        # Skip when username changed, or when user/password were previously blank
-        # (first-time credential entry is local keyring only, not a multi-DB alter).
-        hdbPasswordChangeRequested = (
-            bool(priorUserStripped)
-            and bool(priorOraclePassword)
-            and bool(newOracleUser)
-            and newOracleUser == priorUserStripped
-            and bool(newOraclePassword)
-            and newOraclePassword != priorOraclePassword
-        )
-
         configPath = Utils.getConfigPath()
         config = {}
 
@@ -623,6 +744,7 @@ class uiOptions(QDialog):
         else:
             previousChannel = 'stable'
         newRetro = self.chkbRetroMode.isChecked()
+        colorTheme = self.cbColorTheme.currentData() or 'system'
         tnsPath = self.qleTNSNames.text()
 
         if '%AppRoot%' in tnsPath:
@@ -644,7 +766,13 @@ class uiOptions(QDialog):
             'hourTimestampMethod': hourMethod,
             # Keep periodOffset in sync: EOP = True (end-of-period), BOP = False
             'periodOffset': hourMethod == 'EOP',
-            'lastExportPath': config.get('lastExportPath', '')
+            'lastExportPath': config.get('lastExportPath', ''),
+            'colorTheme': colorTheme,
+            'hdbOverwriteFlag': bool(self.chkbOverwriteFlag.isChecked()),
+            'labelDataTypeUSBR': bool(self.chkbLabelDataTypeUSBR.isChecked()),
+            'labelDataTypeAquarius': bool(self.chkbLabelDataTypeAquarius.isChecked()),
+            'labelDataTypeUSGS': bool(self.chkbLabelDataTypeUSGS.isChecked()),
+            'hdbAccessUnchecked': self._uncheckedHdbAccess(),
         })
 
         with open(configPath, 'w', encoding='utf-8') as configFile:
@@ -656,6 +784,7 @@ class uiOptions(QDialog):
         sessionRetro = bool(Config.retroMode)
         Utils.reloadGlobals()
         Config.retroMode = sessionRetro
+        Utils.applyColorTheme(colorTheme)
 
         if newRetro != previousRetro:
             # Never partially apply retro mid-session (Query showEvent, table
@@ -738,28 +867,7 @@ class uiOptions(QDialog):
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"clearAuthFailure skipped: {e}")
 
-        # Multi-DB HDB password update (parallel); uses prior password to authenticate
-        if hdbPasswordChangeRequested:
-            reply = QMessageBox.question(
-                self,
-                "Update HDB Password",
-                "Oracle password update detected.\n\n"
-                "Update this password on all USBR HDB databases?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
-            )
-            if reply == QMessageBox.StandardButton.Yes:
-                self._startHdbPasswordChange(
-                    username=newOracleUser,
-                    oldPassword=priorOraclePassword,
-                    newPassword=newOraclePassword,
-                )
-            else:
-                Logic.logMessage(
-                    "INFO",
-                    "HDB password change declined by user "
-                    "(local Options credentials were still saved)",
-                )
+        self._refreshDatabaseCombos()
 
         # Close Options (we disconnected the UI auto-accept)
         super().accept()
@@ -781,7 +889,500 @@ class uiOptions(QDialog):
                     lambda: Update.runRevertToPublishedUi(parent),
                 )
 
-    def _startHdbPasswordChange(self, username, oldPassword, newPassword):
+    def _zipDir(self, zf, srcDir, arcPrefix, extensions):
+        if not os.path.isdir(srcDir):
+            return 0
+        n = 0
+        for name in os.listdir(srcDir):
+            path = os.path.join(srcDir, name)
+            if not os.path.isfile(path):
+                continue
+            if extensions and not name.endswith(extensions):
+                continue
+            zf.write(path, f"{arcPrefix}/{name}")
+            n += 1
+        return n
+
+    def onExportProfile(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Export")
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel("Include:"))
+        ckQuery = QCheckBox("Query Quick Looks")
+        ckSql = QCheckBox("SQL Quick Looks")
+        ckCfg = QCheckBox("Config")
+        ckQuery.setChecked(True)
+        ckSql.setChecked(True)
+        ckCfg.setChecked(True)
+        for c in (ckQuery, ckSql, ckCfg):
+            lay.addWidget(c)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        lay.addWidget(buttons)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        parts = []
+        if ckQuery.isChecked():
+            parts.append("queryQuickLooks")
+        if ckSql.isChecked():
+            parts.append("sqlQuickLooks")
+        if ckCfg.isChecked():
+            parts.append("config")
+        if not parts:
+            QMessageBox.warning(self, "Export", "Check at least one item to export.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save profile zip", "DataDoctor-profile.zip", "Zip (*.zip)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".zip"):
+            path += ".zip"
+        try:
+            manifest = {
+                "app": "DataDoctor",
+                "kind": PROFILE_KIND,
+                "version": 1,
+                "parts": list(parts),
+            }
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr(PROFILE_MANIFEST, json.dumps(manifest, indent=2))
+                if "queryQuickLooks" in parts:
+                    self._zipDir(
+                        zf, Utils.getQuickLookDir(), "queryQuickLooks", (".json", ".txt")
+                    )
+                if "sqlQuickLooks" in parts:
+                    self._zipDir(
+                        zf, Utils.getSqlSnippetDir(), "sqlQuickLooks", (".sql",)
+                    )
+                    cfg = Utils.loadConfig()
+                    cats = {
+                        "sqlCategories": list(cfg.get("sqlCategories") or []),
+                        "sqlSnippetCategory": dict(cfg.get("sqlSnippetCategory") or {}),
+                        "sqlSnippetOrder": list(cfg.get("sqlSnippetOrder") or []),
+                    }
+                    zf.writestr(
+                        "sqlQuickLooks/categories.json",
+                        json.dumps(cats, indent=2),
+                    )
+                if "config" in parts:
+                    cfg = Utils.getConfigPath()
+                    if os.path.isfile(cfg):
+                        zf.write(cfg, "config/user.config")
+        except Exception as e:
+            Logic.logException("export profile failed", e)
+            QMessageBox.warning(self, "Export", f"Could not export:\n{e}")
+            return
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"Exported profile to {path} parts={parts}")
+        QMessageBox.information(self, "Export", f"Saved {path}")
+
+    def onImportProfile(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import profile zip", "", "Zip (*.zip);;All files (*)"
+        )
+        if not path:
+            return
+        try:
+            imported = self._importProfilePath(path)
+        except ValueError as e:
+            QMessageBox.warning(self, "Import", str(e))
+            return
+        except Exception as e:
+            Logic.logException("import profile failed", e)
+            QMessageBox.warning(self, "Import", f"Could not import:\n{e}")
+            return
+        self._refreshAfterImport()
+        QMessageBox.information(self, "Import", "Imported:\n" + "\n".join(imported))
+
+    def _importProfilePath(self, path):
+        if os.path.isdir(path):
+            return self._importProfileDir(path)
+        if not zipfile.is_zipfile(path):
+            raise ValueError("That file is not a zip archive.")
+        tmp = tempfile.mkdtemp(prefix="dd-profile-")
+        try:
+            with zipfile.ZipFile(path, "r") as zf:
+                rootReal = os.path.realpath(tmp) + os.sep
+                for info in zf.infolist():
+                    dest = os.path.realpath(os.path.join(tmp, info.filename))
+                    if not (dest + os.sep).startswith(rootReal) and dest != os.path.realpath(tmp):
+                        raise ValueError("Zip contains invalid paths.")
+                zf.extractall(tmp)
+            return self._importProfileDir(tmp)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def _profileRoot(self, folder):
+        if os.path.isfile(os.path.join(folder, PROFILE_MANIFEST)):
+            return folder
+        names = [n for n in os.listdir(folder) if not n.startswith(".")]
+        if len(names) == 1:
+            inner = os.path.join(folder, names[0])
+            if os.path.isdir(inner):
+                if os.path.isfile(os.path.join(inner, PROFILE_MANIFEST)):
+                    return inner
+                return inner
+        for name in ("queryQuickLooks", "sqlQuickLooks", "config"):
+            if os.path.isdir(os.path.join(folder, name)):
+                return folder
+        if os.path.isfile(os.path.join(folder, "user.config")):
+            return folder
+        return None
+
+    def _conflictChoice(self, kind, name, remaining):
+        """
+        Overwrite / Skip / Rename for one name clash.
+        Returns 'overwrite', 'overwrite_all', 'skip', 'skip_all', 'rename', or None (cancel).
+        """
+        box = QMessageBox(self)
+        box.setWindowTitle("Import")
+        box.setText(f"A {kind} named '{name}' already exists.")
+        box.setInformativeText(
+            "Overwrite it, skip it, or save the import under a new name?"
+        )
+        overwrite = box.addButton("Overwrite", QMessageBox.ButtonRole.YesRole)
+        skip = box.addButton("Skip", QMessageBox.ButtonRole.NoRole)
+        rename = box.addButton("Rename…", QMessageBox.ButtonRole.ActionRole)
+        overwriteAll = skipAll = None
+        if remaining > 1:
+            overwriteAll = box.addButton(
+                "Overwrite all", QMessageBox.ButtonRole.AcceptRole
+            )
+            skipAll = box.addButton("Skip all", QMessageBox.ButtonRole.RejectRole)
+        cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(overwrite)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is cancel or clicked is None:
+            return None
+        if clicked is overwriteAll:
+            return "overwrite_all"
+        if clicked is skipAll:
+            return "skip_all"
+        if clicked is overwrite:
+            return "overwrite"
+        if clicked is skip:
+            return "skip"
+        if clicked is rename:
+            return "rename"
+        return None
+
+    def _uniqueDestName(self, destDir, stem, ext):
+        name = stem
+        n = 2
+        while os.path.exists(os.path.join(destDir, name + ext)):
+            name = f"{stem} ({n})"
+            n += 1
+        return name
+
+    def _mergeImportedFiles(self, srcDir, destDir, extensions, kind):
+        """
+        Copy files into destDir. Same-name files prompt overwrite / skip / rename.
+        Returns (copiedCount, renameMap) where renameMap is oldStem → newStem.
+        """
+        os.makedirs(destDir, exist_ok=True)
+        files = [
+            name for name in sorted(os.listdir(srcDir))
+            if os.path.isfile(os.path.join(srcDir, name)) and name.endswith(extensions)
+        ]
+        copied = 0
+        renameMap = {}
+        mode = None  # overwrite_all / skip_all after a "all" click
+        pending = list(files)
+        for name in files:
+            src = os.path.join(srcDir, name)
+            dest = os.path.join(destDir, name)
+            stem, ext = os.path.splitext(name)
+            remaining = len(pending)
+            pending.pop(0)
+            if os.path.exists(dest):
+                choice = mode
+                if choice is None:
+                    choice = self._conflictChoice(kind, stem, remaining)
+                if choice is None:
+                    raise ValueError("Import cancelled.")
+                if choice == "overwrite_all":
+                    mode = "overwrite_all"
+                    choice = "overwrite"
+                elif choice == "skip_all":
+                    mode = "skip_all"
+                    choice = "skip"
+                if choice == "skip":
+                    continue
+                if choice == "rename":
+                    suggested = self._uniqueDestName(destDir, stem, ext)
+                    newStem, ok = QInputDialog.getText(
+                        self, "Rename", "New name:", text=suggested
+                    )
+                    newStem = (newStem or "").strip()
+                    if not ok or not newStem:
+                        continue
+                    if os.path.exists(os.path.join(destDir, newStem + ext)):
+                        newStem = self._uniqueDestName(destDir, newStem, ext)
+                    dest = os.path.join(destDir, newStem + ext)
+            shutil.copy2(src, dest)
+            copied += 1
+            destStem = os.path.splitext(os.path.basename(dest))[0]
+            renameMap[stem] = destStem
+        return copied, renameMap
+
+    def _loadSqlCategoriesSidecar(self, srcDir):
+        path = os.path.join(srcDir, "categories.json")
+        if not os.path.isfile(path):
+            return None
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+        except Exception as e:
+            Logic.logException("import profile: SQL categories.json failed", e)
+        return None
+
+    def _promptSqlCategories(self):
+        box = QMessageBox(self)
+        box.setWindowTitle("Import SQL Quick Looks")
+        box.setText("Import SQL Quick Looks with their categories?")
+        box.setInformativeText(
+            "Yes keeps folder/category assignments from the zip.\n"
+            "No imports the snippets only (new ones go to Uncategorized)."
+        )
+        yes = box.addButton("With categories", QMessageBox.ButtonRole.YesRole)
+        no = box.addButton("Without categories", QMessageBox.ButtonRole.NoRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(yes)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is yes:
+            return True
+        if clicked is no:
+            return False
+        return None
+
+    def _applyImportedSqlCategories(self, sidecar, renameMap, importedStems=None):
+        if not sidecar:
+            return
+        config = Utils.loadConfig()
+        cats = list(config.get("sqlCategories") or [])
+        incomingCats = list(sidecar.get("sqlCategories") or [])
+        for cat in incomingCats:
+            if cat and cat not in cats:
+                cats.append(cat)
+        if "Uncategorized" not in cats:
+            cats = ["Uncategorized"] + [c for c in cats if c != "Uncategorized"]
+        mapping = dict(config.get("sqlSnippetCategory") or {})
+        incomingMap = dict(sidecar.get("sqlSnippetCategory") or {})
+        destNames = set(renameMap.values())
+        for origStem, destStem in renameMap.items():
+            mapping[destStem] = incomingMap.get(origStem) or "Uncategorized"
+        order = list(config.get("sqlSnippetOrder") or [])
+        incomingOrder = list(sidecar.get("sqlSnippetOrder") or [])
+        for name in incomingOrder:
+            destName = renameMap.get(name, name)
+            if destName not in destNames:
+                continue
+            if destName in order:
+                order.remove(destName)
+            order.append(destName)
+        config["sqlCategories"] = cats
+        config["sqlSnippetCategory"] = mapping
+        config["sqlSnippetOrder"] = order
+        with open(Utils.getConfigPath(), "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+
+    def _importProfileDir(self, folder):
+        root = self._profileRoot(folder)
+        if root is None:
+            raise ValueError(
+                "This is not a Data Doctor profile zip "
+                "(no query Quick Looks, SQL Quick Looks, or config)."
+            )
+        manPath = os.path.join(root, PROFILE_MANIFEST)
+        parts = []
+        if os.path.isfile(manPath):
+            with open(manPath, encoding="utf-8") as f:
+                man = json.load(f)
+            if not isinstance(man, dict):
+                raise ValueError("Profile manifest is not valid.")
+            if man.get("kind") != PROFILE_KIND and man.get("app") != "DataDoctor":
+                raise ValueError("This zip is not a Data Doctor profile.")
+            parts = list(man.get("parts") or [])
+        if not parts:
+            if os.path.isdir(os.path.join(root, "queryQuickLooks")):
+                parts.append("queryQuickLooks")
+            if os.path.isdir(os.path.join(root, "sqlQuickLooks")):
+                parts.append("sqlQuickLooks")
+            if os.path.isdir(os.path.join(root, "config")) or os.path.isfile(
+                os.path.join(root, "user.config")
+            ):
+                parts.append("config")
+        if not parts:
+            raise ValueError("This zip has nothing to import.")
+        imported = []
+        sqlCatJob = None
+        if "queryQuickLooks" in parts:
+            src = os.path.join(root, "queryQuickLooks")
+            if os.path.isdir(src):
+                dest = Utils.getQuickLookDir()
+                n, _renames = self._mergeImportedFiles(
+                    src, dest, (".json", ".txt"), "query Quick Look"
+                )
+                imported.append(f"Query Quick Looks ({n})")
+        if "sqlQuickLooks" in parts:
+            src = os.path.join(root, "sqlQuickLooks")
+            if os.path.isdir(src):
+                dest = Utils.getSqlSnippetDir()
+                sidecar = self._loadSqlCategoriesSidecar(src)
+                withCats = False
+                if sidecar:
+                    choice = self._promptSqlCategories()
+                    if choice is None:
+                        raise ValueError("Import cancelled.")
+                    withCats = bool(choice)
+                n, renameMap = self._mergeImportedFiles(
+                    src, dest, (".sql",), "SQL Quick Look"
+                )
+                if withCats:
+                    sqlCatJob = (sidecar, renameMap)
+                imported.append(f"SQL Quick Looks ({n})")
+        if "config" in parts:
+            src = os.path.join(root, "config", "user.config")
+            if not os.path.isfile(src):
+                src = os.path.join(root, "user.config")
+            if os.path.isfile(src):
+                with open(src, encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, dict):
+                    raise ValueError("Config in the zip is not valid.")
+                shutil.copy2(src, Utils.getConfigPath())
+                imported.append("Config")
+        if sqlCatJob is not None:
+            self._applyImportedSqlCategories(sqlCatJob[0], sqlCatJob[1])
+        if not imported:
+            raise ValueError("This zip has nothing to import.")
+        return imported
+
+    def _refreshDatabaseCombos(self):
+        """Reload internal / SQL database lists after Access List save."""
+        win = self.winMain
+        if win is None:
+            return
+        try:
+            wb = getattr(win, "sqlWorkbench", None)
+            cb = getattr(wb, "cbDatabase", None) if wb is not None else None
+            if cb is None:
+                cb = getattr(win, "cbDatabase", None)
+            if cb is not None:
+                current = cb.currentText()
+                Utils.loadDatabase(cb, "sql")
+                i = cb.findText(current)
+                if i >= 0:
+                    cb.setCurrentIndex(i)
+        except Exception as e:
+            Logic.logException("refresh SQL database combo failed", e)
+        try:
+            q = getattr(win, "winQuery", None)
+            if q is not None and getattr(q, "cbDatabase", None) is not None:
+                if getattr(q, "queryType", None) in ("internal", "sql"):
+                    current = q.cbDatabase.currentText()
+                    Utils.loadDatabase(q.cbDatabase, q.queryType)
+                    i = q.cbDatabase.findText(current)
+                    if i >= 0:
+                        q.cbDatabase.setCurrentIndex(i)
+        except Exception as e:
+            Logic.logException("refresh Query database combo failed", e)
+
+    def _refreshAfterImport(self):
+        Utils.reloadGlobals()
+        Utils.applyColorTheme()
+        self.loadSettings()
+        win = self.winMain
+        if win is None:
+            return
+        try:
+            q = getattr(win, "winQuery", None)
+            cb = getattr(q, "cbQuickLook", None) if q is not None else None
+            if cb is not None:
+                Utils.loadQuickLooks(cb)
+        except Exception as e:
+            Logic.logException("import profile: refresh Quick Looks failed", e)
+        try:
+            if hasattr(win, "loadSnippets"):
+                win.loadSnippets()
+        except Exception as e:
+            Logic.logException("import profile: refresh SQL snippets failed", e)
+
+    def onUpdatePasswordPressed(self):
+        """Change the Oracle password on checked Access List databases only."""
+        newOracleUser = (self.qleOracleUser.text() or "").strip()
+        newOraclePassword = self.qleOraclePassword.text() or ""
+        if not newOracleUser:
+            QMessageBox.warning(self, "Update Password", "Enter an Oracle user name first.")
+            return
+        if not newOraclePassword:
+            QMessageBox.warning(self, "Update Password", "Enter the new Oracle password first.")
+            return
+        try:
+            from core.Oracle import validateOraclePassword
+            ok, errMsg = validateOraclePassword(newOraclePassword)
+        except Exception as e:
+            ok, errMsg = False, f"Could not validate Oracle password: {e}"
+        if not ok:
+            QMessageBox.warning(self, "Invalid Oracle Password", errMsg)
+            return
+        targets = self._checkedHdbAccess()
+        if not targets:
+            QMessageBox.warning(
+                self,
+                "Update Password",
+                "Check at least one database on the Databases tab (Access List).",
+            )
+            return
+        try:
+            priorOraclePassword = keyring.get_password("DataDoctor", "oraclePassword") or ""
+        except Exception:
+            priorOraclePassword = ""
+        if not priorOraclePassword:
+            QMessageBox.information(
+                self,
+                "Update Password",
+                "No current password is stored in Options. "
+                "You will be asked for the current password on each database that needs it.",
+            )
+            priorOraclePassword = ""
+        listed = ", ".join(targets)
+        reply = QMessageBox.question(
+            self,
+            "Update HDB Password",
+            f"Change the password for user {newOracleUser} on:\n\n{listed}\n\n"
+            "The new password is saved in Options either way.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            keyring.set_password("DataDoctor", "oracleUser", newOracleUser)
+            keyring.set_password("DataDoctor", "oraclePassword", newOraclePassword)
+            updateKeyringCache("oracleUser", newOracleUser)
+            updateKeyringCache("oraclePassword", newOraclePassword)
+            from core.Oracle import clearAuthFailure
+            clearAuthFailure()
+        except Exception as e:
+            QMessageBox.warning(self, "Credential Save Error", f"Failed to save Oracle credentials: {e}")
+            return
+        self._startHdbPasswordChange(
+            username=newOracleUser,
+            oldPassword=priorOraclePassword,
+            newPassword=newOraclePassword,
+            databases=targets,
+        )
+
+    def _startHdbPasswordChange(self, username, oldPassword, newPassword, databases=None):
         """
         Kick off HDB password updates:
           1) Parallel pass with Options-stored old password
@@ -846,10 +1447,15 @@ class uiOptions(QDialog):
                 uiOptions._finalizeHdbPasswordChange(state)
 
         signals.finished.connect(onFirstPassFinished)
-        worker = hdbPasswordChangeWorker(username, oldPassword, newPassword, signals)
+        worker = hdbPasswordChangeWorker(
+            username, oldPassword, newPassword, signals, databases=databases
+        )
+        targetNote = (
+            ", ".join(databases) if databases else "all USBR databases"
+        )
         Logic.logMessage(
             "INFO",
-            f"Starting HDB password change for user {username} on all USBR databases",
+            f"Starting HDB password change for user {username} on {targetNote}",
         )
         QThreadPool.globalInstance().start(worker)
 
@@ -1123,7 +1729,7 @@ class uiOptions(QDialog):
                 "\n\nYour previous password was restored in Options."
                 if passwordReverted
                 else "\n\nCould not restore the previous password automatically; "
-                     "re-enter it in Options → USBR if needed."
+                     "re-enter it in Options → Oracle if needed."
             )
             QMessageBox.information(
                 parent,
