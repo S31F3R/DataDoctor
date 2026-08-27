@@ -29,6 +29,14 @@ If an older file is missing overlay/delta metadata, those checkboxes stay **unch
 
 **Prev Day / Prev Week** stored in a Quick Look still mean “rolling to now” — they refresh when you load and when you Query.
 
+## Export / Import
+
+**Options → General → Export… / Import…** can include Query Quick Looks and SQL Quick Looks.
+
+Import **merges**. Existing files with the same name prompt **Overwrite**, **Skip**, or **Rename** (and Overwrite all / Skip all when more than one clash remains). Nothing is wiped just because it was not in the zip.
+
+SQL Quick Looks export a `categories.json` sidecar. On import you choose **With categories** (keep folder assignments from the zip) or **Without categories** (new snippets go to Uncategorized).
+
 ## Packaged example
 
 `quickLook/Below Parker Dam (MRID).json` (and similar) are starter looks. Updates do **not** delete user-added files; same-name packaged files can be overwritten.

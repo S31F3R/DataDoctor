@@ -5,7 +5,7 @@ The export button writes **whichever table is on the active tab**:
 | Active tab | What is exported |
 |------------|------------------|
 | **Data Query** | The series table (timestamps + every column as displayed) |
-| **SQL Query Builder** | The current result tab of the active worksheet |
+| **SQL Query Builder** | The **focused** result tab of the active worksheet (not every result tab) |
 
 Display text is what you get (raw vs rounded follows **Options → Raw data**). Overlay/delta columns export as they appear.
 

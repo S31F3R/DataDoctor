@@ -283,7 +283,7 @@ class uiDataDictionary(QMainWindow):
                 Logic.logMessage("DEBUG", "applyDatabaseDelegate: database column not found")
             return
         # Full program list (internal-style) so AQUARIUS + HDB + USGS are all available
-        databases = Utils.programDatabases(queryType='internal')
+        databases = Utils.programDatabases(queryType='internal', applyAccessList=False)
         self._databaseDelegate = DatabaseDelegate(databases, self.mainTable)
         self.mainTable.setItemDelegateForColumn(col, self._databaseDelegate)
         if Config.debug:

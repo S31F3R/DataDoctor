@@ -311,7 +311,7 @@ class uiMain(QMainWindow):
                 self.listSnippets.model().rowsMoved.connect(self.onSnippetsReordered)
             except Exception:
                 pass
-            self.listSnippets.setToolTip("Drag to reorder, or right-click Move Up/Down")
+            self.listSnippets.setToolTip("Drag to reorder, or right-click Move Up/Down/Delete")
 
         # Ensure tab widget expands
         self.tabWidget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -583,9 +583,11 @@ class uiMain(QMainWindow):
 
         if item is None: return
         row = self.listSnippets.row(item)
+        self.listSnippets.setCurrentItem(item)
         menu = QMenu(self)
         actUp = menu.addAction("Move Up")
         actDown = menu.addAction("Move Down")
+        actDelete = menu.addAction("Delete")
         actUp.setEnabled(row > 0)
         actDown.setEnabled(row < self.listSnippets.count() - 1)
         chosen = menu.exec(self.listSnippets.mapToGlobal(pos))
@@ -600,6 +602,11 @@ class uiMain(QMainWindow):
             self.listSnippets.insertItem(row + 1, taken)
             self.listSnippets.setCurrentRow(row + 1)
             self.saveSnippetOrder()
+        elif chosen == actDelete:
+            if self.sqlWorkbench is not None:
+                self.sqlWorkbench.deleteSnippet()
+            else:
+                self.deleteSnippet()
 
     def saveSnippet(self):
         """Save current pteSQL content as .sql snippet."""

@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox,
     QPushButton, QTabWidget, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QListWidget, QListWidgetItem, QStackedWidget, QAbstractItemView,
-    QSizePolicy, QFileDialog,
+    QSizePolicy, QFileDialog, QInputDialog,
 )
 from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal, Qt, QSize
 from PyQt6.QtGui import QIcon, QPixmap
@@ -175,6 +175,13 @@ class uiOptions(QDialog):
         Utils.buttonStyle(self.btnShowPassword, None, None)
         Utils.buttonStyle(self.btnShowUSGSKey, None, None)
         Utils.buttonStyle(self.btnShowOraclePassword, None, None)
+        for btn in (
+            self.btnShowPassword,
+            self.btnShowUSGSKey,
+            self.btnShowOraclePassword,
+        ):
+            if btn is not None:
+                btn.raise_()
 
         try:
             self.btnbOptions.accepted.disconnect()
@@ -342,12 +349,31 @@ class uiOptions(QDialog):
             )
             self.listHdbAccess.addItem(item)
 
+    def _layoutContaining(self, layout, widget):
+        """Find the (possibly nested) QLayout that owns widget."""
+        if layout is None or widget is None:
+            return None
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item is None:
+                continue
+            if item.widget() is widget:
+                return layout
+            child = item.layout()
+            if child is not None:
+                found = self._layoutContaining(child, widget)
+                if found is not None:
+                    return found
+        return None
+
     def _replaceWithPasswordEdit(self, objectName, maxLength=None):
         """
         Swap a plain QLineEdit from the .ui for customPasswordEdit.
 
-        winOptions tabs use absolute geometry (no layout on the parent page), so
-        the geometry path is normal — not a warning.
+        Options pages nest the field in a label + HBox (field | hide button).
+        Parent.layout().indexOf(old) is -1 for nested layouts, which used to
+        fall through to absolute geometry and park the edit on top of the
+        label and hide/unhide button.
         """
         old = self.findChild(QLineEdit, objectName)
         if old is None:
@@ -367,18 +393,21 @@ class uiOptions(QDialog):
         newEdit.setAlignment(old.alignment())
         newEdit.setStyleSheet(old.styleSheet())
         newEdit.setEnabled(old.isEnabled())
+        newEdit.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
 
-        layout = parent.layout() if parent is not None else None
-        if layout is not None:
-            index = layout.indexOf(old)
-            if index != -1:
-                layout.replaceWidget(old, newEdit)
-                old.deleteLater()
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Replaced {objectName} via layout")
-                return newEdit
+        pageLayout = parent.layout() if parent is not None else None
+        found = self._layoutContaining(pageLayout, old)
+        if found is not None:
+            found.replaceWidget(old, newEdit)
+            old.deleteLater()
+            newEdit.show()
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Replaced {objectName} via nested layout")
+            return newEdit
 
-        # Expected path for geometry-based Options tabs
+        # Fallback for a geometry-only page (no layout chain)
         newEdit.setGeometry(geom)
         old.hide()
         old.deleteLater()
@@ -838,6 +867,8 @@ class uiOptions(QDialog):
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"clearAuthFailure skipped: {e}")
 
+        self._refreshDatabaseCombos()
+
         # Close Options (we disconnected the UI auto-accept)
         super().accept()
 
@@ -927,6 +958,16 @@ class uiOptions(QDialog):
                     self._zipDir(
                         zf, Utils.getSqlSnippetDir(), "sqlQuickLooks", (".sql",)
                     )
+                    cfg = Utils.loadConfig()
+                    cats = {
+                        "sqlCategories": list(cfg.get("sqlCategories") or []),
+                        "sqlSnippetCategory": dict(cfg.get("sqlSnippetCategory") or {}),
+                        "sqlSnippetOrder": list(cfg.get("sqlSnippetOrder") or []),
+                    }
+                    zf.writestr(
+                        "sqlQuickLooks/categories.json",
+                        json.dumps(cats, indent=2),
+                    )
                 if "config" in parts:
                     cfg = Utils.getConfigPath()
                     if os.path.isfile(cfg):
@@ -992,6 +1033,167 @@ class uiOptions(QDialog):
             return folder
         return None
 
+    def _conflictChoice(self, kind, name, remaining):
+        """
+        Overwrite / Skip / Rename for one name clash.
+        Returns 'overwrite', 'overwrite_all', 'skip', 'skip_all', 'rename', or None (cancel).
+        """
+        box = QMessageBox(self)
+        box.setWindowTitle("Import")
+        box.setText(f"A {kind} named '{name}' already exists.")
+        box.setInformativeText(
+            "Overwrite it, skip it, or save the import under a new name?"
+        )
+        overwrite = box.addButton("Overwrite", QMessageBox.ButtonRole.YesRole)
+        skip = box.addButton("Skip", QMessageBox.ButtonRole.NoRole)
+        rename = box.addButton("Rename…", QMessageBox.ButtonRole.ActionRole)
+        overwriteAll = skipAll = None
+        if remaining > 1:
+            overwriteAll = box.addButton(
+                "Overwrite all", QMessageBox.ButtonRole.AcceptRole
+            )
+            skipAll = box.addButton("Skip all", QMessageBox.ButtonRole.RejectRole)
+        cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(overwrite)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is cancel or clicked is None:
+            return None
+        if clicked is overwriteAll:
+            return "overwrite_all"
+        if clicked is skipAll:
+            return "skip_all"
+        if clicked is overwrite:
+            return "overwrite"
+        if clicked is skip:
+            return "skip"
+        if clicked is rename:
+            return "rename"
+        return None
+
+    def _uniqueDestName(self, destDir, stem, ext):
+        name = stem
+        n = 2
+        while os.path.exists(os.path.join(destDir, name + ext)):
+            name = f"{stem} ({n})"
+            n += 1
+        return name
+
+    def _mergeImportedFiles(self, srcDir, destDir, extensions, kind):
+        """
+        Copy files into destDir. Same-name files prompt overwrite / skip / rename.
+        Returns (copiedCount, renameMap) where renameMap is oldStem → newStem.
+        """
+        os.makedirs(destDir, exist_ok=True)
+        files = [
+            name for name in sorted(os.listdir(srcDir))
+            if os.path.isfile(os.path.join(srcDir, name)) and name.endswith(extensions)
+        ]
+        copied = 0
+        renameMap = {}
+        mode = None  # overwrite_all / skip_all after a "all" click
+        pending = list(files)
+        for name in files:
+            src = os.path.join(srcDir, name)
+            dest = os.path.join(destDir, name)
+            stem, ext = os.path.splitext(name)
+            remaining = len(pending)
+            pending.pop(0)
+            if os.path.exists(dest):
+                choice = mode
+                if choice is None:
+                    choice = self._conflictChoice(kind, stem, remaining)
+                if choice is None:
+                    raise ValueError("Import cancelled.")
+                if choice == "overwrite_all":
+                    mode = "overwrite_all"
+                    choice = "overwrite"
+                elif choice == "skip_all":
+                    mode = "skip_all"
+                    choice = "skip"
+                if choice == "skip":
+                    continue
+                if choice == "rename":
+                    suggested = self._uniqueDestName(destDir, stem, ext)
+                    newStem, ok = QInputDialog.getText(
+                        self, "Rename", "New name:", text=suggested
+                    )
+                    newStem = (newStem or "").strip()
+                    if not ok or not newStem:
+                        continue
+                    if os.path.exists(os.path.join(destDir, newStem + ext)):
+                        newStem = self._uniqueDestName(destDir, newStem, ext)
+                    dest = os.path.join(destDir, newStem + ext)
+            shutil.copy2(src, dest)
+            copied += 1
+            destStem = os.path.splitext(os.path.basename(dest))[0]
+            renameMap[stem] = destStem
+        return copied, renameMap
+
+    def _loadSqlCategoriesSidecar(self, srcDir):
+        path = os.path.join(srcDir, "categories.json")
+        if not os.path.isfile(path):
+            return None
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+        except Exception as e:
+            Logic.logException("import profile: SQL categories.json failed", e)
+        return None
+
+    def _promptSqlCategories(self):
+        box = QMessageBox(self)
+        box.setWindowTitle("Import SQL Quick Looks")
+        box.setText("Import SQL Quick Looks with their categories?")
+        box.setInformativeText(
+            "Yes keeps folder/category assignments from the zip.\n"
+            "No imports the snippets only (new ones go to Uncategorized)."
+        )
+        yes = box.addButton("With categories", QMessageBox.ButtonRole.YesRole)
+        no = box.addButton("Without categories", QMessageBox.ButtonRole.NoRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(yes)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is yes:
+            return True
+        if clicked is no:
+            return False
+        return None
+
+    def _applyImportedSqlCategories(self, sidecar, renameMap, importedStems=None):
+        if not sidecar:
+            return
+        config = Utils.loadConfig()
+        cats = list(config.get("sqlCategories") or [])
+        incomingCats = list(sidecar.get("sqlCategories") or [])
+        for cat in incomingCats:
+            if cat and cat not in cats:
+                cats.append(cat)
+        if "Uncategorized" not in cats:
+            cats = ["Uncategorized"] + [c for c in cats if c != "Uncategorized"]
+        mapping = dict(config.get("sqlSnippetCategory") or {})
+        incomingMap = dict(sidecar.get("sqlSnippetCategory") or {})
+        destNames = set(renameMap.values())
+        for origStem, destStem in renameMap.items():
+            mapping[destStem] = incomingMap.get(origStem) or "Uncategorized"
+        order = list(config.get("sqlSnippetOrder") or [])
+        incomingOrder = list(sidecar.get("sqlSnippetOrder") or [])
+        for name in incomingOrder:
+            destName = renameMap.get(name, name)
+            if destName not in destNames:
+                continue
+            if destName in order:
+                order.remove(destName)
+            order.append(destName)
+        config["sqlCategories"] = cats
+        config["sqlSnippetCategory"] = mapping
+        config["sqlSnippetOrder"] = order
+        with open(Utils.getConfigPath(), "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2)
+
     def _importProfileDir(self, folder):
         root = self._profileRoot(folder)
         if root is None:
@@ -1021,27 +1223,31 @@ class uiOptions(QDialog):
         if not parts:
             raise ValueError("This zip has nothing to import.")
         imported = []
+        sqlCatJob = None
         if "queryQuickLooks" in parts:
             src = os.path.join(root, "queryQuickLooks")
             if os.path.isdir(src):
                 dest = Utils.getQuickLookDir()
-                os.makedirs(dest, exist_ok=True)
-                n = 0
-                for name in os.listdir(src):
-                    if name.endswith((".json", ".txt")):
-                        shutil.copy2(os.path.join(src, name), os.path.join(dest, name))
-                        n += 1
+                n, _renames = self._mergeImportedFiles(
+                    src, dest, (".json", ".txt"), "query Quick Look"
+                )
                 imported.append(f"Query Quick Looks ({n})")
         if "sqlQuickLooks" in parts:
             src = os.path.join(root, "sqlQuickLooks")
             if os.path.isdir(src):
                 dest = Utils.getSqlSnippetDir()
-                os.makedirs(dest, exist_ok=True)
-                n = 0
-                for name in os.listdir(src):
-                    if name.endswith(".sql"):
-                        shutil.copy2(os.path.join(src, name), os.path.join(dest, name))
-                        n += 1
+                sidecar = self._loadSqlCategoriesSidecar(src)
+                withCats = False
+                if sidecar:
+                    choice = self._promptSqlCategories()
+                    if choice is None:
+                        raise ValueError("Import cancelled.")
+                    withCats = bool(choice)
+                n, renameMap = self._mergeImportedFiles(
+                    src, dest, (".sql",), "SQL Quick Look"
+                )
+                if withCats:
+                    sqlCatJob = (sidecar, renameMap)
                 imported.append(f"SQL Quick Looks ({n})")
         if "config" in parts:
             src = os.path.join(root, "config", "user.config")
@@ -1054,9 +1260,41 @@ class uiOptions(QDialog):
                     raise ValueError("Config in the zip is not valid.")
                 shutil.copy2(src, Utils.getConfigPath())
                 imported.append("Config")
+        if sqlCatJob is not None:
+            self._applyImportedSqlCategories(sqlCatJob[0], sqlCatJob[1])
         if not imported:
             raise ValueError("This zip has nothing to import.")
         return imported
+
+    def _refreshDatabaseCombos(self):
+        """Reload internal / SQL database lists after Access List save."""
+        win = self.winMain
+        if win is None:
+            return
+        try:
+            wb = getattr(win, "sqlWorkbench", None)
+            cb = getattr(wb, "cbDatabase", None) if wb is not None else None
+            if cb is None:
+                cb = getattr(win, "cbDatabase", None)
+            if cb is not None:
+                current = cb.currentText()
+                Utils.loadDatabase(cb, "sql")
+                i = cb.findText(current)
+                if i >= 0:
+                    cb.setCurrentIndex(i)
+        except Exception as e:
+            Logic.logException("refresh SQL database combo failed", e)
+        try:
+            q = getattr(win, "winQuery", None)
+            if q is not None and getattr(q, "cbDatabase", None) is not None:
+                if getattr(q, "queryType", None) in ("internal", "sql"):
+                    current = q.cbDatabase.currentText()
+                    Utils.loadDatabase(q.cbDatabase, q.queryType)
+                    i = q.cbDatabase.findText(current)
+                    if i >= 0:
+                        q.cbDatabase.setCurrentIndex(i)
+        except Exception as e:
+            Logic.logException("refresh Query database combo failed", e)
 
     def _refreshAfterImport(self):
         Utils.reloadGlobals()

@@ -1507,8 +1507,9 @@ def writeHdbRows(uploadRows):
             oracleConn = None
             tasksDone = 0
             try:
-                if getattr(Oracle, 'authFailureMessage', None):
-                    raise Oracle.OracleAuthError(Oracle.authFailureMessage)
+                blocked = Oracle.authFailureFor(dsn)
+                if blocked:
+                    raise Oracle.OracleAuthError(blocked)
 
                 oracleConn = Oracle.oracleConnection(dsn)
                 oracleConn.connect()

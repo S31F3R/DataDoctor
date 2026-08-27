@@ -13,9 +13,14 @@ from pathlib import Path
 from typing import List, Any, Optional, Tuple, Dict
 from core import Logic, Config
 
-# After a bad password, refuse further connect attempts for this process so we
+# After a bad password, refuse further connect attempts for *that DSN* so we
 # do not spam Oracle and lock the account (multi-thread HDB / multi-DSN queries).
-authFailureMessage = None
+# Other databases stay available. The pause expires after AUTH_FAILURE_LOCK_SECONDS
+# (or immediately when credentials are saved).
+authFailureMessage = None  # legacy; no longer set. Use authFailureFor(dsn).
+AUTH_FAILURE_LOCK_SECONDS = 300
+_authFailuresLock = threading.Lock()
+_authFailures: Dict[str, Tuple[str, float]] = {}
 
 # Instant Client + env must be configured once. sqlRead creates many connections
 # (per SDID × date chunk × thread). Old code prepended clientDir to PATH on every
@@ -56,10 +61,63 @@ class OraclePasswordExpiredError(OracleAuthError):
     """Password expired (ORA-28001) — user can change it in Options → USBR."""
     pass
 
-def clearAuthFailure():
-    """Call after the user updates Oracle credentials in Options."""
+def _authDsnKey(dsn: str) -> str:
+    """Normalize USBR-LCHDB / lchdb / USBR-LCHDB|LCHDBA to a dict key."""
+    s = str(dsn or '').strip().lower()
+    if '|' in s:
+        s = s.split('|', 1)[0].strip()
+    if '-' in s:
+        s = s.split('-', 1)[-1].strip()
+    return s
+
+
+def _formatLockRemaining(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds} second(s)"
+    mins = (seconds + 59) // 60
+    return f"{mins} minute(s)"
+
+
+def clearAuthFailure(dsn: Optional[str] = None):
+    """Clear auth fail-fast. No dsn → every database (credential save)."""
     global authFailureMessage
     authFailureMessage = None
+    with _authFailuresLock:
+        if dsn:
+            _authFailures.pop(_authDsnKey(dsn), None)
+        else:
+            _authFailures.clear()
+
+
+def setAuthFailure(dsn: str, message: str):
+    key = _authDsnKey(dsn)
+    if not key:
+        return
+    with _authFailuresLock:
+        _authFailures[key] = (message, time.monotonic() + AUTH_FAILURE_LOCK_SECONDS)
+
+
+def authFailureFor(dsn: str) -> Optional[str]:
+    """User-facing block message for this DSN, or None if not blocked / expired."""
+    key = _authDsnKey(dsn)
+    if not key:
+        return None
+    now = time.monotonic()
+    with _authFailuresLock:
+        rec = _authFailures.get(key)
+        if not rec:
+            return None
+        msg, expiry = rec
+        if now >= expiry:
+            _authFailures.pop(key, None)
+            return None
+        remaining = expiry - now
+    wait = _formatLockRemaining(remaining)
+    return (
+        f"{msg}\n\nThis database is paused for {wait} to avoid locking the "
+        "account. Other databases are still available."
+    )
 
 def _oracleErrorCode(exc) -> Optional[int]:
     """Extract numeric Oracle error code when present."""
@@ -200,21 +258,21 @@ def isAuthError(exc) -> bool:
         pass
     return False
 
-def passwordExpiredMessage() -> str:
+def passwordExpiredMessage(dsn: str = '') -> str:
     """User-facing message for ORA-28001 (no secrets)."""
+    label = (dsn or '').strip()
+    where = f" ({label})" if label else ""
     return (
-        "Your Oracle/HDB password has expired.\n\n"
+        f"Your Oracle/HDB password has expired{where}.\n\n"
         "You can change it in Options under the USBR tab "
-        "(Oracle username and password).\n\n"
-        "Further connect attempts are blocked this session until "
-        "credentials are updated, to avoid locking the account."
+        "(Oracle username and password)."
     )
 
-def genericAuthFailureMessage() -> str:
+def genericAuthFailureMessage(dsn: str = '') -> str:
+    label = (dsn or '').strip() or "this database"
     return (
-        "Oracle login failed: wrong username/password or account locked. "
-        "Fix credentials in Options — further connect attempts are blocked "
-        "this session to avoid locking the account."
+        f"Oracle login failed ({label}): wrong username/password or account locked. "
+        "Update credentials in Options if they are wrong for this database."
     )
 
 def validateOraclePassword(password: str) -> Tuple[bool, str]:
@@ -1045,11 +1103,9 @@ class oracleConnection:
 
     def connect(self) -> oracledb.Connection:
         """Establish Oracle connection with PIV/MCS and user credentials."""
-        global authFailureMessage
-
-        # Do not hammer Oracle after a failed login (account lock protection)
-        if authFailureMessage:
-            raise OracleAuthError(authFailureMessage)
+        blocked = authFailureFor(self.dsn)
+        if blocked:
+            raise OracleAuthError(blocked)
 
         try:
             if isMcsAuth():
@@ -1068,7 +1124,7 @@ class oracleConnection:
                         "DEBUG",
                         f"oracleConnection.connect: Connection established to {self.dsn}",
                     )
-            authFailureMessage = None
+            clearAuthFailure(self.dsn)
             ingestSqlnetLog()
             return self.connection
         except OracleAuthError:
@@ -1077,31 +1133,39 @@ class oracleConnection:
         except oracledb.Error as e:
             ingestSqlnetLog()
             if isPasswordExpiredError(e):
-                authFailureMessage = passwordExpiredMessage()
+                setAuthFailure(self.dsn, passwordExpiredMessage(self.dsn))
                 Logic.logMessage(
                     "ERROR",
                     f"oracleConnection.connect: Password expired for {self.dsn}: {e}",
                 )
-                raise OraclePasswordExpiredError(authFailureMessage) from e
+                raise OraclePasswordExpiredError(
+                    authFailureFor(self.dsn) or passwordExpiredMessage(self.dsn)
+                ) from e
             if isAuthError(e):
-                authFailureMessage = genericAuthFailureMessage()
+                setAuthFailure(self.dsn, genericAuthFailureMessage(self.dsn))
                 Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
-                raise OracleAuthError(authFailureMessage) from e
+                raise OracleAuthError(
+                    authFailureFor(self.dsn) or genericAuthFailureMessage(self.dsn)
+                ) from e
             Logic.logException(f"oracleConnection.connect: Error connecting to Oracle ({self.dsn})", e)
             raise
         except Exception as e:
             ingestSqlnetLog()
             if isPasswordExpiredError(e):
-                authFailureMessage = passwordExpiredMessage()
+                setAuthFailure(self.dsn, passwordExpiredMessage(self.dsn))
                 Logic.logMessage(
                     "ERROR",
                     f"oracleConnection.connect: Password expired for {self.dsn}: {e}",
                 )
-                raise OraclePasswordExpiredError(authFailureMessage) from e
+                raise OraclePasswordExpiredError(
+                    authFailureFor(self.dsn) or passwordExpiredMessage(self.dsn)
+                ) from e
             if isAuthError(e):
-                authFailureMessage = genericAuthFailureMessage()
+                setAuthFailure(self.dsn, genericAuthFailureMessage(self.dsn))
                 Logic.logMessage("ERROR", f"oracleConnection.connect: Auth failure for {self.dsn}: {e}")
-                raise OracleAuthError(authFailureMessage) from e
+                raise OracleAuthError(
+                    authFailureFor(self.dsn) or genericAuthFailureMessage(self.dsn)
+                ) from e
             Logic.logException(f"oracleConnection.connect: Unexpected error ({self.dsn})", e)
             raise
 

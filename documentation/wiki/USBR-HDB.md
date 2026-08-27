@@ -2,6 +2,8 @@
 
 Internal queries talk to Reclamation Hydrologic Databases over **Oracle** (`oracledb`). Set **Options → Oracle** user and password (OS keyring). Point at `tnsnames.ora` if needed. Hourly BOP/EOP and the overwrite flag are under **Options → USBR**.
 
+**Options → Oracle → Access List** is which HDBs you actually use. Unchecked names drop out of Internal Query and SQL Query Builder. Public Query still shows every database. A wrong password on one HDB pauses **that** database for five minutes (or until you save new credentials) so the others stay usable.
+
 Regional / office DSN names:
 
 | DSN | Office |

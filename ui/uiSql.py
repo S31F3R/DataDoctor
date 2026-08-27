@@ -440,7 +440,22 @@ class SnippetCategoryDialog(QDialog):
             act.triggered.connect(
                 lambda _c=False, n=item.text(), k=cat: self._moveSnippet(n, k)
             )
-        menu.exec(self.snipList.mapToGlobal(pos))
+        actDelete = menu.addAction("Delete")
+        chosen = menu.exec(self.snipList.mapToGlobal(pos))
+        if chosen == actDelete:
+            self._deleteSnippet(item.text())
+
+    def _deleteSnippet(self, name):
+        if not name:
+            return
+        reply = QMessageBox.question(
+            self, "Delete Snippet", f"Delete '{name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        if self.wb.deleteSnippetByName(name, confirm=False):
+            self._fillSnippets()
 
     def _moveSnippet(self, snippetName, category):
         if not snippetName or not category:
@@ -732,6 +747,17 @@ class SqlWorkbench:
         if handle is not None:
             handle.setToolTip("Double-click to collapse or expand SQL quick looks")
         self._applySnippetHidden(bool(Utils.loadConfig().get("sqlSnippetsHidden", False)))
+        self._stylePanes()
+
+    def _stylePanes(self, *widgets):
+        targets = widgets or (
+            getattr(self, "pteSQL", None),
+            getattr(self, "sqlTable", None),
+            getattr(self, "listSnippets", None),
+            getattr(self, "snippetPanel", None),
+        )
+        for w in targets:
+            Utils.applyBasePaneBackground(w)
 
     def _newResultTabs(self, parent):
         tabs = ResultTabWidget(parent)
@@ -741,6 +767,7 @@ class SqlWorkbench:
             lambda pos, t=tabs: self._resultTabMenu(t, pos)
         )
         bar.pinClicked.connect(lambda i, t=tabs: self._togglePinAt(t, i))
+        tabs.currentChanged.connect(lambda _i, t=tabs: self._onResultTabChanged(t))
         return tabs
 
     def _wrapResult(self, table, pinned=False):
@@ -778,6 +805,7 @@ class SqlWorkbench:
         return self.resultStack.widget(idx)
 
     def currentResultTable(self):
+        """Table on the focused result tab of the active worksheet (CSV export)."""
         tabs = self.currentResultTabs()
         if tabs is None:
             return self.win.sqlTable
@@ -785,6 +813,13 @@ class SqlWorkbench:
         if isinstance(w, QTableWidget):
             return w
         return self.win.sqlTable
+
+    def _onResultTabChanged(self, tabs):
+        if tabs is not self.currentResultTabs():
+            return
+        w = tabs.currentWidget()
+        if isinstance(w, QTableWidget):
+            self.win.sqlTable = w
 
     def currentDatabase(self):
         if self.cbDatabase is None:
@@ -829,6 +864,7 @@ class SqlWorkbench:
         editor = QPlainTextEdit(self.win.tabSQL)
         editor.setObjectName(f"pteSQL_{self._wsSeq}")
         editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._stylePanes(editor)
         self._setWorksheetDatabase(editor, self.currentDatabase())
         name = f"Query {self._wsSeq}"
         idx = self.worksheetTabs.addTab(editor, name)
@@ -836,6 +872,7 @@ class SqlWorkbench:
         table = QTableWidget(self.win.tabSQL)
         table.setSortingEnabled(True)
         table.horizontalHeader().setStretchLastSection(False)
+        self._stylePanes(table)
         resultTabs.addTab(self._wrapResult(table, pinned=False), "Result")
         resultTabs.tabBar().setTabData(0, {"pinned": False})
         self.resultStack.addTab(resultTabs, "ws")
@@ -952,6 +989,7 @@ class SqlWorkbench:
         table = QTableWidget(self.win.tabSQL)
         table.setSortingEnabled(True)
         table.horizontalHeader().setStretchLastSection(False)
+        self._stylePanes(table)
         idx = tabs.addTab(self._wrapResult(table, pinned=False), "Result")
         tabs.tabBar().setTabData(idx, {"pinned": False})
         tabs.setCurrentIndex(idx)
@@ -1123,6 +1161,7 @@ class SqlWorkbench:
         buttons.accepted.connect(loadCurrent)
         lst.itemDoubleClicked.connect(lambda _i: loadCurrent())
         dlg.exec()
+        Utils.resetStyledButtonHover(self.btnHistory)
 
     def _applyHistory(self, entry):
         editor = self.currentEditor()
@@ -1198,6 +1237,7 @@ class SqlWorkbench:
 
     def manageCategories(self):
         SnippetCategoryDialog(self).exec()
+        Utils.resetStyledButtonHover(self.btnCatagory)
         self._loadCategories()
 
     def loadSnippets(self):
@@ -1299,13 +1339,19 @@ class SqlWorkbench:
         if selected is None:
             QMessageBox.warning(self.win, "Delete Snippet", "No snippet selected.")
             return
-        name = selected.text()
-        reply = QMessageBox.question(
-            self.win, "Delete Snippet", f"Delete '{name}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
+        self.deleteSnippetByName(selected.text(), confirm=True)
+
+    def deleteSnippetByName(self, name, confirm=True):
+        name = (name or "").strip()
+        if not name:
+            return False
+        if confirm:
+            reply = QMessageBox.question(
+                self.win, "Delete Snippet", f"Delete '{name}'?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return False
         filePath = os.path.join(Utils.getSqlSnippetDir(), f"{name}.sql")
         if os.path.exists(filePath):
             os.remove(filePath)
@@ -1313,13 +1359,23 @@ class SqlWorkbench:
         mapping = dict(config.get("sqlSnippetCategory") or {})
         mapping.pop(name, None)
         config["sqlSnippetCategory"] = mapping
+        order = list(config.get("sqlSnippetOrder") or [])
+        if name in order:
+            order = [n for n in order if n != name]
+            config["sqlSnippetOrder"] = order
         try:
             with open(Utils.getConfigPath(), "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
         except Exception:
             pass
-        self.listSnippets.takeItem(self.listSnippets.row(selected))
+        if self.listSnippets is not None:
+            for i in range(self.listSnippets.count()):
+                item = self.listSnippets.item(i)
+                if item is not None and item.text() == name:
+                    self.listSnippets.takeItem(i)
+                    break
         self.win.saveSnippetOrder()
+        return True
 
     def refresh(self):
         """Called when the SQL tab is shown."""

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import (
     QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon,
-    QPixmap, QPalette, QColor,
+    QPixmap, QPalette, QColor, QCursor,
 )
 from core import Logic, Config, Utils
 
@@ -1124,7 +1124,16 @@ def hdbSchemaForDatabase(dbName):
     return dsn.upper() + 'A'
 
 
-def programDatabases(queryType=None):
+def hdbAccessUncheckedNames():
+    """Display names the user turned off in Options → Oracle Access List."""
+    try:
+        names = loadConfig().get('hdbAccessUnchecked') or []
+    except Exception:
+        names = []
+    return set(str(n).strip() for n in names if str(n).strip())
+
+
+def programDatabases(queryType=None, applyAccessList=None):
     """
     Ordered list of database labels used by query combos / data dictionary.
 
@@ -1132,6 +1141,10 @@ def programDatabases(queryType=None):
       'internal' — include AQUARIUS + HDBs + public sources
       'sql'      — HDBs only (Oracle targets)
       None / other — public-style: HDBs + USGS + PNHYD + GPHYD (no AQUARIUS)
+
+    applyAccessList (default True for internal/sql, False otherwise):
+      skip HDBs the user unchecked. Public query always shows every HDB.
+      Data Dictionary should pass False so every source stays editable.
     """
     names = []
     seen = set()
@@ -1142,11 +1155,18 @@ def programDatabases(queryType=None):
             names.append(n)
             seen.add(n)
 
+    if applyAccessList is None:
+        applyAccessList = queryType in ('internal', 'sql')
+    unchecked = hdbAccessUncheckedNames() if applyAccessList else set()
+
     if queryType == 'internal':
         add('AQUARIUS')
 
     for entry in getattr(Config, 'hdbOracleDatabases', ()) or ():
-        add(hdbDatabaseLabel(entry))
+        label = hdbDatabaseLabel(entry)
+        if applyAccessList and label in unchecked:
+            continue
+        add(label)
 
     # Fallback if config empty
     if not any(n.startswith('USBR-') and n not in ('USBR-PNHYD', 'USBR-GPHYD') for n in names):
@@ -1154,6 +1174,8 @@ def programDatabases(queryType=None):
             'USBR-LCHDB', 'USBR-YAOHDB', 'USBR-UCHDB2',
             'USBR-ECOHDB', 'USBR-LBOHDB', 'USBR-KBOHDB',
         ):
+            if applyAccessList and name in unchecked:
+                continue
             add(name)
 
     if queryType != 'sql':
@@ -1214,19 +1236,39 @@ def buttonStyle(button, iconName=None, iconSize=None):
         # Define local event filter for state swaps
         class ButtonEventFilter(QObject):
             def eventFilter(self, obj, event):
-                if event.type() == QEvent.Type.Enter:
+                et = event.type()
+                if et == QEvent.Type.Enter:
                     obj.setIcon(QIcon(hoverPixmap))
-                elif event.type() == QEvent.Type.Leave:
+                elif et in (QEvent.Type.Leave, QEvent.Type.Hide):
                     obj.setIcon(QIcon(normalPixmap))
-                elif event.type() == QEvent.Type.MouseButtonPress:
+                elif et == QEvent.Type.MouseButtonPress:
                     obj.setIcon(QIcon(pressedPixmap))
-                elif event.type() == QEvent.Type.MouseButtonRelease:
-                    obj.setIcon(QIcon(hoverPixmap if obj.underMouse() else normalPixmap))
+                elif et == QEvent.Type.MouseButtonRelease:
+                    # Modal dialogs (History, Categories) can leave underMouse()
+                    # stuck True on Windows until a later hover. Sync from cursor.
+                    def syncIcon():
+                        try:
+                            pos = obj.mapFromGlobal(QCursor.pos())
+                            if (
+                                obj.isVisible()
+                                and obj.isEnabled()
+                                and obj.rect().contains(pos)
+                            ):
+                                obj.setIcon(QIcon(hoverPixmap))
+                            else:
+                                obj.setIcon(QIcon(normalPixmap))
+                        except Exception:
+                            obj.setIcon(QIcon(normalPixmap))
+                    QTimer.singleShot(0, syncIcon)
                 return super().eventFilter(obj, event)
 
         # Install filter (remove any existing to avoid duplicates)
-        button.removeEventFilter(button)
-        button.installEventFilter(ButtonEventFilter(button))
+        oldFilt = getattr(button, '_ddIconFilter', None)
+        if oldFilt is not None:
+            button.removeEventFilter(oldFilt)
+        filt = ButtonEventFilter(button)
+        button._ddIconFilter = filt
+        button.installEventFilter(filt)
 
         # Apply flat stylesheet
         button.setStyleSheet("""
@@ -1770,6 +1812,109 @@ def _pushPalette(app, pal):
             pass
 
 
+def _windowsAppsUseDark():
+    """True if Windows apps are in dark mode; None if unknown / not Windows."""
+    if sys.platform != 'win32':
+        return None
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+        return int(value) == 0
+    except Exception:
+        return None
+
+
+def applyBasePaneBackground(widget):
+    """
+    Fill editors / tables / lists with palette Base.
+
+    On Windows the first SQL widgets (from the .ui) often paint Window (too
+    light in dark mode) while later tabs use Base. Mark the widget so a later
+    theme change can restyle it.
+    """
+    if widget is None:
+        return
+    try:
+        widget.setProperty("sqlPane", True)
+        widget.setBackgroundRole(QPalette.ColorRole.Base)
+        widget.setAutoFillBackground(True)
+        app = QApplication.instance()
+        if app is not None:
+            pal = app.palette()
+            widget.setPalette(pal)
+            vp = getattr(widget, "viewport", None)
+            if callable(vp):
+                view = vp()
+                if view is not None:
+                    view.setPalette(pal)
+                    view.setBackgroundRole(QPalette.ColorRole.Base)
+                    view.setAutoFillBackground(True)
+        existing = widget.styleSheet() or ""
+        if "/*sql-pane-base*/" not in existing:
+            widget.setStyleSheet(
+                "/*sql-pane-base*/\n"
+                "background-color: palette(base);\n"
+                "color: palette(text);\n"
+                + existing
+            )
+    except Exception as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"applyBasePaneBackground failed: {e}")
+
+
+def _restyleMarkedPanes(app):
+    try:
+        widgets = list(app.allWidgets())
+    except Exception:
+        return
+    for w in widgets:
+        try:
+            if w.property("sqlPane"):
+                applyBasePaneBackground(w)
+        except Exception:
+            pass
+
+
+def resetStyledButtonHover(button):
+    """Clear a stuck hover/pressed icon after a modal dialog (Windows)."""
+    if button is None:
+        return
+    try:
+        button.setDown(False)
+        button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+        QApplication.sendEvent(button, QEvent(QEvent.Type.Leave))
+    except Exception:
+        pass
+
+
+def _restoreNativePalette(app):
+    _applyHintScheme(app, Qt.ColorScheme.Unknown)
+    current = _styleKey(app)
+    if _savedStyleName and current.lower() != _savedStyleName.lower():
+        _setAppStyle(app, _savedStyleName)
+    # Empty QPalette() is a baked light palette, not "follow OS".
+    _pushPalette(app, app.style().standardPalette())
+
+
+def _applyForcedTheme(app, wantDark):
+    scheme = Qt.ColorScheme.Dark if wantDark else Qt.ColorScheme.Light
+    _applyHintScheme(app, scheme)
+    pal = app.style().standardPalette()
+    if _paletteIsDark(pal) != wantDark:
+        current = _styleKey(app)
+        if current.lower() != 'fusion':
+            _setAppStyle(app, 'Fusion')
+            _applyHintScheme(app, scheme)
+            pal = app.style().standardPalette()
+        if _paletteIsDark(pal) != wantDark:
+            pal = _forcedSchemePalette(wantDark)
+    _pushPalette(app, pal)
+
+
 def applyColorTheme(theme=None):
     """
     Light/Dark pretend the OS is in that mode.
@@ -1778,7 +1923,9 @@ def applyColorTheme(theme=None):
     keep the real system palette (labels/tables stay dark). We set the hint so
     colorScheme() matches, then install a light or dark palette as the app
     palette (Fusion if the native style still serves the old colors). System
-    restores the original style and palette.
+    restores the original style and palette on Linux/macOS. On Windows, System
+    follows AppsUseLightTheme with the same Light/Dark palettes — the native
+    Windows style does not pick up OS dark mode.
     """
     global _savedStyleName
     name = theme if theme is not None else getattr(Config, 'colorTheme', 'system')
@@ -1793,27 +1940,15 @@ def applyColorTheme(theme=None):
         _savedStyleName = _styleKey(app)
 
     if name == 'system':
-        _applyHintScheme(app, Qt.ColorScheme.Unknown)
-        current = _styleKey(app)
-        if _savedStyleName and current.lower() != _savedStyleName.lower():
-            _setAppStyle(app, _savedStyleName)
-        # Empty constructor is a baked light palette, not "follow OS".
-        _pushPalette(app, app.style().standardPalette())
-        return
+        osDark = _windowsAppsUseDark()
+        if osDark is None:
+            _restoreNativePalette(app)
+        else:
+            _applyForcedTheme(app, wantDark=osDark)
+    else:
+        _applyForcedTheme(app, wantDark=(name == 'dark'))
 
-    wantDark = name == 'dark'
-    scheme = Qt.ColorScheme.Dark if wantDark else Qt.ColorScheme.Light
-    _applyHintScheme(app, scheme)
-    pal = app.style().standardPalette()
-    if _paletteIsDark(pal) != wantDark:
-        current = _styleKey(app)
-        if current.lower() != 'fusion':
-            _setAppStyle(app, 'Fusion')
-            _applyHintScheme(app, scheme)
-            pal = app.style().standardPalette()
-        if _paletteIsDark(pal) != wantDark:
-            pal = _forcedSchemePalette(wantDark)
-    _pushPalette(app, pal)
+    _restyleMarkedPanes(app)
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
