@@ -1,4 +1,16 @@
 ####### CURRENT TASKS #######
+-On the data table, need to give the ability to create Excel like formulas/calculations
+    -Need the same ability to start with =, then be able to click one of the data cells. This would add it to the equation, like =A1 after clicking top left cell
+    -Need to create a list of all the functions that get added in and put them in the wiki
+    -Also need the small square at the bottom of the cell that allows a formula to be dragged down, copying down the formula just like excel does
+        -Add in the same rules to make the copy down not increment if using $ in front of the letter or number
+    -On Overlay queries, make the formulas only work on primary data
+    -Formulas should trigger a change/edit to push/upload back to the database
+-Need to add documentation to the workflow that this document tasks and bugs are to be worked on. Features will be moved up to tasks when they are next in the task queue
+-The 3.0.0 publish last night didn't have any notes. Maybe the workflow needs to go through all the beta/rc .md, then compile the Changes for the next release?
+    -This would be for any 3.# version. Bug fixes will be quick and have their own notes so no need to add them, but bigger versions will most likely have several builds before completed
+    -Since publish is the final, could clean up any .md on source computer after a publish upload. Save all the minor ones for other channels until the next publish then compile
+        -I need ideas, not sure how the workflow should really work here but need to avoid sending a blank change list for a major version like that
 
 ####### CURRENT BUGS #######
 
