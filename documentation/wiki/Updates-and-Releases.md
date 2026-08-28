@@ -32,7 +32,7 @@ Tags use `vMAJOR.MINOR.PATCH`. Release candidates and betas use `vX.Y.Z-rc.N` or
 
 1. Close Data Doctor (or leave it closed).
 2. Put `DataDoctor-Python-*.zip` in the install’s `Update\` folder (next to `Data Doctor.exe`).
-3. Run `applyUpdate.cmd`, or restart **Data Doctor.exe** (it applies zips in `Update\` first).
+3. Restart **Data Doctor.exe**, or run `applyUpdate.cmd`. The exe starts the cmd and exits so launcher files can be replaced; the cmd starts the exe when it finishes.
 
 That refreshes `pythonFiles` code (`app.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary, pip-installs into `python-embed`, and deletes the zip. `pythonFiles\certs\` is left alone so Aquarius certificates survive updates.
 
@@ -40,15 +40,13 @@ That refreshes `pythonFiles` code (`app.pyw`, `ui/`, `core/*` except the **live*
 
 The old zip needed Python on PATH. 3.1+ ships Python 3.14 next to the app and a launcher that starts `python-embed\pythonw.exe`.
 
-In-app update on this hop downloads **`DataDoctor-Windows-*.zip`**, not the Python zip, and tells you to close the app.
+In-app update on this hop downloads **`DataDoctor-Windows-*.zip`**, not the Python zip.
 
-1. Close Data Doctor completely (the running `.exe` cannot replace itself).
-2. Confirm `DataDoctor-Windows-*.zip` is in `Update\` (download it from the update prompt if it is not there yet).
-3. Double-click `applyUpdate.cmd`.
+1. Download from the update prompt (zip lands in `Update\`).
+2. Restart **Data Doctor.exe**. It starts `applyUpdate.cmd` and exits so the `.exe` is not locked.
+3. applyUpdate replaces the launcher, installs `pythonFiles\python-embed\` and `pythonFiles\app.pyw`, merges `bunker.db` (including from leftover `Project Files\`), pip-installs, then starts Data Doctor again.
 
-That replaces `Data Doctor.exe` / `applyUpdate.cmd`, installs `pythonFiles\python-embed\` and `pythonFiles\app.pyw`, merges `bunker.db` (including from a leftover `Project Files\core\bunker.db`), and pip-installs. Do **not** use only the Python zip for this hop — old `applyUpdate` cannot install the launcher or the embed.
-
-If you already applied a 3.1 Python zip (new code, still on `.venv`), the app will prompt for the Windows zip on the next start.
+Do **not** use only the Python zip for this hop — old `applyUpdate` cannot install the launcher or the embed. If you already applied a 3.1 Python zip (new code, still on `.venv`), the app will prompt for the Windows zip on the next start.
 
 Dictionary merge updates `datatype` / `siteName` / `database` from the packaged copy. `valuePrecision`, `precisionOverride`, `expectedMin`, `expectedMax`, `cuttoffMin`, `cutoffMax`, and `rateOfChange` fill blanks only and never overwrite a value you already set.
 

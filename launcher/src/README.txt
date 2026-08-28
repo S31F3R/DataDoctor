@@ -5,8 +5,11 @@ This VS project is meant to be reused. It always starts:
 
   pythonFiles\python-embed\pythonw.exe  pythonFiles\app.pyw
 
-and, if Update\ (or update\) contains a .zip, runs applyUpdate.cmd first
-and waits.
+If Update\ (or update\) contains a .zip, it starts applyUpdate.cmd and
+EXITS (does not wait). That unlocks Data Doctor.exe so the cmd can replace
+the launcher. applyUpdate.py starts Data Doctor.exe when the zip is done.
+
+If there is no zip, it starts pythonw + app.pyw.
 
 Data Doctor packaging (scripts/packageWindows.py) copies DataDoctor.py →
 pythonFiles\app.pyw and extracts embeddable CPython into pythonFiles\python-embed\.

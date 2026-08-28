@@ -819,8 +819,9 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
                 "3.1+ needs the Windows package (DataDoctor-Windows-*.zip), which\n"
                 "replaces Data Doctor.exe and installs Python 3.14 under\n"
                 "pythonFiles\\python-embed\\.\n\n"
-                "Download that zip from GitHub Releases into Update\\, close\n"
-                "Data Doctor, and double-click applyUpdate.cmd.",
+                "Download that zip from GitHub Releases into Update\\, then\n"
+                "restart Data Doctor. The launcher runs applyUpdate.cmd and exits\n"
+                "so the .exe can be replaced; applyUpdate starts the app afterward.",
             )
             return
         ver = info.get("version") or "?"
@@ -829,9 +830,9 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
         box.setText(
             "This Windows install still uses a system Python (.venv).\n\n"
             f"Available:  {ver}\n\n"
-            "Download the Windows package, close Data Doctor, and run\n"
-            "applyUpdate.cmd. That replaces the launcher and installs\n"
-            "Python 3.14. Your dictionary and certs are kept."
+            "Download the Windows package, then restart Data Doctor.\n"
+            "The launcher runs applyUpdate.cmd and exits so the .exe can\n"
+            "be replaced; applyUpdate starts the app when it finishes."
         )
         downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
@@ -989,20 +990,20 @@ def _promptUpdate(parent, info: dict) -> None:
             "this AppImage. You can then replace the current file (the app will "
             "offer to quit and apply, or you can run applyAppImageUpdate.sh)."
         )
-    elif kind == "launcher" and needsWindowsZip:
-        lines.append("")
-        lines.append(
-            "This version ships a new Windows launcher and bundled Python 3.14 "
-            "(no system Python). Download the Windows zip into Update\\, then "
-            "CLOSE Data Doctor and double-click applyUpdate.cmd. Do not restart "
-            "the app first — the running launcher cannot replace itself."
-        )
     elif kind == "launcher":
         lines.append("")
-        lines.append(
-            "Download will place a Python zip in Update/. Restart Data Doctor "
-            "to apply the update."
-        )
+        if needsWindowsZip:
+            lines.append(
+                "This version ships a new Windows launcher and bundled Python 3.14. "
+                "Download the Windows zip into Update\\, then restart Data Doctor. "
+                "The launcher starts applyUpdate.cmd and exits so the .exe can be replaced; "
+                "applyUpdate.cmd starts Data Doctor again when it finishes."
+            )
+        else:
+            lines.append(
+                "Download will place a zip in Update/. Restart Data Doctor "
+                "to apply the update."
+            )
     else:
         lines.append("")
         lines.append(
@@ -1135,25 +1136,13 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
             or "windows" in assetName
             or windowsNeedsLauncherRefresh()
         )
-        if kind == "launcher" and needsWindowsZip:
-            QMessageBox.information(
-                parent,
-                "Launcher update ready",
-                f"Downloaded:\n{path}\n\n"
-                "Close Data Doctor completely, then double-click applyUpdate.cmd\n"
-                "next to Data Doctor.exe.\n\n"
-                "That replaces the launcher and installs Python 3.14 under\n"
-                "pythonFiles\\python-embed\\. Your dictionary and certs are kept.\n\n"
-                "Do not restart the app first — the running .exe cannot replace itself.",
-            )
-            return
-
-        # Launcher / dev — Windows exe applies a Python zip from Update/ on next start
         QMessageBox.information(
             parent,
             "Download complete",
             f"Downloaded:\n{path}\n\n"
-            "Restart Data Doctor to apply the update.",
+            "Restart Data Doctor to apply the update.\n"
+            "The launcher runs applyUpdate.cmd and exits so launcher files "
+            "can be replaced; applyUpdate starts the app when it is done.",
         )
 
     signals = _Signals()

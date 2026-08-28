@@ -1,18 +1,28 @@
 ﻿Imports System.IO
 
 Module app
+    Function HasUpdateZip(root As String) As Boolean
+        For Each name As String In New String() {"Update", "update"}
+            Dim dir As String = Path.Combine(root, name)
+            Try
+                If Directory.Exists(dir) AndAlso Directory.EnumerateFiles(dir, "*.zip").Any() Then
+                    Return True
+                End If
+            Catch
+            End Try
+        Next
+        Return False
+    End Function
+
     Sub Main()
         Dim root As String = AppDomain.CurrentDomain.BaseDirectory
-        Dim updateDir As String = Path.Combine(root, "update")
         Dim updateScript As String = Path.Combine(root, "applyUpdate.cmd")
 
-        ' If there's ever a .zip in the Update folder, run applyUpdate.cmd, wait for it to finish, then continue on to launch the app
+        ' Zip in Update\ → start applyUpdate.cmd and EXIT. Do not wait: this
+        ' process must unlock Data Doctor.exe so the cmd can replace it.
+        ' applyUpdate.cmd starts this exe again when it finishes.
         Try
-            If Directory.Exists(updateDir) AndAlso
-               Directory.EnumerateFiles(updateDir, "*.zip").Any() AndAlso
-               File.Exists(updateScript) Then
-
-                ' Run in a visible console window so applyUpdate.cmd's output is shown to the user as progress
+            If HasUpdateZip(root) AndAlso File.Exists(updateScript) Then
                 Dim updatePsi As New ProcessStartInfo With {
                     .FileName = updateScript,
                     .WorkingDirectory = root,
@@ -20,13 +30,11 @@ Module app
                     .CreateNoWindow = False,
                     .WindowStyle = ProcessWindowStyle.Normal
                 }
-                Dim updateProc As Process = Process.Start(updatePsi)
-                If updateProc IsNot Nothing Then
-                    updateProc.WaitForExit()
-                End If
+                Process.Start(updatePsi)
+                Return
             End If
-        Catch ex As Exception
-            ' If the update check fails, fall through to launching the app normally
+        Catch
+            ' Fall through to launching the app
         End Try
 
         Dim projectDir As String = Path.Combine(root, "pythonFiles")

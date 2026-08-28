@@ -11,7 +11,7 @@ Two modes:
        UPDATE.txt
        LICENSE
        README.txt
-       Project Files/
+       pythonFiles/
          DataDoctor.py
          core/  ui/  quickLook/  oracle/  requirements.txt
          scripts/updateBunker.py
@@ -24,7 +24,7 @@ Two modes:
 
 Prerequisites for a usable package on the target Mac:
   - Python 3.14 (3.13 still works)
-  - Project Files/.venv with requirements.txt, or a system/user env that has them
+  - pythonFiles/.venv with requirements.txt, or a system/user env that has them
 
 Run from project root:
   python scripts/packageMac.py
@@ -89,32 +89,32 @@ FIRST RUN
    or ~/Documents/DataDoctor).
 2) Prefer: double-click "Data Doctor.command"
    - First launch may ask Gatekeeper to allow the script; right-click → Open if needed.
-   - The script prefers Project Files/.venv when present.
+   - The script prefers pythonFiles/.venv when present.
 3) Or from Terminal:
      cd "/path/to/this folder"
      ./Data\\ Doctor.command
 4) If dependencies are missing:
-     python3 -m venv "Project Files/.venv"
-     "Project Files/.venv/bin/python" -m pip install -r "Project Files/requirements.txt"
+     python3 -m venv "pythonFiles/.venv"
+     "pythonFiles/.venv/bin/python" -m pip install -r "pythonFiles/requirements.txt"
 
 UPDATING AN EXISTING INSTALL
 ----------------------------
 See UPDATE.txt. Short version:
   - Copy new files over your install
-  - Do NOT overwrite live Project Files/core/bunker.db if you have local
-    dictionary edits — merge with Project Files/temp/bunker.db instead
+  - Do NOT overwrite live pythonFiles/core/bunker.db if you have local
+    dictionary edits — merge with pythonFiles/temp/bunker.db instead
   - From the package root:
-      python3 "Project Files/scripts/updateBunker.py"
+      python3 "pythonFiles/scripts/updateBunker.py"
 
 AQUARIUS CERTIFICATES
 ---------------------
-Project Files/certs/ is included (empty). Place aquarius.pem or a .cer/.crt
+pythonFiles/certs/ is included (empty). Place aquarius.pem or a .cer/.crt
 there. Updates do not replace this folder. .pfx is not supported.
 
 SUPPORT NOTES
 -------------
 - Config / logs: ~/Library/Application Support/Data Doctor/  (or Qt AppConfigLocation)
-- Oracle Instant Client: optional under Project Files/oracle/ when packaged
+- Oracle Instant Client: optional under pythonFiles/oracle/ when packaged
 """
     (stage / "README.txt").write_text(text.strip() + "\n", encoding="utf-8")
 
@@ -129,13 +129,13 @@ FULL APP UPDATE
 3) Run:
      ./applyUpdate.sh
    Or:
-     python3 "Project Files/scripts/applyUpdate.py"
+     python3 "pythonFiles/scripts/applyUpdate.py"
 4) Restart DataDoctor.
 
 DICTIONARY-ONLY MERGE
 ---------------------
-  python3 "Project Files/scripts/updateBunker.py"
-  python3 "Project Files/scripts/updateBunker.py" --dry-run
+  python3 "pythonFiles/scripts/updateBunker.py"
+  python3 "pythonFiles/scripts/updateBunker.py" --dry-run
 """
     (stage / "UPDATE.txt").write_text(text.strip() + "\n", encoding="utf-8")
 
@@ -148,11 +148,18 @@ set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
+# Zip in Update/ → applyUpdate.sh then exit. applyUpdate.py starts this
+# .command again when the zip is done.
+if { ls "$ROOT/Update"/*.zip >/dev/null 2>&1 || ls "$ROOT/update"/*.zip >/dev/null 2>&1; } \
+   && [ -x "$ROOT/applyUpdate.sh" ]; then
+  exec "$ROOT/applyUpdate.sh"
+fi
+
 PY=""
-if [ -x "$ROOT/Project Files/.venv/bin/python" ]; then
-  PY="$ROOT/Project Files/.venv/bin/python"
-elif [ -x "$ROOT/Project Files/.venv/bin/python3" ]; then
-  PY="$ROOT/Project Files/.venv/bin/python3"
+if [ -x "$ROOT/pythonFiles/.venv/bin/python" ]; then
+  PY="$ROOT/pythonFiles/.venv/bin/python"
+elif [ -x "$ROOT/pythonFiles/.venv/bin/python3" ]; then
+  PY="$ROOT/pythonFiles/.venv/bin/python3"
 elif command -v python3 >/dev/null 2>&1; then
   PY="$(command -v python3)"
 elif command -v python >/dev/null 2>&1; then
@@ -163,9 +170,9 @@ else
   exit 1
 fi
 
-APP="$ROOT/Project Files/DataDoctor.py"
+APP="$ROOT/pythonFiles/DataDoctor.py"
 if [ ! -f "$APP" ]; then
-  echo "ERROR: DataDoctor.py missing under Project Files/" >&2
+  echo "ERROR: DataDoctor.py missing under pythonFiles/" >&2
   exit 1
 fi
 
@@ -183,7 +190,7 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
 
-    projectFiles = stage / "Project Files"
+    projectFiles = stage / "pythonFiles"
     projectFiles.mkdir(parents=True, exist_ok=True)
 
     for name in ("core", "ui", "quickLook", "oracle"):
@@ -211,6 +218,7 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
     updateBunkerSrc = root / "launcher" / "Project Files" / "scripts" / "updateBunker.py"
     if not updateBunkerSrc.is_file():
         for alt in (
+            root / "launcher" / "pythonFiles" / "scripts" / "updateBunker.py",
             root / "scripts" / "updateBunker.py",
             root / "launcher" / "updateBunker.py",
         ):
@@ -240,14 +248,14 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
             "Updates never replace files in this folder.\n",
             encoding="utf-8",
         )
-    print("Packaged Project Files/certs/")
+    print("Packaged pythonFiles/certs/")
 
     bunkerSrc = root / "core" / "bunker.db"
     tempDir = projectFiles / "temp"
     if bunkerSrc.is_file():
         tempDir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(bunkerSrc, tempDir / "bunker.db")
-        print("Packaged bunker.db → Project Files/temp/bunker.db")
+        print("Packaged bunker.db → pythonFiles/temp/bunker.db")
     else:
         print("WARN: core/bunker.db missing — temp merge payload not packaged", file=sys.stderr)
 
@@ -264,16 +272,19 @@ set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 PY=""
-if [ -x "$ROOT/Project Files/.venv/bin/python" ]; then
-  PY="$ROOT/Project Files/.venv/bin/python"
-elif [ -x "$ROOT/Project Files/.venv/bin/python3" ]; then
-  PY="$ROOT/Project Files/.venv/bin/python3"
+if [ -x "$ROOT/pythonFiles/.venv/bin/python" ]; then
+  PY="$ROOT/pythonFiles/.venv/bin/python"
+elif [ -x "$ROOT/pythonFiles/.venv/bin/python3" ]; then
+  PY="$ROOT/pythonFiles/.venv/bin/python3"
 elif command -v python3 >/dev/null 2>&1; then
   PY="$(command -v python3)"
 else
   PY="python"
 fi
-SCRIPT="$ROOT/Project Files/scripts/applyUpdate.py"
+SCRIPT="$ROOT/pythonFiles/scripts/applyUpdate.py"
+if [ ! -f "$SCRIPT" ]; then
+  SCRIPT="$ROOT/Project Files/scripts/applyUpdate.py"
+fi
 if [ ! -f "$SCRIPT" ]; then
   echo "ERROR: applyUpdate.py not found" >&2
   exit 1
@@ -448,7 +459,7 @@ def main() -> int:
         "--skip-venv",
         dest="skipVenv",
         action="store_true",
-        help="Do not copy .venv into Project Files (recommended when packaging off-Mac)",
+        help="Do not copy .venv into pythonFiles (recommended when packaging off-Mac)",
     )
     parser.add_argument(
         "--keep-build",

@@ -12,7 +12,7 @@ Entra vs credential-account login is not implemented. Username and password are 
 
 ## TLS certificates
 
-Windows launcher zips include an empty `pythonFiles/certs/` folder (macOS: `Project Files/certs/`). Updates never replace files there. Place the server cert:
+Windows and macOS launcher zips include an empty `pythonFiles/certs/` folder. Updates never replace files there. Place the server cert:
 
 | File | Behavior |
 |------|----------|

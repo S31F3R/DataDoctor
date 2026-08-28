@@ -100,7 +100,7 @@ def _aquariusCertSearchDirs():
     """
     Candidate certs/ folder paths (never created here — only listed if they already exist).
 
-    Users often drop certs next to the launcher zip root, under Project Files/,
+    Users often drop certs next to the launcher zip root, under pythonFiles/,
     or in the app config dir — not only resourcePath('certs').
     """
     dirs = []

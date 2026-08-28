@@ -14,7 +14,7 @@ Expected install layout (Windows launcher package):
       core/                 ← live bunker.db stays here
       ui/
       …
-    Project Files/          ← 3.0.x / macOS leftover; still accepted
+    Project Files/          ← 3.0.x leftover; still accepted for migrate
 
 What this does:
   1) Pick a zip in Update/ (Windows zip if python-embed is missing, else Python zip)
@@ -457,15 +457,24 @@ def dataDoctorExeRunning() -> bool:
 
 def launchDataDoctorIfIdle(installRoot: Path) -> None:
     """
-    After a 3.0.x → 3.1 Windows-zip hop the user ran applyUpdate.cmd by hand,
-    so nothing starts the app. Skip if Data Doctor.exe is already running
-    (launcher started this cmd and will launch pythonw when we return).
+    The Windows launcher starts applyUpdate.cmd and exits so the .exe can be
+    replaced. This process starts Data Doctor.exe (or the macOS .command)
+    when the zip is done. Skip if the old WaitForExit launcher is still alive.
     """
     exe = installRoot / "Data Doctor.exe"
-    if not exe.is_file():
-        return
-    if dataDoctorExeRunning():
-        print("Data Doctor.exe is already running — not starting another copy")
+    mac = installRoot / "Data Doctor.command"
+    target = None
+    args = None
+    if exe.is_file() and (sys.platform.startswith("win") or not mac.is_file()):
+        if dataDoctorExeRunning():
+            print("Data Doctor.exe is already running — not starting another copy")
+            return
+        target = exe
+        args = [str(exe)]
+    elif mac.is_file():
+        target = mac
+        args = ["open", str(mac)] if sys.platform == "darwin" else ["bash", str(mac)]
+    if target is None:
         return
     try:
         kwargs = {
@@ -479,10 +488,10 @@ def launchDataDoctorIfIdle(installRoot: Path) -> None:
             kwargs["creationflags"] = 0x00000008 | 0x00000200  # DETACHED | NEW_GROUP
         else:
             kwargs["start_new_session"] = True
-        subprocess.Popen([str(exe)], **kwargs)
-        print("Starting Data Doctor.exe")
+        subprocess.Popen(args, **kwargs)
+        print(f"Starting {target.name}")
     except Exception as e:
-        print(f"WARN: could not start Data Doctor.exe: {e}", file=sys.stderr)
+        print(f"WARN: could not start {target.name}: {e}", file=sys.stderr)
 
 
 def writeApplyUpdateCmd(installRoot: Path) -> None:
@@ -571,7 +580,7 @@ def installAppEntry(payload: Path, projectFiles: Path) -> str | None:
 
     windows = (
         sys.platform.startswith("win")
-        or projectFiles.name == WIN_CODE_DIR
+        or (projectFiles.parent / "Data Doctor.exe").is_file()
         or (projectFiles / WIN_APP_ENTRY).is_file()
     )
     if windows:
@@ -751,11 +760,8 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
         except Exception as e:
             print(f"WARN: could not remove zip: {e}", file=sys.stderr)
 
-        if windowsFull:
-            print("Update complete.")
-            launchDataDoctorIfIdle(installRoot)
-        else:
-            print("Update complete. Restart Data Doctor.")
+        print("Update complete.")
+        launchDataDoctorIfIdle(installRoot)
         return 0
     finally:
         if not keepExtract and extractDir.exists():

@@ -136,7 +136,7 @@ compactListObjectNames = frozenset({'listSnippets', 'listQueryList'})
 def _findWindowsLauncherExe(script, cwd):
     """
     Prefer the VB.NET 'Data Doctor.exe' when present next to the install layout
-    (zip root / launcher folder / parent of Project Files).
+    (zip root / launcher folder / parent of pythonFiles).
     """
     candidates = []
     roots = []
@@ -1031,7 +1031,7 @@ def logResolvedUiFont(app=None, where='apply'):
                 "WARN",
                 "UI font mismatch ({}): bundled {!r} resolved as {!r}. "
                 "Windows will look different from Linux (controls may not fit). "
-                "Confirm ui/fonts/*.ttf is in the install (Project Files/ui/fonts/).".format(
+                "Confirm ui/fonts/*.ttf is in the install (pythonFiles/ui/fonts/).".format(
                     where, requested, actual
                 ),
             )
