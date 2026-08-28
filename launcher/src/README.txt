@@ -7,10 +7,14 @@ The checked-in Data Doctor.exe already launches:
 
 and runs applyUpdate.cmd first if Update\ contains a .zip.
 
-Rebuild on Windows only (this Linux packager cannot produce a new .exe):
+Rebuild on Windows only (this Linux packager has no vbc / Visual Studio):
 
   cd launcher\src
   vbc /nologo /target:winexe /out:"..\Data Doctor.exe" /win32icon:..\DataDoctor.ico App.vb
+
+Do NOT compile documentation/app.vb — that is a generic template
+(pythonFiles\app.pyw). Data Doctor's layout is Project Files\DataDoctor.pyw.
+If the .exe looks for pythonFiles\app.pyw it will exit without opening the app.
 
 python-3.14.7-embed-amd64.zip sits in launcher/ and is extracted into the
 Windows zip at package time (Project Files\python-embed\). Pip/site-packages

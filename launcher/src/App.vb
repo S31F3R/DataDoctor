@@ -43,6 +43,15 @@ Module App
         Dim scriptPath As String = Path.Combine(projectDir, "DataDoctor.pyw")
 
         If Not File.Exists(pythonwPath) OrElse Not File.Exists(scriptPath) Then
+            ' Silent Exit(1) looks like "the launcher does nothing".
+            Try
+                Microsoft.VisualBasic.Interaction.MsgBox(
+                    "Data Doctor could not start." & vbCrLf & vbCrLf &
+                    "Need:" & vbCrLf & pythonwPath & vbCrLf & scriptPath,
+                    MsgBoxStyle.Critical,
+                    "Data Doctor")
+            Catch
+            End Try
             Environment.Exit(1)
         End If
 

@@ -232,6 +232,7 @@ pythonw.exe there.
 3) Double-click applyUpdate.cmd
 4) That replaces Data Doctor.exe / applyUpdate.cmd and installs python-embed.
    bunker.db is merged, not overwritten. certs\\ is left alone.
+   When the cmd finishes, Data Doctor.exe is started for you.
 
 DICTIONARY-ONLY MERGE
 --------------------

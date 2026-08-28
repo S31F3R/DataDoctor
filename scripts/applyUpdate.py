@@ -364,6 +364,52 @@ def applyWindowsLauncherBits(payload: Path, installRoot: Path) -> None:
         print("Installed Project Files/python-embed/")
 
 
+def dataDoctorExeRunning() -> bool:
+    """True if a Data Doctor.exe process is already alive (launcher waiting on us)."""
+    if not sys.platform.startswith("win"):
+        return False
+    try:
+        out = subprocess.check_output(
+            ["tasklist", "/FI", "IMAGENAME eq Data Doctor.exe", "/NH"],
+            text=True,
+            errors="replace",
+            timeout=10,
+        )
+        return "Data Doctor.exe" in out
+    except Exception:
+        return False
+
+
+def launchDataDoctorIfIdle(installRoot: Path) -> None:
+    """
+    After a 3.0.x → 3.1 Windows-zip hop the user ran applyUpdate.cmd by hand,
+    so nothing starts the app. Skip if Data Doctor.exe is already running
+    (launcher started this cmd and will launch pythonw when we return).
+    """
+    exe = installRoot / "Data Doctor.exe"
+    if not exe.is_file():
+        return
+    if dataDoctorExeRunning():
+        print("Data Doctor.exe is already running — not starting another copy")
+        return
+    try:
+        kwargs = {
+            "cwd": str(installRoot),
+            "close_fds": True,
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+        if sys.platform.startswith("win"):
+            kwargs["creationflags"] = 0x00000008 | 0x00000200  # DETACHED | NEW_GROUP
+        else:
+            kwargs["start_new_session"] = True
+        subprocess.Popen([str(exe)], **kwargs)
+        print("Starting Data Doctor.exe")
+    except Exception as e:
+        print(f"WARN: could not start Data Doctor.exe: {e}", file=sys.stderr)
+
+
 def writeApplyUpdateCmd(installRoot: Path) -> None:
     """Keep applyUpdate.cmd pointing at python-embed when present."""
     cmd = installRoot / "applyUpdate.cmd"
@@ -603,7 +649,11 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
         except Exception as e:
             print(f"WARN: could not remove zip: {e}", file=sys.stderr)
 
-        print("Update complete. Restart Data Doctor.")
+        if windowsFull:
+            print("Update complete.")
+            launchDataDoctorIfIdle(installRoot)
+        else:
+            print("Update complete. Restart Data Doctor.")
         return 0
     finally:
         if not keepExtract and extractDir.exists():
