@@ -341,15 +341,33 @@ class uiOptions(QDialog):
         self.tblTableColors.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         self.tblTableColors.setColumnWidth(1, 88)
         self.tblTableColors.setShowGrid(True)
+        self.tblTableColors.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.tblTableColors.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.tblTableColors.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         self.tblTableColors.cellDoubleClicked.connect(self._onTableColorDoubleClick)
         self.btnRestoreTableColors = QPushButton("Restore Defaults")
         self.btnRestoreTableColors.setObjectName("btnRestoreTableColors")
+        self.btnRestoreTableColors.setAutoDefault(False)
+        self.btnRestoreTableColors.setDefault(False)
+        self.btnRestoreTableColors.setToolTip(
+            "Reset all table colors to the theme defaults."
+        )
         self.btnRestoreTableColors.clicked.connect(self._onRestoreTableColors)
-        Utils.buttonStyle(self.btnRestoreTableColors, None, None)
+        btnRow = QHBoxLayout()
+        btnRow.setContentsMargins(0, 0, 0, 0)
+        btnRow.addWidget(self.btnRestoreTableColors)
+        btnRow.addStretch(1)
         lay.insertWidget(insertAt, lbl)
         lay.insertWidget(insertAt + 1, self.tblTableColors)
-        lay.insertWidget(insertAt + 2, self.btnRestoreTableColors)
+        lay.insertLayout(insertAt + 2, btnRow)
         self._fillTableColorTable()
+        QTimer.singleShot(0, self._fillTableColorTable)
 
     def _fillTableColorTable(self):
         tbl = getattr(self, "tblTableColors", None)
@@ -376,10 +394,13 @@ class uiOptions(QDialog):
             tbl.setItem(i, 0, nameItem)
             tbl.setItem(i, 1, swatch)
         tbl.resizeRowsToContents()
-        rowsH = tbl.horizontalHeader().height() + sum(
-            tbl.rowHeight(r) for r in range(tbl.rowCount())
-        ) + 4
-        tbl.setMinimumHeight(min(max(rowsH, 160), 320))
+        rowsH = (
+            tbl.horizontalHeader().height()
+            + sum(tbl.rowHeight(r) for r in range(tbl.rowCount()))
+            + tbl.frameWidth() * 2
+            + 6
+        )
+        tbl.setFixedHeight(max(rowsH, 160))
 
     def _onTableColorDoubleClick(self, row, _col):
         nameItem = self.tblTableColors.item(row, 0)

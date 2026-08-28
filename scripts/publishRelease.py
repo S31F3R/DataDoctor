@@ -16,6 +16,9 @@ Without --yes, "Tag which branch / commit?" defaults to that branch (Enter).
 
 Release notes: documentation/releases/vX.Y.Z.md (created if missing).
 That file is the GitHub Release body. Version.py is committed when it changes.
+A published X.Y.Z also folds documentation/test.txt Confirmed titles into
+## Changes when they were missed in Working Notes / rc-beta notes, then
+clears Confirmed (those tests are the bug/beta cycle, not a forever list).
 
 Order the updater uses: published > rc > beta (same X.Y.Z).
   3.0.0 > 3.0.0-rc.2.1 > 3.0.0-rc.2 > 3.0.0-beta.4
@@ -62,6 +65,7 @@ REPO = Version.GITHUB_REPO
 VERSION_PATH = ROOT / "core" / "Version.py"
 NOTES_DIR = ROOT / "documentation" / "releases"
 WORKING_NOTES = ROOT / "documentation" / "Working Notes.txt"
+TEST_FILE = ROOT / "documentation" / "test.txt"
 WORKING_NOTES_STUB = (
     "Working Notes\n"
     "=============\n"
@@ -340,79 +344,371 @@ def clearWorkingNotes() -> None:
     log(f"Cleared {WORKING_NOTES.relative_to(ROOT)}")
 
 
+_TEST_HEADING_RE = re.compile(
+    r"^(Current Tests|Confirmed|Deferred / known)\s*$", re.I
+)
+_STOP_WORDS = {
+    "a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with",
+    "vs", "no", "not", "is", "are", "be", "from", "into", "via", "per",
+    "as", "at", "by", "this", "that", "then", "when", "after", "before",
+}
+
+
+def confirmedTestTitles() -> list[str]:
+    """One-line titles from test.txt Confirmed (`[x] Title`)."""
+    if not TEST_FILE.is_file():
+        return []
+    titles: list[str] = []
+    inConfirmed = False
+    for raw in TEST_FILE.read_text(encoding="utf-8").splitlines():
+        s = raw.strip()
+        m = _TEST_HEADING_RE.match(s)
+        if m:
+            inConfirmed = m.group(1).lower() == "confirmed"
+            continue
+        if not inConfirmed:
+            continue
+        if s and set(s) <= {"-", "="}:
+            continue
+        hit = re.match(r"^\[x\]\s+(.+)$", s, re.I)
+        if hit:
+            title = hit.group(1).strip()
+            if title:
+                titles.append(title)
+    return titles
+
+
+def clearConfirmedTests() -> None:
+    """Keep Current Tests and Deferred; empty the Confirmed list."""
+    if not TEST_FILE.is_file():
+        return
+    lines = TEST_FILE.read_text(encoding="utf-8").splitlines()
+    out: list[str] = []
+    inConfirmed = False
+    wroteRule = False
+    for raw in lines:
+        s = raw.strip()
+        m = _TEST_HEADING_RE.match(s)
+        if m:
+            name = m.group(1).lower()
+            if inConfirmed and not wroteRule:
+                out.append("")
+                wroteRule = True
+            inConfirmed = name == "confirmed"
+            out.append(raw)
+            continue
+        if inConfirmed:
+            if s and set(s) <= {"-", "="}:
+                out.append(raw)
+                if not wroteRule:
+                    out.append("")
+                    wroteRule = True
+            continue
+        out.append(raw)
+    if inConfirmed and not wroteRule:
+        out.append("")
+    while out and not out[-1].strip():
+        out.pop()
+    out.append("")
+    TEST_FILE.write_text("\n".join(out) + "\n", encoding="utf-8")
+    try:
+        rel = TEST_FILE.relative_to(ROOT)
+    except ValueError:
+        rel = TEST_FILE
+    log(f"Cleared Confirmed tests in {rel}")
+
+
+def _normBullet(line: str) -> str:
+    s = (line or "").strip()
+    if s.startswith("-"):
+        s = s[1:].strip()
+    s = re.sub(r"^\[x\]\s*", "", s, flags=re.I)
+    return re.sub(r"\s+", " ", s).lower()
+
+
+def _coreTitle(line: str) -> str:
+    """Drop parentheticals so 'Foo 3.14 (fresh zip)' matches notes about Foo 3.14."""
+    s = _normBullet(line)
+    s = re.sub(r"\s*\([^)]*\)\s*", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _tokens(text: str) -> list[str]:
+    return [
+        t
+        for t in re.findall(r"[a-z0-9]+", (text or "").lower())
+        if len(t) > 1 and t not in _STOP_WORDS
+    ]
+
+
+def _tokenHit(needle: str, hay: list[str]) -> bool:
+    for x in hay:
+        if needle == x or needle.startswith(x) or x.startswith(needle):
+            return True
+    return False
+
+
+def _overlapNeed(nTokens: int) -> int:
+    if nTokens <= 1:
+        return nTokens
+    if nTokens <= 3:
+        return 2
+    return max(3, int(round(0.55 * nTokens)))
+
+
+def titleCoveredBy(title: str, bullets: list[str]) -> bool:
+    """True if an existing change bullet already describes this test title."""
+    nt = _coreTitle(title)
+    if not nt:
+        return True
+    tt = _tokens(nt)
+    full = _normBullet(title)
+    for b in bullets:
+        nb = _normBullet(b)
+        if not nb:
+            continue
+        cb = _coreTitle(b)
+        if nt == nb or nt == cb or nt in nb or nt in cb:
+            return True
+        if len(nb) >= 12 and (nb in full or nb in nt):
+            return True
+        bt = _tokens(nb)
+        if not tt or not bt:
+            continue
+        hits = sum(1 for t in tt if _tokenHit(t, bt))
+        if hits >= _overlapNeed(len(tt)):
+            return True
+    return False
+
+
+def otherPublishedChangeBullets(version: str) -> list[str]:
+    """## Changes from earlier published (non-rc/beta) notes, not this triple."""
+    if not NOTES_DIR.is_dir():
+        return []
+    triple = baseTriple(version)
+    out: list[str] = []
+    for p in NOTES_DIR.iterdir():
+        if not p.is_file() or p.suffix.lower() != ".md":
+            continue
+        stem = p.stem
+        if not stem.startswith("v"):
+            continue
+        ver = stem[1:]
+        parsed = Version.parseVersion(ver)
+        if parsed is None or parsed[3] is not None:
+            continue
+        other = f"{parsed[0]}.{parsed[1]}.{parsed[2]}"
+        if other == triple:
+            continue
+        try:
+            text = p.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        out.extend(extractChangesBullets(text))
+    return out
+
+
+def mergeBulletTexts(*blocks: str) -> str:
+    """Concatenate bullet blocks, de-duped by normalized key (first wins)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for block in blocks:
+        if not (block or "").strip():
+            continue
+        for raw in block.splitlines():
+            stripped = raw.rstrip()
+            s = stripped.strip()
+            if not s:
+                if out and out[-1].strip():
+                    out.append("")
+                continue
+            isCont = bool(out) and not s.startswith("-")
+            if isCont:
+                out.append(stripped)
+                continue
+            k = _bulletKey(s)
+            if not k or k in seen:
+                continue
+            seen.add(k)
+            out.append(stripped if stripped.startswith("-") else f"- {s}")
+    while out and not out[-1].strip():
+        out.pop()
+    if not out:
+        return ""
+    return "\n".join(out) + "\n"
+
+
+def confirmedMissedBullets(existing: list[str], version: str) -> list[str]:
+    """Confirmed titles that are in neither this release's notes nor older published notes."""
+    titles = confirmedTestTitles()
+    if not titles:
+        return []
+    covered = list(existing) + otherPublishedChangeBullets(version)
+    extras: list[str] = []
+    seen: set[str] = set()
+    for title in titles:
+        k = _bulletKey(title)
+        if not k or k in seen:
+            continue
+        if titleCoveredBy(title, covered):
+            continue
+        seen.add(k)
+        extras.append(f"- {title}")
+    return extras
+
+
+def appendChangesBullets(md: str, extras: list[str]) -> str:
+    """Insert extra `- ` lines at the end of ## Changes (before the next ##)."""
+    if not extras:
+        return md if (md or "").endswith("\n") else (md or "") + "\n"
+    lines = (md or "").splitlines()
+    changesStart: int | None = None
+    changesEnd = len(lines)
+    for i, raw in enumerate(lines):
+        s = raw.strip()
+        if s.startswith("## "):
+            heading = s[3:].strip().lower()
+            if heading == "changes":
+                changesStart = i + 1
+                continue
+            if changesStart is not None:
+                changesEnd = i
+                break
+    if changesStart is None:
+        body = (md or "").rstrip() + "\n\n## Changes\n\n" + "\n".join(extras) + "\n"
+        return body
+    mid: list[str] = []
+    for raw in lines[changesStart:changesEnd]:
+        s = raw.strip()
+        if not s:
+            continue
+        if s.startswith("-") and s.lstrip("-").strip() == "":
+            continue
+        mid.append(raw.rstrip())
+    newLines = lines[:changesStart]
+    if mid:
+        newLines.append("")
+        newLines.extend(mid)
+    newLines.append("")
+    newLines.extend(extras)
+    newLines.append("")
+    newLines.extend(lines[changesEnd:])
+    while newLines and not newLines[-1].strip():
+        newLines.pop()
+    return "\n".join(newLines) + "\n"
+
+
 def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | None, yes: bool) -> str:
     """
     GitHub Release body comes from documentation/releases/vVERSION.md.
     --notes PATH overrides. Interactive run can type a few bullets first.
 
     If the versioned file is missing/empty, seed ## Changes from Working
-    Notes bullets. For channel=published with no Working Notes (and no real
-    bullets in an existing placeholder file), compile ## Changes from
-    vX.Y.Z-rc.* / vX.Y.Z-beta.* for that triple.
+    Notes bullets. For channel=published, also compile vX.Y.Z-rc.* /
+    vX.Y.Z-beta.* for that triple (merged, de-duped) and fold in
+    documentation/test.txt Confirmed titles that were missed in the notes
+    (and not already shipped in an older published X.Y.Z).
     """
     dest = notesPathFor(version)
+    dest.parent.mkdir(parents=True, exist_ok=True)
     if notesArg:
         src = Path(notesArg)
         if not src.is_file():
             die(f"notes file not found: {src}")
         text = src.read_text(encoding="utf-8").strip() + "\n"
-        dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(text, encoding="utf-8")
         log(f"Release notes copied to {dest.relative_to(ROOT)}")
         return text
 
+    existing = ""
     if dest.is_file() and dest.stat().st_size > 0:
         existing = dest.read_text(encoding="utf-8")
-        # Placeholder "## Changes\n\n- \n" counts as empty — compile rc/beta
-        # notes for a published X.Y.Z instead of shipping a blank list.
-        if extractChangesBullets(existing) or channel != "published":
-            log(f"Release notes: {dest.relative_to(ROOT)}")
-            return existing
+    existingBullets = extractChangesBullets(existing)
 
-    working = workingNotesBody()
-    compiled = ""
-    if channel == "published" and not working:
-        compiled = compilePreReleaseNotes(baseTriple(version))
-    seed = working or compiled
-    if seed:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        source = "Working Notes" if working else f"rc/beta notes for {baseTriple(version)}"
-        body = (
-            f"# Data Doctor {version}\n\n"
-            f"Channel: {channel}\n\n"
-            f"## Changes\n\n"
-            f"{seed.rstrip()}\n\n"
-            f"## Notes\n\n"
-            f"Windows: already on python-embed → `DataDoctor-Python-*.zip` + "
-            f"`applyUpdate.cmd`. Coming from 3.0.x → `DataDoctor-Windows-*.zip`, "
-            f"close the app, then `applyUpdate.cmd` (replaces the launcher).\n"
-        )
-        dest.write_text(body, encoding="utf-8")
-        log(f"Seeded {dest.relative_to(ROOT)} from {source}")
-        return body
+    if existingBullets and channel != "published":
+        log(f"Release notes: {dest.relative_to(ROOT)}")
+        return existing
 
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    extra = ""
-    if not yes:
-        log(f"No {dest.relative_to(ROOT)} yet. Type changes (empty line to finish).")
-        lines = []
-        while True:
-            try:
-                line = input("  - " if not lines else "    ")
-            except EOFError:
-                break
-            if not line.strip():
-                break
-            bullet = line.strip()
-            if not bullet.startswith("-"):
-                bullet = f"- {bullet}"
-            lines.append(bullet)
-        extra = "\n".join(lines)
-    body = notesTemplate(version, channel)
-    if extra:
-        body = body.replace("## Changes\n\n- \n", "## Changes\n\n" + extra + "\n")
-    dest.write_text(body, encoding="utf-8")
-    log(f"Wrote {dest.relative_to(ROOT)} — edit that file next time to change GitHub notes")
+    if existingBullets:
+        body = existing
+        log(f"Release notes: {dest.relative_to(ROOT)}")
+    else:
+        working = workingNotesBody()
+        compiled = ""
+        if channel == "published":
+            compiled = compilePreReleaseNotes(baseTriple(version))
+        seed = mergeBulletTexts(working, compiled)
+        if seed:
+            sources = []
+            if working:
+                sources.append("Working Notes")
+            if compiled:
+                sources.append(f"rc/beta notes for {baseTriple(version)}")
+            source = " + ".join(sources)
+            body = (
+                f"# Data Doctor {version}\n\n"
+                f"Channel: {channel}\n\n"
+                f"## Changes\n\n"
+                f"{seed.rstrip()}\n\n"
+                f"## Notes\n\n"
+                f"Windows: already on python-embed → `DataDoctor-Python-*.zip` + "
+                f"`applyUpdate.cmd`. Coming from 3.0.x → `DataDoctor-Windows-*.zip`, "
+                f"close the app, then `applyUpdate.cmd` (replaces the launcher).\n"
+            )
+            dest.write_text(body, encoding="utf-8")
+            log(f"Seeded {dest.relative_to(ROOT)} from {source}")
+        else:
+            extra = ""
+            if not yes:
+                log(f"No {dest.relative_to(ROOT)} yet. Type changes (empty line to finish).")
+                lines = []
+                while True:
+                    try:
+                        line = input("  - " if not lines else "    ")
+                    except EOFError:
+                        break
+                    if not line.strip():
+                        break
+                    bullet = line.strip()
+                    if not bullet.startswith("-"):
+                        bullet = f"- {bullet}"
+                    lines.append(bullet)
+                extra = "\n".join(lines)
+            body = notesTemplate(version, channel)
+            if extra:
+                body = body.replace("## Changes\n\n- \n", "## Changes\n\n" + extra + "\n")
+            dest.write_text(body, encoding="utf-8")
+            log(
+                f"Wrote {dest.relative_to(ROOT)} — "
+                f"edit that file next time to change GitHub notes"
+            )
+
+    if channel == "published":
+        extras = confirmedMissedBullets(extractChangesBullets(body), version)
+        nConfirmed = len(confirmedTestTitles())
+        # First published after Confirmed was a forever-list can have dozens of
+        # historical tests that were never in any vVERSION.md. Do not dump
+        # those into this X.Y.Z. A normal bug/beta cycle is a short list.
+        backlogLimit = 20
+        if len(extras) > backlogLimit:
+            log(
+                f"Confirmed has {nConfirmed} titles; {len(extras)} are not in "
+                f"this release or older published notes. Treating that as a "
+                f"historical backlog (not folding into {version}). Confirmed "
+                f"will still be cleared."
+            )
+            extras = []
+        if extras:
+            body = appendChangesBullets(body, extras)
+            dest.write_text(body, encoding="utf-8")
+            log(
+                f"Added {len(extras)} Confirmed test(s) that were missing from "
+                f"{dest.relative_to(ROOT)}"
+            )
+        elif nConfirmed:
+            log(f"Confirmed tests: all {nConfirmed} already covered in notes")
+        else:
+            log("Confirmed tests: none listed")
     return body
 
 
@@ -848,6 +1144,9 @@ def main() -> int:
     if WORKING_NOTES.is_file() or workingNotesBody():
         clearWorkingNotes()
         extraNotes.append(WORKING_NOTES)
+    if channel == "published" and TEST_FILE.is_file():
+        clearConfirmedTests()
+        extraNotes.append(TEST_FILE)
     gitCommitVersion(version, extraPaths=extraNotes)
 
     built: list[tuple[dict, Path]] = []
