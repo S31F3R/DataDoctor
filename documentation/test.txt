@@ -12,9 +12,10 @@ Current Tests
         applyUpdate.cmd, pythonFiles\python-embed\pythonw.exe,
         pythonFiles\app.pyw (no .venv, no python-3.13 installer, no embed
         zip at zip root).
-     b. Unzip on Windows. Double-click Data Doctor.exe. Launcher runs
-        applyUpdate.cmd (Update\ has a Python zip), pip-installs into
-        python-embed, then the app opens. No system Python on PATH.
+     b. Unzip on Windows. Double-click Data Doctor.exe. Launcher starts
+        applyUpdate.cmd and exits (updates\ has a Python zip). applyUpdate
+        pip-installs into python-embed, starts Data Doctor.exe again, app
+        opens. No system Python on PATH.
      c. About / goat / graph still work (pygame-ce, PyQt6, numpy).
 
 [x] 3.0.x → 3.1 Windows hop (launcher replace)
@@ -34,7 +35,7 @@ Current Tests
         unverified). Server URL stored as http:// is used as https://.
      b. USGS legacy still queries with TLS verified after an SSL error retry
         (no "verification disabled" in the log).
-     c. In-app Update → Download → Cancel does not leave a zip in Update/
+     c. In-app Update → Download → Cancel does not leave a zip in updates/
         that applyUpdate.cmd would apply on next start.
 
 [ ] Light System theme checkboxes (Windows)
@@ -47,7 +48,7 @@ Current Tests
    Steps:
      a. From project root: python scripts/packageMac.py --skip-venv
      b. dist/DataDoctor-macOS-YYYYMMDD.zip contains Data Doctor.command + pythonFiles/
-        + Update/ + applyUpdate.sh + pythonFiles/certs/
+        + updates/ + applyUpdate.sh + pythonFiles/certs/
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
