@@ -16,7 +16,7 @@ Current Tests
         python-embed, then the app opens. No system Python on PATH.
      c. About / goat / graph still work (pygame-ce, PyQt6, numpy).
 
-[ ] 3.0.x → 3.1 Windows hop (launcher replace)
+[x] 3.0.x → 3.1 Windows hop (launcher replace)
    Steps:
      a. On a 3.0.x install (system Python + .venv, no python-embed): apply
         DataDoctor-Python-*.zip with the old applyUpdate. App starts on .venv.
