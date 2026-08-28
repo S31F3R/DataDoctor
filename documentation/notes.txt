@@ -13,7 +13,11 @@ Type and select Python: Select Interpreter
 Select .venv
 
 
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
 
+# Can verify with this
+git config --global --list
 
 
 

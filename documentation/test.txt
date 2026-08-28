@@ -9,8 +9,9 @@ Current Tests
 [ ] Windows python-embed 3.14 (fresh zip)
    Steps:
      a. python scripts/packageWindows.py → dist zip has Data Doctor.exe,
-        applyUpdate.cmd, Project Files\python-embed\pythonw.exe (no .venv,
-        no python-3.13 installer, no embed zip at zip root).
+        applyUpdate.cmd, pythonFiles\python-embed\pythonw.exe,
+        pythonFiles\app.pyw (no .venv, no python-3.13 installer, no embed
+        zip at zip root).
      b. Unzip on Windows. Double-click Data Doctor.exe. Launcher runs
         applyUpdate.cmd (Update\ has a Python zip), pip-installs into
         python-embed, then the app opens. No system Python on PATH.
