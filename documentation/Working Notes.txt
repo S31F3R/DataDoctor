@@ -10,16 +10,3 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
-- Internal Data Query: Excel-style formulas (=A1+B1, SUM/IF/…, click-to-ref,
-  fill handle with $ locks); overlay writes primary; errors are not uploaded
-- Published releases with empty Working Notes compile ## Changes from that
-  version's rc/beta notes (avoids a blank 3.0.0-style change list)
-- To Do: CURRENT TASKS/BUGS are the work queue; FEATURES stay backlog until
-  promoted
-- Formula editor: click another cell inserts A1 (does not leave the formula)
-- Windows launcher ships embeddable Python 3.14 (no system Python / .venv)
-- 3.0.x Windows hop: in-app update downloads DataDoctor-Windows-*.zip; close and run applyUpdate.cmd to replace the launcher
-- Requirements: Python 3.14, pygame-ce (pygame has no 3.14 wheel)
-- Hardening: no unverified TLS (Aquarius/USGS); zip path checks; GitHub download host/digest/cancel; pip requirements flags ignored
-- Hardening: do not log Oracle SQL text; HDB identifiers and SQL snippet names cannot traverse paths
-
