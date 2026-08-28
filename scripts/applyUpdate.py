@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
 """
-Apply a DataDoctor Python zip from the install's Update/ folder.
+Apply a DataDoctor zip from the install's Update/ folder.
 
-Expected install layout (launcher package):
+Expected install layout (Windows launcher package):
   <install root>/
     Data Doctor.exe | Data Doctor.command | …
     applyUpdate.cmd | applyUpdate.sh | this script (or under Project Files/scripts/)
-    Update/                 ← drop DataDoctor-Python-*.zip here (from packagePython.py)
+    Update/                 ← DataDoctor-Python-*.zip (code) or
+                              DataDoctor-Windows-*.zip (launcher + python-embed)
     Project Files/
       DataDoctor.py[w]
+      python-embed/         ← bundled CPython 3.14 (Windows); no system Python
       core/                 ← live bunker.db stays here
       ui/
-      .venv/
       …
 
 What this does:
-  1) Pick the newest *.zip in Update/ (or --zip path)
+  1) Pick a zip in Update/ (Windows zip if python-embed is missing, else Python zip)
   2) Extract to a temp dir under Update/
   3) Copy DataDoctor.py as DataDoctor.pyw on Windows (or when .pyw already exists),
      plus ui/, core/* (except bunker.db), quickLook/, requirements
-  4) If temp/bunker.db present → merge into live core/bunker.db via updateBunker.py
-  5) pip install -r requirements.txt into Project Files/.venv (if present)
-  6) Remove the zip and extract tree
+  4) Windows zip also replaces Data Doctor.exe and installs python-embed
+  5) If temp/bunker.db or core/bunker.db present → merge via updateBunker.py
+  6) pip install -r requirements.txt into python-embed (Windows) or .venv
+  7) Remove the zip and extract tree
 
 Does NOT:
   - Touch user config / keyring / AppData
@@ -75,6 +77,28 @@ def pickNewestZip(updateDir: Path) -> Path | None:
     return zips[0] if zips else None
 
 
+def pickUpdateZip(updateDir: Path, projectFiles: Path) -> Path | None:
+    """
+    Prefer DataDoctor-Windows-*.zip when python-embed is missing (3.0.x hop).
+    Otherwise prefer DataDoctor-Python-*.zip so a leftover Windows zip is not
+    re-applied on every code update.
+    """
+    if not updateDir.is_dir():
+        return None
+    zips = [p for p in updateDir.glob("*.zip") if p.is_file()]
+    if not zips:
+        return None
+    newest = lambda xs: max(xs, key=lambda p: p.stat().st_mtime)
+    embedOk = (projectFiles / "python-embed" / "pythonw.exe").is_file()
+    windowsZips = [p for p in zips if "windows" in p.name.lower()]
+    pythonZips = [p for p in zips if "python" in p.name.lower()]
+    if not embedOk and windowsZips:
+        return newest(windowsZips)
+    if pythonZips:
+        return newest(pythonZips)
+    return newest(zips)
+
+
 def copyTreeMerge(src: Path, dst: Path, skipNames=None):
     """Copy files from src into dst; never deletes dest-only files."""
     skipNames = set(skipNames or [])
@@ -94,7 +118,8 @@ def copyTreeMerge(src: Path, dst: Path, skipNames=None):
 
 def resolvePython(projectFiles: Path) -> str:
     candidates = [
-        projectFiles / ".venv" / "Scripts" / "python.exe",  # Windows
+        projectFiles / "python-embed" / "python.exe",  # Windows bundled 3.14
+        projectFiles / ".venv" / "Scripts" / "python.exe",
         projectFiles / ".venv" / "bin" / "python",
         projectFiles / ".venv" / "bin" / "python3",
     ]
@@ -104,47 +129,213 @@ def resolvePython(projectFiles: Path) -> str:
     return sys.executable
 
 
-def ensureVenv(projectFiles: Path) -> str:
-    """
-    Return a Python executable inside Project Files/.venv, creating the
-    venv with the current interpreter if it is missing.
+def enableEmbedSite(embedDir: Path) -> None:
+    pthFiles = list(embedDir.glob("python*._pth"))
+    if not pthFiles:
+        return
+    pth = pthFiles[0]
+    text = pth.read_text(encoding="utf-8")
+    lines = []
+    sawSite = False
+    sawLib = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.lstrip("#").strip() == "import site":
+            lines.append("import site")
+            sawSite = True
+            continue
+        if stripped.replace("\\", "/") == "Lib/site-packages":
+            lines.append("Lib\\site-packages")
+            sawLib = True
+            continue
+        lines.append(line)
+    if not sawLib:
+        inserted = False
+        new = []
+        for line in lines:
+            new.append(line)
+            if line.strip() == "." and not inserted:
+                new.append("Lib\\site-packages")
+                inserted = True
+        lines = new if inserted else lines + ["Lib\\site-packages"]
+    if not sawSite:
+        lines.append("import site")
+    pth.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    Linux and Windows venvs are not interchangeable (bin vs Scripts,
-    ELF vs PE extensions). This always creates a venv for *this* OS.
-    """
+
+def ensurePip(py: str, projectFiles: Path) -> None:
+    """Bootstrap pip into python-embed if `python -m pip` is missing."""
+    probe = subprocess.call(
+        [py, "-m", "pip", "--version"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if probe == 0:
+        return
+    getPip = projectFiles / "python-embed" / "get-pip.py"
+    if not getPip.is_file():
+        url = "https://bootstrap.pypa.io/get-pip.py"
+        print(f"Downloading {url}")
+        try:
+            import urllib.request
+            getPip.parent.mkdir(parents=True, exist_ok=True)
+            urllib.request.urlretrieve(url, getPip)
+        except Exception as e:
+            print(f"WARN: get-pip.py download failed: {e}", file=sys.stderr)
+            return
+    print("+", py, str(getPip))
+    subprocess.call([py, str(getPip), "--no-warn-script-location"])
+    enableEmbedSite(projectFiles / "python-embed")
+
+
+def ensurePython(projectFiles: Path) -> str:
+    """Prefer bundled python-embed; fall back to .venv / this interpreter."""
+    embedDir = projectFiles / "python-embed"
+    embedPy = embedDir / "python.exe"
+    if embedPy.is_file():
+        enableEmbedSite(embedDir)
+        py = str(embedPy)
+        ensurePip(py, projectFiles)
+        return py
+
     existing = resolvePython(projectFiles)
     venvDir = projectFiles / ".venv"
     winPy = venvDir / "Scripts" / "python.exe"
     nixPy = venvDir / "bin" / "python"
     nixPy3 = venvDir / "bin" / "python3"
-    if existing != sys.executable and (
-        Path(existing) == winPy or Path(existing) == nixPy or Path(existing) == nixPy3
-    ):
+    if existing != sys.executable and Path(existing) in (winPy, nixPy, nixPy3):
         return existing
 
-    print(f"Creating virtualenv at {venvDir}")
+    print(f"Creating virtualenv at {venvDir} (no python-embed on this install)")
     rc = subprocess.call([sys.executable, "-m", "venv", str(venvDir)])
     if rc != 0:
-        print(
-            f"WARN: python -m venv failed with {rc}; using {sys.executable}",
-            file=sys.stderr,
-        )
+        print(f"WARN: python -m venv failed with {rc}; using {sys.executable}", file=sys.stderr)
         return sys.executable
     for c in (winPy, nixPy, nixPy3):
         if c.is_file():
             print(f"Created {c}")
             return str(c)
-    print(
-        f"WARN: venv created but no python found under {venvDir}; using {sys.executable}",
-        file=sys.stderr,
-    )
     return sys.executable
+
+
+def isWindowsFullPayload(payload: Path) -> bool:
+    """True if this zip is a DataDoctor-Windows package, not a Python-only payload."""
+    if (payload / "Data Doctor.exe").is_file():
+        return True
+    pf = payload / "Project Files"
+    if (pf / "python-embed" / "pythonw.exe").is_file():
+        return True
+    if (pf / "DataDoctor.pyw").is_file() and (payload / "applyUpdate.cmd").is_file():
+        return True
+    return False
+
+
+def copyFileIfPresent(src: Path, dest: Path) -> bool:
+    if not src.is_file():
+        return False
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(src, dest)
+        print(f"Updated {dest.name}")
+        return True
+    except OSError as e:
+        # Data Doctor.exe cannot overwrite itself while the launcher is waiting
+        # on applyUpdate.cmd. Rename the locked file, then copy the new one.
+        if dest.is_file():
+            old = dest.with_name(dest.name + ".old")
+            try:
+                if old.is_file():
+                    old.unlink()
+                dest.rename(old)
+                shutil.copy2(src, dest)
+                print(f"Updated {dest.name} (replaced locked file via rename)")
+                return True
+            except Exception as e2:
+                print(
+                    f"WARN: could not replace {dest.name}: {e}; retry={e2}",
+                    file=sys.stderr,
+                )
+                return False
+        print(f"WARN: could not copy {dest.name}: {e}", file=sys.stderr)
+        return False
+
+
+def copyApplyScripts(codeRoot: Path, projectFiles: Path) -> None:
+    """Copy applyUpdate.py / updateBunker.py when the zip includes them."""
+    destDir = projectFiles / "scripts"
+    destDir.mkdir(parents=True, exist_ok=True)
+    applySrc = codeRoot / "scripts" / "applyUpdate.py"
+    if not applySrc.is_file():
+        # 3.0.x applyUpdate copies core/* but not scripts/; python zip ships
+        # a copy at core/applyUpdate.py so this hop still gets the new updater.
+        applySrc = codeRoot / "core" / "applyUpdate.py"
+    if applySrc.is_file():
+        shutil.copy2(applySrc, destDir / "applyUpdate.py")
+        print("Updated scripts/applyUpdate.py")
+    bunkerSrc = codeRoot / "scripts" / "updateBunker.py"
+    if bunkerSrc.is_file():
+        shutil.copy2(bunkerSrc, destDir / "updateBunker.py")
+        print("Updated scripts/updateBunker.py")
+
+
+def applyWindowsLauncherBits(payload: Path, installRoot: Path) -> None:
+    """Replace Data Doctor.exe, applyUpdate.cmd, and python-embed from a Windows zip."""
+    copyFileIfPresent(payload / "Data Doctor.exe", installRoot / "Data Doctor.exe")
+    copyFileIfPresent(payload / "applyUpdate.cmd", installRoot / "applyUpdate.cmd")
+    copyFileIfPresent(payload / "README.txt", installRoot / "README.txt")
+    copyFileIfPresent(payload / "UPDATE.txt", installRoot / "UPDATE.txt")
+    srcEmbed = payload / "Project Files" / "python-embed"
+    destEmbed = installRoot / "Project Files" / "python-embed"
+    if srcEmbed.is_dir() and (srcEmbed / "pythonw.exe").is_file():
+        if destEmbed.exists():
+            shutil.rmtree(destEmbed)
+        shutil.copytree(srcEmbed, destEmbed)
+        enableEmbedSite(destEmbed)
+        print("Installed Project Files/python-embed/")
+
+
+def writeApplyUpdateCmd(installRoot: Path) -> None:
+    """Keep applyUpdate.cmd pointing at python-embed when present."""
+    cmd = installRoot / "applyUpdate.cmd"
+    body = "\r\n".join([
+        "@echo off",
+        "REM Apply newest zip in Update\\ (code + bunker merge + pip into python-embed)",
+        "setlocal",
+        'cd /d "%~dp0"',
+        'set "PY="',
+        'if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
+        'if not defined PY if exist "Project Files\\.venv\\Scripts\\python.exe" set "PY=Project Files\\.venv\\Scripts\\python.exe"',
+        'if not defined PY set "PY=python"',
+        'set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
+        'if not exist "%SCRIPT%" (',
+        "  echo ERROR: applyUpdate.py not found",
+        "  pause",
+        "  exit /b 1",
+        ")",
+        '"%PY%" "%SCRIPT%" %*',
+        "set ERR=%ERRORLEVEL%",
+        "if %ERR% neq 0 (",
+        "  echo.",
+        "  echo Command failed with exit code %ERR%",
+        "  pause",
+        ")",
+        "endlocal",
+        "exit /b %ERR%",
+        "",
+    ])
+    cmd.write_text(body, encoding="utf-8", newline="\r\n")
 
 
 def runPipInstall(py: str, requirements: Path) -> int:
     if not requirements.is_file():
         print("No requirements.txt in update — skipping pip install")
         return 0
+    # pygame 2.6.1 has no Python 3.14 wheel. pygame-ce provides `import pygame`.
+    subprocess.call(
+        [py, "-m", "pip", "uninstall", "-y", "pygame"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     cmd = [py, "-m", "pip", "install", "--upgrade", "-r", str(requirements)]
     print("+", " ".join(cmd))
     try:
@@ -225,26 +416,43 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
         # Payload may be at extract root or nested one level
         payload = extractDir
         if not (payload / "DataDoctor.py").is_file() and not (payload / "core").is_dir():
-            kids = [p for p in extractDir.iterdir() if p.is_dir()]
-            if len(kids) == 1:
-                payload = kids[0]
+            if not isWindowsFullPayload(payload):
+                kids = [p for p in extractDir.iterdir() if p.is_dir()]
+                if len(kids) == 1:
+                    payload = kids[0]
+
+        windowsFull = isWindowsFullPayload(payload)
+        codeRoot = payload
+        if windowsFull:
+            print("Windows full package: replacing launcher + python-embed")
+            applyWindowsLauncherBits(payload, installRoot)
+            pf = payload / "Project Files"
+            if pf.is_dir():
+                codeRoot = pf
 
         # App entry: raw Python zip ships DataDoctor.py. Windows launcher
         # installs run DataDoctor.pyw (no console). If .pyw is already live
         # or we are on Windows, write .pyw and drop leftover .py so an old
         # .pyw is not left sitting next to a new .py.
-        destName = installAppEntry(payload, projectFiles)
+        destName = installAppEntry(codeRoot, projectFiles)
         if destName:
             print(f"Updated {destName}")
 
         for name in ("requirements.txt", "README.txt", "LICENSE"):
-            src = payload / name
+            src = codeRoot / name
             if src.is_file():
                 shutil.copy2(src, projectFiles / name)
                 print(f"Updated {name}")
 
+        copyApplyScripts(codeRoot, projectFiles)
+        if (
+            sys.platform.startswith("win")
+            or (installRoot / "Data Doctor.exe").is_file()
+            or (installRoot / "applyUpdate.cmd").is_file()
+        ):
+            writeApplyUpdateCmd(installRoot)
+
         # Trees (do not overwrite live bunker.db here — merge uses packaged core/bunker.db)
-        # Raw Python zips have no scripts/; launcher install keeps its own apply/update tools.
         treeNames = (
             "ui",
             "core",
@@ -252,11 +460,15 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
             "oracle",
         )
         for tree in treeNames:
-            src = payload / tree
+            src = codeRoot / tree
             if not src.is_dir():
                 continue
             if tree == "core":
-                copyTreeMerge(src, projectFiles / tree, skipNames={"bunker.db"})
+                copyTreeMerge(
+                    src,
+                    projectFiles / tree,
+                    skipNames={"bunker.db", "applyUpdate.py"},
+                )
                 print("Updated core/ (bunker.db skipped — merge path)")
             else:
                 copyTreeMerge(src, projectFiles / tree)
@@ -278,12 +490,14 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
         else:
             print("Left Project Files/certs/ unchanged")
 
-        py = ensureVenv(projectFiles)
+        py = ensurePython(projectFiles)
         print(f"Using Python: {py}")
 
-        # Bunker merge: packaged DB is core/bunker.db in the raw Python zip.
-        # Merge helper lives on the *install* (Project Files/scripts/updateBunker.py).
-        packagedBunker = payload / "core" / "bunker.db"
+        # Bunker merge: packaged DB is core/bunker.db in the raw Python zip
+        # (or Project Files/core or Project Files/temp in a Windows zip).
+        packagedBunker = codeRoot / "core" / "bunker.db"
+        if not packagedBunker.is_file():
+            packagedBunker = codeRoot / "temp" / "bunker.db"
         if packagedBunker.is_file():
             rc = runBunkerMerge(py, projectFiles, packagedBunker)
             if rc != 0:
@@ -345,16 +559,18 @@ def main() -> int:
     if args.zip:
         zipPath = Path(args.zip).expanduser().resolve()
     else:
-        zipPath = pickNewestZip(updateDir)
+        projectFiles = installRoot / "Project Files"
+        zipPath = pickUpdateZip(updateDir, projectFiles)
         if zipPath is None:
             print(
                 f"ERROR: No *.zip found in {updateDir}\n"
-                "  Place a DataDoctor-Python-*.zip there (scripts/packagePython.py), or pass --zip path",
+                "  Place DataDoctor-Python-*.zip (code) or DataDoctor-Windows-*.zip "
+                "(launcher + python-embed) there, or pass --zip path",
                 file=sys.stderr,
             )
             return 1
 
-    print(f"Python zip: {zipPath}")
+    print(f"Update zip: {zipPath}")
     return apply(zipPath, installRoot, keepExtract=args.keepExtract)
 
 

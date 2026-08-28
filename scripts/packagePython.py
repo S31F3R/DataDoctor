@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-Build a raw Python runtime zip for DataDoctor (no launcher, no .venv, no apply scripts).
+Build a raw Python runtime zip for DataDoctor (no launcher, no .venv).
 
 Contents = what you need to run the app with a local Python:
   DataDoctor.py
   requirements.txt
   README.txt
   LICENSE          (if present)
-  core/            (includes bunker.db)
+  core/            (includes bunker.db; also applyUpdate.py for the 3.0.x hop)
   ui/
   quickLook/
   certs/           (optional Aquarius certs — folder always present)
   oracle/          (optional network admin / Instant Client; client/ skipped by default)
+  scripts/applyUpdate.py
 
-Update / bunker-merge tooling lives on the *launcher* install side (applyUpdate,
-updateBunker), not in this zip.
+3.0.x Windows applyUpdate copies core/* but not scripts/. core/applyUpdate.py
+is that bootstrap: DataDoctor.py moves it to Project Files/scripts/ so the
+next hop (DataDoctor-Windows-*.zip) can replace the launcher + python-embed.
 
 Run from project root:
   python scripts/packagePython.py
@@ -143,6 +145,16 @@ def main() -> int:
 
     shutil.copy2(root / "DataDoctor.py", stage / "DataDoctor.py")
 
+    # 3.0.x applyUpdate copies core/* and skips scripts/. Put a copy in core/
+    # so the first 3.1 hop can install a Windows-zip-capable updater.
+    applySrc = root / "scripts" / "applyUpdate.py"
+    if applySrc.is_file():
+        scriptsDir = stage / "scripts"
+        scriptsDir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(applySrc, scriptsDir / "applyUpdate.py")
+        shutil.copy2(applySrc, stage / "core" / "applyUpdate.py")
+        print("Packaged scripts/applyUpdate.py + core/applyUpdate.py (3.0.x hop)")
+
     req = root / "requirements.txt"
     if req.is_file():
         shutil.copy2(req, stage / "requirements.txt")
@@ -161,7 +173,8 @@ def main() -> int:
 Version: {appVersion}
 Built: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
-Raw app tree only (no launcher, no .venv, no update scripts).
+Raw app tree (no launcher, no .venv). applyUpdate.py is included so a 3.0.x
+Windows install can learn to apply DataDoctor-Windows-*.zip next.
 
 LAYOUT
 ------
@@ -172,6 +185,7 @@ LAYOUT
   quickLook/
   certs/         Optional Aquarius certs (aquarius.pem / .cer)
   oracle/        Optional Oracle network admin / Instant Client
+  scripts/applyUpdate.py
 
 MANUAL INSTALL
 --------------
@@ -188,9 +202,13 @@ Mark beta/RC releases as Pre-release on GitHub.
 
 UPDATING A LAUNCHER INSTALL
 ---------------------------
-Launcher packages ship applyUpdate + updateBunker. Drop this zip into that
-install's Update/ folder and run applyUpdate — merge/pip are handled on the
-launcher side, not by anything inside this zip.
+Already on python-embed (3.1+): drop this zip into Update\\ and run
+applyUpdate.cmd (or restart Data Doctor.exe).
+
+3.0.x Windows (.venv / system Python): apply this zip first, then download
+DataDoctor-Windows-*.zip, close Data Doctor, and run applyUpdate.cmd. That
+replaces the launcher and installs Python 3.14. Do not use only this Python
+zip for that hop.
 """
     (stage / "README.txt").write_text(readme.strip() + "\n", encoding="utf-8")
 

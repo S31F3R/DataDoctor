@@ -1846,6 +1846,14 @@ if __name__ == '__main__':
     app = None
 
     try:
+        # 3.0.x python-zip hop: old applyUpdate copies core/applyUpdate.py
+        # but not scripts/. Move it into place and refresh applyUpdate.cmd
+        # before Qt starts so Close → applyUpdate.cmd can apply a Windows zip.
+        try:
+            Update.bootstrapWindowsApplyTools()
+        except Exception:
+            pass
+
         # Windows taskbar: python.exe / pythonw.exe group under the Python
         # AppUserModelID, so the shell shows the Python icon even when
         # setWindowIcon is correct. Give this process its own ID *before*

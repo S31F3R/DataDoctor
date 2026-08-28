@@ -23,9 +23,9 @@ Older GitHub Releases (e.g. rc.1) stay up until deleted on the website.
 
 What this Linux machine can build
 ---------------------------------
-  YES  DataDoctor-Python-vX.Y.Z.zip     update payload (Windows applyUpdate)
-  YES  DataDoctor-Windows-vX.Y.Z.zip    first-install zip (uses repo launcher exe)
-                                        always --skip-venv here (Linux venv is useless)
+  YES  DataDoctor-Python-vX.Y.Z.zip     code update (already on python-embed)
+  YES  DataDoctor-Windows-vX.Y.Z.zip    first install + 3.0.x launcher hop
+                                        (python-embed 3.14; --skip-venv is a no-op)
   YES  DataDoctor-<arch>-vX.Y.Z.AppImage  this CPU/glibc only (needs PyInstaller)
   YES  DataDoctor-macOS-vX.Y.Z.zip      portable .command zip (--skip-venv)
   NO   native macOS .app                must run packageMac.py --app on a Mac
@@ -208,8 +208,9 @@ def notesTemplate(version: str, channel: str) -> str:
         f"\n"
         f"## Notes\n"
         f"\n"
-        f"Windows launcher updates use the `DataDoctor-Python-*.zip` asset "
-        f"(`Update\\` + `applyUpdate.cmd`).\n"
+        f"Windows: already on python-embed → `DataDoctor-Python-*.zip` + "
+        f"`applyUpdate.cmd`. Coming from 3.0.x → `DataDoctor-Windows-*.zip`, "
+        f"close the app, then `applyUpdate.cmd` (replaces the launcher).\n"
     )
 
 
@@ -382,8 +383,9 @@ def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | 
             f"## Changes\n\n"
             f"{seed.rstrip()}\n\n"
             f"## Notes\n\n"
-            f"Windows launcher updates use the `DataDoctor-Python-*.zip` asset "
-            f"(`Update\\` + `applyUpdate.cmd`).\n"
+            f"Windows: already on python-embed → `DataDoctor-Python-*.zip` + "
+            f"`applyUpdate.cmd`. Coming from 3.0.x → `DataDoctor-Windows-*.zip`, "
+            f"close the app, then `applyUpdate.cmd` (replaces the launcher).\n"
         )
         dest.write_text(body, encoding="utf-8")
         log(f"Seeded {dest.relative_to(ROOT)} from {source}")
@@ -488,7 +490,7 @@ def plannedAssets(version: str, skipAppImage: bool) -> list[dict]:
         {
             "key": "windows",
             "ok": True,
-            "label": "Windows launcher zip (--skip-venv)",
+            "label": "Windows launcher zip (python-embed 3.14)",
             "script": "scripts/packageWindows.py",
             "args": ["--skip-venv"],
             "out": ROOT / "dist" / f"DataDoctor-Windows-{tag}.zip",
@@ -740,8 +742,9 @@ def defaultNotes(version: str, channel: str, files: list[Path]) -> str:
         lines.append(f"- `{p.name}`")
     lines.extend([
         "",
-        "Windows users: for an existing launcher install, drop the `DataDoctor-Python-*.zip` "
-        "into `Update\\` and run `applyUpdate.cmd`.",
+        "Windows: already on python-embed, drop `DataDoctor-Python-*.zip` into `Update\\` "
+        "and run `applyUpdate.cmd`. Coming from 3.0.x, use `DataDoctor-Windows-*.zip`, "
+        "close Data Doctor, then run `applyUpdate.cmd` (replaces the launcher + Python 3.14).",
         "Linux: download the AppImage for your CPU.",
         "",
         "See the [wiki](https://github.com/S31F3R/DataDoctor/wiki/Updates-and-Releases).",

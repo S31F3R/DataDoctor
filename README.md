@@ -8,7 +8,7 @@ A desktop tool for querying, reviewing, and (on Reclamation HDB) editing hydrolo
 
 Built for Reclamation and USGS workflows: data dictionary labels, QAQC coloring, overlay/delta pairs, graphing, CSV export, and saved Quick Looks.
 
-Current version: **3.0.0** (see `core/Version.py`).
+Current version: **3.0.1** (see `core/Version.py`). Next Windows builds ship Python 3.14 embeddable.
 
 [Wiki](https://github.com/S31F3R/DataDoctor/wiki) · [Releases](https://github.com/S31F3R/DataDoctor/releases) · [Issues](https://github.com/S31F3R/DataDoctor/issues)
 
@@ -16,8 +16,8 @@ Current version: **3.0.0** (see `core/Version.py`).
 
 ## Requirements
 
-- **Python 3.13.x** (tested with 3.13.7)
-- Dependencies in [`requirements.txt`](requirements.txt): PyQt6, requests, oracledb, keyring, matplotlib, numpy, pygame
+- **Python 3.14** (Windows launcher ships embeddable 3.14; from source / Linux / macOS: 3.14 recommended, 3.13 still works)
+- Dependencies in [`requirements.txt`](requirements.txt): PyQt6, requests, oracledb, keyring, matplotlib, numpy, pygame-ce
 - **USBR / HDB**: packaged Oracle Instant Client (when present) plus TNS / `tnsnames.ora`. The client in the package is used whenever it is there. `tnsnames.ora` and `sqlnet.ora` come from `TNS_ADMIN` if that env var is set, otherwise from packaged `oracle/network/admin/` (we do not ship `tnsnames.ora` — copy yours there).
 - **Aquarius** (TLS): a server certificate in a `certs/` folder — see [Aquarius](https://github.com/S31F3R/DataDoctor/wiki/Aquarius)
 - **USGS** (optional): an [api.data.gov](https://api.waterdata.usgs.gov/signup/) key for higher rate limits — see [USGS](https://github.com/S31F3R/DataDoctor/wiki/USGS)
@@ -39,9 +39,11 @@ python DataDoctor.py
 
 Unzip a **Windows** package and double-click `Data Doctor.exe`.
 
-- Needs Python 3.13 on PATH (an installer may be included in the zip)
+- No system Python. The zip ships Python 3.14 under `Project Files\python-embed\`
+- First run: `Data Doctor.exe` applies the Python zip in `Update\` (pip into python-embed), or run `applyUpdate.cmd` yourself
 - Live app lives under `Project Files\` (`DataDoctor.pyw`)
-- Updates: drop `DataDoctor-Python-*.zip` in `Update\` and run `applyUpdate.cmd`
+- Later code updates: drop `DataDoctor-Python-*.zip` in `Update\` and restart (or run `applyUpdate.cmd`)
+- Coming from 3.0.x (system Python / `.venv`): use `DataDoctor-Windows-*.zip`, close Data Doctor, then run `applyUpdate.cmd` so the launcher can be replaced
 
 ### Linux (AppImage)
 
@@ -55,7 +57,7 @@ python scripts/packageAppImage.py
 
 ### macOS
 
-Unzip the macOS package and double-click `Data Doctor.command` (needs Python 3.13). Optional native `.app` via `python scripts/packageMac.py --app` on a Mac.
+Unzip the macOS package and double-click `Data Doctor.command` (needs Python 3.14, or 3.13). Optional native `.app` via `python scripts/packageMac.py --app` on a Mac.
 
 More detail: [Installation](https://github.com/S31F3R/DataDoctor/wiki/Installation) and [Updates and Releases](https://github.com/S31F3R/DataDoctor/wiki/Updates-and-Releases).
 
@@ -123,7 +125,8 @@ From the project root:
 
 GitHub Release asset names:
 
-- Launcher / Python payload: `DataDoctor-Python.zip` (or `*python*.zip`)
+- Code update: `DataDoctor-Python-vX.Y.Z.zip` (already on python-embed)
+- Windows first install / 3.0.x hop: `DataDoctor-Windows-vX.Y.Z.zip`
 - AppImage: `DataDoctor-x86_64.AppImage`
 - Tags: `vMAJOR.MINOR.PATCH` or `vX.Y.Z-rc.N` (check **Pre-release** for betas)
 

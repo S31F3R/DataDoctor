@@ -19,8 +19,8 @@ Typical files on a GitHub Release:
 
 | Kind | Asset name |
 |------|------------|
-| Update payload (Windows launcher `applyUpdate`) | `DataDoctor-Python-vX.Y.Z.zip` (any `*python*.zip`) |
-| Windows first install | `DataDoctor-Windows-vX.Y.Z.zip` |
+| Code update (already on `python-embed`) | `DataDoctor-Python-vX.Y.Z.zip` (any `*python*.zip`) |
+| Windows first install **and** 3.0.x → 3.1+ launcher hop | `DataDoctor-Windows-vX.Y.Z.zip` |
 | Linux | `DataDoctor-x86_64-vX.Y.Z.AppImage` (or a zip that contains an AppImage) |
 | macOS portable | `DataDoctor-macOS-vX.Y.Z.zip` |
 
@@ -28,18 +28,34 @@ Tags use `vMAJOR.MINOR.PATCH`. Release candidates and betas use `vX.Y.Z-rc.N` or
 
 ## Apply on Windows (launcher)
 
-1. Close Data Doctor.
-2. Put `DataDoctor-Python-*.zip` in the install’s `Update\` folder (next to `Data Doctor.exe`).
-3. Run `applyUpdate.cmd`.
+### Already on bundled Python 3.14 (`Project Files\python-embed\`)
 
-That refreshes `Project Files` code (`DataDoctor.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary (`Project Files\temp\bunker.db` → live `core\bunker.db`), creates `Project Files\.venv` if missing, and runs pip. `Project Files\certs\` is left alone so Aquarius certificates survive updates.
+1. Close Data Doctor (or leave it closed).
+2. Put `DataDoctor-Python-*.zip` in the install’s `Update\` folder (next to `Data Doctor.exe`).
+3. Run `applyUpdate.cmd`, or restart **Data Doctor.exe** (it applies zips in `Update\` first).
+
+That refreshes `Project Files` code (`DataDoctor.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary, pip-installs into `python-embed`, and deletes the zip. `Project Files\certs\` is left alone so Aquarius certificates survive updates.
+
+### Coming from 3.0.x (system Python + `.venv`)
+
+The old zip needed Python on PATH. 3.1+ ships Python 3.14 next to the app and a launcher that starts `python-embed\pythonw.exe`.
+
+In-app update on this hop downloads **`DataDoctor-Windows-*.zip`**, not the Python zip, and tells you to close the app.
+
+1. Close Data Doctor completely (the running `.exe` cannot replace itself).
+2. Confirm `DataDoctor-Windows-*.zip` is in `Update\` (download it from the update prompt if it is not there yet).
+3. Double-click `applyUpdate.cmd`.
+
+That replaces `Data Doctor.exe` / `applyUpdate.cmd`, installs `Project Files\python-embed\`, merges `bunker.db`, and pip-installs. Do **not** use only the Python zip for this hop — old `applyUpdate` cannot install the launcher or the embed.
+
+If you already applied a 3.1 Python zip (new code, still on `.venv`), the app will prompt for the Windows zip on the next start.
 
 Dictionary merge updates `datatype` / `siteName` / `database` from the packaged copy. `valuePrecision`, `precisionOverride`, `expectedMin`, `expectedMax`, `cuttoffMin`, `cutoffMax`, and `rateOfChange` fill blanks only and never overwrite a value you already set.
 
 Dictionary-only merge:
 
 ```text
-python "Project Files\scripts\updateBunker.py"
+"Project Files\python-embed\python.exe" "Project Files\scripts\updateBunker.py"
 ```
 
 The raw Python zip ships `DataDoctor.py`. On Windows (or when a `.pyw` already exists) `applyUpdate` installs it as `DataDoctor.pyw` so both files are not left side by side.

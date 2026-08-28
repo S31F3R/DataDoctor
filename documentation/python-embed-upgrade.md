@@ -1,86 +1,77 @@
-# Python Embed Upgrade
+# Python embed upgrade (Windows)
 
-## Goal
-
-Make the launcher fully portable so **Python does not need to be installed on the target machine**.
-
-## Why the `.venv` isn't enough
-
-A `.venv` is not a self-contained Python install. It only contains:
-
-- Small launcher shims (`python.exe` / `pythonw.exe` in `Scripts`)
-- Installed packages (`Lib\site-packages`)
-- A `pyvenv.cfg` file
-
-The `pythonw.exe` inside `.venv\Scripts` is a tiny redirector. It reads `pyvenv.cfg`, finds the `home = ...` path pointing to the **base Python install** on the machine, and delegates all the actual interpreter work (the standard library, `python3XX.dll`, etc.) to that base install. No base Python on the machine = nothing to delegate to.
-
-The venv gives package isolation, not interpreter portability.
-
-## The fix: embeddable Python
-
-Ship Python's official **Windows embeddable package** alongside the app instead of relying on the venv. It's plain files on disk — no self-extraction, no packing — so Windows Defender has nothing to flag (unlike PyInstaller `--onefile`).
-
-## Setup steps
-
-### 1. Download and extract
-
-Download the **Windows embeddable package (64-bit)** zip from python.org for the target version. Extract it to:
+Windows 3.1+ does **not** need Python on PATH. The launcher starts:
 
 ```
-Project Files\python-embed\
+Project Files\python-embed\pythonw.exe  Project Files\DataDoctor.pyw
 ```
 
-### 2. Enable site packages
+`Data Doctor.exe` already uses those paths (`launcher/src/App.vb`). A `.venv` is not portable — its `python.exe` is a shim to a machine-level install.
 
-Edit `python-embed\python3XX._pth` (e.g. `python313._pth`) and **uncomment** this line:
+## What ships
+
+| Piece | Where |
+|-------|--------|
+| Embeddable CPython 3.14.7 | `launcher/python-3.14.7-embed-amd64.zip` (extracted at package time) |
+| Launcher source | `launcher/src/App.vb` (rebuild on Windows with `vbc`) |
+| Packager | `scripts/packageWindows.py` → `Project Files\python-embed\` |
+| Apply | `scripts/applyUpdate.py` (pip + site + Windows zip) |
+
+`python-embed` includes `vcruntime140.dll`. Pip/site-packages are installed on the user's PC (first `applyUpdate.cmd`), not stored in git. Linux/mac still use a venv.
+
+## `_pth` + pip
+
+After extract, `python314._pth` must contain:
 
 ```
-#import site
-```
-
-so it reads:
-
-```
+python314.zip
+.
+Lib\site-packages
 import site
 ```
 
-This lets the embed build see installed packages in `Lib\site-packages`.
+`get-pip.py` is downloaded into `python-embed` at package time (and again at apply time if missing). `python -m pip install -r requirements.txt` then fills `Lib\site-packages`.
 
-### 3. Bootstrap pip and install packages
+`pygame` 2.6.1 has no cp314 wheel. Requirements use `pygame-ce` (`import pygame` still works). applyUpdate uninstalls leftover `pygame` first.
 
-From a machine with regular Python:
+This Linux packager cannot pip-install Windows wheels. First run on the PC does that.
+
+## Zip roles
+
+| Asset | Use |
+|-------|-----|
+| `DataDoctor-Python-*.zip` | Code update once `python-embed` is already there |
+| `DataDoctor-Windows-*.zip` | Fresh install, **and** 3.0.x → 3.1+ (replaces `Data Doctor.exe`, installs embed) |
+
+Old 3.0.x `applyUpdate.py` only understands a Python zip (`DataDoctor.py` at the zip root). It cannot install the launcher or `python-embed`.
+
+### 3.0.x hop
+
+1. In-app update on 3.0.x still downloads the **Python** zip (old updater).
+2. Old applyUpdate copies `core/` (including `core/applyUpdate.py` shipped in the Python zip).
+3. New `DataDoctor.py` moves that file to `Project Files\scripts\applyUpdate.py` and rewrites `applyUpdate.cmd`.
+4. New updater sees no `python-embed\pythonw.exe` and offers **`DataDoctor-Windows-*.zip`**.
+5. User **closes** Data Doctor (the running `.exe` cannot replace itself) and double-clicks `applyUpdate.cmd`.
+
+Do not tell them to "restart" for that hop.
+
+## Layout after unzip (Windows)
 
 ```
-curl -o get-pip.py https://bootstrap.pypa.io/get-pip.py
-python-embed\python.exe get-pip.py
-python-embed\python.exe -m pip install -r requirements.txt
+Data Doctor.exe
+applyUpdate.cmd
+Update\                    (first-install Python zip)
+Project Files\
+  DataDoctor.pyw
+  python-embed\            (python.exe, pythonw.exe, python314.dll, vcruntime140.dll, …)
+  core\  ui\  quickLook\  oracle\  certs\  scripts\
 ```
 
-Everything lands in `python-embed\Lib\site-packages` — fully portable.
+## Rebuild the exe (Windows only)
 
-### 4. Verify the folder
+```
+cd launcher\src
+vbc /nologo /target:winexe /out:"..\Data Doctor.exe" /win32icon:..\DataDoctor.ico App.vb
+```
 
-Confirm `python-embed\` contains at minimum:
-
-- `pythonw.exe`
-- `python.exe`
-- `python3XX.dll`
-- `python3XX.zip`
-- `Lib\` (with `site-packages\`)
-
-That's the whole interpreter — nothing references a machine-level install.
-
-## Gotcha: Visual C++ Redistributable
-
-If any packages ship compiled extensions (numpy-adjacent libraries, etc.), they may need the **Visual C++ Redistributable** runtime. It's present on most Windows machines already, but if you hit missing-DLL errors, that's the cause. Fix by dropping the needed `vcruntime140.dll` into the `python-embed` folder.
-
-## Packaging script notes
-
-When updating the scripts that push the project to GitHub:
-
-- Include the entire `python-embed\` folder in the pushed/packaged output.
-- Do **not** rely on `.gitignore` rules that exclude `*.exe`, `*.dll`, or `python-embed\` — these files must ship.
-- Do **not** ship the `.venv` anymore; it's replaced by `python-embed`.
-- Keep `requirements.txt` in the repo so the embed can be rebuilt reproducibly.
-- Consider excluding `get-pip.py` from the final package (only needed during setup).
-- Watch repo size — the embed folder plus `site-packages` can be large; use Git LFS if it becomes an issue.
+`documentation/app.vb` is an old draft with the wrong paths (`pythonFiles\app.pyw`). Ignore it.

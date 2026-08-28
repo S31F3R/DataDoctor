@@ -8,7 +8,7 @@ architecture (x86_64, aarch64, …).
 
 Prerequisites:
   - Linux host (or WSL)
-  - Python 3.13 + project venv with requirements.txt installed
+  - Python 3.14 (or 3.13) + project venv with requirements.txt installed
   - PyInstaller:  pip install pyinstaller
   - appimagetool for this arch under scripts/appimagetool/ (preferred):
         scripts/appimagetool/appimagetool-x86_64.appimage

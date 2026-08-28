@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- **Python 3.13.x** (tested with 3.13.7)
-- From [`requirements.txt`](https://github.com/S31F3R/DataDoctor/blob/main/requirements.txt): PyQt6, requests, oracledb, keyring, matplotlib, numpy, pygame
+- **Python 3.14** (Windows launcher ships embeddable 3.14; from source / Linux / macOS: 3.14 recommended, 3.13 still works)
+- From [`requirements.txt`](https://github.com/S31F3R/DataDoctor/blob/main/requirements.txt): PyQt6, requests, oracledb, keyring, matplotlib, numpy, pygame-ce
 - **USBR queries**: Oracle Instant Client + a working TNS / `tnsnames.ora`
 - **Aquarius**: optional TLS certificate (see [Aquarius](Aquarius))
 - **USGS**: optional API key (see [USGS](USGS))
@@ -33,6 +33,7 @@ UPDATE.txt
 Update\                 (includes a DataDoctor-Python-*.zip for first run)
 Project Files\
   DataDoctor.pyw
+  python-embed\  (official Windows embeddable Python 3.14 — no system Python)
   core\          (live bunker.db stays here)
   ui\
   quickLook\
@@ -43,9 +44,12 @@ Project Files\
 ```
 
 1. Unzip to a writable folder.
-2. Install Python 3.13 if needed (an installer may be in the zip). Enable **Add python.exe to PATH**.
-3. Run **applyUpdate.cmd** once. Linux/mac virtualenvs cannot run on Windows, so the zip does not ship a `.venv`. applyUpdate creates `Project Files\.venv`, installs requirements, and applies the Python payload already in `Update\`.
-4. Double-click **Data Doctor.exe**.
+2. Double-click **Data Doctor.exe**. If `Update\` has a zip, the launcher runs **applyUpdate.cmd** first (bootstraps pip into `python-embed`, installs requirements, merges the dictionary), then starts the app.
+3. Or run **applyUpdate.cmd** yourself, then **Data Doctor.exe**.
+
+No system Python and no `.venv`. `python-embed` is the interpreter.
+
+Coming from a **3.0.x** install that used system Python + `Project Files\.venv`: do **not** drop only the Python zip. Use `DataDoctor-Windows-*.zip` (see [Updates and Releases](Updates-and-Releases)).
 
 Do **not** overwrite `Project Files\core\bunker.db` with a zip’s copy if the dictionary has local edits. Updates merge via `applyUpdate.cmd`.
 
@@ -66,7 +70,7 @@ Needs a matching tool under `scripts/appimagetool/` from [appimagetool releases]
 ## macOS
 
 1. Unzip `DataDoctor-macOS-*.zip`.
-2. Double-click **Data Doctor.command** (needs Python 3.13 and a venv or system env with requirements).
+2. Double-click **Data Doctor.command** (needs Python 3.14 or 3.13 and a venv or system env with requirements).
 
 A portable zip can be built with `python scripts/packageMac.py`. A native `.app` requires `python scripts/packageMac.py --app` on macOS with PyInstaller.
 

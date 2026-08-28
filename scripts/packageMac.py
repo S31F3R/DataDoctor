@@ -23,7 +23,7 @@ Two modes:
        → dist/DataDoctor-macOS-YYYYMMDD.app  (and optional zip of the .app)
 
 Prerequisites for a usable package on the target Mac:
-  - Python 3.13.x
+  - Python 3.14 (3.13 still works)
   - Project Files/.venv with requirements.txt, or a system/user env that has them
 
 Run from project root:
@@ -81,7 +81,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 REQUIREMENTS
 ------------
 - macOS 12+ recommended
-- Python 3.13.x (https://www.python.org/downloads/ or Homebrew: brew install python@3.13)
+- Python 3.14 (https://www.python.org/downloads/ or Homebrew: brew install python@3.14). 3.13 still works.
 
 FIRST RUN
 ---------
@@ -158,7 +158,7 @@ elif command -v python3 >/dev/null 2>&1; then
 elif command -v python >/dev/null 2>&1; then
   PY="$(command -v python)"
 else
-  osascript -e 'display dialog "Python 3.13 was not found.\nInstall Python 3.13 from python.org or Homebrew, then try again." buttons {"OK"} default button 1 with title "Data Doctor"' 2>/dev/null || \
+  osascript -e 'display dialog "Python 3 was not found.\nInstall Python 3.14 from python.org or Homebrew, then try again." buttons {"OK"} default button 1 with title "Data Doctor"' 2>/dev/null || \
     echo "ERROR: Python 3 not found" >&2
   exit 1
 fi

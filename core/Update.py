@@ -112,6 +112,77 @@ def updateDir() -> Path | None:
     return d
 
 
+def windowsNeedsLauncherRefresh() -> bool:
+    """
+    True when this is a Windows launcher install without python-embed.
+    3.0.x shipped a system-Python .venv; 3.1+ needs DataDoctor-Windows-*.zip.
+    """
+    root = installRoot()
+    if root is None:
+        return False
+    if not (root / "Data Doctor.exe").is_file():
+        return False
+    embed = root / "Project Files" / "python-embed" / "pythonw.exe"
+    return not embed.is_file()
+
+
+_APPLY_UPDATE_CMD = "\r\n".join([
+    "@echo off",
+    "REM Apply newest zip in Update\\ (code + bunker merge + pip into python-embed)",
+    "setlocal",
+    'cd /d "%~dp0"',
+    'set "PY="',
+    'if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
+    'if not defined PY if exist "Project Files\\.venv\\Scripts\\python.exe" set "PY=Project Files\\.venv\\Scripts\\python.exe"',
+    'if not defined PY set "PY=python"',
+    'set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
+    'if not exist "%SCRIPT%" (',
+    "  echo ERROR: applyUpdate.py not found",
+    "  pause",
+    "  exit /b 1",
+    ")",
+    '"%PY%" "%SCRIPT%" %*',
+    "set ERR=%ERRORLEVEL%",
+    "if %ERR% neq 0 (",
+    "  echo.",
+    "  echo Command failed with exit code %ERR%",
+    "  pause",
+    ")",
+    "endlocal",
+    "exit /b %ERR%",
+    "",
+])
+
+
+def bootstrapWindowsApplyTools() -> None:
+    """
+    3.0.x applyUpdate copies core/* but not scripts/. The Python zip ships
+    core/applyUpdate.py so the first hop can install a Windows-zip-capable
+    updater, then the user runs applyUpdate.cmd for the launcher + embed.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        coreDir = Path(__file__).resolve().parent
+        projectFiles = coreDir.parent
+        src = coreDir / "applyUpdate.py"
+        destDir = projectFiles / "scripts"
+        dest = destDir / "applyUpdate.py"
+        if src.is_file():
+            destDir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+            try:
+                src.unlink()
+            except Exception:
+                pass
+        root = projectFiles.parent
+        if (root / "Data Doctor.exe").is_file() or (root / "applyUpdate.cmd").is_file():
+            cmd = root / "applyUpdate.cmd"
+            cmd.write_text(_APPLY_UPDATE_CMD, encoding="utf-8", newline="\r\n")
+    except Exception as e:
+        Logic.logMessage("DEBUG", f"bootstrapWindowsApplyTools: {e}")
+
+
 def _httpJson(url: str):
     req = urllib.request.Request(
         url,
@@ -191,21 +262,32 @@ def _pickAsset(assets: list, kind: str) -> dict | None:
             return hit
         return None
 
-    # launcher / python payload
+    if kind == "windows":
+        # Full launcher + python-embed. Used for 3.0.x → 3.1+ on Windows.
+        hit = find(lambda n: n.endswith(".zip"), lambda n: "windows" in n)
+        if hit:
+            return hit
+        return None
+
+    # launcher / python payload (code-only; already on python-embed)
     hit = find(lambda n: n.endswith(".zip"), lambda n: "python" in n)
     if hit:
         return hit
     hit = find(lambda n: n.endswith(".zip"), lambda n: "update" in n)
     if hit:
         return hit
-    # Windows full package is not applied via applyUpdate the same way — skip .exe
     hit = find(lambda n: n.endswith(".zip"), lambda n: "windows" not in n and "mac" not in n)
     if hit:
         return hit
     return find(lambda n: n.endswith(".zip"))
 
 
-def fetchLatestRelease(channel: str | None = None, requireNewer: bool = True) -> dict | None:
+def fetchLatestRelease(
+    channel: str | None = None,
+    requireNewer: bool = True,
+    allowCurrent: bool = False,
+    assetKind: str | None = None,
+) -> dict | None:
     """
     Return a dict:
       version, tag, name, prerelease, html_url, asset_name, asset_url, body
@@ -213,6 +295,9 @@ def fetchLatestRelease(channel: str | None = None, requireNewer: bool = True) ->
 
     requireNewer: default True (startup check). False is used when reverting
     from beta/RC to the latest published tag, which may be an older triple.
+    allowCurrent: when requireNewer is False, still return a same-version
+      release (needed to download DataDoctor-Windows-*.zip after a Python-zip hop).
+    assetKind: appimage | launcher | python | windows. Default is inferred.
     """
     channel = channel or getUpdateChannel()
     try:
@@ -258,7 +343,7 @@ def fetchLatestRelease(channel: str | None = None, requireNewer: bool = True) ->
                     f"Update check: up to date local={Version.VERSION} remote={ver}",
                 )
             return None
-    elif Version.compareVersions(ver, Version.VERSION) == 0:
+    elif not allowCurrent and Version.compareVersions(ver, Version.VERSION) == 0:
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
@@ -267,14 +352,26 @@ def fetchLatestRelease(channel: str | None = None, requireNewer: bool = True) ->
         return None
 
     kind = detectInstallKind()
-    assetKind = "appimage" if kind == "appimage" else "launcher"
+    if assetKind is None:
+        if windowsNeedsLauncherRefresh():
+            assetKind = "windows"
+        elif kind == "appimage":
+            assetKind = "appimage"
+        else:
+            assetKind = "launcher"
     asset = _pickAsset(rel.get("assets") or [], assetKind)
-    if asset is None and kind != "appimage":
+    if asset is None and assetKind == "windows":
+        Logic.logMessage(
+            "INFO",
+            f"Update {ver} found but no DataDoctor-Windows-*.zip on the release",
+        )
+    elif asset is None and kind != "appimage":
         asset = _pickAsset(rel.get("assets") or [], "python")
+        assetKind = "launcher" if asset else assetKind
     if asset is None:
         Logic.logMessage(
             "INFO",
-            f"Update {ver} found but no matching asset for install kind={kind}",
+            f"Update {ver} found but no matching asset for install kind={kind} assetKind={assetKind}",
         )
         return {
             "version": Version.displayVersion(ver),
@@ -286,6 +383,7 @@ def fetchLatestRelease(channel: str | None = None, requireNewer: bool = True) ->
             "asset_url": None,
             "body": (rel.get("body") or "")[:2000],
             "kind": kind,
+            "assetKind": assetKind,
         }
 
     return {
@@ -298,6 +396,7 @@ def fetchLatestRelease(channel: str | None = None, requireNewer: bool = True) ->
         "asset_url": asset.get("browser_download_url"),
         "body": (rel.get("body") or "")[:2000],
         "kind": kind,
+        "assetKind": assetKind,
     }
 
 
@@ -565,9 +664,83 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
     """Fire a background update check after the main window is up."""
     try:
         from PyQt6.QtCore import QTimer
-        QTimer.singleShot(delayMs, lambda: runUpdateCheckUi(parent, silentIfNone=True))
+
+        def _go():
+            if windowsNeedsLauncherRefresh():
+                runWindowsLauncherRefreshUi(parent)
+            else:
+                runUpdateCheckUi(parent, silentIfNone=True)
+
+        QTimer.singleShot(delayMs, _go)
     except Exception as e:
         Logic.logMessage("DEBUG", f"scheduleStartupUpdateCheck: {e}")
+
+
+def runWindowsLauncherRefreshUi(parent=None) -> None:
+    """
+    3.0.x .venv install that already applied the Python zip: still needs
+    DataDoctor-Windows-*.zip even when the version number matches.
+    """
+    from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
+    from PyQt6.QtWidgets import QApplication, QMessageBox
+
+    class _Signals(QObject):
+        done = pyqtSignal(object)
+
+    class _Worker(QRunnable):
+        def __init__(self, signals):
+            super().__init__()
+            self.signals = signals
+
+        def run(self):
+            try:
+                info = fetchLatestRelease(
+                    requireNewer=False,
+                    allowCurrent=True,
+                    assetKind="windows",
+                )
+            except Exception as e:
+                Logic.logMessage("INFO", f"Windows launcher refresh check: {e}")
+                info = None
+            self.signals.done.emit(info)
+
+    def onDone(info):
+        if info is None or not info.get("asset_url"):
+            QMessageBox.information(
+                parent,
+                "Launcher update",
+                "This Windows install still uses a system Python (.venv).\n\n"
+                "3.1+ needs the Windows package (DataDoctor-Windows-*.zip), which\n"
+                "replaces Data Doctor.exe and installs Python 3.14 under\n"
+                "Project Files\\python-embed\\.\n\n"
+                "Download that zip from GitHub Releases into Update\\, close\n"
+                "Data Doctor, and double-click applyUpdate.cmd.",
+            )
+            return
+        ver = info.get("version") or "?"
+        box = QMessageBox(parent)
+        box.setWindowTitle("Launcher update")
+        box.setText(
+            "This Windows install still uses a system Python (.venv).\n\n"
+            f"Available:  {ver}\n\n"
+            "Download the Windows package, close Data Doctor, and run\n"
+            "applyUpdate.cmd. That replaces the launcher and installs\n"
+            "Python 3.14. Your dictionary and certs are kept."
+        )
+        downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(downloadBtn)
+        box.exec()
+        if box.clickedButton() is downloadBtn:
+            _downloadAndOfferApply(parent, info)
+
+    signals = _Signals()
+    app = QApplication.instance()
+    holder = parent or app
+    if holder is not None:
+        holder._updateWindowsRefreshSignals = signals  # type: ignore[attr-defined]
+    signals.done.connect(onDone)
+    QThreadPool.globalInstance().start(_Worker(signals))
 
 
 def runRevertToPublishedUi(parent=None) -> None:
@@ -702,12 +875,21 @@ def _promptUpdate(parent, info: dict) -> None:
         QMessageBox.information(parent, "Update available", "\n".join(lines))
         return
 
+    needsWindowsZip = (info.get("assetKind") == "windows") or windowsNeedsLauncherRefresh()
     if kind == "appimage":
         lines.append("")
         lines.append(
             "Download will place the new AppImage in an Update/ folder next to "
             "this AppImage. You can then replace the current file (the app will "
             "offer to quit and apply, or you can run applyAppImageUpdate.sh)."
+        )
+    elif kind == "launcher" and needsWindowsZip:
+        lines.append("")
+        lines.append(
+            "This version ships a new Windows launcher and bundled Python 3.14 "
+            "(no system Python). Download the Windows zip into Update\\, then "
+            "CLOSE Data Doctor and double-click applyUpdate.cmd. Do not restart "
+            "the app first — the running launcher cannot replace itself."
         )
     elif kind == "launcher":
         lines.append("")
@@ -826,7 +1008,26 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                     )
             return
 
-        # Launcher / dev — Windows exe applies the zip from Update/ on next start
+        assetName = (info.get("asset_name") or str(path) or "").lower()
+        needsWindowsZip = (
+            info.get("assetKind") == "windows"
+            or "windows" in assetName
+            or windowsNeedsLauncherRefresh()
+        )
+        if kind == "launcher" and needsWindowsZip:
+            QMessageBox.information(
+                parent,
+                "Launcher update ready",
+                f"Downloaded:\n{path}\n\n"
+                "Close Data Doctor completely, then double-click applyUpdate.cmd\n"
+                "next to Data Doctor.exe.\n\n"
+                "That replaces the launcher and installs Python 3.14 under\n"
+                "Project Files\\python-embed\\. Your dictionary and certs are kept.\n\n"
+                "Do not restart the app first — the running .exe cannot replace itself.",
+            )
+            return
+
+        # Launcher / dev — Windows exe applies a Python zip from Update/ on next start
         QMessageBox.information(
             parent,
             "Download complete",
