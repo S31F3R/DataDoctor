@@ -509,9 +509,24 @@ def makeFontForRole(role='ui', pointSize=None):
 
     if family:
         pt = size if size > 0 else (6 if Config.retroMode else 10)
-        font = QFont(family, pt)
+        font = QFont()
+        try:
+            font.setFamilies([family])
+        except Exception:
+            font.setFamily(family)
+        font.setPointSize(pt)
         if Config.retroMode:
             font.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
+        else:
+            # PreferMatch: do not silently substitute Segoe UI / Arial on Windows
+            # after QApplication.setStyle() (Fusion) resets widget fonts.
+            try:
+                font.setStyleStrategy(
+                    QFont.StyleStrategy.PreferAntialias
+                    | QFont.StyleStrategy.PreferMatch
+                )
+            except Exception:
+                font.setStyleStrategy(QFont.StyleStrategy.PreferMatch)
         return font
 
     # Fallback: OS UI font (only if bundled default failed to load)
@@ -970,6 +985,56 @@ def propagateUiFont(app, font=None):
     return font
 
 
+def logResolvedUiFont(app=None, where='apply'):
+    """
+    Log requested vs actually resolved family.
+
+    Windows native / Fusion setStyle() often substitutes Segoe UI; that is
+    why Query radios and Options checkboxes look larger than Linux Noto.
+    """
+    app = app or QApplication.instance()
+    requested = (getattr(Config, 'uiFontFamily', None) or activeFontFamily() or '').strip()
+    actual = ''
+    exact = None
+    pt = None
+    try:
+        font = app.font() if app is not None else makeUiFont()
+        info = QFontInfo(font)
+        actual = (info.family() or '').strip()
+        exact = info.exactMatch()
+        pt = info.pointSize()
+    except Exception as e:
+        Logic.logMessage("WARN", f"UI font ({where}): could not read QFontInfo: {e}")
+        return
+    Logic.logMessage(
+        "INFO",
+        "UI font ({}): requested={!r} actual={!r} pt={} exact={} "
+        "style={} defaultLoaded={} retroLoaded={} retroMode={}".format(
+            where,
+            requested or '(none)',
+            actual or '(none)',
+            pt,
+            exact,
+            _styleKey(app) if app is not None else '',
+            getattr(Config, 'defaultFontLoaded', False),
+            getattr(Config, 'retroFontLoaded', False),
+            bool(getattr(Config, 'retroMode', False)),
+        ),
+    )
+    if requested and actual:
+        req = requested.casefold()
+        got = actual.casefold()
+        if req not in got and got not in req:
+            Logic.logMessage(
+                "WARN",
+                "UI font mismatch ({}): bundled {!r} resolved as {!r}. "
+                "Windows will look different from Linux (controls may not fit). "
+                "Confirm ui/fonts/*.ttf is in the install (Project Files/ui/fonts/).".format(
+                    where, requested, actual
+                ),
+            )
+
+
 def applyRoleFonts(app=None, root=None):
     """
     Set role-specific sizes: buttons stay smaller in retro; log/code larger, etc.
@@ -1075,29 +1140,11 @@ def applyStylesAndFonts(app, mainTable, queryList):
         ensureRetroFontLoaded()  # About dialog always uses pixel font
 
     app.setStyleSheet(readBaseStylesheet())
-    appFont = propagateUiFont(app)
+    propagateUiFont(app)
     # Mode-specific ABS button/checkbox positions (default Noto vs retro)
     applyModeControlLayouts(app=app)
 
-    try:
-        info = QFontInfo(appFont)
-        Logic.logMessage(
-            "INFO",
-            "UI font: platform={} retroMode={} requested={!r} actual={!r} "
-            "uiPt={} buttonPt={} logPt={} defaultLoaded={} retroLoaded={}".format(
-                sys.platform,
-                Config.retroMode,
-                Config.uiFontFamily or '(system fallback)',
-                info.family(),
-                rolePointSize('ui'),
-                rolePointSize('button'),
-                rolePointSize('log'),
-                Config.defaultFontLoaded,
-                Config.retroFontLoaded,
-            ),
-        )
-    except Exception as e:
-        Logic.logMessage("WARN", f"UI font diagnostics failed: {e}")
+    logResolvedUiFont(app, where='applyStylesAndFonts')
 
     setRetroStyles(app, bool(Config.retroMode), mainTable, queryList)
     # setRetroStyles may clear listQueryList stylesheet — re-apply compact list padding
@@ -2135,6 +2182,16 @@ def applyColorTheme(theme=None):
         _applyForcedTheme(app, wantDark=(name == 'dark'))
 
     _restyleMarkedPanes(app)
+    # QApplication.setStyle() resets widget fonts to the style default
+    # (Segoe UI on Windows). Re-apply bundled Noto / Press Start so Linux
+    # and Windows match. Skip the pre-logging startup call — widgets and
+    # retroMode are not ready yet.
+    if getattr(Logic, 'loggingInitialized', False):
+        try:
+            propagateUiFont(app)
+            logResolvedUiFont(app, where=f'applyColorTheme:{name}')
+        except Exception as e:
+            Logic.logMessage("WARN", f"applyColorTheme re-apply font failed: {e}")
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
