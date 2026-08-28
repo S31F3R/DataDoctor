@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidge
 from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, QEvent, pyqtSignal, QTimer
 from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
 from PyQt6 import uic
-from core import Logic, Query, Utils, Config, Upload, Update
+from core import Logic, Query, Utils, Config, Upload, Update, FormulaUi
 from ui.uiAbout import uiAbout
 from ui.uiDataDictionary import uiDataDictionary
 from ui.uiOptions import uiOptions, warmKeyringCache
@@ -291,6 +291,7 @@ class uiMain(QMainWindow):
 
         # Edit triggers / locks applied after each query via Upload.snapshotBaseline
         # Multi-column selection → highlight every selected column header
+        FormulaUi.installOnTable(self)
         Upload.ensureHeaderSelectionSync(self)
         self.tabWidget.tabCloseRequested.connect(self.onTabCloseRequested)
 

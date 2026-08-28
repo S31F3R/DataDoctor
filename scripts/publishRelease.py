@@ -213,6 +213,93 @@ def notesTemplate(version: str, channel: str) -> str:
     )
 
 
+def extractChangesBullets(mdText: str) -> list[str]:
+    """## Changes bullets from a vVERSION.md (skip empty '- ' placeholders)."""
+    if not mdText:
+        return []
+    lines = mdText.splitlines()
+    bullets: list[str] = []
+    inChanges = False
+    for raw in lines:
+        stripped = raw.rstrip()
+        s = stripped.strip()
+        if s.startswith("## "):
+            heading = s[3:].strip().lower()
+            if heading == "changes":
+                inChanges = True
+                continue
+            if inChanges:
+                break
+            continue
+        if not inChanges:
+            continue
+        if not s:
+            if bullets:
+                bullets.append(stripped)
+            continue
+        if s == "-" or s.lstrip("-").strip() == "":
+            continue
+        if s.startswith("-"):
+            bullets.append(stripped if stripped.startswith("-") else f"- {s}")
+        elif bullets:
+            bullets.append(stripped)
+    while bullets and not bullets[-1].strip():
+        bullets.pop()
+    return bullets
+
+
+def _bulletKey(line: str) -> str:
+    return re.sub(r"\s+", " ", (line or "").strip().lower())
+
+
+def compilePreReleaseNotes(triple: str) -> str:
+    """
+    Merge ## Changes from v{triple}-rc.* and v{triple}-beta.* (oldest first).
+    Used when publishing the final X.Y.Z and Working Notes is empty.
+    """
+    if not NOTES_DIR.is_dir():
+        return ""
+    paths = [
+        p
+        for p in NOTES_DIR.iterdir()
+        if p.is_file() and p.suffix.lower() == ".md"
+    ]
+    pre: list[tuple] = []
+    for p in paths:
+        stem = p.stem
+        if not stem.startswith("v"):
+            continue
+        ver = stem[1:]
+        parsed = Version.parseVersion(ver)
+        if parsed is None or parsed[3] is None:
+            continue
+        maj, minor, patch, _pre = parsed
+        if f"{maj}.{minor}.{patch}" != triple:
+            continue
+        pre.append((Version.versionKey(parsed), p))
+    pre.sort(key=lambda t: t[0])
+    seen: set[str] = set()
+    out: list[str] = []
+    for _key, p in pre:
+        try:
+            text = p.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for b in extractChangesBullets(text):
+            k = _bulletKey(b)
+            isCont = bool(out) and not b.lstrip().startswith("-")
+            if not isCont:
+                if not k or k in seen:
+                    continue
+                seen.add(k)
+                out.append(b if b.startswith("-") else f"- {b}")
+            else:
+                out.append(b)
+    if not out:
+        return ""
+    return "\n".join(out) + "\n"
+
+
 def workingNotesBody() -> str:
     """
     Change bullets from documentation/Working Notes.txt.
@@ -258,8 +345,9 @@ def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | 
     --notes PATH overrides. Interactive run can type a few bullets first.
 
     If the versioned file is missing/empty, seed ## Changes from Working
-    Notes bullets (the scratch file has no version in its name — that is
-    chosen at publish). Then reset Working Notes to the empty template.
+    Notes bullets. For channel=published with no Working Notes (and no real
+    bullets in an existing placeholder file), compile ## Changes from
+    vX.Y.Z-rc.* / vX.Y.Z-beta.* for that triple.
     """
     dest = notesPathFor(version)
     if notesArg:
@@ -273,23 +361,32 @@ def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | 
         return text
 
     if dest.is_file() and dest.stat().st_size > 0:
-        log(f"Release notes: {dest.relative_to(ROOT)}")
-        return dest.read_text(encoding="utf-8")
+        existing = dest.read_text(encoding="utf-8")
+        # Placeholder "## Changes\n\n- \n" counts as empty — compile rc/beta
+        # notes for a published X.Y.Z instead of shipping a blank list.
+        if extractChangesBullets(existing) or channel != "published":
+            log(f"Release notes: {dest.relative_to(ROOT)}")
+            return existing
 
     working = workingNotesBody()
-    if working:
+    compiled = ""
+    if channel == "published" and not working:
+        compiled = compilePreReleaseNotes(baseTriple(version))
+    seed = working or compiled
+    if seed:
         dest.parent.mkdir(parents=True, exist_ok=True)
+        source = "Working Notes" if working else f"rc/beta notes for {baseTriple(version)}"
         body = (
             f"# Data Doctor {version}\n\n"
             f"Channel: {channel}\n\n"
             f"## Changes\n\n"
-            f"{working.rstrip()}\n\n"
+            f"{seed.rstrip()}\n\n"
             f"## Notes\n\n"
             f"Windows launcher updates use the `DataDoctor-Python-*.zip` asset "
             f"(`Update\\` + `applyUpdate.cmd`).\n"
         )
         dest.write_text(body, encoding="utf-8")
-        log(f"Seeded {dest.relative_to(ROOT)} from Working Notes")
+        log(f"Seeded {dest.relative_to(ROOT)} from {source}")
         return body
 
     dest.parent.mkdir(parents=True, exist_ok=True)

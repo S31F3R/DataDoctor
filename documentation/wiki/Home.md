@@ -18,6 +18,7 @@ The installed version is shown in **About**.
 - [Quick Looks](Quick-Looks)
 - [Graph](Graph)
 - [CSV Export](CSV-Export)
+- [Formulas](Formulas) — Excel-style `=` in Internal Data Query
 
 ## Data sources
 

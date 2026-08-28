@@ -57,4 +57,6 @@ The **Data Query** tab is selected (re-added at index 0 if you had closed it). G
 
 Right-click a **header** for series details / Graph. Right-click a **cell** for value details (internal, plus USGS public “Show details”).
 
+Internal tables accept Excel-style **formulas** (`=A1+B1`, fill handle, `$` locks). See [Formulas](Formulas).
+
 See [Data Dictionary](Data-Dictionary) for how column titles are built.

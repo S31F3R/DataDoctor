@@ -13,6 +13,7 @@
 - [Quick Looks](Quick-Looks)
 - [Graph](Graph)
 - [CSV Export](CSV-Export)
+- [Formulas](Formulas)
 
 **Sources**
 

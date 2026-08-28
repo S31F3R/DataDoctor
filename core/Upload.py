@@ -13,6 +13,7 @@ from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QAbstractItemView, QMessageBox
 
 from core import Logic, Config, Oracle
+from core.Formula import isErrorValue
 
 # User-edited / pending upload (magenta + white) — not used by QAQC
 editBg = QColor(0xC2, 0x18, 0x5B)  # #C2185B
@@ -23,6 +24,10 @@ uploadOkBg = QColor(0x00, 0x69, 0x5C)  # #00695C
 uploadOkFg = QColor(255, 255, 255)
 
 editKey = 'uploadEdit'
+
+# FormulaUi.installOnTable sets these so paste/clear go through formula eval.
+cellInputHook = None
+recalcHook = None
 
 # Parallel writers per HDB database (mirrors USBR.sqlRead style)
 maxWriteThreads = 8
@@ -618,7 +623,9 @@ def clearSelectedCells(mainWindow):
             continue
         handled = True
         # setText('') fires itemChanged → onItemChanged → magenta dirty edit
-        if item.text() != '':
+        if cellInputHook is not None:
+            cellInputHook(mainWindow, r, c, '')
+        elif item.text() != '':
             item.setText('')
 
     if Config.debug and handled:
@@ -764,10 +771,15 @@ def pasteClipboardToSelection(mainWindow):
             if not (item.flags() & Qt.ItemFlag.ItemIsEditable):
                 continue
             newText = cellText.strip() if cellText is not None else ''
-            if item.text() != newText:
+            if cellInputHook is not None:
+                if cellInputHook(mainWindow, r, c, newText):
+                    changed += 1
+            elif item.text() != newText:
                 item.setText(newText)
                 changed += 1
 
+    if changed and recalcHook is not None:
+        recalcHook(mainWindow)
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
@@ -1329,6 +1341,8 @@ def collectUploadRows(mainWindow):
             if originalText is None:
                 originalText = ''
             value = item.text() if item.text() is not None else ''
+            if isErrorValue(value):
+                continue
 
             reason = 'overlaySecondaryFill' if edit.get('autoOverlayFill') else 'userEdit'
             rows.append({

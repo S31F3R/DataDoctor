@@ -22,6 +22,8 @@ An extra column: secondary − primary (or the pair rule used at query time).
 
 You can run Overlay, Delta, or both.
 
+[Formulas](Formulas) on an overlay column edit the **primary** value only. Delta columns stay locked.
+
 ## Upload
 
 Internal queries only. Public tables are locked.
