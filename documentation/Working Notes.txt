@@ -10,3 +10,5 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- 3.0.x → 3.1 applyUpdate.cmd starts Data Doctor.exe when the Windows zip hop finishes (app was closed)
+
