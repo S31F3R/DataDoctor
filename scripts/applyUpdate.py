@@ -99,6 +99,66 @@ def pickUpdateZip(updateDir: Path, projectFiles: Path) -> Path | None:
     return newest(zips)
 
 
+def pathIsInside(dest: Path, target: Path) -> bool:
+    destReal = os.path.normcase(str(dest.resolve())) + os.sep
+    t = os.path.normcase(str(target.resolve()))
+    return t == destReal[:-1] or t.startswith(destReal)
+
+
+def zipMemberUnsafe(name: str) -> bool:
+    raw = (name or "").replace("\\", "/")
+    if not raw or raw.startswith("/") or raw.startswith("\\"):
+        return True
+    if len(raw) > 1 and raw[1] == ":":
+        return True
+    parts = [p for p in raw.split("/") if p and p != "."]
+    return any(p == ".." for p in parts)
+
+
+def safeExtractZip(zf: zipfile.ZipFile, dest: Path, maxUncompressed: int = 2 * 1024 ** 3) -> None:
+    """Extract a zip, rejecting .. / absolute paths and oversized payloads."""
+    dest = dest.resolve()
+    dest.mkdir(parents=True, exist_ok=True)
+    total = 0
+    for info in zf.infolist():
+        if zipMemberUnsafe(info.filename):
+            raise ValueError(f"unsafe zip path: {info.filename}")
+        total += max(int(getattr(info, "file_size", 0) or 0), 0)
+        if total > maxUncompressed:
+            raise ValueError("zip uncompressed size exceeds limit")
+        target = (dest / info.filename.replace("\\", "/")).resolve()
+        if not pathIsInside(dest, target):
+            raise ValueError(f"unsafe zip path: {info.filename}")
+        if info.is_dir() or info.filename.endswith("/"):
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with zf.open(info) as src, open(target, "wb") as out:
+            shutil.copyfileobj(src, out)
+
+
+def writeFilteredRequirements(src: Path, dest: Path) -> bool:
+    """
+    Copy requirement lines that are package pins only.
+    Drops pip CLI flags (-r, --index-url, --trusted-host) and direct URLs.
+    """
+    if not src.is_file():
+        return False
+    keep = []
+    for raw in src.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("-") or "://" in line:
+            print(f"WARN: ignoring requirements line: {line}", file=sys.stderr)
+            continue
+        keep.append(raw.rstrip())
+    if not keep:
+        return False
+    dest.write_text("\n".join(keep) + "\n", encoding="utf-8")
+    return True
+
+
 def copyTreeMerge(src: Path, dst: Path, skipNames=None):
     """Copy files from src into dst; never deletes dest-only files."""
     skipNames = set(skipNames or [])
@@ -179,7 +239,17 @@ def ensurePip(py: str, projectFiles: Path) -> None:
         try:
             import urllib.request
             getPip.parent.mkdir(parents=True, exist_ok=True)
-            urllib.request.urlretrieve(url, getPip)
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                final = resp.geturl()
+                if not str(final).lower().startswith("https://bootstrap.pypa.io/"):
+                    print(f"WARN: refusing get-pip redirect to {final}", file=sys.stderr)
+                    return
+                data = resp.read()
+            if len(data) < 1000 or len(data) > 3 * 1024 * 1024:
+                print("WARN: get-pip.py size looks wrong; not running it", file=sys.stderr)
+                return
+            getPip.write_bytes(data)
         except Exception as e:
             print(f"WARN: get-pip.py download failed: {e}", file=sys.stderr)
             return
@@ -336,13 +406,28 @@ def runPipInstall(py: str, requirements: Path) -> int:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    cmd = [py, "-m", "pip", "install", "--upgrade", "-r", str(requirements)]
-    print("+", " ".join(cmd))
+    filtered = requirements.with_name(requirements.name + ".safe")
     try:
-        return subprocess.call(cmd)
-    except Exception as e:
-        print(f"ERROR: pip install failed: {e}", file=sys.stderr)
-        return 1
+        if not writeFilteredRequirements(requirements, filtered):
+            print("No usable package pins in requirements.txt — skipping pip install")
+            return 0
+        cmd = [
+            py, "-m", "pip", "install", "--upgrade",
+            "--disable-pip-version-check",
+            "-r", str(filtered),
+        ]
+        print("+", " ".join(cmd))
+        try:
+            return subprocess.call(cmd)
+        except Exception as e:
+            print(f"ERROR: pip install failed: {e}", file=sys.stderr)
+            return 1
+    finally:
+        try:
+            if filtered.is_file():
+                filtered.unlink()
+        except Exception:
+            pass
 
 
 def installAppEntry(payload: Path, projectFiles: Path) -> str | None:
@@ -411,7 +496,7 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
 
     try:
         with zipfile.ZipFile(zipPath, "r") as zf:
-            zf.extractall(extractDir)
+            safeExtractZip(zf, extractDir)
 
         # Payload may be at extract root or nested one level
         payload = extractDir

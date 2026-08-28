@@ -49,7 +49,20 @@ if [ -n "$WAIT_PID" ]; then
     sleep 1
   done
   sleep 1
+  if kill -0 "$WAIT_PID" 2>/dev/null; then
+    echo "ERROR: process $WAIT_PID still running; not replacing AppImage" >&2
+    exit 1
+  fi
 fi
+
+magic=$(od -An -N4 -tx1 "$NEW" 2>/dev/null | tr -d ' \n')
+case "$magic" in
+  7f454c46*|2321*) ;;
+  *)
+    echo "ERROR: new file is not an ELF/AppImage: $NEW" >&2
+    exit 1
+    ;;
+esac
 
 chmod +x "$NEW" 2>/dev/null || true
 

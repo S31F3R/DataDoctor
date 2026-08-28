@@ -140,7 +140,15 @@ def installPythonEmbed(root: Path, dest: Path) -> bool:
         try:
             import urllib.request
             print(f"Downloading {url}")
-            urllib.request.urlretrieve(url, getPip)
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                final = resp.geturl()
+                if not str(final).lower().startswith("https://bootstrap.pypa.io/"):
+                    raise ValueError(f"refusing get-pip redirect to {final}")
+                data = resp.read()
+            if len(data) < 1000 or len(data) > 3 * 1024 * 1024:
+                raise ValueError("get-pip.py size looks wrong")
+            getPip.write_bytes(data)
         except Exception as e:
             print(f"WARN: could not download get-pip.py ({e}); applyUpdate will try at runtime", file=sys.stderr)
     return (dest / "pythonw.exe").is_file()

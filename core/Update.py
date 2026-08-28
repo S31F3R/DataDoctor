@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -15,6 +16,7 @@ import shutil
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -25,6 +27,56 @@ from core import Config, Logic, Utils, Version
 _UA = f"DataDoctor/{Version.displayVersion()} (+https://github.com/{Version.GITHUB_REPO})"
 _API = f"https://api.github.com/repos/{Version.GITHUB_REPO}/releases"
 _TIMEOUT = 20
+_GITHUB_HOSTS = frozenset({
+    "api.github.com",
+    "github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+    "github-releases.githubusercontent.com",
+})
+
+
+def _httpsHostAllowed(url: str, extraHosts=()) -> bool:
+    try:
+        p = urllib.parse.urlparse(url)
+    except Exception:
+        return False
+    if p.scheme != "https":
+        return False
+    host = (p.hostname or "").lower()
+    if host in _GITHUB_HOSTS or host in extraHosts:
+        return True
+    return host.endswith(".githubusercontent.com")
+
+
+def _safeDownloadName(name: str) -> str:
+    base = Path(str(name or "download.bin")).name
+    if not base or base in (".", ".."):
+        return "download.bin"
+    return base
+
+
+def _verifyDigest(path: Path, digest: str | None) -> bool:
+    """If GitHub sent sha256:…, require a match. Unknown/missing digest is allowed."""
+    if not digest:
+        return True
+    kind, _, expect = str(digest).partition(":")
+    if kind.lower() != "sha256" or not expect:
+        return True
+    expect = expect.strip().lower()
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    got = h.hexdigest()
+    if got != expect:
+        Logic.logMessage("ERROR", f"Update digest mismatch (got {got}, expected {expect})")
+        try:
+            path.unlink()
+        except Exception:
+            pass
+        return False
+    return True
 
 
 def getUpdateChannel() -> str:
@@ -184,6 +236,8 @@ def bootstrapWindowsApplyTools() -> None:
 
 
 def _httpJson(url: str):
+    if not _httpsHostAllowed(url):
+        raise ValueError(f"refusing JSON fetch from {url}")
     req = urllib.request.Request(
         url,
         headers={
@@ -192,29 +246,47 @@ def _httpJson(url: str):
         },
     )
     with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+        final = resp.geturl()
+        if not _httpsHostAllowed(final):
+            raise ValueError(f"refusing JSON redirect to {final}")
         return json.loads(resp.read().decode("utf-8"))
 
 
-def _httpDownload(url: str, dest: Path, progress=None) -> None:
+def _httpDownload(url: str, dest: Path, progress=None, cancelled=None) -> None:
+    if not _httpsHostAllowed(url):
+        raise ValueError(f"refusing download from {url}")
     req = urllib.request.Request(url, headers={"User-Agent": _UA})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        total = int(resp.headers.get("Content-Length") or 0)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_suffix(dest.suffix + ".part")
-        done = 0
-        with open(tmp, "wb") as f:
-            while True:
-                chunk = resp.read(256 * 1024)
-                if not chunk:
-                    break
-                f.write(chunk)
-                done += len(chunk)
-                if progress and total:
-                    try:
-                        progress(done, total)
-                    except Exception:
-                        pass
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            final = resp.geturl()
+            if not _httpsHostAllowed(final):
+                raise ValueError(f"refusing download redirect to {final}")
+            total = int(resp.headers.get("Content-Length") or 0)
+            done = 0
+            with open(tmp, "wb") as f:
+                while True:
+                    if cancelled and cancelled():
+                        raise RuntimeError("download cancelled")
+                    chunk = resp.read(256 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    done += len(chunk)
+                    if progress and total:
+                        try:
+                            progress(done, total)
+                        except Exception:
+                            pass
         tmp.replace(dest)
+    except Exception:
+        try:
+            if tmp.is_file():
+                tmp.unlink()
+        except Exception:
+            pass
+        raise
 
 
 def _releaseVersion(rel: dict) -> str:
@@ -381,6 +453,7 @@ def fetchLatestRelease(
             "html_url": rel.get("html_url") or "",
             "asset_name": None,
             "asset_url": None,
+            "asset_digest": None,
             "body": (rel.get("body") or "")[:2000],
             "kind": kind,
             "assetKind": assetKind,
@@ -394,20 +467,21 @@ def fetchLatestRelease(
         "html_url": rel.get("html_url") or "",
         "asset_name": asset.get("name"),
         "asset_url": asset.get("browser_download_url"),
+        "asset_digest": asset.get("digest"),
         "body": (rel.get("body") or "")[:2000],
         "kind": kind,
         "assetKind": assetKind,
     }
 
 
-def downloadReleaseAsset(info: dict, destDir: Path | None = None) -> Path | None:
+def downloadReleaseAsset(info: dict, destDir: Path | None = None, cancelled=None) -> Path | None:
     """
     Download the release asset into Update/.
     For AppImage zips, extract the .AppImage into Update/.
     Returns path to the primary file to apply, or None.
     """
     url = info.get("asset_url")
-    name = info.get("asset_name") or "download.bin"
+    name = _safeDownloadName(info.get("asset_name") or "download.bin")
     if not url:
         return None
     destDir = destDir or updateDir()
@@ -419,9 +493,14 @@ def downloadReleaseAsset(info: dict, destDir: Path | None = None) -> Path | None
     target = destDir / name
     Logic.logMessage("INFO", f"Downloading update {info.get('version')} → {target}")
     try:
-        _httpDownload(url, target)
+        _httpDownload(url, target, cancelled=cancelled)
     except Exception as e:
-        Logic.logException("Update download failed", e)
+        if cancelled and cancelled():
+            Logic.logMessage("INFO", "Update download cancelled")
+        else:
+            Logic.logException("Update download failed", e)
+        return None
+    if not _verifyDigest(target, info.get("asset_digest")):
         return None
 
     kind = info.get("kind") or detectInstallKind()
@@ -447,7 +526,12 @@ def downloadReleaseAsset(info: dict, destDir: Path | None = None) -> Path | None
                         if "x86_64" in m or "aarch64" in m:
                             member = m
                             break
+                    if ".." in member.replace("\\", "/").split("/"):
+                        Logic.logMessage("WARN", f"Skipping unsafe AppImage zip member {member}")
+                        return target
                     outName = Path(member).name
+                    if not outName.lower().endswith(".appimage"):
+                        return target
                     outPath = destDir / outName
                     with zf.open(member) as src, open(outPath, "wb") as dst:
                         shutil.copyfileobj(src, dst)
@@ -542,16 +626,18 @@ def spawnAppImageReplaceAndExit(newAppImage: Path, mainWindow=None) -> bool:
     if not newAppImage.is_file():
         return False
 
-    script = applyAppImageScriptPath()
-    # Inline fallback if no shipped script
-    if script is None:
-        # Write a one-shot script into Update/
-        d = updateDir()
-        if d is None:
-            return False
-        script = d / "applyAppImageUpdate.sh"
+    # Always write the script we ship in this build so a planted
+    # applyAppImageUpdate.sh next to the AppImage cannot run.
+    d = updateDir()
+    if d is None:
+        return False
+    script = d / "applyAppImageUpdate.sh"
+    try:
         script.write_text(_APPIMAGE_APPLY_SCRIPT, encoding="utf-8")
         script.chmod(script.stat().st_mode | 0o111)
+    except Exception as e:
+        Logic.logException("could not write applyAppImageUpdate.sh", e)
+        return False
 
     import subprocess
     env = os.environ.copy()
@@ -622,7 +708,19 @@ if [ -n "$WAIT_PID" ]; then
     sleep 1
   done
   sleep 1
+  if kill -0 "$WAIT_PID" 2>/dev/null; then
+    echo "ERROR: process $WAIT_PID still running; not replacing AppImage" >&2
+    exit 1
+  fi
 fi
+magic=$(od -An -N4 -tx1 "$NEW" 2>/dev/null | tr -d ' \n')
+case "$magic" in
+  7f454c46*|2321*) ;;
+  *)
+    echo "ERROR: new file is not an ELF/AppImage: $NEW" >&2
+    exit 1
+    ;;
+esac
 chmod +x "$NEW" 2>/dev/null || true
 # Backup then replace
 if [ -f "$CURRENT" ]; then
@@ -965,7 +1063,20 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
         def run(self):
             path = None
             try:
-                path = downloadReleaseAsset(self.info)
+                if cancelled["flag"]:
+                    self.signals.done.emit(False)
+                    return
+                path = downloadReleaseAsset(
+                    self.info, cancelled=lambda: cancelled["flag"]
+                )
+                if cancelled["flag"]:
+                    if path is not None:
+                        try:
+                            Path(path).unlink()
+                        except Exception:
+                            pass
+                    self.signals.done.emit(False)
+                    return
                 if path is not None:
                     writePendingMarker(self.info, path)
                     if (self.info.get("kind") or detectInstallKind()) == "appimage":
@@ -977,6 +1088,8 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
 
     def onDone(path):
         progress.close()
+        if path is False:
+            return
         if path is None:
             QMessageBox.warning(
                 parent,

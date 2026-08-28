@@ -197,7 +197,7 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
         if Config.debug:
             Logic.logMessage("DEBUG", "Fetching USBR URL: {}".format(url))
         try:
-            response = requests.get(url)
+            response = requests.get(url, timeout=60)
             response.raise_for_status()
             readFile = json.loads(response.content)
             seriesList = readFile['Series']

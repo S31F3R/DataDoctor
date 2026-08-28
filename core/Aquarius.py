@@ -12,6 +12,20 @@ from core import Logic, Config, Query
 queryLimit = 30000 # Configurable max points per API call
 maxThreads = 50 # Configurable max number of threads
 
+
+def _httpsServer(server: str) -> str:
+    """Force https:// on the Aquarius base URL. Empty if nothing usable."""
+    s = (server or "").strip().rstrip("/")
+    if not s:
+        return ""
+    low = s.lower()
+    if low.startswith("http://"):
+        s = "https://" + s[7:]
+    elif not low.startswith("https://"):
+        s = "https://" + s
+    return s
+
+
 def apiRead(dataIDs, startDate, endDate, interval):
     if Config.debug:
         Logic.logMessage("DEBUG", "Aquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}".format(dataIDs, interval, startDate, endDate))
@@ -56,7 +70,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
     endDate = f'{endDateTime.year}-{endMonth}-{endDay} {endHour}:{endMinute}'
 
     # Fetch creds right before auth, use, then clear
-    server = keyring.get_password("DataDoctor", "aqServer") or ''
+    server = _httpsServer(keyring.get_password("DataDoctor", "aqServer") or '')
     user = keyring.get_password("DataDoctor", "aqUser") or ''
     password = keyring.get_password("DataDoctor", "aqPassword") or ''
 
@@ -64,13 +78,13 @@ def apiRead(dataIDs, startDate, endDate, interval):
         Logic.logMessage("ERROR", "Missing Aquarius credentials.")
         return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
 
-    # Authenticate session with fallback for SSL verification.
-    # Accepts .pem, or auto-converts .cer / .crt / .pfx / .p12 in certs/ → aquarius.pem
+    # TLS: system trust, then certs/aquarius.pem. Never verify=False — that
+    # would send username/password to a MITM.
     authData = {'Username': user, 'EncryptedPassword': password}
     certPath = Logic.ensureAquariusPem()
     verifyMode = True
 
-    for attempt in ['system', 'customCert', 'unverified']:
+    for attempt in ('system', 'customCert'):
         try:
             if attempt == 'customCert' and (not certPath or not os.path.exists(certPath)):
                 if Config.debug:
@@ -80,19 +94,17 @@ def apiRead(dataIDs, startDate, endDate, interval):
                         "(.pem / .cer); skipping customCert.",
                     )
                 continue
-            verifyMode = certPath if attempt == 'customCert' else False if attempt == 'unverified' else True
-            authResponse = requests.post(f'{server}/AQUARIUS/Provisioning/v1/session', data=authData, verify=verifyMode)
+            verifyMode = certPath if attempt == 'customCert' else True
+            authResponse = requests.post(
+                f'{server}/AQUARIUS/Provisioning/v1/session',
+                data=authData,
+                verify=verifyMode,
+                timeout=30,
+            )
             authResponse.raise_for_status()
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Authentication succeeded with verify={verifyMode}")
-            if attempt == 'unverified' and Config.debug:
-                Logic.logMessage(
-                    "WARN",
-                    "SSL verification disabled due to cert issues. "
-                    "Place aquarius.pem or .cer in an existing certs/ folder "
-                    "(app will not create one) or system trust store for secure connection.",
-                )
             break
         except requests.exceptions.SSLError as e:
             if Config.debug:
@@ -102,7 +114,12 @@ def apiRead(dataIDs, startDate, endDate, interval):
             Logic.logMessage("ERROR", f"Authentication failed: {e}")
             return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
     else:
-        Logic.logMessage("ERROR", f"Aquarius authentication failed after all attempts.")
+        Logic.logMessage(
+            "ERROR",
+            "Aquarius TLS failed (system trust and certs/aquarius.pem). "
+            "Place the server certificate as aquarius.pem or .cer in certs/ "
+            "— unverified HTTPS is not used.",
+        )
         return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
     token = authResponse.text.strip('"')
     headers = {'X-Authentication-Token': token}
@@ -172,7 +189,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
         subEndStr = f'{subEndYear}-{subEndMonth}-{subEndDay} {subEndHour}:{subEndMinute}'
         response = requests.get(
             f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={subStartStr}&QueryTo={subEndStr}&utcOffset={offsetHours}&GetParts=All&format=json',
-            headers=headers, verify=verifyMode
+            headers=headers, verify=verifyMode, timeout=60,
         )
 
         try:

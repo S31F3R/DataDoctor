@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import sys
 import traceback
 import urllib.parse
@@ -27,6 +28,15 @@ def logPath() -> str:
     return Utils.getLogPath("app.log")
 
 
+_REDACT_SECRET = re.compile(
+    r"(?i)(password|passwd|pwd|api[_-]?key|secret|token|authorization)\s*[:=]\s*\S+"
+)
+
+
+def _redactSecrets(text: str) -> str:
+    return _REDACT_SECRET.sub(r"\1=***", text or "")
+
+
 def logTail(maxChars: int = _MAX_LOG_CHARS) -> str:
     path = logPath()
     try:
@@ -34,7 +44,7 @@ def logTail(maxChars: int = _MAX_LOG_CHARS) -> str:
             text = f.read()
     except Exception:
         return ""
-    text = text.replace("\r\n", "\n").strip()
+    text = _redactSecrets(text.replace("\r\n", "\n").strip())
     if len(text) <= maxChars:
         return text
     return text[-maxChars:]
@@ -142,6 +152,7 @@ def copyToClipboard(text: str) -> bool:
 def crashTitle(excType, excValue) -> str:
     name = getattr(excType, "__name__", "Error")
     msg = str(excValue or "").strip().splitlines()[0] if excValue else ""
+    msg = _redactSecrets(msg)
     if msg:
         return f"Crash: {name}: {msg}"[:120]
     return f"Crash: {name}"
@@ -155,8 +166,8 @@ def crashBody(excType, excValue, excTb) -> str:
         tbText = f"{excType}: {excValue}"
     extra = ""
     if tbText:
-        extra = "## Traceback\n\n```\n" + tbText[:3000] + "\n```"
-    return issueBody("crash", summary=f"{excType.__name__}: {excValue}", extra=extra)
+        extra = "## Traceback\n\n```\n" + _redactSecrets(tbText[:3000]) + "\n```"
+    return issueBody("crash", summary=_redactSecrets(f"{excType.__name__}: {excValue}"), extra=extra)
 
 
 def showCrashDialog(excType, excValue, excTb) -> None:

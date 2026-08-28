@@ -28,9 +28,9 @@ Search order (existing folders only):
 4. Current working directory
 5. User config `certs/` (see [App Data](App-Data))
 
-Converted `aquarius.pem` is written **next to** the source file. If conversion fails, the app falls back to system trust, then unverified — it will not keep using a stale pem blindly.
+Converted `aquarius.pem` is written **next to** the source file. TLS uses system trust first, then `certs/aquarius.pem`. There is **no unverified HTTPS fallback** (that would send the password to a MITM). If both fail, add the server cert or put it in the OS trust store.
 
-The cert can also be added to the OS trust store instead of using `certs/`.
+The server URL is always `https://` (a stored `http://` host is upgraded).
 
 ## Dictionary headers
 

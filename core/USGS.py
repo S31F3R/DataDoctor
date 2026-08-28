@@ -204,28 +204,17 @@ def apiReadOldMethod(dataID, interval, startDate, endDate):
                 if attempt < maxRetries - 1:
                     Logic.logMessage(
                         "WARN",
-                        "Retry {} of {}: SSL error: {}. Retrying with increased timeout and disabled verification...".format(
+                        "Retry {} of {}: SSL error: {}. Retrying with a longer timeout (TLS stays verified).".format(
                             attempt + 1, maxRetries, e
                         ),
                     )
                     timeout *= 2
                     time.sleep(2 ** attempt)
-                    try:
-                        response = requests.get(url, timeout=timeout, verify=False)
-                        response.raise_for_status()
-                        readFile = json.loads(response.content)
-                        timeSeriesList = readFile["value"]["timeSeries"]
-                        Logic.logMessage(
-                            "WARN",
-                            "SSL verification disabled for this request. Update OpenSSL or check network.",
-                        )
-                        break
-                    except Exception as e2:
-                        Logic.logMessage("WARN", "SSL fallback failed: {}".format(e2))
+                    continue
                 else:
                     Logic.logMessage(
                         "ERROR",
-                        "Max retries exceeded: {} for URL: {}. Update OpenSSL or use a different network.".format(
+                        "Max retries exceeded: {} for URL: {}. Update OpenSSL, check the network, or the system trust store.".format(
                             e, url
                         ),
                     )
