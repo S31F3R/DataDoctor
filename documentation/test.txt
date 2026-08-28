@@ -6,56 +6,78 @@ Workflow / publish how-to: documentation/status.grok (gitignored).
 Current Tests
 --------------------------------------------------------------------------------
 
-[x] Graph Ctrl + mouse wheel zoom
+[ ] Options Save stays open; Close vs Cancel
    Steps:
-     a. Plot a Data Query series (Graph). Hold Ctrl and scroll the wheel over
-        the plot. Time axis zooms toward the pointer. Y refits to visible data.
-     b. Wheel without Ctrl does not zoom. Zoom stays inside the data range
-        (cannot pan/zoom past the series). Back/Home still work.
+     a. Open Options. Bottom-right button says Close. Change UTC offset — it
+        says Cancel. Save. Window stays open; button says Close again.
+     b. Change something, Cancel. Window closes and the change is not kept.
+        Reopen Options: previous saved values are back.
+     c. Change nothing, Close. Window closes.
 
-[x] AppImage tab close buttons
+[ ] Options Profile: label; Raw Data / QAQC gone from General
    Steps:
-     a. Run the Linux AppImage (not the venv). Main tabs (Data Query, SQL,
-        Graph, Log) show the close X. Hover/press still swap the icon.
-     b. SQL Query Builder query tabs still show close. Retro close icons too
-        if retro is on.
-     c. Dev/venv and Windows zip still show close buttons (not AppImage-only).
+     a. Options → General: left of Export… / Import… is a "Profile:" label.
+     b. Raw Data and Quality Control Checks are not on Options. Debug and
+        Beta updates are still there.
 
-[x] Oracle auth lock is per-database + timed
+[ ] Query Options Raw Data + QAQC (defaults off; Quick Look)
    Steps:
-     a. SQL Query Builder: pick an HDB you cannot log into → Run. Wrong
-        username/password dialog. Other HDBs in the combo still run.
-     b. Retrying the failed DB is blocked with a remaining-time note (~5 min).
-     c. After 5 minutes, or after saving Oracle credentials in Options, that
-        DB can be tried again. Restart is not required.
+     a. New Query window: Display Deltas, Overlay Pairs, Raw Data, QAQC all
+        unchecked. Info dialog describes all four.
+     b. Check Raw Data + QAQC, run a query. Table is unrounded; QAQC colors
+        apply. Refresh keeps both. Graph hover matches the raw table text.
+     c. Save Quick Look with those boxes (and Overlay/Delta as you like).
+        Clear Query List unchecks all four. Load the Quick Look — boxes
+        restore. A Quick Look with no metadata still unchecks them.
 
-[x] Profile import merge / overwrite / rename + SQL categories
+[ ] Quick Look date mode (Custom / Prev Day / Prev Week)
    Steps:
-     a. Export SQL Quick Looks (and Query Quick Looks). Import into a profile
-        that already has some of those names.
-     b. Same-name prompt: Overwrite, Skip, Rename (Overwrite all / Skip all
-        when more than one clash). Existing names not in the zip stay.
-     c. SQL zip: choose With categories vs Without. Without → new snippets
-        Uncategorized. With → zip folder assignments apply.
-     d. Random/non-profile zip still errors and changes nothing.
+     a. Prev Day to current → Save Quick Look. Load it later: Prev Day is
+        selected, end time is now (not the old clock). Same for Prev Week.
+     b. Custom with a historical range → Save → Load: Custom stays on and
+        the pickers have the stored times (not refreshed to now).
+     c. New Query / unspecified Quick Look: Custom is the default.
 
-[x] USBR Overwrite Flag on upload
+[ ] Query list multi-select move / delete
    Steps:
-     a. Options → USBR → Overwrite Flag off → Save. Edit an existing HDB value
-        and Upload. Debug/log: OVERWRITE_FLAG NULL. Existing HDB value is not
-        replaced (HDB keeps the old value or the proc no-ops).
-     b. Check Overwrite Flag → Save. Upload the same cell again. Log says
-        OVERWRITE_FLAG='O'. The HDB value is replaced.
-     c. Freehand SQL in SQL Query Builder is unchanged (no auto flag).
+     a. Ctrl/Shift select several rows. Delete button and context Delete
+        remove all of them. Insert Above / Below are disabled while several
+        are selected.
+     b. Select a block, Up 1 / Down 1: order inside the block stays; they
+        stop at the top (or bottom) instead of wrapping or reversing.
+     c. Up-MAX packs the selection to the top in the same order. Down-MAX
+        packs to the bottom. A selection that includes row 0 does not crash
+        or jump past the top.
 
-[x] Windows package: empty certs/ + first-run applyUpdate.cmd
+[ ] Data ID Search siteID + numeric/text sort
    Steps:
-     a. Unzip DataDoctor-Windows-*.zip. Project Files\certs\ exists
-        (README ok; empty is fine).
-     b. Update\ contains DataDoctor-Python.zip. No Linux .venv in the zip.
-     c. After Python 3.13 is on PATH: run applyUpdate.cmd → creates
-        Project Files\.venv, pip installs, app starts via Data Doctor.exe.
-     d. Put a dummy aquarius.pem in certs\, run applyUpdate again — pem still there.
+     a. Query → Search: columns include dataID and siteID. Typing a site
+        number or location tag filters rows.
+     b. Double-click still adds dataID|interval|database (not siteID).
+     c. Sort dataID and siteID headers: all-digit IDs first (1, 2, 10 not
+        1, 10, 2), then text/hex IDs. Same in Data Dictionary.
+
+[ ] Packaged Oracle + TNS_ADMIN
+   Steps:
+     a. Options → Oracle → TNS Names Location shows TNS_ADMIN if that env
+        is set (read-only), else the packaged oracle/network/admin path
+        (or a path you saved). Not oracle/client/network/admin.
+     b. A machine without a system Oracle still uses packaged Instant
+        Client. sqlnet.ora / tnsnames.ora come from that TNS folder.
+        Copy tnsnames.ora into packaged network/admin if TNS_ADMIN is unset.
+
+[ ] Icon hover after a dialog
+   Steps:
+     a. Click a Query info button, dismiss the dialog. Icon is normal unless
+        the cursor is still on the button (then hover is OK).
+     b. Same for main-window Refresh / Upload / Reset / About after their
+        dialogs. SQL History still OK.
+
+[ ] Light System theme checkboxes (Windows)
+   Steps:
+     a. Appearance = System, OS in light mode. Radio and checkbox indicators
+        are light with a visible check. Same on a fresh Windows 11 install.
+     b. Dark mode still looks dark. Linux System is unchanged.
 
 [ ] Mac package script
    Steps:
@@ -77,6 +99,12 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Graph Ctrl + mouse wheel zoom
+[x] AppImage tab close buttons
+[x] Oracle auth lock is per-database + timed
+[x] Profile import merge / overwrite / rename + SQL categories
+[x] USBR Overwrite Flag on upload
+[x] Windows package: empty certs/ + first-run applyUpdate.cmd
 [x] SQL History button hover after double-click
 [x] Windows System Default appearance (dark OS → dark app)
 [x] Hide/Unhide password buttons (Oracle, Aquarius, USGS)
