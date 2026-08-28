@@ -1821,24 +1821,47 @@ def loadConfig():
             Logic.logException("Failed to create default user.config", e)
         return defaults
 
+def ensurePrivateDir(path):
+    """Create a user-only directory on POSIX (no-op mode on Windows)."""
+    os.makedirs(path, exist_ok=True)
+    if os.name != "nt":
+        try:
+            os.chmod(path, 0o700)
+        except Exception:
+            pass
+    return path
+
+
+def ensurePrivateFile(path):
+    if os.name != "nt" and path and os.path.isfile(path):
+        try:
+            os.chmod(path, 0o600)
+        except Exception:
+            pass
+    return path
+
+
 def getConfigPath():
     configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
 
     if not os.path.exists(configDir):
-        os.makedirs(configDir)
-    return os.path.join(configDir, "user.config")
+        ensurePrivateDir(configDir)
+    path = os.path.join(configDir, "user.config")
+    if os.path.isfile(path):
+        ensurePrivateFile(path)
+    return path
 
 def getQuickLookDir():
     quickLookDir = os.path.join(getConfigDir(), "quickLook")
     queryDir = os.path.join(quickLookDir, "query")
 
     if not os.path.exists(quickLookDir):
-        os.makedirs(quickLookDir)
+        ensurePrivateDir(quickLookDir)
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"getQuickLookDir: Created quickLook directory: {quickLookDir}")
     if not os.path.exists(queryDir):        
-        os.makedirs(queryDir)
+        ensurePrivateDir(queryDir)
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"getQuickLookDir: Created query subfolder: {queryDir}")
@@ -2292,7 +2315,7 @@ def getConfigDir():
     configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
     
     if not os.path.exists(configDir):
-        os.makedirs(configDir)
+        ensurePrivateDir(configDir)
     return configDir
 
 def getLogDir():
@@ -2307,8 +2330,28 @@ def getSqlSnippetDir():
     sqlDir = os.path.join(quickLookDir, "sql")
 
     if not os.path.exists(sqlDir):
-        os.makedirs(sqlDir)
+        ensurePrivateDir(sqlDir)
         if Config.debug:
             Logic.logMessage("DEBUG", f"getSqlSnippetDir: Created sql directory: {sqlDir}")
 
     return sqlDir
+
+
+def sqlSnippetStem(name: str) -> str:
+    """Basename only; no path separators or '..'."""
+    s = (name or "").strip().replace("\\", "/")
+    s = os.path.basename(s)
+    if s.lower().endswith(".sql"):
+        s = s[:-4]
+    if not s or s in (".", "..") or "/" in s or "\\" in s:
+        raise ValueError("invalid snippet name")
+    return s
+
+
+def sqlSnippetPath(name: str) -> str:
+    stem = sqlSnippetStem(name)
+    sqlDir = os.path.realpath(getSqlSnippetDir())
+    path = os.path.realpath(os.path.join(sqlDir, stem + ".sql"))
+    if os.path.commonpath([sqlDir, path]) != sqlDir:
+        raise ValueError("invalid snippet name")
+    return path

@@ -396,7 +396,7 @@ def initLogging():
         return # Already initialized
     
     logDir = Utils.getLogDir()
-    os.makedirs(logDir, exist_ok=True)
+    Utils.ensurePrivateDir(logDir)
     
     logger = logging.getLogger('Data Doctor')
     logger.setLevel(logging.DEBUG) # Capture all levels
@@ -411,6 +411,7 @@ def initLogging():
     
     # File handler: Log to rotating file with timestamps
     filePath = Utils.getLogPath('app.log')
+    Utils.ensurePrivateFile(filePath)
     fileHandler = AppRotatingFileHandler(
         filePath, maxBytes=1048576, backupCount=5, encoding='utf-8',
     )

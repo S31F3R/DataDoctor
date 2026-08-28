@@ -1306,9 +1306,12 @@ class SqlWorkbench:
         name, ok = QInputDialog.getText(self.win, "Save Snippet", "Snippet name:")
         if not (ok and name.strip()):
             return
-        name = name.strip()
-        sqlDir = Utils.getSqlSnippetDir()
-        filePath = os.path.join(sqlDir, f"{name}.sql")
+        try:
+            name = Utils.sqlSnippetStem(name)
+            filePath = Utils.sqlSnippetPath(name)
+        except ValueError:
+            QMessageBox.warning(self.win, "Save Snippet", "Snippet name cannot contain path characters.")
+            return
         with open(filePath, "w", encoding="utf-8") as f:
             f.write(sqlText)
         config = Utils.loadConfig()
@@ -1329,8 +1332,11 @@ class SqlWorkbench:
         item = self.listSnippets.itemFromIndex(index)
         if item is None:
             return
-        name = item.text()
-        filePath = os.path.join(Utils.getSqlSnippetDir(), f"{name}.sql")
+        try:
+            name = Utils.sqlSnippetStem(item.text())
+            filePath = Utils.sqlSnippetPath(name)
+        except ValueError:
+            return
         if not os.path.exists(filePath):
             return
         with open(filePath, "r", encoding="utf-8") as f:
@@ -1359,7 +1365,11 @@ class SqlWorkbench:
             )
             if reply != QMessageBox.StandardButton.Yes:
                 return False
-        filePath = os.path.join(Utils.getSqlSnippetDir(), f"{name}.sql")
+        try:
+            name = Utils.sqlSnippetStem(name)
+            filePath = Utils.sqlSnippetPath(name)
+        except ValueError:
+            return False
         if os.path.exists(filePath):
             os.remove(filePath)
         config = Utils.loadConfig()

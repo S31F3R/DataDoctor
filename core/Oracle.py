@@ -1250,7 +1250,11 @@ class oracleConnection:
         # Detect bind variables (e.g., :1, :name) more precisely
         hasBindVars = bool(re.search(r'(?<!\w):(\d+|[a-zA-Z]\w*)', query))
 
-        if Config.debug: Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Query '{query[:100]}' has bind vars: {hasBindVars}")
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"OracleConnection.executeCustomQuery: {len(query)} chars, binds={hasBindVars}",
+            )
 
         if not params and hasBindVars:
             if Config.debug: Logic.logMessage("DEBUG", "OracleConnection.executeCustomQuery: Bind variables detected but no params provided")
@@ -1284,18 +1288,16 @@ class oracleConnection:
 
     def runQueryOnCursor(self, cursor, query, params, fetchAll, startTime):
         exactQuery = query
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"OracleConnection.executeCustomQuery: Validating query: {exactQuery}")
-
         if params:
             cursor.execute(exactQuery, params)
         else:
             cursor.execute(exactQuery)
 
         if Config.debug:
+            nParams = len(params) if params is not None else 0
             Logic.logMessage(
                 "DEBUG",
-                f"OracleConnection.executeCustomQuery: Executed query: {exactQuery[:100]} with params {params}",
+                f"OracleConnection.executeCustomQuery: executed {len(exactQuery)} chars, {nParams} bind params",
             )
         isSelect = cursor.description is not None
         executionTime = time.time() - startTime

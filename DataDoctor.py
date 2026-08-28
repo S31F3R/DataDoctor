@@ -626,8 +626,12 @@ class uiMain(QMainWindow):
         name, ok = QInputDialog.getText(self, "Save Snippet", "Snippet name:")
 
         if ok and name:
-            sqlDir = Utils.getSqlSnippetDir()
-            filePath = os.path.join(sqlDir, f"{name}.sql")
+            try:
+                name = Utils.sqlSnippetStem(name)
+                filePath = Utils.sqlSnippetPath(name)
+            except ValueError:
+                QMessageBox.warning(self, "Save Snippet", "Snippet name cannot contain path characters.")
+                return
 
             with open(filePath, 'w', encoding='utf-8') as f:
                 f.write(sqlText)
@@ -643,9 +647,11 @@ class uiMain(QMainWindow):
         item = self.listSnippets.itemFromIndex(index)
 
         if item:
-            name = item.text()
-            sqlDir = Utils.getSqlSnippetDir()
-            filePath = os.path.join(sqlDir, f"{name}.sql")
+            try:
+                name = Utils.sqlSnippetStem(item.text())
+                filePath = Utils.sqlSnippetPath(name)
+            except ValueError:
+                return
 
             if os.path.exists(filePath):
                 with open(filePath, 'r', encoding='utf-8') as f:
@@ -667,12 +673,14 @@ class uiMain(QMainWindow):
             QMessageBox.warning(self, "Delete Snippet", "No snippet selected.")
             if Config.debug: Logic.logMessage("DEBUG", "deleteSnippet: No item selected")
             return
-        name = selected.text()
+        try:
+            name = Utils.sqlSnippetStem(selected.text())
+            filePath = Utils.sqlSnippetPath(name)
+        except ValueError:
+            return
         reply = QMessageBox.question(self, "Delete Snippet", f"Delete '{name}'?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
 
         if reply == QMessageBox.StandardButton.Yes:
-            sqlDir = Utils.getSqlSnippetDir()
-            filePath = os.path.join(sqlDir, f"{name}.sql")
 
             if os.path.exists(filePath):
                 os.remove(filePath)

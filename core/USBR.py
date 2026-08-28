@@ -1,9 +1,11 @@
 # USBR.py
 
+import re
 import requests
 import json
 import threading
 import queue
+from urllib.parse import urlencode
 from core import Oracle, Query, Config, Logic
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -16,6 +18,17 @@ maxThreads = 15
 _LINKED_HDB_ALIASES = frozenset({"lchdb", "yaohdb", "uchdb2", "uchdb"})
 # No usable links from that family — always a direct session on its own worker.
 _ISOLATED_HDB_ALIASES = frozenset({"kbohdb", "cuhdb", "lbohdb", "ecohdb"})
+_IDENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_#$]*$")
+
+
+def safeHdbIdent(value, what="identifier") -> str:
+    """Reject anything that is not a single Oracle identifier (no @, --, dots)."""
+    s = str(value or "").strip()
+    if s.startswith("@"):
+        s = s[1:]
+    if not _IDENT_RE.match(s):
+        raise ValueError(f"invalid HDB {what}")
+    return s
 
 
 def hdbAlias(svr) -> str:
@@ -47,8 +60,14 @@ def qualifyHdbObject(name, schema='', link=''):
     Linked remote: SCHEMA.name@link  (LCHDBA.r_base@lchdb)
     Direct session: name             (r_base) — default schema / public synonyms
     """
-    prefix = f"{schema}." if schema else ""
-    return f"{prefix}{name}{link or ''}"
+    name = safeHdbIdent(name, "object")
+    prefix = f"{safeHdbIdent(schema, 'schema')}." if schema else ""
+    if link:
+        raw = str(link)[1:] if str(link).startswith("@") else str(link)
+        link = f"@{safeHdbIdent(raw, 'dblink')}"
+    else:
+        link = ""
+    return f"{prefix}{name}{link}"
 
 
 def fetchAgenMap(oracleConn, schema):
@@ -192,7 +211,16 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
     for groupStart in range(0, len(SDIDs), queryLimit):
         groupSDIDs = SDIDs[groupStart:groupStart + queryLimit]
         groupSDIDStr = ','.join(groupSDIDs)
-        url = f'https://www.usbr.gov/pn-bin/hdb/hdb.pl?svr={svr}&SDI={groupSDIDStr}&tstp={tstp}&t1={startYear}-{startMonth}-{startDay}T{startHour}:{startMinute}&t2={endYear}-{endMonth}-{endDay}T{endHour}:{endMinute}&table={table}&mrid={mrid}&format=json'
+        url = "https://www.usbr.gov/pn-bin/hdb/hdb.pl?" + urlencode({
+            "svr": svr,
+            "SDI": groupSDIDStr,
+            "tstp": tstp,
+            "t1": f"{startYear}-{startMonth}-{startDay}T{startHour}:{startMinute}",
+            "t2": f"{endYear}-{endMonth}-{endDay}T{endHour}:{endMinute}",
+            "table": table,
+            "mrid": mrid,
+            "format": "json",
+        })
         
         if Config.debug:
             Logic.logMessage("DEBUG", "Fetching USBR URL: {}".format(url))
@@ -299,6 +327,7 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
     connection to the target DSN (forceDirect).
     """
     global primaryDsn
+    svr = safeHdbIdent(hdbAlias(svr) or svr, "database")
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
