@@ -46,8 +46,8 @@ Current Tests
 [ ] Mac package script
    Steps:
      a. From project root: python scripts/packageMac.py --skip-venv
-     b. dist/DataDoctor-macOS-YYYYMMDD.zip contains Data Doctor.command + Project Files/
-        + Update/ + applyUpdate.sh + Project Files/certs/
+     b. dist/DataDoctor-macOS-YYYYMMDD.zip contains Data Doctor.command + pythonFiles/
+        + Update/ + applyUpdate.sh + pythonFiles/certs/
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
