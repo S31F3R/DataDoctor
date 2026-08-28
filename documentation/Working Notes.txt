@@ -10,3 +10,5 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Windows: do not `from DataDoctor import uiMain` (app.pyw is the entry; that import was No module named DataDoctor)
+

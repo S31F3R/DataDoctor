@@ -13,11 +13,11 @@ Current Tests
    Steps:
      a. Unzip a new DataDoctor-Windows-*.zip to an empty folder. Double-click
         Data Doctor.exe. applyUpdate.cmd runs (pip into python-embed), then
-        the app window opens (not a silent close).
+        the app window opens (not a silent close). No "No module named
+        DataDoctor" MessageBox / startup-error.log.
      b. pythonFiles\\python-embed\\python314._pth contains `..` and
         sitecustomize.py exists next to pythonw.exe.
-     c. If start still fails: pythonFiles\\startup-error.log exists and a
-        MessageBox shows the import error (not silent).
+     c. Overlay or delta query still paints (modifyTable finds the main window).
 
 [ ] Leftover DataDoctor.ico removed
    Steps:
