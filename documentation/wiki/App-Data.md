@@ -13,9 +13,9 @@ Application name is **Data Doctor** (no organization folder). Config is **per us
 | Item | Purpose |
 |------|---------|
 | `user.config` | JSON settings: UTC offset, raw/QAQC/retro/debug, last Quick Look, export path, graph save folder, SQL snippet order/categories, update channel, Oracle access list, … |
-| `logs/app.log` | Current Python + Qt log (Log Viewer tab) |
+| `logs/app.log` | Current log (Log Viewer tab). The Windows launcher and `applyUpdate` also append here (`launcher:` / `applyUpdate:` / `startup:` lines) so a silent launch failure is visible without a window |
 | `logs/app.log.1` … `.5` | Rotated backups (~1 MB each, newest `.1`) |
-| `logs/fault.log` | Native interpreter faults (not held open on `app.log`) |
+| `logs/fault.log` | Native interpreter faults (enabled before Qt loads; not held open on `app.log`) |
 | `quickLook/query/` | Saved query lists (Quick Looks) |
 | `quickLook/sql/` | SQL Query Builder snippets (category assignment in `user.config`) |
 | `certs/` | Optional user-level Aquarius cert folder (created only if needed) |
@@ -39,3 +39,5 @@ Passwords and API keys are **not** in `user.config`. They go to the OS keyring, 
 ## Logging
 
 **Log Viewer** on the main window toggles a tab that loads `app.log` plus `app.log.1`…`app.log.5` (newest first) and live-appends while the tab is open. Closing and reopening reloads every rotation from disk. Uncaught exceptions write full tracebacks there. Debug mode (**Options → General**) adds extra `DEBUG` lines.
+
+Windows launch writes `startup: process begin` then `startup: imports ok`, `startup: QApplication ready`, `startup: main window shown`. If the window never appears, the last of those lines is how far Python got. Native crashes dump to `fault.log` in the same folder.

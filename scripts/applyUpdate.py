@@ -47,6 +47,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -56,6 +57,29 @@ CODE_DIR_NAMES = (WIN_CODE_DIR, LEGACY_CODE_DIR)
 WIN_APP_ENTRY = "app.pyw"
 UPDATES_DIR = "updates"
 LEGACY_UPDATES_DIRS = ("Update", "Updates", "update", "UPDATES")
+
+
+def userLogDir() -> Path:
+    """Same AppData logs folder the app writes (no Qt)."""
+    if sys.platform.startswith("win"):
+        base = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        return Path(base) / "Data Doctor" / "logs"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Data Doctor" / "logs"
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    root = Path(xdg) if xdg else Path.home() / ".config"
+    return root / "Data Doctor" / "logs"
+
+
+def appendAppLog(level: str, message: str) -> None:
+    try:
+        logDir = userLogDir()
+        logDir.mkdir(parents=True, exist_ok=True)
+        line = time.strftime("%Y-%m-%d %H:%M:%S") + f" [{level}] applyUpdate: {message}\n"
+        with (logDir / "app.log").open("a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception:
+        pass
 
 
 def findInstallRoot(start: Path) -> Path:
@@ -653,6 +677,7 @@ def launchDataDoctorIfIdle(installRoot: Path) -> None:
     if exe.is_file() and (sys.platform.startswith("win") or not mac.is_file()):
         if dataDoctorExeRunning():
             print("Data Doctor.exe is already running — not starting another copy")
+            appendAppLog("INFO", "exe already running — not starting another copy")
             return
         target = exe
         args = [str(exe)]
@@ -675,8 +700,10 @@ def launchDataDoctorIfIdle(installRoot: Path) -> None:
             kwargs["start_new_session"] = True
         subprocess.Popen(args, **kwargs)
         print(f"Starting {target.name}")
+        appendAppLog("INFO", f"starting {target.name}")
     except Exception as e:
         print(f"WARN: could not start {target.name}: {e}", file=sys.stderr)
+        appendAppLog("ERROR", f"could not start {target.name}: {e}")
 
 
 def writeApplyUpdateCmd(installRoot: Path) -> None:
@@ -815,6 +842,7 @@ def runBunkerMerge(py: str, projectFiles: Path, packagedBunker: Path) -> int:
 def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
     if not zipPath.is_file():
         print(f"ERROR: zip not found: {zipPath}", file=sys.stderr)
+        appendAppLog("ERROR", f"zip not found: {zipPath}")
         return 1
 
     migrateLegacyUpdatesFolder(installRoot)
@@ -921,6 +949,7 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
 
         py = ensurePython(projectFiles)
         print(f"Using Python: {py}")
+        appendAppLog("INFO", f"using Python {py} for {zipPath.name}")
 
         # Bunker merge: packaged DB is core/bunker.db in the raw Python zip
         # (or Project Files/core or Project Files/temp in a Windows zip).
@@ -939,6 +968,9 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
         rc = runPipInstall(py, req)
         if rc != 0:
             print(f"WARN: pip install exited {rc}", file=sys.stderr)
+            appendAppLog("WARN", f"pip install exited {rc}")
+        else:
+            appendAppLog("INFO", "pip install finished")
 
         removeLeftoverDataDoctorIco(installRoot, projectFiles)
 
@@ -948,6 +980,7 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
                 "Not starting Data Doctor.",
                 file=sys.stderr,
             )
+            appendAppLog("ERROR", "PyQt6 is not importable after pip; not starting")
             return 1
 
         # Cleanup zip after successful extract/copy
@@ -958,6 +991,7 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
             print(f"WARN: could not remove zip: {e}", file=sys.stderr)
 
         print("Update complete.")
+        appendAppLog("INFO", f"update complete ({zipPath.name})")
         launchDataDoctorIfIdle(installRoot)
         return 0
     finally:
@@ -993,6 +1027,7 @@ def main() -> int:
         installRoot = findInstallRoot(Path(__file__).resolve().parent)
 
     print(f"Install root: {installRoot}")
+    appendAppLog("INFO", f"install root {installRoot}")
     updateDir = resolveUpdatesDir(installRoot, create=True)
 
     if args.zip:

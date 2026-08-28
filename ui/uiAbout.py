@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QUrl, QSize, QObject, QEvent, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPixmap, QFont, QIcon, QImage, QColor, QPainter
-from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6 import uic
 
 from core import Logic, Utils, Version
@@ -25,6 +24,15 @@ try:
 except Exception:  # pragma: no cover
     pygame = None
     Vector2 = None
+
+
+def _qtMultimedia():
+    """Lazy import — QtMultimedia/Media Foundation can abort on Windows VMs."""
+    try:
+        from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+        return QMediaPlayer, QAudioOutput
+    except Exception:
+        return None, None
 
 
 def _pygameMixer():
@@ -198,13 +206,17 @@ class uiAbout(QDialog):
         self.setupSecretButton()
         self.mediaPlayer = None
         self.audioOutput = None
-        self.setupMusic()
+        self._musicTried = False
         self._ensureCabinetWidgets()
         self._ensurePlayHost()
         self._layoutAboutChrome()
 
     def setupMusic(self):
         try:
+            QMediaPlayer, QAudioOutput = _qtMultimedia()
+            if QMediaPlayer is None:
+                Logic.logMessage("WARN", "About music skipped: QtMultimedia not available")
+                return
             wavPath = Logic.resourcePath('ui/sounds/8-Bit-Perplexion.wav')
             self.audioOutput = QAudioOutput(self)
             self.audioOutput.setVolume(0.8)
@@ -222,6 +234,9 @@ class uiAbout(QDialog):
         Logic.logMessage("WARN", f"About music error: {error} {errorString}")
 
     def startMusic(self):
+        if not self._musicTried:
+            self._musicTried = True
+            self.setupMusic()
         if not self.mediaPlayer:
             return
         if self._playMode or self._splashMode:
@@ -1238,6 +1253,9 @@ if pygame is not None:
             self._ufoName = "ufo"
             self._owner = QObject()
             try:
+                QMediaPlayer, QAudioOutput = _qtMultimedia()
+                if QMediaPlayer is None:
+                    return
                 for key, fn in self._NAMES.items():
                     path = Logic.resourcePath(f"ui/fx/{fn}")
                     if not path or not os.path.isfile(path):
@@ -1307,6 +1325,9 @@ if pygame is not None:
 
         def _load(self, fn, owner):
             try:
+                QMediaPlayer, QAudioOutput = _qtMultimedia()
+                if QMediaPlayer is None:
+                    return None
                 path = Logic.resourcePath(f"ui/fx/{fn}")
                 if not path or not os.path.isfile(path):
                     return None

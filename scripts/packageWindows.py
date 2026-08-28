@@ -222,7 +222,8 @@ there. Updates do not replace this folder. .pfx is not supported.
 
 SUPPORT NOTES
 -------------
-- Logs live under your user AppData config folder for Data Doctor.
+- Logs live under %LOCALAPPDATA%\\Data Doctor\\logs\\ (app.log, fault.log).
+  The launcher and first-run applyUpdate append there too.
 - SQL / Oracle Instant Client may be under pythonFiles\\oracle\\ when packaged.
 - python-embed already includes vcruntime140.dll (numpy / PyQt).
 """

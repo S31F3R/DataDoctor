@@ -47,7 +47,13 @@ pythonFiles\
 2. Double-click **Data Doctor.exe**. If `updates\` has a zip, the launcher starts **applyUpdate.cmd** and exits (so the `.exe` can be replaced). applyUpdate pip-installs into `python-embed` (needs internet the first time), merges the dictionary, then starts **Data Doctor.exe** again, which then opens `app.pyw`.
 3. Or run **applyUpdate.cmd** yourself — it starts the exe when it finishes.
 
-No system Python and no `.venv`. `python-embed` is the interpreter. If the window never appears, check `pythonFiles\startup-error.log` (pythonw has no console).
+No system Python and no `.venv`. `python-embed` is the interpreter. If the window never appears, check:
+
+- `%LOCALAPPDATA%\Data Doctor\logs\app.log` (launcher, applyUpdate, and Python startup lines)
+- `%LOCALAPPDATA%\Data Doctor\logs\fault.log` (native crash dump)
+- `pythonFiles\startup-error.log` (import failure next to the app; pythonw has no console)
+
+A rebuilt `Data Doctor.exe` also waits a few seconds and pops a message if `pythonw` dies immediately.
 
 Coming from a **3.0.x** install that used system Python + `Project Files\.venv`: do **not** drop only the Python zip. Use `DataDoctor-Windows-*.zip` (see [Updates and Releases](Updates-and-Releases)).
 

@@ -2327,9 +2327,38 @@ def reloadGlobals():
             f"(file retroMode={settings.get('retroMode')} applies on next start)",
         )
 
+def defaultConfigDir():
+    """
+    Per-user config dir without Qt. Matches QStandardPaths AppConfigLocation
+    once QApplication.applicationName is 'Data Doctor'.
+    """
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or os.path.join(
+            os.path.expanduser("~"), "AppData", "Local"
+        )
+        return os.path.join(base, "Data Doctor")
+    if sys.platform == "darwin":
+        return os.path.join(
+            os.path.expanduser("~"), "Library", "Application Support", "Data Doctor"
+        )
+    xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
+        os.path.expanduser("~"), ".config"
+    )
+    return os.path.join(xdg, "Data Doctor")
+
+
 def getConfigDir():
-    configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
-    
+    configDir = ""
+    try:
+        loc = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.AppConfigLocation
+        )
+        if loc and os.path.basename(loc.rstrip("\\/")) == "Data Doctor":
+            configDir = loc
+    except Exception:
+        pass
+    if not configDir:
+        configDir = defaultConfigDir()
     if not os.path.exists(configDir):
         ensurePrivateDir(configDir)
     return configDir

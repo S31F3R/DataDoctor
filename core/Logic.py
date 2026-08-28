@@ -401,13 +401,19 @@ def initLogging():
     logger = logging.getLogger('Data Doctor')
     logger.setLevel(logging.DEBUG) # Capture all levels
     
-    # Console handler: Print to terminal, format like current prints
-    consoleHandler = logging.StreamHandler()
+    # Console handler: real tty only. pythonw has no console; we may have
+    # rebound stderr to app.log, and a StreamHandler would duplicate lines.
     consoleLevel = logging.DEBUG if Config.debug else logging.WARNING
-    consoleHandler.setLevel(consoleLevel)
-    consoleFormatter = logging.Formatter('[%(levelname)s] %(message)s')
-    consoleHandler.setFormatter(consoleFormatter)
-    logger.addHandler(consoleHandler)
+    try:
+        stderr = sys.stderr
+        if stderr is not None and hasattr(stderr, "isatty") and stderr.isatty():
+            consoleHandler = logging.StreamHandler()
+            consoleHandler.setLevel(consoleLevel)
+            consoleFormatter = logging.Formatter('[%(levelname)s] %(message)s')
+            consoleHandler.setFormatter(consoleFormatter)
+            logger.addHandler(consoleHandler)
+    except Exception:
+        pass
     
     # File handler: Log to rotating file with timestamps
     filePath = Utils.getLogPath('app.log')

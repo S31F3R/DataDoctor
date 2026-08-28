@@ -10,7 +10,13 @@ and EXITS (does not wait). That unlocks Data Doctor.exe so the cmd can
 replace the launcher. applyUpdate.py starts Data Doctor.exe when the zip is
 done.
 
-If there is no zip, it starts pythonw + app.pyw.
+If there is no zip, it starts pythonw + app.pyw, appends to
+`%LOCALAPPDATA%\Data Doctor\logs\app.log`, and waits ~8 seconds. If pythonw
+exits in that window, it shows a MessageBox pointing at the log.
+
+app.pyw also writes startup heartbeats to the same app.log (and fault.log for
+native crashes) so a silent pythonw death is still diagnosable with an older
+exe that does not wait.
 
 Data Doctor packaging (scripts/packageWindows.py) copies DataDoctor.py →
 pythonFiles\app.pyw and extracts embeddable CPython into pythonFiles\python-embed\.

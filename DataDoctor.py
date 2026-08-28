@@ -2,7 +2,83 @@
 
 import sys
 import os
+import time
 import traceback
+
+# pythonw has no console. Keep the faulthandler file handle alive for the
+# process lifetime (GC closing it would silently disable native-crash dumps).
+_faultFile = None
+_stdioLogFile = None
+
+def _userLogDir():
+    """Same folder as Utils.getLogDir, but with no Qt (imports may have failed)."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or os.path.join(
+            os.path.expanduser("~"), "AppData", "Local"
+        )
+        return os.path.join(base, "Data Doctor", "logs")
+    if sys.platform == "darwin":
+        return os.path.join(
+            os.path.expanduser("~"),
+            "Library", "Application Support", "Data Doctor", "logs",
+        )
+    xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
+        os.path.expanduser("~"), ".config"
+    )
+    return os.path.join(xdg, "Data Doctor", "logs")
+
+def _appendAppLog(level, message):
+    """Write one line to AppData app.log before Logic.initLogging exists."""
+    path = ""
+    try:
+        logDir = _userLogDir()
+        os.makedirs(logDir, exist_ok=True)
+        path = os.path.join(logDir, "app.log")
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"{ts} [{level}] {message}\n")
+    except Exception:
+        pass
+    return path
+
+def _enableEarlyFaultHandler():
+    """Dump native crashes to fault.log before Qt / pygame / numpy load."""
+    global _faultFile
+    try:
+        import faulthandler
+        logDir = _userLogDir()
+        os.makedirs(logDir, exist_ok=True)
+        path = os.path.join(logDir, "fault.log")
+        _faultFile = open(path, "a", encoding="utf-8")
+        _faultFile.write(
+            f"\n--- faulthandler {time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()} ---\n"
+        )
+        _faultFile.flush()
+        faulthandler.enable(file=_faultFile, all_threads=True)
+    except Exception:
+        pass
+
+def _bindPythonwStdio():
+    """pythonw.exe has sys.stdout/stderr = None; send them to app.log."""
+    global _stdioLogFile
+    try:
+        if sys.platform != "win32":
+            return
+        needOut = sys.stdout is None
+        needErr = sys.stderr is None
+        if not needOut and not needErr:
+            return
+        logDir = _userLogDir()
+        os.makedirs(logDir, exist_ok=True)
+        _stdioLogFile = open(
+            os.path.join(logDir, "app.log"), "a", encoding="utf-8", buffering=1
+        )
+        if needOut:
+            sys.stdout = _stdioLogFile
+        if needErr:
+            sys.stderr = _stdioLogFile
+    except Exception:
+        pass
 
 def _ensureAppDirOnPath():
     """
@@ -40,6 +116,7 @@ def _startupFail(exc):
     text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     here = os.path.dirname(os.path.abspath(__file__))
     logPath = os.path.join(here, "startup-error.log")
+    appLog = _appendAppLog("ERROR", "startup failed:\n" + text)
 
     try:
         with open(logPath, "w", encoding="utf-8") as f: f.write(text)
@@ -50,9 +127,10 @@ def _startupFail(exc):
             sys.stderr.write(text)
         except Exception: pass
     msg = "Data Doctor failed to start.\n\n" + str(exc)
+    detail = logPath or appLog
 
-    if logPath:
-        msg += "\n\nDetails: " + logPath
+    if detail:
+        msg += "\n\nDetails: " + detail
     if sys.platform == "win32":
         try:
             import ctypes
@@ -62,7 +140,32 @@ def _startupFail(exc):
         try:
             sys.stderr.write(msg + "\n")
         except Exception: pass
+
+def _prepareQtRuntime():
+    """python-embed plugin path + VM-safe Qt before QApplication()."""
+    try:
+        import PyQt6
+        root = os.path.dirname(os.path.abspath(PyQt6.__file__))
+        for rel in ("Qt6/plugins", "Qt/plugins"):
+            plugins = os.path.join(root, rel)
+            if os.path.isdir(os.path.join(plugins, "platforms")):
+                os.environ.setdefault("QT_PLUGIN_PATH", plugins)
+                break
+    except Exception:
+        pass
+    if sys.platform == "win32":
+        # Qt 6 Windows can abort in D3D11 on VMs with no GPU. This app is
+        # widgets + matplotlib, not Qt Quick — software is fine.
+        os.environ.setdefault("QSG_RHI_BACKEND", "software")
+        os.environ.setdefault("QT_WIDGETS_RHI", "0")
+
+_enableEarlyFaultHandler()
+_bindPythonwStdio()
 _ensureAppDirOnPath()
+_appendAppLog(
+    "INFO",
+    f"startup: process begin pid={os.getpid()} python={sys.executable} argv={sys.argv!r}",
+)
 
 try:
     import csv
@@ -75,17 +178,16 @@ try:
     from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
     from PyQt6 import uic
     from core import Logic, Query, Utils, Config, Upload, Update, FormulaUi
-    from ui.uiAbout import uiAbout
     from ui.uiDataDictionary import uiDataDictionary
     from ui.uiOptions import uiOptions, warmKeyringCache
     from ui.uiQuery import uiQuery
     from ui.uiDetails import uiDetails
-    from ui.uiGraph import GraphPanel
     from ui.uiSql import SqlWorkbench
     from core.Oracle import oracleConnection
 except Exception as e:
     _startupFail(e)
     raise SystemExit(1) from e
+_appendAppLog("INFO", "startup: imports ok")
 
 class detachedTabWindow(QMainWindow):
     """
@@ -956,14 +1058,28 @@ class uiMain(QMainWindow):
 
     def btnInfoPressed(self):
         try:
-            if self.winAbout:
-                about = self.winAbout
-                if about.isVisible():
-                    about.raise_()
-                    about.activateWindow()
-                else:
-                    about.show()
-                if Config.debug: Logic.logMessage("DEBUG", "btnInfoPressed: Opened about dialog")
+            about = getattr(self, "winAbout", None)
+            if about is None:
+                # About pulls in QtMultimedia + pygame. Do that on demand so a
+                # VM with no audio/GPU does not kill launch.
+                from ui.uiAbout import uiAbout
+                about = uiAbout(self)
+                self.winAbout = about
+            if about.isVisible():
+                about.raise_()
+                about.activateWindow()
+            else:
+                about.show()
+            if Config.debug: Logic.logMessage("DEBUG", "btnInfoPressed: Opened about dialog")
+        except Exception as e:
+            Logic.logException("btnInfoPressed: About window failed", e)
+            try:
+                QMessageBox.warning(
+                    self, "About",
+                    "Could not open About.\n\nSee app.log for details.",
+                )
+            except Exception:
+                pass
         finally:
             Utils.resetStyledButtonHover(self.btnInfo)
 
@@ -1489,6 +1605,7 @@ class uiMain(QMainWindow):
     def ensureGraphPanel(self):
         """Create GraphPanel once; reuse across show/hide/detach."""
         if self.tabGraph is None:
+            from ui.uiGraph import GraphPanel
             self.tabGraph = GraphPanel(None)
             self.tabGraph.setObjectName('tabGraph')
         return self.tabGraph
@@ -1908,6 +2025,14 @@ if __name__ == '__main__':
         except Exception:
             pass
 
+        _prepareQtRuntime()
+        _appendAppLog(
+            "INFO",
+            "startup: creating QApplication "
+            f"QT_PLUGIN_PATH={os.environ.get('QT_PLUGIN_PATH', '')!r} "
+            f"QSG_RHI_BACKEND={os.environ.get('QSG_RHI_BACKEND', '')!r}",
+        )
+
         # Windows taskbar: python.exe / pythonw.exe group under the Python
         # AppUserModelID, so the shell shows the Python icon even when
         # setWindowIcon is correct. Give this process its own ID *before*
@@ -1921,6 +2046,7 @@ if __name__ == '__main__':
                 )
             except Exception: pass
         app = QApplication(sys.argv)
+        _appendAppLog("INFO", "startup: QApplication ready")
 
         # Application name only — do NOT set OrganizationName. QStandardPaths
         # AppConfigLocation becomes ~/.config/<App> (or %LocalAppData%\<App>).
@@ -1956,9 +2082,11 @@ if __name__ == '__main__':
                 if not appIcon.isNull(): break
         if not appIcon.isNull(): app.setWindowIcon(appIcon)
 
-        # Init logging early, then install hooks so uncaught errors are logged and non-fatal
+        # Init logging after QApplication (LogNotifier is a QObject). Native
+        # faults and import failures already went to app.log / fault.log.
         Logic.initLogging()
         Logic.installExceptionHooks(showDialog=True)
+        Logic.logMessage("INFO", "startup: logging initialized")
 
         if Config.debug:   
             Logic.logMessage("DEBUG", "Applied global app stylesheet with default button effects and tab close styles")
@@ -1976,17 +2104,18 @@ if __name__ == '__main__':
         # applyColorTheme so Light/Dark is what we see, not the real OS scheme.
         Config.systemTextColor = app.palette().color(QPalette.ColorRole.Text)
 
-        # Create instances
+        # Create instances. About (QtMultimedia / pygame) is created on first
+        # Info click — constructing it here killed launch on some Windows VMs.
+        Logic.logMessage("INFO", "startup: creating main window")
         winMain = uiMain()
         if not appIcon.isNull(): winMain.setWindowIcon(appIcon)
         winQuery = uiQuery(winMain)
         winDataDictionary = uiDataDictionary(winMain)
         winOptions = uiOptions(winMain)
-        winAbout = uiAbout(winMain)  
         winMain.winQuery = winQuery
         winMain.winDataDictionary = winDataDictionary  
         winMain.winOptions = winOptions
-        winMain.winAbout = winAbout
+        winMain.winAbout = None
 
         # Apply styles and fonts
         Utils.applyStylesAndFonts(app, winMain.mainTable, winQuery.listQueryList)
@@ -2011,6 +2140,7 @@ if __name__ == '__main__':
 
         # Show main window
         winMain.show()
+        Logic.logMessage("INFO", "startup: main window shown")
 
         # Re-apply window icon after first show (Windows sometimes paints the
         # default icon on the very first frame before the process icon sticks).
@@ -2048,6 +2178,7 @@ if __name__ == '__main__':
         try:
             Logic.logException("Fatal startup error", e)
         except Exception:
+            _appendAppLog("ERROR", f"Fatal startup error: {e}\n{traceback.format_exc()}")
             print(f"Fatal startup error: {e}", file=sys.stderr)
         try:
             if app is not None: QMessageBox.critical(None, "Startup Error", f"Data Doctor failed to start:\n{e}")

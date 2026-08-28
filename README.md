@@ -90,7 +90,7 @@ Config and logs are **per user**, not inside the install folder.
 | Windows | `%LOCALAPPDATA%\Data Doctor\` |
 | macOS | `~/Library/Application Support/Data Doctor/` |
 
-Inside that folder: `user.config`, `logs/app.log`, `quickLook/query/`, `quickLook/sql/`.
+Inside that folder: `user.config`, `logs/app.log`, `quickLook/query/`, `quickLook/sql/`. On Windows the launcher and `applyUpdate` also write to `logs/app.log`; a window that never appears should leave `startup:` / `launcher:` lines there (and `logs/fault.log` for a native crash).
 
 The live data dictionary is `core/bunker.db` next to the app (Windows: `pythonFiles\core\bunker.db`). Do not overwrite it with a packaged copy if the dictionary has local edits — `applyUpdate` merges.
 
