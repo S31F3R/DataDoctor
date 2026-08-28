@@ -17,4 +17,9 @@ resets this file to this template.
 - To Do: CURRENT TASKS/BUGS are the work queue; FEATURES stay backlog until
   promoted
 - Formula editor: click another cell inserts A1 (does not leave the formula)
+- Windows launcher ships embeddable Python 3.14 (no system Python / .venv)
+- 3.0.x Windows hop: in-app update downloads DataDoctor-Windows-*.zip; close and run applyUpdate.cmd to replace the launcher
+- Requirements: Python 3.14, pygame-ce (pygame has no 3.14 wheel)
+- Hardening: no unverified TLS (Aquarius/USGS); zip path checks; GitHub download host/digest/cancel; pip requirements flags ignored
+- Hardening: do not log Oracle SQL text; HDB identifiers and SQL snippet names cannot traverse paths
 

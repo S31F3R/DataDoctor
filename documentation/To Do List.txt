@@ -1,16 +1,12 @@
 ####### CURRENT TASKS #######
--Update to newest python and packages
--Add python-embed to Windows version
-    -Auto update to this version will need to let windows users know they need there is a launcher update
-        -This means have them run applyUpdate.cmd manually and allow it to replace the launcher files. So the windows update will need the windows.zip and not the python.zip
+
 ####### CURRENT BUGS #######
 
 ####### 3.1.0 FEATURES #######
--Complete review of the code to harden and fix any potential vulnerabilities
 
 ####### 3.2.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
-    -Add a plot that graphs delta pair and overlays delta as a seperate line
+    -Add a plot that graphs delta pair and 4overlays delta as a seperate line
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)
 -Get OAuth App for GitHub stuffs
