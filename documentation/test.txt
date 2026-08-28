@@ -9,7 +9,7 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Data Doctor.exe launches after applyUpdate (fresh Windows zip)
+[x] Data Doctor.exe launches after applyUpdate (fresh Windows zip)
    Steps:
      a. Unzip a new DataDoctor-Windows-*.zip to an empty folder. Double-click
         Data Doctor.exe. applyUpdate.cmd runs (pip into python-embed), then
@@ -19,7 +19,7 @@ Current Tests
         sitecustomize.py exists next to pythonw.exe.
      c. Overlay or delta query still paints (modifyTable finds the main window).
 
-[ ] Leftover DataDoctor.ico removed
+[x] Leftover DataDoctor.ico removed
    Steps:
      a. Place DataDoctor.ico next to Data Doctor.exe and under
         pythonFiles\\ui\\icons\\. Apply a Python or Windows zip.
@@ -28,8 +28,9 @@ Current Tests
 
 [ ] Hardening (TLS / updates)
    Steps:
-     a. Aquarius with a bad/missing cert fails the query (does not connect
-        unverified). Server URL stored as http:// is used as https://.
+     a. Aquarius: OS trust / optional certs/ used first. If those fail, the
+        query still runs over HTTPS and the log has a WARN (unverified,
+        Aquarius-only). Server URL stored as http:// is used as https://.
      b. USGS legacy still queries with TLS verified after an SSL error retry
         (no "verification disabled" in the log).
      c. In-app Update → Download → Cancel does not leave a zip in updates/

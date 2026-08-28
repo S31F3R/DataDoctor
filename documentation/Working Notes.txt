@@ -10,3 +10,5 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Aquarius TLS: verify with the OS certificate store (not certifi) plus optional certs/ CA; if both fail, HTTPS without checking the cert and a WARN (internal/VPN only). USGS still always verifies.
+
