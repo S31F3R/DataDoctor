@@ -8,34 +8,6 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-
-[x] Data Doctor.exe launches after applyUpdate (fresh Windows zip)
-   Steps:
-     a. Unzip a new DataDoctor-Windows-*.zip to an empty folder. Double-click
-        Data Doctor.exe. applyUpdate.cmd runs (pip into python-embed), then
-        the app window opens (not a silent close). No "No module named
-        DataDoctor" MessageBox / startup-error.log.
-     b. pythonFiles\\python-embed\\python314._pth contains `..` and
-        sitecustomize.py exists next to pythonw.exe.
-     c. Overlay or delta query still paints (modifyTable finds the main window).
-
-[x] Leftover DataDoctor.ico removed
-   Steps:
-     a. Place DataDoctor.ico next to Data Doctor.exe and under
-        pythonFiles\\ui\\icons\\. Apply a Python or Windows zip.
-     b. Those DataDoctor.ico files are gone. Data Doctor.ico remains
-        (zip root and pythonFiles\\ui\\icons\\).
-
-[ ] Hardening (TLS / updates)
-   Steps:
-     a. Aquarius: OS trust / optional certs/ used first. If those fail, the
-        query still runs over HTTPS and the log has a WARN (unverified,
-        Aquarius-only). Server URL stored as http:// is used as https://.
-     b. USGS legacy still queries with TLS verified after an SSL error retry
-        (no "verification disabled" in the log).
-     c. In-app Update → Download → Cancel does not leave a zip in updates/
-        that applyUpdate.cmd would apply on next start.
-
 [ ] Mac package script
    Steps:
      a. From project root: python scripts/packageMac.py --skip-venv
@@ -47,6 +19,9 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Hardening (TLS / updates)
+[x] Leftover DataDoctor.ico removed
+[x] Data Doctor.exe launches after applyUpdate (fresh Windows zip)
 [x] Options Appearance table height + Restore Defaults button
 [x] pythonFiles leftover cleanup
 [x] Appearance table colors
@@ -54,158 +29,8 @@ Confirmed
 [x] 3.0.x → 3.1 Windows hop (launcher replace)
 [x] Light System theme checkboxes (Windows)
 [x] Data Query Excel-style formulas (internal)
-[x] Packaged Oracle + TNS_ADMIN
-[x] Windows bundled Noto (controls fit)
-[x] Options Save stays open; Close vs Cancel
-[x] Query Select Quick Look vs Raw Data spacing
-[x] Options Profile: label; Raw Data / QAQC gone from General
-[x] Query Options Raw Data + QAQC (defaults off; Quick Look)
-[x] Quick Look date mode (Custom / Prev Day / Prev Week)
-[x] Query list multi-select move / delete
-[x] Data ID Search siteID + numeric/text sort
-[x] Icon hover after a dialog
-[x] Update check after a real release
-[x] Graph Ctrl + mouse wheel zoom
-[x] AppImage tab close buttons
-[x] Oracle auth lock is per-database + timed
-[x] Profile import merge / overwrite / rename + SQL categories
-[x] USBR Overwrite Flag on upload
-[x] Windows package: empty certs/ + first-run applyUpdate.cmd
-[x] SQL History button hover after double-click
-[x] Windows System Default appearance (dark OS → dark app)
-[x] Hide/Unhide password buttons (Oracle, Aquarius, USGS)
-[x] SQL Query Builder dark-mode pane color (Windows)
-[x] CSV export = focused SQL result tab
-[x] Oracle Access List filters Internal + SQL, not Public
-[x] SQL snippet right-click Delete (pane + Categories)
-[x] Options Export / Import profile zip
-[x] sqlnet.log Fatals — only new, in app.log time order
-[x] Options left categories (Kate-style) + Light/Dark as real palettes
-[x] SQL Query Builder workbench (worksheets, pin, snippets, history, stop)
-[x] Crash / About Report on GitHub (option C, no stored login)
-[x] Log rotation + viewer reloads all app.log*
-[x] Beta updates checkbox after Save (RC offer / revert to published)
-[x] HDB database-link failure → direct connect fallback
-[x] Isolated HDB queries (KBO / CU / LBO / ECO) — SQL FROM r_base
-[x] sqlnet.log Fatals in app.log
-[x] Query list right-click Delete
-[x] Save Quick Look prefills name + overwrite confirm
-[x] MCS Oracle credentials prompted once per session burst
-[x] bunker merge fills blanks only (QAQC / precision)
-[x] Close Data Doctor (Windows) — no deleted-QTableWidget crash
-[x] Data Dictionary combobox — one text only
-[x] USBR CSV → bunker.db
-[x] Update dialogs: restart, not applyUpdate.cmd
-[x] applyUpdate keeps a single bunker.db.bak
-[x] Header multi-select Ctrl add (viewport filter; Shift origin not stolen)
-[x] HDB password change UI only shows useful outcomes (Skip vs errors)
-[x] About: no scrollbars; ratio lock; maximize still works
-[x] Child windows minimize to the taskbar (About + Dictionary + Query)
-[x] publishRelease.py dry-run + build-only
-[x] publishRelease re-upload same tag (no 422)
-[x] publishRelease --upload without gh CLI
-[x] GitHub README + wiki first pass
-[x] Update check silent when nothing newer (incl. no releases)
-[x] applyUpdate writes DataDoctor.pyw (Windows / existing .pyw)
-[x] Graph hover shows table values (raw when raw is on); axis stays clean
-[x] Query finish selects Data Query tab
-[x] Overlay / delta use the display limiter (raw mode)
-[x] USGS / Aquarius Data Dictionary second-line source tag
-[x] Multi Y-axis graph (distinct value bands + hide axis with legend)
-[x] Graph Y-scale fits data in current X view (outlier off-screen)
-[x] Graph legend toggle keeps current X zoom
-[x] Header Graph uses full multi-column selection (not just click col)
-[x] Graph markers dense when zoomed (1-minute data)
-[x] Beta updates checkbox (UI-owned, code wire-up only)
-[x] Graph legend ☑/☐ toggle works while Zoom is default-on
-[x] Windows package: no root updateBunker.cmd; applyUpdate merges bunker
-[x] Graph always shows data-point markers (dots)
-[x] Graph Y-axis keeps absolute values when zoomed (no offset scale)
-[x] Fresh graph pan at full range has no visual "adjust"/resize
-[x] Refresh bumps end time to now (unless historical > 2h)
-[x] Python zip + applyUpdate (first pass)
-[x] USGS-NWIS intervals: no HOUR; default INSTANT:15
-[x] Options password fields: no layout WARN spam
-[x] Graph opens with Zoom tool active
-[x] Graph save remembers last folder
-[x] Context menu Graph + selection window
-[x] Aquarius Server Link placeholder
-[x] Goat stress-relief button plays scream
-[x] SQL Query Builder opens with zero tabs open
-[x] Graph middle-mouse pan + range clamp
-[x] Windows first-load icon (retest / improve-only)
-[x] Graph hover tooltip stable at top edge (no frame jump)
-[x] Graph arrow keys pan the view
-[x] Graph series legend click-to-toggle (☑/☐) + rescale
-[x] Column header highlight — all selected columns
-[x] Graph overlay legends use header first-line labels
-[x] Quick Look missing delta/overlay meta → checkboxes unchecked
-[x] Prev Day / Prev Week times refresh on open, load quick look, and Query
-[x] Windows package script layout (WinZip flat view was a false alarm)
-[x] commonName-datatype header (no spaces around dash)
-[x] Log Viewer button toggles tab (open / close)
-[x] Graph: system dark/light colors + blank title + hover tooltip + table timestamps
-[x] Graph toolbar button tooltips
-[x] Query list: Insert Above / Insert Below
-[x] Clear Query List unchecks Deltas and Overlay
-[x] btnSQL toggles SQL Query Builder tab
-[x] Query list double-click edit allows interval (and database) change
-[x] Data dictionary headers use "commonName - datatype" for all DBs (pre-space-strip)
-[x] SQL + Graph button tooltips and hover/pressed icons
-[x] Graph button plots Data Query table into Graph tab
-[x] Detach / Attach for Graph and Log Viewer tabs only
-[x] USGS dataDictionary lookup (bunker PVLC — precisionOverride DEC(2))
-[x] Data Dictionary Ctrl+S / Save button (combobox commit + executemany)
-[x] Data Dictionary combo column widths (sizeFromContents + scrollbar)
-[x] Cell-level Copy (Details + Data Dictionary; SelectItems)
-[x] AppImage tool path under scripts/appimagetool/
-[x] Data Dictionary database column is a dropdown
-[x] Options tab focus + tab order
-[x] App icons layout
-[x] Linux AppImage packager script (+ oracledb getpass fix)
-[x] MRID internal query (values only; no metadata)
-[x] Windows package + bunker merge scripts
-[x] Clipboard copy/paste (Excel-like) — main data table
-[x] Delta columns skip normal QAQC coloring
-[x] UCHDB2 schema UCHDBA via config
-[x] Aquarius certs: no random certs/ folders + convert cleanup (.cer/.pem only; no .pfx)
-[x] Timestamps centered in vertical header column
-[x] Smarter query dates for DAY+ intervals
-[x] USGS DataID: optional parameter + Site-Parameter lookup (resolveUsgsDataId / picker)
-[x] Interval timestamps: DAY / MONTH / YEAR / WATER YEAR display formats
-[x] Details window resizes down when switching tabs
-[x] Packaged Oracle preferred; system fallback
-[x] winMain tooltips (simplified labels)
-[x] Header size no longer changes when clicking a cell
-[x] Overlay secondary-only → auto edit for upload
-[x] USGS public query: Show details on right-click
-[x] valuePrecision.json lives under core/
-[x] valuePrecision + precisionOverride (bunker.db + formatting)
-[x] Logging: full Python tracebacks + Qt in app.log / Log Viewer
-[x] USGS interval combo: no intervals past DAY when USGS-NWIS selected
-[x] Fonts/layout: Noto default ↔ retro toggle (Linux then Windows)
-[x] Log Viewer tab
-[x] Keep connection reuse (C); do NOT re-add batch SDIDs (A)
-[x] Option C connection reuse
-[x] V1 large table build + overlay
-[x] PATH Instant Client env limit
-[x] Prior bug-smash cluster
-[x] HDB MODIFY_R_BASE / DELETE_R_BASE write path
-[x] Delete key multi-clear
-[x] Delta never shows signed zero (-0.00)
-[x] Aquarius-only query: Show details on right-click
-[x] Details window title not clipped
-[x] Retro mode: session frozen until full restart
-[x] Header: single-click highlight; double-click sort
-[x] Windows taskbar icon (AppUserModelID + window icon)
-[x] User config + quickLooks load from profile again
-[x] Options first open after startup is snappy
 
 Deferred / known
 --------------------------------------------------------------------------------
 [!] USGS monthly/yearly (OGC has no products)
-[!] Aquarius daily 2300 TZ
-[!] Features still backlog: advanced plot tool / quick-look plots,
-    dataDictionary non-destructive bulk update, Aquarius Entra login
-[!] Windows first-load icon — improve-only
 [!] AppImage applyUpdate path not wired the same as launcher packages yet
