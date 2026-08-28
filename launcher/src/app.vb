@@ -53,12 +53,10 @@ Module app
         Dim updateScript As String = Path.Combine(root, "applyUpdate.cmd")
         LogToApp("INFO", "start root=" & root)
 
-        ' Zip in Update\ → start applyUpdate.cmd and EXIT. Do not wait: this
-        ' process must unlock Data Doctor.exe so the cmd can replace it.
-        ' applyUpdate.cmd starts this exe again when it finishes.
         Try
             If HasUpdateZip(root) AndAlso File.Exists(updateScript) Then
                 LogToApp("INFO", "updates zip present — starting applyUpdate.cmd")
+
                 Dim updatePsi As New ProcessStartInfo With {
                     .FileName = updateScript,
                     .WorkingDirectory = root,
