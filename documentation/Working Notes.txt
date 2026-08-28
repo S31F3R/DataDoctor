@@ -10,3 +10,10 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Internal Data Query: Excel-style formulas (=A1+B1, SUM/IF/…, click-to-ref,
+  fill handle with $ locks); overlay writes primary; errors are not uploaded
+- Published releases with empty Working Notes compile ## Changes from that
+  version's rc/beta notes (avoids a blank 3.0.0-style change list)
+- To Do: CURRENT TASKS/BUGS are the work queue; FEATURES stay backlog until
+  promoted
+

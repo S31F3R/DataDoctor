@@ -5,9 +5,21 @@ Workflow / publish how-to: documentation/status.grok (gitignored).
 
 Current Tests
 --------------------------------------------------------------------------------
+
+[ ] Data Query Excel-style formulas (internal)
+   Steps:
+     a. Internal query. Type = in a cell, click another cell — A1-style ref
+        is inserted. Enter. Cell shows the computed number (not the formula).
+        Double-click shows the formula again.
+     b. =SUM(A1:A5), =A1-B1, =IF(A1>0, A1, 0). $A1 fill-down keeps column A.
+        Fill handle (square at bottom-right) copies down/right. Overlay:
+        formula on the overlay column changes primary only. Delta stays locked.
+     c. Formula result is magenta (edit). Upload sends the number. #DIV/0!
+        is not uploaded. Public Query still cannot edit.
+
 Later, on the machines that showed them (not this Linux box):
 
-[ ] Packaged Oracle + TNS_ADMIN
+[x] Packaged Oracle + TNS_ADMIN
    Steps:
      a. Options → Oracle → TNS Names Location shows TNS_ADMIN if that env
         is set (read-only), else the packaged oracle/network/admin path
