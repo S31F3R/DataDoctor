@@ -4,7 +4,6 @@ import sys
 import os
 import traceback
 
-
 def _ensureAppDirOnPath():
     """
     python-embed's python*._pth lists only the embed dir + site-packages.
@@ -16,7 +15,6 @@ def _ensureAppDirOnPath():
     if here and here not in sys.path:
         sys.path.insert(0, here)
 
-
 def _removeLeftoverDataDoctorIco():
     """Old name was DataDoctor.ico; keep Data Doctor.ico only."""
     here = os.path.dirname(os.path.abspath(__file__))
@@ -27,46 +25,43 @@ def _removeLeftoverDataDoctorIco():
         os.path.join("ui", "icons", "DataDoctor.ico"),
     )
     for root in roots:
-        if not root:
-            continue
+        if not root: continue
+        
         for rel in rels:
             p = os.path.join(root, rel)
+
             try:
                 if os.path.isfile(p):
                     os.remove(p)
             except Exception:
                 pass
 
-
 def _startupFail(exc):
     text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
     here = os.path.dirname(os.path.abspath(__file__))
     logPath = os.path.join(here, "startup-error.log")
+
     try:
-        with open(logPath, "w", encoding="utf-8") as f:
-            f.write(text)
+        with open(logPath, "w", encoding="utf-8") as f: f.write(text)
     except Exception:
         logPath = ""
+
         try:
             sys.stderr.write(text)
-        except Exception:
-            pass
+        except Exception: pass
     msg = "Data Doctor failed to start.\n\n" + str(exc)
+
     if logPath:
         msg += "\n\nDetails: " + logPath
     if sys.platform == "win32":
         try:
             import ctypes
             ctypes.windll.user32.MessageBoxW(None, msg, "Data Doctor", 0x00000010)
-        except Exception:
-            pass
+        except Exception: pass
     else:
         try:
             sys.stderr.write(msg + "\n")
-        except Exception:
-            pass
-
-
+        except Exception: pass
 _ensureAppDirOnPath()
 
 try:
@@ -105,40 +100,35 @@ class detachedTabWindow(QMainWindow):
         self.tabTitle = title
         self.key = key  # 'graph' | 'log' | 'sql'
         self._attaching = False
-
         self.setWindowTitle(f"Data Doctor — {title}")
         self.setWindowIcon(mainWindow.windowIcon() if mainWindow else QIcon())
         self.resize(1000, 700)
         self.setMinimumSize(400, 300)
-
         self.hostTabs = QTabWidget(self)
         self.hostTabs.setTabsClosable(False)
         self.hostTabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
         # Reparent content into this window's tab strip (keeps tab look)
         self.hostTabs.addTab(contentWidget, title)
         self.setCentralWidget(self.hostTabs)
-
         tabBar = self.hostTabs.tabBar()
         tabBar.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         tabBar.customContextMenuRequested.connect(self.onTabBarContextMenu)
 
     def onTabBarContextMenu(self, pos):
         idx = self.hostTabs.tabBar().tabAt(pos)
-        if idx < 0:
-            return
+        if idx < 0: return
         menu = QMenu(self)
         attachAct = menu.addAction("Attach")
         chosen = menu.exec(self.hostTabs.tabBar().mapToGlobal(pos))
-        if chosen == attachAct:
-            self.attachBack()
+        if chosen == attachAct: self.attachBack()
 
     def attachBack(self):
-        if self._attaching:
-            return
+        if self._attaching: return
         self._attaching = True
+
         try:
-            if self.mainWindow is not None:
-                self.mainWindow.attachDetachedTab(self.key)
+            if self.mainWindow is not None: self.mainWindow.attachDetachedTab(self.key)
         finally:
             self._attaching = False
 
@@ -146,6 +136,7 @@ class detachedTabWindow(QMainWindow):
         # Closing the floating window returns the tab to main (does not destroy content)
         if not self._attaching and self.mainWindow is not None:
             self._attaching = True
+
             try:
                 self.mainWindow.attachDetachedTab(self.key)
             finally:
@@ -183,8 +174,8 @@ class mainTableKeyFilter(QObject):
         return super().eventFilter(obj, event)
 
 class sqlQuerySignals(QObject):
-    finished = pyqtSignal(object)   # list of row dicts
-    failed = pyqtSignal(str, bool)  # message, isAuthError
+    finished = pyqtSignal(object) # list of row dicts
+    failed = pyqtSignal(str, bool) # message, isAuthError
 
 class sqlQueryWorker(QRunnable):
     """Run Oracle custom SQL off the UI thread so the main window stays responsive."""
@@ -196,6 +187,7 @@ class sqlQueryWorker(QRunnable):
 
     def run(self):
         conn = None
+
         try:
             from core.Oracle import OracleAuthError
             conn = oracleConnection(self.dsn)
@@ -204,6 +196,7 @@ class sqlQueryWorker(QRunnable):
             self.signals.finished.emit(results if results is not None else [])
         except Exception as e:
             isAuth = False
+
             try:
                 from core.Oracle import OracleAuthError, isAuthError
                 isAuth = isinstance(e, OracleAuthError) or isAuthError(e)
@@ -290,7 +283,7 @@ class uiMain(QMainWindow):
                       ]
 
         # Set button style        
-        for btn, iconName, iconSize in buttonIcons:
+        for btn, iconName, iconSize in buttonIcons: 
             if btn is not None: Utils.buttonStyle(btn, iconName, iconSize=iconSize)
 
         # Ensure every main toolbar / data-tab button has a tooltip
@@ -312,9 +305,8 @@ class uiMain(QMainWindow):
             self.btnRunQuery: "Run SQL query",
         }
 
-        for btn, tip in mainTooltips.items():
-            if btn is not None:
-                btn.setToolTip(tip)
+        for btn, tip in mainTooltips.items(): 
+            if btn is not None: btn.setToolTip(tip)
 
         # Set up layout
         centralLayout = self.centralWidget().layout()
@@ -390,9 +382,7 @@ class uiMain(QMainWindow):
 
         # Set up Data Query tab
         self.tabMain.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-        if self.sqlTable is not None:
-            self.sqlTable.horizontalHeader().setStretchLastSection(False)
+        if self.sqlTable is not None: self.sqlTable.horizontalHeader().setStretchLastSection(False)
 
         if not self.tabMain.layout():
             layout = QGridLayout(self.tabMain)
@@ -433,6 +423,7 @@ class uiMain(QMainWindow):
 
         # Live log updates: append while Log tab is open (no-op when closed — no refresh button)
         notifier = Logic.getLogNotifier()
+
         if notifier is not None:
             notifier.newLogEntry.connect(
                 self.appendLogEntry,
@@ -442,6 +433,7 @@ class uiMain(QMainWindow):
         # SQL Query Builder workbench (worksheets, pin, history, categories)
         if sqlTab:
             self.sqlWorkbench = SqlWorkbench(self)
+            
             if Config.debug:
                 Logic.logMessage("DEBUG", "Set up SQL Query Builder workbench")
 
@@ -500,6 +492,7 @@ class uiMain(QMainWindow):
             ):
                 sqlSplitter = self.findChild(QSplitter, 'sqlSplitter')
                 mainSplitter = self.findChild(QSplitter, 'mainSplitter')
+
                 if sqlSplitter is not None and mainSplitter is not None:
                     config = Utils.loadConfig()
                     config['sqlVerticalSizes'] = sqlSplitter.sizes()
@@ -526,8 +519,7 @@ class uiMain(QMainWindow):
                 pass
         try:
             import pygame
-            if pygame.get_init():
-                pygame.quit()
+            if pygame.get_init(): pygame.quit()
         except Exception:
             pass
         try:
@@ -548,28 +540,20 @@ class uiMain(QMainWindow):
     def _removeHeaderSelectFilters(self):
         """Detach header click filters before Qt deletes the table on close."""
         table = getattr(self, "mainTable", None)
-        if table is None:
-            return
+
+        if table is None: return
         filt = getattr(table, "_headerSelectFilter", None)
-        if filt is None:
-            return
-        try:
-            header = table.horizontalHeader()
-        except RuntimeError:
-            header = None
+        if filt is None: return
+        try: header = table.horizontalHeader()
+        except RuntimeError: header = None
+
         for widget in (table, header, getattr(header, "viewport", lambda: None)()):
-            if widget is None:
-                continue
-            try:
-                widget.removeEventFilter(filt)
-            except RuntimeError:
-                pass
-            except Exception:
-                pass
-        try:
-            table._headerSelectFilter = None
-        except Exception:
-            pass
+            if widget is None: continue
+            try: widget.removeEventFilter(filt)
+            except RuntimeError: pass
+            except Exception: pass
+        try: table._headerSelectFilter = None
+        except Exception: pass
 
     def showEvent(self, event):
         """Re-apply app icon after the window is shown (Windows first-paint glitch)."""
@@ -580,29 +564,28 @@ class uiMain(QMainWindow):
             try:
                 self.setWindowIcon(icon)
                 app = QApplication.instance()
-                if app is not None:
-                    app.setWindowIcon(icon)
-            except Exception:
-                pass
+                if app is not None: app.setWindowIcon(icon)
+            except Exception: pass
 
     def loadSnippets(self):
         """Load SQL snippets (filtered by the workbench category combo)."""
         if self.sqlWorkbench is not None:
             self.sqlWorkbench.loadSnippets()
             return
-        if self.listSnippets is None:
-            return
+        if self.listSnippets is None: return
+
         try:
             sqlDir = Utils.getSqlSnippetDir()
             namesOnDisk = []
+
             if os.path.isdir(sqlDir):
                 for file in os.listdir(sqlDir):
-                    if file.endswith(".sql"):
-                        namesOnDisk.append(file[:-4])
+                    if file.endswith(".sql"): namesOnDisk.append(file[:-4])
             config = Utils.loadConfig()
             savedOrder = config.get('sqlSnippetOrder') or []
             ordered = []
             seen = set()
+
             for name in savedOrder:
                 if name in namesOnDisk and name not in seen:
                     ordered.append(name)
@@ -610,16 +593,13 @@ class uiMain(QMainWindow):
             for name in sorted(namesOnDisk, key=lambda s: s.lower()):
                 if name not in seen:
                     ordered.append(name)
-            self.listSnippets.clear()
-            for name in ordered:
-                self.listSnippets.addItem(name)
-        except Exception as e:
-            Logic.logException("loadSnippets failed", e)
+            self.listSnippets.clear()            
+            for name in ordered: self.listSnippets.addItem(name)
+        except Exception as e: Logic.logException("loadSnippets failed", e)
 
     def currentSnippetOrder(self):
         """Return snippet names in current list order."""
-        if self.listSnippets is None:
-            return []
+        if self.listSnippets is None: return []
         return [
             self.listSnippets.item(i).text()
             for i in range(self.listSnippets.count())
@@ -631,16 +611,15 @@ class uiMain(QMainWindow):
         try:
             config = Utils.loadConfig()
             config['sqlSnippetOrder'] = self.currentSnippetOrder()
-
             with open(Utils.getConfigPath(), 'w', encoding='utf-8') as configFile:
                 json.dump(config, configFile, indent=2)
+
             if Config.debug:
                 Logic.logMessage(
                     "DEBUG",
                     f"saveSnippetOrder: {config['sqlSnippetOrder']}",
                 )
-        except Exception as e:
-            Logic.logException("saveSnippetOrder failed", e)
+        except Exception as e: Logic.logException("saveSnippetOrder failed", e)
 
     def onSnippetsReordered(self, *args):
         """Drag-drop finished — save order after Qt finishes the move."""
@@ -649,11 +628,9 @@ class uiMain(QMainWindow):
 
     def showSnippetContextMenu(self, pos):
         """Right-click: Move Up / Move Down for SQL snippet order."""
-        if self.listSnippets is None:
-            return
+        if self.listSnippets is None:return
         item = self.listSnippets.itemAt(pos)
-
-        if item is None: return
+        if item is None:return
         row = self.listSnippets.row(item)
         self.listSnippets.setCurrentItem(item)
         menu = QMenu(self)
@@ -675,24 +652,19 @@ class uiMain(QMainWindow):
             self.listSnippets.setCurrentRow(row + 1)
             self.saveSnippetOrder()
         elif chosen == actDelete:
-            if self.sqlWorkbench is not None:
-                self.sqlWorkbench.deleteSnippet()
-            else:
-                self.deleteSnippet()
+            if self.sqlWorkbench is not None: self.sqlWorkbench.deleteSnippet()
+            else: self.deleteSnippet()
 
     def saveSnippet(self):
         """Save current pteSQL content as .sql snippet."""
         if self.pteSQL is None:
-            if Config.debug:
-                Logic.logMessage("WARN", "pteSQL not found, skipping saveSnippet")
+            if Config.debug: Logic.logMessage("WARN", "pteSQL not found, skipping saveSnippet")
             return
         sqlText = self.pteSQL.toPlainText().strip()
-
-        if not sqlText:
-            QMessageBox.warning(self, "Save Snippet", "No SQL query to save.")
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", "saveSnippet: No SQL text to save")
+        if not sqlText: QMessageBox.warning(self, "Save Snippet", "No SQL query to save.")
+        
+        if Config.debug:
+            Logic.logMessage("DEBUG", "saveSnippet: No SQL text to save")
             return
         name, ok = QInputDialog.getText(self, "Save Snippet", "Snippet name:")
 
@@ -752,7 +724,6 @@ class uiMain(QMainWindow):
         reply = QMessageBox.question(self, "Delete Snippet", f"Delete '{name}'?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
 
         if reply == QMessageBox.StandardButton.Yes:
-
             if os.path.exists(filePath):
                 os.remove(filePath)
                 self.listSnippets.takeItem(self.listSnippets.row(selected))
