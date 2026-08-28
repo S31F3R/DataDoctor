@@ -2,8 +2,6 @@
 
 ####### CURRENT BUGS #######
 
-####### 3.1.0 FEATURES #######
-
 ####### 3.2.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool

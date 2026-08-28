@@ -2,32 +2,25 @@ TEST FILE — tests to run
 ============================================================
 Grok writes the steps. Mark [x] when it passes, or note a fail.
 Workflow / publish how-to: documentation/status.grok (gitignored).
+Current Tests: untested / failed / retest. Passed [x] items collapse to Confirmed.
+Confirmed: tests passed since the last published X.Y.Z. A published
+publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Windows python-embed 3.14 (fresh zip)
+[x] Options Appearance table height + Restore Defaults button
    Steps:
-     a. python scripts/packageWindows.py → dist zip has Data Doctor.exe,
-        applyUpdate.cmd, pythonFiles\python-embed\pythonw.exe,
-        pythonFiles\app.pyw (no .venv, no python-3.13 installer, no embed
-        zip at zip root).
-     b. Unzip on Windows. Double-click Data Doctor.exe. Launcher starts
-        applyUpdate.cmd and exits (updates\ has a Python zip). applyUpdate
-        pip-installs into python-embed, starts Data Doctor.exe again, app
-        opens. No system Python on PATH.
-     c. About / goat / graph still work (pygame-ce, PyQt6, numpy).
+     a. Options → Appearance. Last table-color row is fully visible (no slider).
+     b. Restore Defaults looks like Export / Import / Update Password (a real
+        button, not plain text). Click it; swatches return to defaults.
 
-[x] 3.0.x → 3.1 Windows hop (launcher replace)
+[ ] pythonFiles leftover cleanup
    Steps:
-     a. On a 3.0.x install (system Python + .venv, no python-embed): apply
-        DataDoctor-Python-*.zip with the old applyUpdate. App starts on .venv.
-     b. Prompt says this needs a launcher update. Download puts
-        DataDoctor-Windows-*.zip in Update\. Message: close the app and run
-        applyUpdate.cmd (not Restart).
-     c. After applyUpdate.cmd: Data Doctor.exe replaced, python-embed present,
-        bunker.db and certs kept, app launches via pythonw.exe. Later code
-        updates use the Python zip again.
+     a. 3.0.x hop / Windows zip: after applyUpdate, Project Files\ is gone
+        (or Project Files.old if the old venv was still running). Next start
+        from python-embed removes Project Files.old. Update\ / Updates\
+        is now updates\.
 
 [ ] Hardening (TLS / updates)
    Steps:
@@ -37,12 +30,6 @@ Current Tests
         (no "verification disabled" in the log).
      c. In-app Update → Download → Cancel does not leave a zip in updates/
         that applyUpdate.cmd would apply on next start.
-
-[ ] Light System theme checkboxes (Windows)
-   Steps:
-     a. Appearance = System, OS in light mode. Radio and checkbox indicators
-        are light with a visible check. Same on a fresh Windows 11 install.
-     b. Dark mode still looks dark. Linux System is unchanged.
 
 [ ] Mac package script
    Steps:
@@ -55,6 +42,10 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Appearance table colors
+[x] Windows python-embed 3.14 (fresh zip)
+[x] 3.0.x → 3.1 Windows hop (launcher replace)
+[x] Light System theme checkboxes (Windows)
 [x] Data Query Excel-style formulas (internal)
 [x] Packaged Oracle + TNS_ADMIN
 [x] Windows bundled Noto (controls fit)
