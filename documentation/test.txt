@@ -22,7 +22,7 @@ Later, on the machines that showed them (not this Linux box):
         are light with a visible check. Same on a fresh Windows 11 install.
      b. Dark mode still looks dark. Linux System is unchanged.
 
-[ ] Windows bundled Noto (controls fit)
+[x] Windows bundled Noto (controls fit)
    Steps:
      a. Non-retro. app.log: "UI font" requested and actual both Noto Sans
         (not Segoe UI / Arial). After Options Save (theme apply) still Noto.
