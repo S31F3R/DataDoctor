@@ -2,24 +2,95 @@
 
 import sys
 import os
-import csv
-import json
-from datetime import datetime, timedelta
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QTableWidgetItem,
-                             QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
-                             QVBoxLayout, QHBoxLayout, QSplitter, QLabel, QAbstractItemView)
-from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, QEvent, pyqtSignal, QTimer
-from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
-from PyQt6 import uic
-from core import Logic, Query, Utils, Config, Upload, Update, FormulaUi
-from ui.uiAbout import uiAbout
-from ui.uiDataDictionary import uiDataDictionary
-from ui.uiOptions import uiOptions, warmKeyringCache
-from ui.uiQuery import uiQuery
-from ui.uiDetails import uiDetails
-from ui.uiGraph import GraphPanel
-from ui.uiSql import SqlWorkbench
-from core.Oracle import oracleConnection
+import traceback
+
+
+def _ensureAppDirOnPath():
+    """
+    python-embed's python*._pth lists only the embed dir + site-packages.
+    The launcher starts pythonFiles\\python-embed\\pythonw.exe with
+    pythonFiles\\app.pyw — without pythonFiles on sys.path, `import core`
+    fails and pythonw exits with no window.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here and here not in sys.path:
+        sys.path.insert(0, here)
+
+
+def _removeLeftoverDataDoctorIco():
+    """Old name was DataDoctor.ico; keep Data Doctor.ico only."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    roots = [here, os.path.dirname(here)]
+    rels = (
+        "DataDoctor.ico",
+        os.path.join("ui", "DataDoctor.ico"),
+        os.path.join("ui", "icons", "DataDoctor.ico"),
+    )
+    for root in roots:
+        if not root:
+            continue
+        for rel in rels:
+            p = os.path.join(root, rel)
+            try:
+                if os.path.isfile(p):
+                    os.remove(p)
+            except Exception:
+                pass
+
+
+def _startupFail(exc):
+    text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    here = os.path.dirname(os.path.abspath(__file__))
+    logPath = os.path.join(here, "startup-error.log")
+    try:
+        with open(logPath, "w", encoding="utf-8") as f:
+            f.write(text)
+    except Exception:
+        logPath = ""
+        try:
+            sys.stderr.write(text)
+        except Exception:
+            pass
+    msg = "Data Doctor failed to start.\n\n" + str(exc)
+    if logPath:
+        msg += "\n\nDetails: " + logPath
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, msg, "Data Doctor", 0x00000010)
+        except Exception:
+            pass
+    else:
+        try:
+            sys.stderr.write(msg + "\n")
+        except Exception:
+            pass
+
+
+_ensureAppDirOnPath()
+
+try:
+    import csv
+    import json
+    from datetime import datetime, timedelta
+    from PyQt6.QtWidgets import (QApplication, QMainWindow, QPushButton, QTableWidget, QTabWidget, QWidget, QGridLayout, QTableWidgetItem,
+                                 QSizePolicy, QMessageBox, QFileDialog, QMenu, QComboBox, QPlainTextEdit, QListWidget, QInputDialog,
+                                 QVBoxLayout, QHBoxLayout, QSplitter, QLabel, QAbstractItemView)
+    from PyQt6.QtCore import Qt, QObject, QRunnable, QThreadPool, QEvent, pyqtSignal, QTimer
+    from PyQt6.QtGui import QPalette, QIcon, QTextCharFormat, QTextBlockFormat, QColor, QTextCursor, QFont
+    from PyQt6 import uic
+    from core import Logic, Query, Utils, Config, Upload, Update, FormulaUi
+    from ui.uiAbout import uiAbout
+    from ui.uiDataDictionary import uiDataDictionary
+    from ui.uiOptions import uiOptions, warmKeyringCache
+    from ui.uiQuery import uiQuery
+    from ui.uiDetails import uiDetails
+    from ui.uiGraph import GraphPanel
+    from ui.uiSql import SqlWorkbench
+    from core.Oracle import oracleConnection
+except Exception as e:
+    _startupFail(e)
+    raise SystemExit(1) from e
 
 class detachedTabWindow(QMainWindow):
     """
@@ -1859,6 +1930,10 @@ if __name__ == '__main__':
         # before Qt starts so Close → applyUpdate.cmd can apply a Windows zip.
         try:
             Update.bootstrapWindowsApplyTools()
+        except Exception:
+            pass
+        try:
+            _removeLeftoverDataDoctorIco()
         except Exception:
             pass
 

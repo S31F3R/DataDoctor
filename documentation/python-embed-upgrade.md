@@ -26,9 +26,12 @@ After extract, `python314._pth` must contain:
 ```
 python314.zip
 .
+..
 Lib\site-packages
 import site
 ```
+
+`..` is `pythonFiles/` (parent of `python-embed`). Without it, `pythonw.exe app.pyw` cannot `import core` and exits with no window. `python-embed/sitecustomize.py` also inserts that parent on `sys.path`. `DataDoctor.py` does the same as a fallback and writes `pythonFiles/startup-error.log` plus a MessageBox if imports still fail.
 
 `get-pip.py` is downloaded into `python-embed` at package time (and again at apply time if missing). `python -m pip install -r requirements.txt` then fills `Lib\site-packages`.
 

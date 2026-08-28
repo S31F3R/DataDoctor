@@ -78,8 +78,20 @@ def findEmbedZip(root: Path) -> Path | None:
     return hits[-1] if hits else None
 
 
+_EMBED_SITECUSTOMIZE = """\
+# Data Doctor: pythonFiles (parent of this python-embed dir) must be on sys.path.
+# python*._pth does not add the script directory, so `import core` would fail.
+import os
+import sys
+_embed = os.path.dirname(os.path.abspath(__file__))
+_app = os.path.dirname(_embed)
+if _app and _app not in sys.path:
+    sys.path.insert(0, _app)
+"""
+
+
 def enableEmbedSite(embedDir: Path) -> None:
-    """Uncomment `import site` and add Lib\\site-packages so pip packages work."""
+    """Uncomment `import site`, add Lib\\site-packages, and pythonFiles (`..`)."""
     pthFiles = list(embedDir.glob("python*._pth"))
     if not pthFiles:
         print("WARN: no python*._pth in embed dir", file=sys.stderr)
@@ -89,6 +101,7 @@ def enableEmbedSite(embedDir: Path) -> None:
     out = []
     sawSite = False
     sawLib = False
+    sawParent = False
     for line in lines:
         stripped = line.strip()
         if stripped.lstrip("#").strip() == "import site":
@@ -99,21 +112,33 @@ def enableEmbedSite(embedDir: Path) -> None:
             out.append("Lib\\site-packages")
             sawLib = True
             continue
+        if stripped in ("..", "../", "..\\"):
+            if not sawParent:
+                out.append("..")
+                sawParent = True
+            continue
         out.append(line)
-    if not sawLib:
-        # After the `.` search-path line if present
-        inserted = False
+    if not sawLib or not sawParent:
         new = []
         for line in out:
             new.append(line)
-            if line.strip() == "." and not inserted:
-                new.append("Lib\\site-packages")
-                inserted = True
-        out = new if inserted else out + ["Lib\\site-packages"]
+            if line.strip() == ".":
+                if not sawParent:
+                    new.append("..")
+                    sawParent = True
+                if not sawLib:
+                    new.append("Lib\\site-packages")
+                    sawLib = True
+        out = new
+    if not sawParent:
+        out.append("..")
+    if not sawLib:
+        out.append("Lib\\site-packages")
     if not sawSite:
         out.append("import site")
     pth.write_text("\n".join(out) + "\n", encoding="utf-8")
-    print(f"Enabled import site in {pth.name}")
+    (embedDir / "sitecustomize.py").write_text(_EMBED_SITECUSTOMIZE, encoding="utf-8")
+    print(f"Enabled import site in {pth.name} (pythonFiles on sys.path)")
 
 
 def installPythonEmbed(root: Path, dest: Path) -> bool:
@@ -285,6 +310,8 @@ def main():
             'updateBunker.cmd', 'Project Files',
             # Full CPython installer — replaced by python-embed
             'python-3.13.14-amd64.exe',
+            # Renamed to Data Doctor.ico
+            'DataDoctor.ico',
         },
     )
     # Never ship the embed *zip* at zip root; it is extracted into pythonFiles.
@@ -293,6 +320,10 @@ def main():
     for leftover in stage.glob("python-*.exe"):
         leftover.unlink()
         print(f"Omitted system Python installer {leftover.name} (using python-embed)")
+    oldIco = stage / "DataDoctor.ico"
+    if oldIco.is_file():
+        oldIco.unlink()
+        print("Omitted leftover DataDoctor.ico (using Data Doctor.ico)")
 
     # 2) LICENSE at zip root
     licenseSrc = root / "LICENSE"
@@ -306,7 +337,14 @@ def main():
     for name in ("core", "ui", "quickLook", "oracle"):
         src = root / name
         if src.exists():
-            copyTree(src, projectFiles / name, ignoreNames={'.git', '__pycache__', 'client'})
+            copyTree(
+                src,
+                projectFiles / name,
+                ignoreNames={'.git', '__pycache__', 'client', 'DataDoctor.ico'},
+            )
+    oldUiIco = projectFiles / "ui" / "icons" / "DataDoctor.ico"
+    if oldUiIco.is_file():
+        oldUiIco.unlink()
     installOracleClient(root, projectFiles / "oracle" / "client", "windows")
 
     # DataDoctor.py → pythonFiles/app.pyw (generic VB launcher)

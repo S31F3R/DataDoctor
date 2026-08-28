@@ -256,6 +256,18 @@ def resolvePython(projectFiles: Path) -> str:
     return sys.executable
 
 
+_EMBED_SITECUSTOMIZE = """\
+# Data Doctor: pythonFiles (parent of this python-embed dir) must be on sys.path.
+# python*._pth does not add the script directory, so `import core` would fail.
+import os
+import sys
+_embed = os.path.dirname(os.path.abspath(__file__))
+_app = os.path.dirname(_embed)
+if _app and _app not in sys.path:
+    sys.path.insert(0, _app)
+"""
+
+
 def enableEmbedSite(embedDir: Path) -> None:
     pthFiles = list(embedDir.glob("python*._pth"))
     if not pthFiles:
@@ -265,6 +277,7 @@ def enableEmbedSite(embedDir: Path) -> None:
     lines = []
     sawSite = False
     sawLib = False
+    sawParent = False
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.lstrip("#").strip() == "import site":
@@ -275,19 +288,32 @@ def enableEmbedSite(embedDir: Path) -> None:
             lines.append("Lib\\site-packages")
             sawLib = True
             continue
+        if stripped in ("..", "../", "..\\"):
+            if not sawParent:
+                lines.append("..")
+                sawParent = True
+            continue
         lines.append(line)
-    if not sawLib:
-        inserted = False
+    if not sawLib or not sawParent:
         new = []
         for line in lines:
             new.append(line)
-            if line.strip() == "." and not inserted:
-                new.append("Lib\\site-packages")
-                inserted = True
-        lines = new if inserted else lines + ["Lib\\site-packages"]
+            if line.strip() == ".":
+                if not sawParent:
+                    new.append("..")
+                    sawParent = True
+                if not sawLib:
+                    new.append("Lib\\site-packages")
+                    sawLib = True
+        lines = new
+    if not sawParent:
+        lines.append("..")
+    if not sawLib:
+        lines.append("Lib\\site-packages")
     if not sawSite:
         lines.append("import site")
     pth.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (embedDir / "sitecustomize.py").write_text(_EMBED_SITECUSTOMIZE, encoding="utf-8")
 
 
 def ensurePip(py: str, projectFiles: Path) -> None:
@@ -419,12 +445,42 @@ def copyApplyScripts(codeRoot: Path, projectFiles: Path) -> None:
         print("Updated scripts/updateBunker.py")
 
 
+def removeLeftoverDataDoctorIco(installRoot: Path, projectFiles: Path) -> None:
+    """Drop the old DataDoctor.ico name; the icon is Data Doctor.ico now."""
+    places = [
+        installRoot / "DataDoctor.ico",
+        projectFiles / "DataDoctor.ico",
+        projectFiles / "ui" / "DataDoctor.ico",
+        projectFiles / "ui" / "icons" / "DataDoctor.ico",
+    ]
+    for p in places:
+        try:
+            if p.is_file():
+                p.unlink()
+                print(f"Removed leftover {p.relative_to(installRoot)}")
+        except Exception as e:
+            print(f"WARN: could not remove {p}: {e}", file=sys.stderr)
+
+
+def pythonCanImport(py: str, module: str) -> bool:
+    try:
+        rc = subprocess.call(
+            [py, "-c", f"import {module}"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return rc == 0
+    except Exception:
+        return False
+
+
 def applyWindowsLauncherBits(payload: Path, installRoot: Path) -> None:
     """Replace Data Doctor.exe, applyUpdate.cmd, and python-embed from a Windows zip."""
     copyFileIfPresent(payload / "Data Doctor.exe", installRoot / "Data Doctor.exe")
     copyFileIfPresent(payload / "applyUpdate.cmd", installRoot / "applyUpdate.cmd")
     copyFileIfPresent(payload / "README.txt", installRoot / "README.txt")
     copyFileIfPresent(payload / "UPDATE.txt", installRoot / "UPDATE.txt")
+    copyFileIfPresent(payload / "Data Doctor.ico", installRoot / "Data Doctor.ico")
     srcEmbed = None
     for name in CODE_DIR_NAMES:
         cand = payload / name / "python-embed"
@@ -883,6 +939,16 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
         rc = runPipInstall(py, req)
         if rc != 0:
             print(f"WARN: pip install exited {rc}", file=sys.stderr)
+
+        removeLeftoverDataDoctorIco(installRoot, projectFiles)
+
+        if (projectFiles / "python-embed" / "pythonw.exe").is_file() and not pythonCanImport(py, "PyQt6"):
+            print(
+                "ERROR: PyQt6 is not importable. First-run pip needs internet. "
+                "Not starting Data Doctor.",
+                file=sys.stderr,
+            )
+            return 1
 
         # Cleanup zip after successful extract/copy
         try:
