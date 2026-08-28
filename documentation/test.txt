@@ -6,7 +6,7 @@ Workflow / publish how-to: documentation/status.grok (gitignored).
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Options Save stays open; Close vs Cancel
+[x] Options Save stays open; Close vs Cancel
    Steps:
      a. Open Options. Bottom-right button says Close. Change UTC offset — it
         says Cancel. Save. Window stays open; button says Close again.
@@ -14,13 +14,18 @@ Current Tests
         Reopen Options: previous saved values are back.
      c. Change nothing, Close. Window closes.
 
+[ ] Query Select Quick Look vs Raw Data spacing
+   Steps:
+     a. Open Query. "Select Quick Look" is fully below Raw Data / QAQC, not
+        overlapping. Combo and Load/Save still sit above Query Data.
+
 [ ] Options Profile: label; Raw Data / QAQC gone from General
    Steps:
      a. Options → General: left of Export… / Import… is a "Profile:" label.
      b. Raw Data and Quality Control Checks are not on Options. Debug and
         Beta updates are still there.
 
-[ ] Query Options Raw Data + QAQC (defaults off; Quick Look)
+[x] Query Options Raw Data + QAQC (defaults off; Quick Look)
    Steps:
      a. New Query window: Display Deltas, Overlay Pairs, Raw Data, QAQC all
         unchecked. Info dialog describes all four.
@@ -28,9 +33,9 @@ Current Tests
         apply. Refresh keeps both. Graph hover matches the raw table text.
      c. Save Quick Look with those boxes (and Overlay/Delta as you like).
         Clear Query List unchecks all four. Load the Quick Look — boxes
-        restore. A Quick Look with no metadata still unchecks them.
+        restore. A Quick Look with no metadata still unchecks them.      
 
-[ ] Quick Look date mode (Custom / Prev Day / Prev Week)
+[x] Quick Look date mode (Custom / Prev Day / Prev Week)
    Steps:
      a. Prev Day to current → Save Quick Look. Load it later: Prev Day is
         selected, end time is now (not the old clock). Same for Prev Week.
@@ -38,7 +43,7 @@ Current Tests
         the pickers have the stored times (not refreshed to now).
      c. New Query / unspecified Quick Look: Custom is the default.
 
-[ ] Query list multi-select move / delete
+[ ] Query list multi-select move / delete (retest — move crashed TypeError)
    Steps:
      a. Ctrl/Shift select several rows. Delete button and context Delete
         remove all of them. Insert Above / Below are disabled while several
@@ -49,7 +54,7 @@ Current Tests
         packs to the bottom. A selection that includes row 0 does not crash
         or jump past the top.
 
-[ ] Data ID Search siteID + numeric/text sort
+[x] Data ID Search siteID + numeric/text sort
    Steps:
      a. Query → Search: columns include dataID and siteID. Typing a site
         number or location tag filters rows.
@@ -66,7 +71,7 @@ Current Tests
         Client. sqlnet.ora / tnsnames.ora come from that TNS folder.
         Copy tnsnames.ora into packaged network/admin if TNS_ADMIN is unset.
 
-[ ] Icon hover after a dialog
+[ ] Icon hover after a dialog (retest — still stuck after info / crash)
    Steps:
      a. Click a Query info button, dismiss the dialog. Icon is normal unless
         the cursor is still on the button (then hover is OK).
@@ -87,7 +92,7 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[ ] Update check after a real release (when you publish one)
+[x] Update check after a real release (when you publish one)
    Steps:
      a. Bump Version.VERSION lower than a published tag OR publish a higher tag with assets:
         - Launcher: DataDoctor-Python.zip (or *python*.zip)
