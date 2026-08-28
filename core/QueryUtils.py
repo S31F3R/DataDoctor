@@ -7,7 +7,6 @@ from PyQt6.QtCore import Qt, QCoreApplication
 from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem
 from core import Logic, Config, Utils, TableColors
-from DataDoctor import uiMain
 
 
 def modifyTable(
@@ -373,7 +372,9 @@ def modifyTable(
         widget = table
         mainWindowFound = None
         while widget is not None:
-            if isinstance(widget, uiMain):
+            # uiMain lives in DataDoctor.py / app.pyw (__main__), not a
+            # DataDoctor module — Windows packages have no DataDoctor.py.
+            if type(widget).__name__ == "uiMain":
                 mainWindowFound = widget
                 break
             widget = widget.parent()
