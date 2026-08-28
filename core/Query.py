@@ -1222,14 +1222,26 @@ def timestampSortTable(table, dataDictionaryTable):
     except Exception as e:
         Logic.logException("timestampSortTable failed", e)
 
-def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable, deltaChecked=False, overlayChecked=False):
+def executeQuery(
+    mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable,
+    deltaChecked=False, overlayChecked=False, rawDataChecked=False, qaqcChecked=False,
+):
     progressDialog = None
     try:
         Config.deltaChecked = deltaChecked
         Config.overlayChecked = overlayChecked
+        Config.rawData = bool(rawDataChecked)
+        Config.qaqcEnabled = bool(qaqcChecked)
 
         if Config.debug:
-            Logic.logMessage("DEBUG", "executeQuery: isInternal={}, items={}, deltaChecked={}, overlayChecked={}".format(isInternal, len(queryItems), deltaChecked, overlayChecked))
+            Logic.logMessage(
+                "DEBUG",
+                "executeQuery: isInternal={}, items={}, deltaChecked={}, overlayChecked={}, "
+                "rawData={}, qaqc={}".format(
+                    isInternal, len(queryItems), deltaChecked, overlayChecked,
+                    rawDataChecked, qaqcChecked,
+                ),
+            )
         if not isInternal:
             queryItems = [item for item in queryItems if item[2] != 'AQUARIUS']
         if Config.debug:
@@ -1703,12 +1715,19 @@ def executeQuery(mainWindow, queryItems, startDate, endDate, isInternal, dataDic
         if Config.debug:
             Logic.logMessage("DEBUG", "Query executed and table updated.")
 
-        # Store last delta and overlay states for refresh using globals
+        # Store last query-option states for refresh using globals
         Config.lastDeltaChecked = deltaChecked
         Config.lastOverlayChecked = overlayChecked
+        Config.lastRawDataChecked = bool(rawDataChecked)
+        Config.lastQaqcChecked = bool(qaqcChecked)
 
         if Config.debug:
-            Logic.logMessage("DEBUG", f"executeQuery: Stored lastDeltaChecked={deltaChecked}, lastOverlayChecked={overlayChecked}")
+            Logic.logMessage(
+                "DEBUG",
+                f"executeQuery: Stored lastDeltaChecked={deltaChecked}, "
+                f"lastOverlayChecked={overlayChecked}, lastRawDataChecked={rawDataChecked}, "
+                f"lastQaqcChecked={qaqcChecked}",
+            )
 
         # Baseline for edit/upload tracking + public/delta lock (after QAQC colors)
         try:

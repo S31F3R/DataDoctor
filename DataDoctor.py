@@ -896,19 +896,25 @@ class uiMain(QMainWindow):
             QMessageBox.warning(self, "Export Error", f"Failed to export CSV: {e}")
 
     def btnOptionsPressed(self):
-        if self.winOptions:
-            self.winOptions.exec()
-            if Config.debug: Logic.logMessage("DEBUG", "btnOptionsPressed: Opened options dialog")
+        try:
+            if self.winOptions:
+                self.winOptions.exec()
+                if Config.debug: Logic.logMessage("DEBUG", "btnOptionsPressed: Opened options dialog")
+        finally:
+            Utils.resetStyledButtonHover(self.btnOptions)
 
     def btnInfoPressed(self):
-        if self.winAbout:
-            about = self.winAbout
-            if about.isVisible():
-                about.raise_()
-                about.activateWindow()
-            else:
-                about.show()
-            if Config.debug: Logic.logMessage("DEBUG", "btnInfoPressed: Opened about dialog")
+        try:
+            if self.winAbout:
+                about = self.winAbout
+                if about.isVisible():
+                    about.raise_()
+                    about.activateWindow()
+                else:
+                    about.show()
+                if Config.debug: Logic.logMessage("DEBUG", "btnInfoPressed: Opened about dialog")
+        finally:
+            Utils.resetStyledButtonHover(self.btnInfo)
 
     def _parseQueryDate(self, value):
         """Normalize lastStartDate / lastEndDate to datetime, or None."""
@@ -950,9 +956,11 @@ class uiMain(QMainWindow):
                 if not Upload.confirmDiscardPendingEdits(self, "refresh the query"):
                     if Config.debug: Logic.logMessage("DEBUG", "btnRefreshPressed: Canceled due to pending edits")
                     return
-                # Retrieve last delta and overlay states from globals, default to False if not set
+                # Retrieve last query-option states from globals, default to False if not set
                 deltaChecked = getattr(Config, 'lastDeltaChecked', False)
                 overlayChecked = getattr(Config, 'lastOverlayChecked', False)
+                rawChecked = getattr(Config, 'lastRawDataChecked', False)
+                qaqcChecked = getattr(Config, 'lastQaqcChecked', False)
                 startDate = self.lastStartDate
                 endDate = self.refreshEndDateForQuery(self.lastEndDate)
 
@@ -963,12 +971,14 @@ class uiMain(QMainWindow):
                     Logic.logMessage(
                         "DEBUG",
                         f"btnRefreshPressed: Refreshing start={startDate}, end={endDate}, "
-                        f"deltaChecked={deltaChecked}, overlayChecked={overlayChecked}",
+                        f"deltaChecked={deltaChecked}, overlayChecked={overlayChecked}, "
+                        f"rawData={rawChecked}, qaqc={qaqcChecked}",
                     )
                 Query.executeQuery(
                     self, self.lastQueryItems, startDate, endDate,
                     self.lastQueryType == 'internal', self.winDataDictionary.mainTable,
                     deltaChecked=deltaChecked, overlayChecked=overlayChecked,
+                    rawDataChecked=rawChecked, qaqcChecked=qaqcChecked,
                 )
 
                 if Config.debug: Logic.logMessage("DEBUG", "btnRefreshPressed: Refreshed query with last parameters")
@@ -977,6 +987,8 @@ class uiMain(QMainWindow):
         except Exception as e:
             Logic.logException("btnRefreshPressed failed", e)
             QMessageBox.warning(self, "Refresh Error", f"Failed to refresh query:\n{e}")
+        finally:
+            Utils.resetStyledButtonHover(self.btnRefresh)
 
     def btnUndoPressed(self):
         try:
@@ -989,6 +1001,8 @@ class uiMain(QMainWindow):
             if Config.debug: Logic.logMessage("DEBUG", "btnUndoPressed: Called timestampSortTable")
         except Exception as e:
             Logic.logException("btnUndoPressed failed", e)
+        finally:
+            Utils.resetStyledButtonHover(self.btnUndo)
 
     def onMainTableItemChanged(self, item):
         """Flag user edits for upload (magenta); restore baseline when text matches original."""
@@ -1004,7 +1018,10 @@ class uiMain(QMainWindow):
 
     def btnUploadPressed(self):
         """Upload pending user edits: HDB via MODIFY_R_BASE; Aquarius stubbed for now."""
-        Upload.runUpload(self)
+        try:
+            Upload.runUpload(self)
+        finally:
+            Utils.resetStyledButtonHover(self.btnUpload)
 
     def showHeaderContextMenu(self, pos):
         """Show context menu for header right-click to display full query info using uiDetails."""

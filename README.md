@@ -18,7 +18,7 @@ Current version: **3.0.0** (see `core/Version.py`).
 
 - **Python 3.13.x** (tested with 3.13.7)
 - Dependencies in [`requirements.txt`](requirements.txt): PyQt6, requests, oracledb, keyring, matplotlib, numpy, pygame
-- **USBR / HDB**: Oracle Instant Client (may ship inside the Windows / AppImage / macOS package) plus TNS / `tnsnames.ora`
+- **USBR / HDB**: packaged Oracle Instant Client (when present) plus TNS / `tnsnames.ora`. The client in the package is used whenever it is there. `tnsnames.ora` and `sqlnet.ora` come from `TNS_ADMIN` if that env var is set, otherwise from packaged `oracle/network/admin/` (we do not ship `tnsnames.ora` — copy yours there).
 - **Aquarius** (TLS): a server certificate in a `certs/` folder — see [Aquarius](https://github.com/S31F3R/DataDoctor/wiki/Aquarius)
 - **USGS** (optional): an [api.data.gov](https://api.waterdata.usgs.gov/signup/) key for higher rate limits — see [USGS](https://github.com/S31F3R/DataDoctor/wiki/USGS)
 
@@ -67,7 +67,7 @@ Open **Options** (left categories, General tab on each) and set the sources that
 
 | Category | What to set |
 |----------|-------------|
-| General | Raw data, QAQC, debug, **Beta updates** |
+| General | Debug, **Beta updates**, profile export/import |
 | Appearance | Retro mode, color theme (System / Light / Dark) |
 | Oracle | TNS names path, user / password; Databases access list |
 | USGS | API key (optional, stored in the OS keyring) |

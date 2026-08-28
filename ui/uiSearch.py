@@ -35,7 +35,7 @@ class uiSearch(QMainWindow):
         self.searchTable.setEditTriggers(self.searchTable.EditTrigger.NoEditTriggers)
 
         # Populate with limited columns (must match bunker.db schema; datatype is lowercase)
-        columns = ['dataID', 'database', 'commonName', 'datatype']
+        columns = ['dataID', 'siteID', 'database', 'commonName', 'datatype']
         whereClause = "database != 'AQUARIUS'" if self.parent().queryType == 'public' else None
         Logic.buildDataDictionary(self.searchTable, columns=columns, whereClause=whereClause)
 
@@ -67,12 +67,20 @@ class uiSearch(QMainWindow):
 
     def applyFilter(self):
         searchText = self.qleSearch.text()
-        Logic.filterTable(self.searchTable, searchText, ['dataID', 'commonName', 'datatype'])
+        Logic.filterTable(self.searchTable, searchText, ['dataID', 'siteID', 'commonName', 'datatype'])
+
+    def _cellText(self, row, columnName):
+        for c in range(self.searchTable.columnCount()):
+            header = self.searchTable.horizontalHeaderItem(c)
+            if header is not None and header.text().strip() == columnName:
+                item = self.searchTable.item(row, c)
+                return item.text() if item is not None else ''
+        return ''
 
     def addToQuery(self, item):
         row = item.row()
-        dataID = self.searchTable.item(row, 0).text()
-        database = self.searchTable.item(row, 1).text()
+        dataID = self._cellText(row, 'dataID')
+        database = self._cellText(row, 'database')
         interval = self.parent().cbInterval.currentText()
         itemText = f"{dataID}|{interval}|{database}"
         self.parent().listQueryList.addItem(itemText)
@@ -92,8 +100,8 @@ class uiSearch(QMainWindow):
             menu.exec(self.searchTable.viewport().mapToGlobal(pos))
 
     def addToQueryFromRow(self, row):
-        dataID = self.searchTable.item(row, 0).text()
-        database = self.searchTable.item(row, 1).text()
+        dataID = self._cellText(row, 'dataID')
+        database = self._cellText(row, 'database')
         interval = self.parent().cbInterval.currentText()
         itemText = f"{dataID}|{interval}|{database}"
         self.parent().listQueryList.addItem(itemText)

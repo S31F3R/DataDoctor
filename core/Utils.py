@@ -8,6 +8,7 @@ import configparser
 import subprocess
 import tempfile
 import time
+import weakref
 from pathlib import Path
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import (
@@ -66,6 +67,7 @@ controlLayouts = {
         'btnIntervalInfo': (100, 76, 31, 20),
         'btnQueryOptionsInfo': (110, 401, 31, 20),
         'chkbOverlay': (150, 424, 131, 22),         # .ui
+        'chkbQAQC': (150, 448, 131, 22),
     },
     'retro': {
         # Press Start — same row as default, +34 x / +2 y (historical Refresh offset)
@@ -76,6 +78,7 @@ controlLayouts = {
         'btnIntervalInfo': (164, 76, 31, 20),
         'btnQueryOptionsInfo': (164, 401, 31, 20),
         'chkbOverlay': (162, 424, 131, 22),
+        'chkbQAQC': (162, 448, 131, 22),
     },
 }
 
@@ -90,6 +93,8 @@ retroSmallFontControls = frozenset({
     'rbPrevWeekToCurrent',
     'chkbDelta',
     'chkbOverlay',
+    'chkbRawData',
+    'chkbQAQC',
     'lblTimeStampMethod',
     'rbBOP',
     'rbEOP',
@@ -504,9 +509,24 @@ def makeFontForRole(role='ui', pointSize=None):
 
     if family:
         pt = size if size > 0 else (6 if Config.retroMode else 10)
-        font = QFont(family, pt)
+        font = QFont()
+        try:
+            font.setFamilies([family])
+        except Exception:
+            font.setFamily(family)
+        font.setPointSize(pt)
         if Config.retroMode:
             font.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
+        else:
+            # PreferMatch: do not silently substitute Segoe UI / Arial on Windows
+            # after QApplication.setStyle() (Fusion) resets widget fonts.
+            try:
+                font.setStyleStrategy(
+                    QFont.StyleStrategy.PreferAntialias
+                    | QFont.StyleStrategy.PreferMatch
+                )
+            except Exception:
+                font.setStyleStrategy(QFont.StyleStrategy.PreferMatch)
         return font
 
     # Fallback: OS UI font (only if bundled default failed to load)
@@ -965,6 +985,56 @@ def propagateUiFont(app, font=None):
     return font
 
 
+def logResolvedUiFont(app=None, where='apply'):
+    """
+    Log requested vs actually resolved family.
+
+    Windows native / Fusion setStyle() often substitutes Segoe UI; that is
+    why Query radios and Options checkboxes look larger than Linux Noto.
+    """
+    app = app or QApplication.instance()
+    requested = (getattr(Config, 'uiFontFamily', None) or activeFontFamily() or '').strip()
+    actual = ''
+    exact = None
+    pt = None
+    try:
+        font = app.font() if app is not None else makeUiFont()
+        info = QFontInfo(font)
+        actual = (info.family() or '').strip()
+        exact = info.exactMatch()
+        pt = info.pointSize()
+    except Exception as e:
+        Logic.logMessage("WARN", f"UI font ({where}): could not read QFontInfo: {e}")
+        return
+    Logic.logMessage(
+        "INFO",
+        "UI font ({}): requested={!r} actual={!r} pt={} exact={} "
+        "style={} defaultLoaded={} retroLoaded={} retroMode={}".format(
+            where,
+            requested or '(none)',
+            actual or '(none)',
+            pt,
+            exact,
+            _styleKey(app) if app is not None else '',
+            getattr(Config, 'defaultFontLoaded', False),
+            getattr(Config, 'retroFontLoaded', False),
+            bool(getattr(Config, 'retroMode', False)),
+        ),
+    )
+    if requested and actual:
+        req = requested.casefold()
+        got = actual.casefold()
+        if req not in got and got not in req:
+            Logic.logMessage(
+                "WARN",
+                "UI font mismatch ({}): bundled {!r} resolved as {!r}. "
+                "Windows will look different from Linux (controls may not fit). "
+                "Confirm ui/fonts/*.ttf is in the install (Project Files/ui/fonts/).".format(
+                    where, requested, actual
+                ),
+            )
+
+
 def applyRoleFonts(app=None, root=None):
     """
     Set role-specific sizes: buttons stay smaller in retro; log/code larger, etc.
@@ -1070,29 +1140,11 @@ def applyStylesAndFonts(app, mainTable, queryList):
         ensureRetroFontLoaded()  # About dialog always uses pixel font
 
     app.setStyleSheet(readBaseStylesheet())
-    appFont = propagateUiFont(app)
+    propagateUiFont(app)
     # Mode-specific ABS button/checkbox positions (default Noto vs retro)
     applyModeControlLayouts(app=app)
 
-    try:
-        info = QFontInfo(appFont)
-        Logic.logMessage(
-            "INFO",
-            "UI font: platform={} retroMode={} requested={!r} actual={!r} "
-            "uiPt={} buttonPt={} logPt={} defaultLoaded={} retroLoaded={}".format(
-                sys.platform,
-                Config.retroMode,
-                Config.uiFontFamily or '(system fallback)',
-                info.family(),
-                rolePointSize('ui'),
-                rolePointSize('button'),
-                rolePointSize('log'),
-                Config.defaultFontLoaded,
-                Config.retroFontLoaded,
-            ),
-        )
-    except Exception as e:
-        Logic.logMessage("WARN", f"UI font diagnostics failed: {e}")
+    logResolvedUiFont(app, where='applyStylesAndFonts')
 
     setRetroStyles(app, bool(Config.retroMode), mainTable, queryList)
     # setRetroStyles may clear listQueryList stylesheet — re-apply compact list padding
@@ -1263,6 +1315,78 @@ def _iconButtonCursorOver(widget):
         return False
 
 
+_styledIconButtons = []
+_appIconHoverFilter = None
+
+
+def _pruneStyledIconButtons():
+    _styledIconButtons[:] = [ref for ref in _styledIconButtons if ref() is not None]
+
+
+def _registerStyledIconButton(button):
+    _pruneStyledIconButtons()
+    _styledIconButtons.append(weakref.ref(button))
+    _ensureAppIconHoverFilter()
+
+
+def _syncOneIconButton(button):
+    if button is None:
+        return
+    try:
+        over = _iconButtonCursorOver(button)
+        if button.isDown():
+            icon = getattr(button, '_ddPressedIcon', None)
+        elif over:
+            icon = getattr(button, '_ddHoverIcon', None)
+        else:
+            icon = getattr(button, '_ddNormalIcon', None)
+            button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+        if icon is not None:
+            button.setIcon(icon)
+    except RuntimeError:
+        pass
+    except Exception:
+        pass
+
+
+def _syncAllIconButtonHovers():
+    _pruneStyledIconButtons()
+    for ref in _styledIconButtons:
+        _syncOneIconButton(ref())
+
+
+class _AppIconHoverFilter(QObject):
+    """
+    Mouse Leave is often swallowed after a modal or a slot exception, so the
+    hover icon sticks until the cursor re-enters that button. Any mouse move
+    or window deactivate re-syncs every icon button from the real cursor.
+    """
+
+    def eventFilter(self, obj, event):
+        et = event.type()
+        if et in (
+            QEvent.Type.MouseMove,
+            QEvent.Type.HoverMove,
+            QEvent.Type.WindowDeactivate,
+            QEvent.Type.WindowActivate,
+            QEvent.Type.ApplicationDeactivate,
+            QEvent.Type.ApplicationActivate,
+        ):
+            _syncAllIconButtonHovers()
+        return False
+
+
+def _ensureAppIconHoverFilter():
+    global _appIconHoverFilter
+    if _appIconHoverFilter is not None:
+        return
+    app = QApplication.instance()
+    if app is None:
+        return
+    _appIconHoverFilter = _AppIconHoverFilter(app)
+    app.installEventFilter(_appIconHoverFilter)
+
+
 def buttonStyle(button, iconName=None, iconSize=None):
     """Apply flat, borderless style to a QPushButton with hover/press effects using resized icons if iconName provided."""
     if iconName:
@@ -1301,41 +1425,37 @@ def buttonStyle(button, iconName=None, iconSize=None):
         button.setIcon(normalIcon)
         button.setFlat(True)
         button.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        button.setMouseTracking(True)
+        _registerStyledIconButton(button)
 
         # Define local event filter for state swaps
         class ButtonEventFilter(QObject):
             def eventFilter(self, obj, event):
                 et = event.type()
-                if et in (QEvent.Type.Enter, QEvent.Type.HoverEnter):
-                    # Windows posts a fake Enter after a modal (History). Only
-                    # hover if the cursor is actually over the button.
-                    if _iconButtonCursorOver(obj):
-                        obj.setIcon(hoverIcon)
-                    else:
-                        obj.setIcon(normalIcon)
-                        obj.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+                if et in (
+                    QEvent.Type.Enter,
+                    QEvent.Type.HoverEnter,
+                    QEvent.Type.HoverMove,
+                ):
+                    # Fake Enter after a modal: only hover if the cursor is
+                    # actually over the button.
+                    _syncOneIconButton(obj)
                 elif et in (
                     QEvent.Type.Leave,
                     QEvent.Type.HoverLeave,
                     QEvent.Type.Hide,
                 ):
+                    obj.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
                     obj.setIcon(normalIcon)
                 elif et == QEvent.Type.MouseButtonPress:
                     obj.setIcon(pressedIcon)
                 elif et == QEvent.Type.MouseButtonRelease:
                     def syncIcon():
-                        try:
-                            if _iconButtonCursorOver(obj):
-                                obj.setIcon(hoverIcon)
-                            else:
-                                obj.setIcon(normalIcon)
-                                obj.setAttribute(
-                                    Qt.WidgetAttribute.WA_UnderMouse, False
-                                )
-                        except Exception:
-                            obj.setIcon(normalIcon)
+                        _syncOneIconButton(obj)
                     syncIcon()
                     QTimer.singleShot(0, syncIcon)
+                    QTimer.singleShot(50, syncIcon)
+                    QTimer.singleShot(150, syncIcon)
                 return super().eventFilter(obj, event)
 
         # Install filter (remove any existing to avoid duplicates)
@@ -1345,6 +1465,26 @@ def buttonStyle(button, iconName=None, iconSize=None):
         filt = ButtonEventFilter(button)
         button._ddIconFilter = filt
         button.installEventFilter(filt)
+        # After clicked slots (modal or exception dialog), wait until no
+        # modal is up, then force a cursor-based restore.
+        def _syncAfterClick(*_args, _btn=button):
+            def tick(retries=40):
+                app = QApplication.instance()
+                if app is not None and app.activeModalWidget() is not None:
+                    if retries > 0:
+                        QTimer.singleShot(50, lambda: tick(retries - 1))
+                    return
+                resetStyledButtonHover(_btn)
+            QTimer.singleShot(0, lambda: tick())
+            QTimer.singleShot(200, lambda: resetStyledButtonHover(_btn))
+        oldClick = getattr(button, '_ddHoverClickHook', None)
+        if oldClick is not None:
+            try:
+                button.clicked.disconnect(oldClick)
+            except TypeError:
+                pass
+        button._ddHoverClickHook = _syncAfterClick
+        button.clicked.connect(_syncAfterClick)
 
         # Apply flat stylesheet
         button.setStyleSheet("""
@@ -1577,7 +1717,7 @@ def loadConfig():
         'periodOffset': True,
         'hourTimestampMethod': 'EOP',
         'retroMode': False,
-        'qaqc': True,
+        'qaqc': False,
         'rawData': False,
         'lastQuickLook': '',
         # stable = GitHub full releases only; beta = include pre-releases (-rc / -beta)
@@ -1656,12 +1796,9 @@ def loadConfig():
                     Logic.logMessage("DEBUG", "Removing obsolete colorMode")
                 config.pop('colorMode')
 
-            # Check os env for existing TNS_ADMIN
-            envTns = os.environ.get('TNS_ADMIN')
-
-            # If existing TNS_ADMIN, overwrite config TNS_ADMIN location
-            if envTns:
-                config['tnsNamesLocation'] = envTns
+            # Do not copy TNS_ADMIN into tnsNamesLocation. Env is read at
+            # Instant Client setup; persisting it made Options show a system
+            # Oracle path on machines that should use packaged network/admin.
 
             # Write updated config back to file if migrations occurred
             with open(configPath, 'w', encoding='utf-8') as configFile:
@@ -1741,7 +1878,7 @@ def convertConfigToJson():
         settings = {
             'utcOffset': "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
             'retroFont': True,
-            'qaqc': True,
+            'qaqc': False,
             'rawData': False,
             'debugMode': False,
             'tnsNamesLocation': '',
@@ -1956,21 +2093,15 @@ def _restyleMarkedPanes(app):
 
 
 def resetStyledButtonHover(button):
-    """Clear a stuck hover/pressed icon after a modal dialog (Windows)."""
+    """Clear a stuck hover/pressed icon after a modal dialog or slot error."""
     if button is None:
         return
 
     def apply():
         try:
-            over = _iconButtonCursorOver(button)
             button.setDown(False)
-            if not over:
-                button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
-            icon = getattr(
-                button, '_ddHoverIcon' if over else '_ddNormalIcon', None
-            )
-            if icon is not None:
-                button.setIcon(icon)
+            button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
+            _syncOneIconButton(button)
             st = button.style()
             if st is not None:
                 st.unpolish(button)
@@ -1982,6 +2113,7 @@ def resetStyledButtonHover(button):
     apply()
     QTimer.singleShot(0, apply)
     QTimer.singleShot(50, apply)
+    QTimer.singleShot(150, apply)
 
 
 def _restoreNativePalette(app):
@@ -1996,6 +2128,14 @@ def _restoreNativePalette(app):
 def _applyForcedTheme(app, wantDark):
     scheme = Qt.ColorScheme.Dark if wantDark else Qt.ColorScheme.Light
     _applyHintScheme(app, scheme)
+    # Windows 11 native style paints checkbox/radio indicators from the OS
+    # theme and ignores a pushed palette (dark boxes on a light System UI).
+    # Fusion honors Light/Dark palettes for those indicators on every machine.
+    if sys.platform == 'win32':
+        current = _styleKey(app)
+        if current.lower() != 'fusion':
+            _setAppStyle(app, 'Fusion')
+            _applyHintScheme(app, scheme)
     pal = app.style().standardPalette()
     if _paletteIsDark(pal) != wantDark:
         current = _styleKey(app)
@@ -2042,6 +2182,16 @@ def applyColorTheme(theme=None):
         _applyForcedTheme(app, wantDark=(name == 'dark'))
 
     _restyleMarkedPanes(app)
+    # QApplication.setStyle() resets widget fonts to the style default
+    # (Segoe UI on Windows). Re-apply bundled Noto / Press Start so Linux
+    # and Windows match. Skip the pre-logging startup call — widgets and
+    # retroMode are not ready yet.
+    if getattr(Logic, 'loggingInitialized', False):
+        try:
+            propagateUiFont(app)
+            logResolvedUiFont(app, where=f'applyColorTheme:{name}')
+        except Exception as e:
+            Logic.logMessage("WARN", f"applyColorTheme re-apply font failed: {e}")
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
@@ -2117,8 +2267,8 @@ def reloadGlobals():
     Config.debug = settings['debugMode']
     Config.utcOffset = settings['utcOffset']
     Config.periodOffset = resolvePeriodOffset(settings)
-    Config.qaqcEnabled = settings['qaqc']
-    Config.rawData = settings['rawData']
+    # rawData / qaqcEnabled are Query-window flags (Quick Look + last query),
+    # not Options globals. Do not reload them from user.config.
     theme = str(settings.get('colorTheme') or 'system').strip().lower()
     if theme not in ('system', 'light', 'dark'):
         theme = 'system'

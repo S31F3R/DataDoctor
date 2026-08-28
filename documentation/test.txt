@@ -5,57 +5,22 @@ Workflow / publish how-to: documentation/status.grok (gitignored).
 
 Current Tests
 --------------------------------------------------------------------------------
+Later, on the machines that showed them (not this Linux box):
 
-[x] Graph Ctrl + mouse wheel zoom
+[ ] Packaged Oracle + TNS_ADMIN
    Steps:
-     a. Plot a Data Query series (Graph). Hold Ctrl and scroll the wheel over
-        the plot. Time axis zooms toward the pointer. Y refits to visible data.
-     b. Wheel without Ctrl does not zoom. Zoom stays inside the data range
-        (cannot pan/zoom past the series). Back/Home still work.
+     a. Options → Oracle → TNS Names Location shows TNS_ADMIN if that env
+        is set (read-only), else the packaged oracle/network/admin path
+        (or a path you saved). Not oracle/client/network/admin.
+     b. A machine without a system Oracle still uses packaged Instant
+        Client. sqlnet.ora / tnsnames.ora come from that TNS folder.
+        Copy tnsnames.ora into packaged network/admin if TNS_ADMIN is unset.
 
-[x] AppImage tab close buttons
+[ ] Light System theme checkboxes (Windows)
    Steps:
-     a. Run the Linux AppImage (not the venv). Main tabs (Data Query, SQL,
-        Graph, Log) show the close X. Hover/press still swap the icon.
-     b. SQL Query Builder query tabs still show close. Retro close icons too
-        if retro is on.
-     c. Dev/venv and Windows zip still show close buttons (not AppImage-only).
-
-[x] Oracle auth lock is per-database + timed
-   Steps:
-     a. SQL Query Builder: pick an HDB you cannot log into → Run. Wrong
-        username/password dialog. Other HDBs in the combo still run.
-     b. Retrying the failed DB is blocked with a remaining-time note (~5 min).
-     c. After 5 minutes, or after saving Oracle credentials in Options, that
-        DB can be tried again. Restart is not required.
-
-[x] Profile import merge / overwrite / rename + SQL categories
-   Steps:
-     a. Export SQL Quick Looks (and Query Quick Looks). Import into a profile
-        that already has some of those names.
-     b. Same-name prompt: Overwrite, Skip, Rename (Overwrite all / Skip all
-        when more than one clash). Existing names not in the zip stay.
-     c. SQL zip: choose With categories vs Without. Without → new snippets
-        Uncategorized. With → zip folder assignments apply.
-     d. Random/non-profile zip still errors and changes nothing.
-
-[x] USBR Overwrite Flag on upload
-   Steps:
-     a. Options → USBR → Overwrite Flag off → Save. Edit an existing HDB value
-        and Upload. Debug/log: OVERWRITE_FLAG NULL. Existing HDB value is not
-        replaced (HDB keeps the old value or the proc no-ops).
-     b. Check Overwrite Flag → Save. Upload the same cell again. Log says
-        OVERWRITE_FLAG='O'. The HDB value is replaced.
-     c. Freehand SQL in SQL Query Builder is unchanged (no auto flag).
-
-[x] Windows package: empty certs/ + first-run applyUpdate.cmd
-   Steps:
-     a. Unzip DataDoctor-Windows-*.zip. Project Files\certs\ exists
-        (README ok; empty is fine).
-     b. Update\ contains DataDoctor-Python.zip. No Linux .venv in the zip.
-     c. After Python 3.13 is on PATH: run applyUpdate.cmd → creates
-        Project Files\.venv, pip installs, app starts via Data Doctor.exe.
-     d. Put a dummy aquarius.pem in certs\, run applyUpdate again — pem still there.
+     a. Appearance = System, OS in light mode. Radio and checkbox indicators
+        are light with a visible check. Same on a fresh Windows 11 install.
+     b. Dark mode still looks dark. Linux System is unchanged.
 
 [ ] Mac package script
    Steps:
@@ -65,18 +30,25 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[x] Update check after a real release (when you publish one)
-   Steps:
-     a. Bump Version.VERSION lower than a published tag OR publish a higher tag with assets:
-        - Launcher: DataDoctor-Python.zip (or *python*.zip)
-        - AppImage: DataDoctor-x86_64.AppImage (or zip containing it)
-     b. Stable channel ignores Pre-release tags; Beta channel includes them (-rc / -beta).
-     c. Prompt → Download → file lands in Update/ next to install / AppImage.
-     d. Launcher: close + applyUpdate. AppImage: Quit and apply (or applyAppImageUpdate.sh).
-
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Windows bundled Noto (controls fit)
+[x] Options Save stays open; Close vs Cancel
+[x] Query Select Quick Look vs Raw Data spacing
+[x] Options Profile: label; Raw Data / QAQC gone from General
+[x] Query Options Raw Data + QAQC (defaults off; Quick Look)
+[x] Quick Look date mode (Custom / Prev Day / Prev Week)
+[x] Query list multi-select move / delete
+[x] Data ID Search siteID + numeric/text sort
+[x] Icon hover after a dialog
+[x] Update check after a real release
+[x] Graph Ctrl + mouse wheel zoom
+[x] AppImage tab close buttons
+[x] Oracle auth lock is per-database + timed
+[x] Profile import merge / overwrite / rename + SQL categories
+[x] USBR Overwrite Flag on upload
+[x] Windows package: empty certs/ + first-run applyUpdate.cmd
 [x] SQL History button hover after double-click
 [x] Windows System Default appearance (dark OS → dark app)
 [x] Hide/Unhide password buttons (Oracle, Aquarius, USGS)

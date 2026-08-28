@@ -28,6 +28,8 @@ _authFailures: Dict[str, Tuple[str, float]] = {}
 # longer than 32767 characters.
 clientInitLock = threading.Lock()
 clientInitialized = False
+# TNS_ADMIN inherited from the process environment (not one we set later).
+_inheritedTnsAdmin = (os.environ.get("TNS_ADMIN") or "").strip()
 
 # MCS (Microsoft Certificate Store) TLS: Windows prompts per *new* session.
 # Serialize the first connect per DSN, then reuse live sessions so later
@@ -687,21 +689,69 @@ def ensureClientOnPath(clientDir):
     if Config.debug:
         Logic.logMessage("DEBUG", f"oracleConnection: Prepended Instant Client to {key} (len={len(candidate)})")
 
+def inheritedTnsAdmin():
+    """TNS_ADMIN from the process environment at import; empty if we set it later."""
+    return _inheritedTnsAdmin
+
+
+def packagedTnsAdmin():
+    """Packaged oracle/network/admin (tnsnames.ora / sqlnet.ora live here)."""
+    return os.path.normpath(Logic.resourcePath("oracle/network/admin"))
+
+
+def resolveTnsAdmin():
+    """
+    Folder Instant Client uses for tnsnames.ora and sqlnet.ora.
+
+    1. TNS_ADMIN environment variable, if set
+    2. Options → Oracle → TNS Names Location, if saved
+    3. Packaged oracle/network/admin (we do not ship tnsnames.ora)
+    """
+    inherited = (_inheritedTnsAdmin or "").strip()
+    if inherited:
+        return os.path.normpath(inherited)
+    try:
+        from core import Utils
+        loc = (Utils.loadConfig().get("tnsNamesLocation") or "").strip()
+        if loc:
+            if "%AppRoot%" in loc:
+                loc = loc.replace("%AppRoot%", getattr(Config, "appRoot", "") or "")
+            loc = os.path.normpath(loc)
+            if loc:
+                return loc
+    except Exception:
+        pass
+    return packagedTnsAdmin()
+
+
+def applyTnsAdmin(path=None):
+    """
+    Set process TNS_ADMIN before Instant Client init.
+
+    Instant Client defaults to <clientDir>/network/admin when this is unset,
+    which is NOT where we put sqlnet.ora / tnsnames.ora.
+    """
+    admin = path or resolveTnsAdmin()
+    os.environ["TNS_ADMIN"] = admin
+    return admin
+
+
 def ensureOracleClientReady():
     """
     One-time Instant Client init + TNS_ADMIN. Safe to call from any thread;
     concurrent callers block until the first setup finishes.
 
     Instant Client priority:
-      1. Packaged oracle/client next to the app (preferred)
+      1. Packaged oracle/client next to the app (always, when present)
       2. System Instant Client already on PATH / LD_LIBRARY_PATH
       3. Thin mode (no Instant Client) — last resort
 
-    sqlnet.ora / TNS_ADMIN:
-      - If TNS_ADMIN is already set in the environment, keep it (user/system tnsnames).
-      - Else, if packaged oracle/network/admin exists, point TNS_ADMIN there so the
-        bundled sqlnet.ora is used.
-      - tnsnames.ora path from Options is unchanged (works independently).
+    tnsnames.ora / sqlnet.ora (same folder):
+      1. TNS_ADMIN environment variable
+      2. Options TNS Names Location
+      3. Packaged oracle/network/admin
+    TNS_ADMIN is applied before init_oracle_client so Instant Client does not
+    look at oracle/client/network/admin.
     """
     global clientInitialized
     if clientInitialized:
@@ -714,6 +764,20 @@ def ensureOracleClientReady():
         system = platform.system().lower()
         if platform.architecture()[0] != "64bit":
             raise RuntimeError("Only 64-bit platforms supported.")
+
+        tnsAdmin = applyTnsAdmin()
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"oracleConnection.setup: TNS_ADMIN={tnsAdmin} "
+                f"(sqlnet.ora present={os.path.isfile(os.path.join(tnsAdmin, 'sqlnet.ora'))}, "
+                f"tnsnames.ora present={os.path.isfile(os.path.join(tnsAdmin, 'tnsnames.ora'))})",
+            )
+        else:
+            Logic.logMessage(
+                "INFO",
+                f"oracleConnection.setup: Using TNS_ADMIN {tnsAdmin}",
+            )
 
         # Packaged client is Instant Client Basic Lite (raw files, no installer).
         # Full Basic library names still count as ready.
@@ -792,40 +856,6 @@ def ensureOracleClientReady():
                         f"({_safeErrorText(e)}); continuing in thin mode",
                     )
 
-        # TNS_ADMIN / sqlnet.ora: env wins; else prefer packaged network/admin
-        envTns = os.environ.get('TNS_ADMIN')
-        resourceAdmin = Logic.resourcePath('oracle/network/admin')
-        packagedAdminExists = os.path.isdir(resourceAdmin)
-
-        if envTns:
-            if Config.debug:
-                Logic.logMessage(
-                    "DEBUG",
-                    f"oracleConnection.setup: Using env TNS_ADMIN: {envTns} "
-                    f"(sqlnet.ora from that directory if present)",
-                )
-        elif packagedAdminExists:
-            os.environ['TNS_ADMIN'] = resourceAdmin
-            sqlnetPath = os.path.join(resourceAdmin, 'sqlnet.ora')
-            if Config.debug:
-                Logic.logMessage(
-                    "DEBUG",
-                    f"oracleConnection.setup: Set TNS_ADMIN to packaged path: {resourceAdmin} "
-                    f"(sqlnet.ora present={os.path.isfile(sqlnetPath)})",
-                )
-            else:
-                Logic.logMessage(
-                    "INFO",
-                    f"oracleConnection.setup: Using packaged sqlnet.ora/TNS_ADMIN at {resourceAdmin}",
-                )
-        else:
-            if Config.debug:
-                Logic.logMessage(
-                    "DEBUG",
-                    "oracleConnection.setup: No TNS_ADMIN env and no packaged "
-                    "oracle/network/admin — Oracle default name resolution only",
-                )
-
         clientInitialized = True
         ingestSqlnetLog()
 
@@ -840,14 +870,10 @@ def sqlnetWalletMethod() -> Optional[str]:
     if _walletMethodCache is not None:
         return _walletMethodCache or None
 
+    # sqlnet.ora comes from the same folder as tnsnames.ora
     candidates = []
-    envTns = os.environ.get("TNS_ADMIN")
-    if envTns:
-        candidates.append(os.path.join(envTns, "sqlnet.ora"))
     try:
-        candidates.append(
-            os.path.join(Logic.resourcePath("oracle/network/admin"), "sqlnet.ora")
-        )
+        candidates.append(os.path.join(resolveTnsAdmin(), "sqlnet.ora"))
     except Exception:
         pass
     method = None

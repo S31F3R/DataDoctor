@@ -1,6 +1,6 @@
 # Overlay and Delta
 
-On the Query window, **Overlay** and **Delta** apply to **pairs** in the query list (1–2, 3–4, …).
+On the Query window, **Overlay Pairs** and **Display Deltas** apply to **pairs** in the query list (1–2, 3–4, …). **Raw Data** and **QAQC** sit on the next row. All four default **unchecked** and are stored on a Quick Look the same way.
 
 ## Overlay
 
