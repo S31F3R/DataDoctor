@@ -2,7 +2,7 @@
 
 Module app
     Function HasUpdateZip(root As String) As Boolean
-        For Each name As String In New String() {"Update", "update"}
+        For Each name As String In New String() {"updates", "Update", "update"}
             Dim dir As String = Path.Combine(root, name)
             Try
                 If Directory.Exists(dir) AndAlso Directory.EnumerateFiles(dir, "*.zip").Any() Then

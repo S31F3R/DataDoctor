@@ -30,7 +30,7 @@ Data Doctor.exe
 applyUpdate.cmd
 README.txt
 UPDATE.txt
-Update\                 (includes a DataDoctor-Python-*.zip for first run)
+updates\                (includes a DataDoctor-Python-*.zip for first run)
 pythonFiles\
   app.pyw        (DataDoctor.py renamed — launcher always starts this name)
   python-embed\  (official Windows embeddable Python 3.14 — no system Python)
@@ -44,7 +44,7 @@ pythonFiles\
 ```
 
 1. Unzip to a writable folder.
-2. Double-click **Data Doctor.exe**. If `Update\` has a zip, the launcher starts **applyUpdate.cmd** and exits (so the `.exe` can be replaced). applyUpdate pip-installs into `python-embed`, merges the dictionary, then starts **Data Doctor.exe** again, which then opens `app.pyw`.
+2. Double-click **Data Doctor.exe**. If `updates\` has a zip, the launcher starts **applyUpdate.cmd** and exits (so the `.exe` can be replaced). applyUpdate pip-installs into `python-embed`, merges the dictionary, then starts **Data Doctor.exe** again, which then opens `app.pyw`.
 3. Or run **applyUpdate.cmd** yourself — it starts the exe when it finishes.
 
 No system Python and no `.venv`. `python-embed` is the interpreter.
@@ -70,7 +70,7 @@ Needs a matching tool under `scripts/appimagetool/` from [appimagetool releases]
 ## macOS
 
 1. Unzip `DataDoctor-macOS-*.zip`.
-2. Double-click **Data Doctor.command** (needs Python 3.14 or 3.13 and a venv or system env with requirements). Live app is `pythonFiles/DataDoctor.py`. If `Update/` has a zip, the command runs `applyUpdate.sh` then applyUpdate starts the command again.
+2. Double-click **Data Doctor.command** (needs Python 3.14 or 3.13 and a venv or system env with requirements). Live app is `pythonFiles/DataDoctor.py`. If `updates/` has a zip, the command runs `applyUpdate.sh` then applyUpdate starts the command again.
 
 A portable zip can be built with `python scripts/packageMac.py`. A native `.app` requires `python scripts/packageMac.py --app` on macOS with PyInstaller.
 

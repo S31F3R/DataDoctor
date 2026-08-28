@@ -40,9 +40,9 @@ python DataDoctor.py
 Unzip a **Windows** package and double-click `Data Doctor.exe`.
 
 - No system Python. The zip ships Python 3.14 under `pythonFiles\python-embed\`
-- First run: `Data Doctor.exe` applies the Python zip in `Update\` (pip into python-embed), or run `applyUpdate.cmd` yourself
+- First run: `Data Doctor.exe` applies the Python zip in `updates\` (pip into python-embed), or run `applyUpdate.cmd` yourself
 - Live app lives under `pythonFiles\` (`app.pyw`, copied from `DataDoctor.py`)
-- Later code updates: drop `DataDoctor-Python-*.zip` in `Update\` and restart (or run `applyUpdate.cmd`)
+- Later code updates: drop `DataDoctor-Python-*.zip` in `updates\` and restart (or run `applyUpdate.cmd`)
 - Coming from 3.0.x (system Python / `.venv`): use `DataDoctor-Windows-*.zip`, close Data Doctor, then run `applyUpdate.cmd` so the launcher can be replaced
 
 ### Linux (AppImage)

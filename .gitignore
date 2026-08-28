@@ -58,6 +58,7 @@ secret.grok
 
 # Local update downloads (launcher / AppImage / dev)
 Update/
+updates/
 
 # Visual Studio launcher build
 launcher/src/bin/

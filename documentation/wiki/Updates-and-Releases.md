@@ -31,7 +31,7 @@ Tags use `vMAJOR.MINOR.PATCH`. Release candidates and betas use `vX.Y.Z-rc.N` or
 ### Already on bundled Python 3.14 (`pythonFiles\python-embed\`)
 
 1. Close Data Doctor (or leave it closed).
-2. Put `DataDoctor-Python-*.zip` in the install’s `Update\` folder (next to `Data Doctor.exe`).
+2. Put `DataDoctor-Python-*.zip` in the install’s `updates\` folder (next to `Data Doctor.exe`).
 3. Restart **Data Doctor.exe**, or run `applyUpdate.cmd`. The exe starts the cmd and exits so launcher files can be replaced; the cmd starts the exe when it finishes.
 
 That refreshes `pythonFiles` code (`app.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary, pip-installs into `python-embed`, and deletes the zip. `pythonFiles\certs\` is left alone so Aquarius certificates survive updates.
@@ -42,7 +42,7 @@ The old zip needed Python on PATH. 3.1+ ships Python 3.14 next to the app and a 
 
 In-app update on this hop downloads **`DataDoctor-Windows-*.zip`**, not the Python zip.
 
-1. Download from the update prompt (zip lands in `Update\`).
+1. Download from the update prompt (zip lands in `updates\`).
 2. Restart **Data Doctor.exe**. It starts `applyUpdate.cmd` and exits so the `.exe` is not locked.
 3. applyUpdate replaces the launcher, installs `pythonFiles\python-embed\` and `pythonFiles\app.pyw`, merges `bunker.db` (including from leftover `Project Files\`), pip-installs, then starts Data Doctor again.
 
@@ -62,7 +62,7 @@ The raw Python zip ships `DataDoctor.py`. On Windows `applyUpdate` installs it a
 
 ## Apply on AppImage
 
-Download the new AppImage next to the current one (or into `Update/`). Use **Quit and apply** from the update prompt, or `scripts/applyAppImageUpdate.sh`.
+Download the new AppImage next to the current one (or into `updates/`). Use **Quit and apply** from the update prompt, or `scripts/applyAppImageUpdate.sh`.
 
 ## Apply on macOS
 
@@ -70,4 +70,4 @@ Replace the unzipped tree or run `Data Doctor.command` from the new zip.
 
 ## From source
 
-A download accepted from the update prompt lands in an `Update/` folder next to the project or install root. Apply it the same way as the matching package type.
+A download accepted from the update prompt lands in an `updates/` folder next to the project or install root. Apply it the same way as the matching package type.

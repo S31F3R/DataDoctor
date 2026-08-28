@@ -75,8 +75,9 @@ fi
 mv "$NEW" "$CURRENT"
 chmod +x "$CURRENT" 2>/dev/null || true
 
-UPD_DIR="$(dirname "$CURRENT")/Update"
+UPD_DIR="$(dirname "$CURRENT")/updates"
 rm -f "$UPD_DIR/pending.json" 2>/dev/null || true
+rm -f "$(dirname "$CURRENT")/Update/pending.json" 2>/dev/null || true
 
 echo "AppImage updated: $CURRENT"
 echo "Previous copy (if any): ${CURRENT}.bak"

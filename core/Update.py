@@ -1,5 +1,5 @@
 # Update.py
-# Check GitHub Releases, download payload into Update/, help apply (launcher or AppImage).
+# Check GitHub Releases, download payload into updates/, help apply (launcher or AppImage).
 #
 # Stable channel → latest non-prerelease on GitHub.
 # Beta channel   → latest release including GitHub "pre-release" and/or -rc./-beta. tags.
@@ -134,7 +134,7 @@ def detectInstallKind() -> str:
 
 
 def installRoot() -> Path | None:
-    """Directory that should hold Update/ (and apply scripts for launcher)."""
+    """Directory that should hold updates/ (and apply scripts for launcher)."""
     kind = detectInstallKind()
     if kind == "appimage":
         appimage = os.environ.get("APPIMAGE")
@@ -152,15 +152,32 @@ def installRoot() -> Path | None:
         return root.parent
     if (root / "pythonFiles").is_dir() or (root / "Project Files").is_dir():
         return root
-    # Dev: project root is fine for a local Update/ folder
+    # Dev: project root is fine for a local updates/ folder
     return root
 
 
 def updateDir() -> Path | None:
+    """
+    Canonical drop folder is updates/.
+    3.0.x Data Doctor.exe only looks in Update\\, so until python-embed
+    exists we still write there.
+    """
     root = installRoot()
     if root is None:
         return None
-    d = root / "Update"
+    embed = (
+        (root / "pythonFiles" / "python-embed" / "pythonw.exe").is_file()
+        or (root / "Project Files" / "python-embed" / "pythonw.exe").is_file()
+    )
+    if (root / "Data Doctor.exe").is_file() and not embed:
+        for name in ("Update", "update", "updates"):
+            d = root / name
+            if d.is_dir():
+                return d
+        d = root / "Update"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    d = root / "updates"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -184,7 +201,7 @@ def windowsNeedsLauncherRefresh() -> bool:
 
 _APPLY_UPDATE_CMD = "\r\n".join([
     "@echo off",
-    "REM Apply newest zip in Update\\ (code + bunker merge + pip into python-embed)",
+    "REM Apply newest zip in updates\\ (code + bunker merge + pip into python-embed)",
     "setlocal",
     'cd /d "%~dp0"',
     'set "PY="',
@@ -483,8 +500,8 @@ def fetchLatestRelease(
 
 def downloadReleaseAsset(info: dict, destDir: Path | None = None, cancelled=None) -> Path | None:
     """
-    Download the release asset into Update/.
-    For AppImage zips, extract the .AppImage into Update/.
+    Download the release asset into updates/.
+    For AppImage zips, extract the .AppImage into updates/.
     Returns path to the primary file to apply, or None.
     """
     url = info.get("asset_url")
@@ -739,8 +756,9 @@ fi
 mv "$NEW" "$CURRENT"
 chmod +x "$CURRENT" 2>/dev/null || true
 # Drop pending marker if present
-UPD_DIR="$(dirname "$CURRENT")/Update"
+UPD_DIR="$(dirname "$CURRENT")/updates"
 rm -f "$UPD_DIR/pending.json" 2>/dev/null || true
+rm -f "$(dirname "$CURRENT")/Update/pending.json" 2>/dev/null || true
 echo "AppImage updated: $CURRENT"
 '''
 
@@ -819,7 +837,7 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
                 "3.1+ needs the Windows package (DataDoctor-Windows-*.zip), which\n"
                 "replaces Data Doctor.exe and installs Python 3.14 under\n"
                 "pythonFiles\\python-embed\\.\n\n"
-                "Download that zip from GitHub Releases into Update\\, then\n"
+                "Download that zip from GitHub Releases into updates\\, then\n"
                 "restart Data Doctor. The launcher runs applyUpdate.cmd and exits\n"
                 "so the .exe can be replaced; applyUpdate starts the app afterward.",
             )
@@ -986,7 +1004,7 @@ def _promptUpdate(parent, info: dict) -> None:
     if kind == "appimage":
         lines.append("")
         lines.append(
-            "Download will place the new AppImage in an Update/ folder next to "
+            "Download will place the new AppImage in an updates/ folder next to "
             "this AppImage. You can then replace the current file (the app will "
             "offer to quit and apply, or you can run applyAppImageUpdate.sh)."
         )
@@ -995,19 +1013,19 @@ def _promptUpdate(parent, info: dict) -> None:
         if needsWindowsZip:
             lines.append(
                 "This version ships a new Windows launcher and bundled Python 3.14. "
-                "Download the Windows zip into Update\\, then restart Data Doctor. "
+                "Download the Windows zip into updates\\, then restart Data Doctor. "
                 "The launcher starts applyUpdate.cmd and exits so the .exe can be replaced; "
                 "applyUpdate.cmd starts Data Doctor again when it finishes."
             )
         else:
             lines.append(
-                "Download will place a zip in Update/. Restart Data Doctor "
+                "Download will place a zip in updates/. Restart Data Doctor "
                 "to apply the update."
             )
     else:
         lines.append("")
         lines.append(
-            "Dev/source install: the package will download into Update/ under "
+            "Dev/source install: the package will download into updates/ under "
             "the project root. Apply manually if desired."
         )
 

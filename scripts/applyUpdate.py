@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Apply a DataDoctor zip from the install's Update/ folder.
+Apply a DataDoctor zip from the install's updates/ folder.
 
 Expected install layout (Windows launcher package):
   <install root>/
     Data Doctor.exe | Data Doctor.command | …
     applyUpdate.cmd | applyUpdate.sh | this script (or under pythonFiles/scripts/)
-    Update/                 ← DataDoctor-Python-*.zip (code) or
+    updates/                ← DataDoctor-Python-*.zip (code) or
                               DataDoctor-Windows-*.zip (launcher + python-embed)
+                              (3.0.x leftover: Update/)
     pythonFiles/            ← Windows (generic launcher: app.pyw)
       app.pyw               ← DataDoctor.py renamed at package/apply time
       python-embed/         ← bundled CPython 3.14; no system Python
@@ -17,8 +18,8 @@ Expected install layout (Windows launcher package):
     Project Files/          ← 3.0.x leftover; still accepted for migrate
 
 What this does:
-  1) Pick a zip in Update/ (Windows zip if python-embed is missing, else Python zip)
-  2) Extract to a temp dir under Update/
+  1) Pick a zip in updates/ (Windows zip if python-embed is missing, else Python zip)
+  2) Extract to a temp dir under updates/
   3) Copy DataDoctor.py as app.pyw on Windows (pythonFiles/),
      plus ui/, core/* (except bunker.db), quickLook/, requirements
   4) Windows zip also replaces Data Doctor.exe and installs python-embed
@@ -34,7 +35,7 @@ Does NOT:
 
 Run from install root:
   python applyUpdate.py
-  python applyUpdate.py --zip Update/DataDoctor-Python-20260808.zip
+  python applyUpdate.py --zip updates/DataDoctor-Python-20260808.zip
   python "pythonFiles/scripts/applyUpdate.py"
 """
 
@@ -53,6 +54,8 @@ WIN_CODE_DIR = "pythonFiles"
 LEGACY_CODE_DIR = "Project Files"
 CODE_DIR_NAMES = (WIN_CODE_DIR, LEGACY_CODE_DIR)
 WIN_APP_ENTRY = "app.pyw"
+UPDATES_DIR = "updates"
+LEGACY_UPDATES_DIRS = ("Update", "update")
 
 
 def findInstallRoot(start: Path) -> Path:
@@ -98,6 +101,38 @@ def payloadCodeDir(payload: Path) -> Path:
     return payload
 
 
+def allUpdatesDirs(installRoot: Path) -> list[Path]:
+    """Canonical updates/ plus leftover Update/ from 3.0.x (Windows is case-insensitive)."""
+    found: list[Path] = []
+    seen: set[str] = set()
+    for name in (UPDATES_DIR,) + LEGACY_UPDATES_DIRS:
+        d = installRoot / name
+        if not d.is_dir():
+            continue
+        try:
+            key = os.path.normcase(str(d.resolve()))
+        except Exception:
+            key = os.path.normcase(str(d))
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append(d)
+    return found
+
+
+def resolveUpdatesDir(installRoot: Path, create: bool = True) -> Path:
+    for d in allUpdatesDirs(installRoot):
+        if d.name == UPDATES_DIR:
+            return d
+    existing = allUpdatesDirs(installRoot)
+    if existing:
+        return existing[0]
+    d = installRoot / UPDATES_DIR
+    if create:
+        d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def pickNewestZip(updateDir: Path) -> Path | None:
     if not updateDir.is_dir():
         return None
@@ -109,15 +144,15 @@ def pickNewestZip(updateDir: Path) -> Path | None:
     return zips[0] if zips else None
 
 
-def pickUpdateZip(updateDir: Path, projectFiles: Path) -> Path | None:
+def pickUpdateZip(installRoot: Path, projectFiles: Path) -> Path | None:
     """
     Prefer DataDoctor-Windows-*.zip when python-embed is missing (3.0.x hop).
     Otherwise prefer DataDoctor-Python-*.zip so a leftover Windows zip is not
     re-applied on every code update.
     """
-    if not updateDir.is_dir():
-        return None
-    zips = [p for p in updateDir.glob("*.zip") if p.is_file()]
+    zips: list[Path] = []
+    for d in allUpdatesDirs(installRoot):
+        zips.extend(p for p in d.glob("*.zip") if p.is_file())
     if not zips:
         return None
     newest = lambda xs: max(xs, key=lambda p: p.stat().st_mtime)
@@ -499,7 +534,7 @@ def writeApplyUpdateCmd(installRoot: Path) -> None:
     cmd = installRoot / "applyUpdate.cmd"
     body = "\r\n".join([
         "@echo off",
-        "REM Apply newest zip in Update\\ (code + bunker merge + pip into python-embed)",
+        "REM Apply newest zip in updates\\ (code + bunker merge + pip into python-embed)",
         "setlocal",
         'cd /d "%~dp0"',
         'set "PY="',
@@ -632,8 +667,7 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
         print(f"ERROR: zip not found: {zipPath}", file=sys.stderr)
         return 1
 
-    updateDir = installRoot / "Update"
-    updateDir.mkdir(parents=True, exist_ok=True)
+    updateDir = resolveUpdatesDir(installRoot, create=True)
     extractDir = Path(tempfile.mkdtemp(prefix="dd-update-", dir=str(updateDir)))
     print(f"Extracting {zipPath.name} → {extractDir}")
 
@@ -769,11 +803,11 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Apply DataDoctor Python zip from Update/")
+    parser = argparse.ArgumentParser(description="Apply DataDoctor Python zip from updates/")
     parser.add_argument(
         "--zip",
         default=None,
-        help="Path to Python zip (default: newest *.zip in Update/)",
+        help="Path to Python zip (default: newest *.zip in updates/)",
     )
     parser.add_argument(
         "--install-root",
@@ -785,7 +819,7 @@ def main() -> int:
         "--keep-extract",
         dest="keepExtract",
         action="store_true",
-        help="Keep extracted files under Update/ for debugging",
+        help="Keep extracted files under updates/ for debugging",
     )
     args = parser.parse_args()
 
@@ -796,14 +830,13 @@ def main() -> int:
         installRoot = findInstallRoot(Path(__file__).resolve().parent)
 
     print(f"Install root: {installRoot}")
-    updateDir = installRoot / "Update"
-    updateDir.mkdir(parents=True, exist_ok=True)
+    updateDir = resolveUpdatesDir(installRoot, create=True)
 
     if args.zip:
         zipPath = Path(args.zip).expanduser().resolve()
     else:
         projectFiles = resolveCodeDir(installRoot)
-        zipPath = pickUpdateZip(updateDir, projectFiles)
+        zipPath = pickUpdateZip(installRoot, projectFiles)
         if zipPath is None:
             print(
                 f"ERROR: No *.zip found in {updateDir}\n"

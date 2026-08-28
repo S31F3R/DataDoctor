@@ -202,7 +202,7 @@ Mark beta/RC releases as Pre-release on GitHub.
 
 UPDATING A LAUNCHER INSTALL
 ---------------------------
-Already on python-embed (3.1+): drop this zip into Update\\ and run
+Already on python-embed (3.1+): drop this zip into updates\\ and run
 applyUpdate.cmd (or restart Data Doctor.exe).
 
 3.0.x Windows (.venv / system Python): apply this zip first, then download
@@ -223,7 +223,7 @@ zip for that hop.
 
     sizeKiB = outZip.stat().st_size // 1024
     print(f"Wrote {outZip} ({sizeKiB} KiB)")
-    print("Raw Python tree only. Launcher installs apply this via Update/ + applyUpdate.")
+    print("Raw Python tree only. Launcher installs apply this via updates/ + applyUpdate.")
 
     if not args.keepBuild and stage.exists():
         shutil.rmtree(stage, ignore_errors=True)

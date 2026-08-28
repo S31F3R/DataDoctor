@@ -51,7 +51,7 @@ Old 3.0.x `applyUpdate.py` only understands a Python zip (`DataDoctor.py` at the
 2. Old applyUpdate copies `core/` (including `core/applyUpdate.py` shipped in the Python zip).
 3. New `DataDoctor.py` moves that file to `pythonFiles\scripts\applyUpdate.py` (or `Project Files\scripts\` on 3.0.x) and rewrites `applyUpdate.cmd`.
 4. New updater sees no `python-embed\pythonw.exe` and offers **`DataDoctor-Windows-*.zip`**.
-5. User **closes** Data Doctor (the running `.exe` cannot replace itself) and double-clicks `applyUpdate.cmd`.
+5. User restarts Data Doctor. The launcher starts applyUpdate.cmd and exits so the `.exe` can be replaced.
 
 Do not tell them to "restart" for that hop.
 
@@ -60,7 +60,7 @@ Do not tell them to "restart" for that hop.
 ```
 Data Doctor.exe
 applyUpdate.cmd
-Update\                    (first-install Python zip)
+updates\                   (first-install Python zip)
 pythonFiles\
   app.pyw
   python-embed\            (python.exe, pythonw.exe, python314.dll, vcruntime140.dll, …)

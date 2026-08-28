@@ -8,7 +8,7 @@ Zip layout (launcher is the zip root):
   README.txt               (generated each run)
   UPDATE.txt               (how to apply updates / merge dictionary)
   LICENSE
-  Update/                  (drop DataDoctor-Python-*.zip here)
+  updates/                 (drop DataDoctor-Python-*.zip here)
   pythonFiles/
     app.pyw                (DataDoctor.py renamed — generic launcher starts this)
     python-embed/          (official Windows embeddable Python 3.14 — no system Python)
@@ -169,7 +169,7 @@ FIRST RUN
 ---------
 1) Unzip this package to a folder you can write to (e.g. Documents\\DataDoctor).
 2) Double-click "Data Doctor.exe".
-   If Update\\ contains a DataDoctor-Python-*.zip, the launcher runs
+   If updates\\ contains a DataDoctor-Python-*.zip, the launcher runs
    applyUpdate.cmd first (pip-installs requirements into python-embed,
    merges the data dictionary), then starts the app.
 3) Or run applyUpdate.cmd yourself, then Data Doctor.exe.
@@ -179,11 +179,11 @@ UPDATING AN EXISTING INSTALL
 See UPDATE.txt next to this file.
 
   Code-only (already on bundled Python 3.14):
-    Drop DataDoctor-Python-*.zip into Update\\ and run applyUpdate.cmd
-    (or just restart Data Doctor.exe — it applies zips in Update\\).
+    Drop DataDoctor-Python-*.zip into updates\\ and run applyUpdate.cmd
+    (or just restart Data Doctor.exe — it applies zips in updates\\).
 
   Launcher + bundled Python (first 3.1 / coming from a 3.0.x .venv install):
-    Drop DataDoctor-Windows-*.zip into Update\\ and run applyUpdate.cmd.
+    Drop DataDoctor-Windows-*.zip into updates\\ and run applyUpdate.cmd.
     That replaces Data Doctor.exe and installs python-embed. Your
     live bunker.db (pythonFiles\\core\\ or leftover Project Files\\core\\)
     is merged, not overwritten.
@@ -215,9 +215,9 @@ def writeUpdateReadme(stage: Path):
 CODE UPDATE (already on bundled python-embed)
 --------------------------------------------
 1) Close Data Doctor.
-2) Drop DataDoctor-Python-*.zip into Update\\
+2) Drop DataDoctor-Python-*.zip into updates\\
 3) Double-click applyUpdate.cmd  (or restart Data Doctor.exe — it applies
-   zips in Update\\ first).
+   zips in updates\\ first).
 4) applyUpdate refreshes pythonFiles code (app.pyw, ui/, core/*
    except live bunker.db), merges the dictionary, pip-installs into
    python-embed, and deletes the zip.
@@ -229,7 +229,7 @@ Python 3.14 under pythonFiles\\python-embed\\ and a launcher that starts
 pythonFiles\\app.pyw.
 
 1) Close Data Doctor.
-2) Drop DataDoctor-Windows-*.zip (the full Windows package) into Update\\
+2) Drop DataDoctor-Windows-*.zip (the full Windows package) into updates\\
 3) Double-click applyUpdate.cmd
 4) That replaces Data Doctor.exe / applyUpdate.cmd and installs python-embed.
    bunker.db is merged, not overwritten. certs\\ is left alone.
@@ -347,8 +347,8 @@ def main():
     else:
         print("WARN: applyUpdate.py not found", file=sys.stderr)
 
-    # Empty Update/ drop folder for DataDoctor-Python-*.zip (from packagePython.py)
-    updateDrop = stage / "Update"
+    # Empty updates/ drop folder for DataDoctor-Python-*.zip (from packagePython.py)
+    updateDrop = stage / "updates"
     updateDrop.mkdir(parents=True, exist_ok=True)
     (updateDrop / "README.txt").write_text(
         "Code update (already on python-embed): drop DataDoctor-Python-*.zip here, "
@@ -423,7 +423,7 @@ def main():
     writeRootCmd(
         "applyUpdate.cmd",
         "pythonFiles\\scripts\\applyUpdate.py",
-        "Apply newest zip in Update\\ (code refresh + bunker merge + pip into python-embed)",
+        "Apply newest zip in updates\\ (code refresh + bunker merge + pip into python-embed)",
     )
 
     embedOk = installPythonEmbed(root, projectFiles / "python-embed")

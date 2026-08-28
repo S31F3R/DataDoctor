@@ -443,7 +443,7 @@ def main() -> int:
             shutil.copy2(applySrc, dest)
             dest.chmod(dest.stat().st_mode | 0o111)
             print(f"Wrote {dest}")
-        updateDrop = side / "Update"
+        updateDrop = side / "updates"
         updateDrop.mkdir(parents=True, exist_ok=True)
         (updateDrop / "README.txt").write_text(
             "App downloads a new .AppImage here on update.\n"

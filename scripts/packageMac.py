@@ -125,7 +125,7 @@ def writeUpdateReadme(stage: Path):
 FULL APP UPDATE
 ---------------
 1) Close DataDoctor.
-2) Drop a DataDoctor-Python-*.zip (from packagePython.py) into Update/
+2) Drop a DataDoctor-Python-*.zip (from packagePython.py) into updates/
 3) Run:
      ./applyUpdate.sh
    Or:
@@ -148,9 +148,9 @@ set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
-# Zip in Update/ → applyUpdate.sh then exit. applyUpdate.py starts this
+# Zip in updates/ → applyUpdate.sh then exit. applyUpdate.py starts this
 # .command again when the zip is done.
-if { ls "$ROOT/Update"/*.zip >/dev/null 2>&1 || ls "$ROOT/update"/*.zip >/dev/null 2>&1; } \
+if { ls "$ROOT/updates"/*.zip >/dev/null 2>&1 || ls "$ROOT/Update"/*.zip >/dev/null 2>&1 || ls "$ROOT/update"/*.zip >/dev/null 2>&1; } \
    && [ -x "$ROOT/applyUpdate.sh" ]; then
   exec "$ROOT/applyUpdate.sh"
 fi
@@ -259,7 +259,7 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
     else:
         print("WARN: core/bunker.db missing — temp merge payload not packaged", file=sys.stderr)
 
-    updateDrop = stage / "Update"
+    updateDrop = stage / "updates"
     updateDrop.mkdir(parents=True, exist_ok=True)
     (updateDrop / "README.txt").write_text(
         "Drop a DataDoctor-Python-*.zip here (from packagePython.py), then run applyUpdate.sh from the install root.\n",

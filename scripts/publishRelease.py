@@ -742,7 +742,7 @@ def defaultNotes(version: str, channel: str, files: list[Path]) -> str:
         lines.append(f"- `{p.name}`")
     lines.extend([
         "",
-        "Windows: already on python-embed, drop `DataDoctor-Python-*.zip` into `Update\\` "
+        "Windows: already on python-embed, drop `DataDoctor-Python-*.zip` into `updates\\` "
         "and run `applyUpdate.cmd`. Coming from 3.0.x, use `DataDoctor-Windows-*.zip`, "
         "close Data Doctor, then run `applyUpdate.cmd` (replaces the launcher + Python 3.14).",
         "Linux: download the AppImage for your CPU.",
