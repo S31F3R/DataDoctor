@@ -15,7 +15,7 @@ Contents = what you need to run the app with a local Python:
   scripts/applyUpdate.py
 
 3.0.x Windows applyUpdate copies core/* but not scripts/. core/applyUpdate.py
-is that bootstrap: DataDoctor.py moves it to Project Files/scripts/ so the
+is that bootstrap: DataDoctor.py moves it to pythonFiles/scripts/ (or Project Files/) so the
 next hop (DataDoctor-Windows-*.zip) can replace the launcher + python-embed.
 
 Run from project root:

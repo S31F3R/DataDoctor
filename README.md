@@ -39,9 +39,9 @@ python DataDoctor.py
 
 Unzip a **Windows** package and double-click `Data Doctor.exe`.
 
-- No system Python. The zip ships Python 3.14 under `Project Files\python-embed\`
+- No system Python. The zip ships Python 3.14 under `pythonFiles\python-embed\`
 - First run: `Data Doctor.exe` applies the Python zip in `Update\` (pip into python-embed), or run `applyUpdate.cmd` yourself
-- Live app lives under `Project Files\` (`DataDoctor.pyw`)
+- Live app lives under `pythonFiles\` (`app.pyw`, copied from `DataDoctor.py`)
 - Later code updates: drop `DataDoctor-Python-*.zip` in `Update\` and restart (or run `applyUpdate.cmd`)
 - Coming from 3.0.x (system Python / `.venv`): use `DataDoctor-Windows-*.zip`, close Data Doctor, then run `applyUpdate.cmd` so the launcher can be replaced
 
@@ -92,7 +92,7 @@ Config and logs are **per user**, not inside the install folder.
 
 Inside that folder: `user.config`, `logs/app.log`, `quickLook/query/`, `quickLook/sql/`.
 
-The live data dictionary is `core/bunker.db` next to the app (Windows: `Project Files\core\bunker.db`). Do not overwrite it with a packaged copy if the dictionary has local edits — `applyUpdate` merges.
+The live data dictionary is `core/bunker.db` next to the app (Windows: `pythonFiles\core\bunker.db`). Do not overwrite it with a packaged copy if the dictionary has local edits — `applyUpdate` merges.
 
 See [App Data](https://github.com/S31F3R/DataDoctor/wiki/App-Data).
 
@@ -118,7 +118,7 @@ From the project root:
 | Script | Output |
 |--------|--------|
 | `python scripts/publishRelease.py` | Prompts published / rc / beta, builds host-supported assets, optional GitHub upload |
-| `python scripts/packageWindows.py` | Windows launcher zip (`DataDoctor.pyw` under `Project Files/`) |
+| `python scripts/packageWindows.py` | Windows launcher zip (`app.pyw` under `pythonFiles/`) |
 | `python scripts/packagePython.py` | `DataDoctor-Python.zip` (update payload / raw Python) |
 | `python scripts/packageAppImage.py` | `dist/DataDoctor-<arch>-YYYYMMDD.AppImage` |
 | `python scripts/packageMac.py` | macOS zip (`Data Doctor.command`) |

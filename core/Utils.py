@@ -184,6 +184,7 @@ def restartApplication():
                 script + 'w' if not script.endswith('w') else script[:-1],
                 os.path.join(Config.appRoot or '', 'DataDoctor.py'),
                 os.path.join(Config.appRoot or '', 'DataDoctor.pyw'),
+                os.path.join(Config.appRoot or '', 'app.pyw'),
             ):
                 if alt and os.path.isfile(alt):
                     script = os.path.abspath(alt)
@@ -195,7 +196,8 @@ def restartApplication():
             cwd = os.path.dirname(script) or cwd
         if Config.appRoot and os.path.isdir(Config.appRoot):
             if os.path.isfile(os.path.join(Config.appRoot, 'DataDoctor.py')) or \
-               os.path.isfile(os.path.join(Config.appRoot, 'DataDoctor.pyw')):
+               os.path.isfile(os.path.join(Config.appRoot, 'DataDoctor.pyw')) or \
+               os.path.isfile(os.path.join(Config.appRoot, 'app.pyw')):
                 cwd = Config.appRoot
 
         Logic.logMessage(

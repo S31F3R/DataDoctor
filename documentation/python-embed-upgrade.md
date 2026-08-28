@@ -3,7 +3,7 @@
 Windows 3.1+ does **not** need Python on PATH. The launcher starts:
 
 ```
-Project Files\python-embed\pythonw.exe  Project Files\DataDoctor.pyw
+pythonFiles\python-embed\pythonw.exe  pythonFiles\app.pyw
 ```
 
 `Data Doctor.exe` already uses those paths (`launcher/src/App.vb`). A `.venv` is not portable — its `python.exe` is a shim to a machine-level install.
@@ -14,7 +14,7 @@ Project Files\python-embed\pythonw.exe  Project Files\DataDoctor.pyw
 |-------|--------|
 | Embeddable CPython 3.14.7 | `launcher/python-3.14.7-embed-amd64.zip` (extracted at package time) |
 | Launcher source | `launcher/src/App.vb` (rebuild on Windows with `vbc`) |
-| Packager | `scripts/packageWindows.py` → `Project Files\python-embed\` |
+| Packager | `scripts/packageWindows.py` → `pythonFiles\python-embed\` |
 | Apply | `scripts/applyUpdate.py` (pip + site + Windows zip) |
 
 `python-embed` includes `vcruntime140.dll`. Pip/site-packages are installed on the user's PC (first `applyUpdate.cmd`), not stored in git. Linux/mac still use a venv.
@@ -49,7 +49,7 @@ Old 3.0.x `applyUpdate.py` only understands a Python zip (`DataDoctor.py` at the
 
 1. In-app update on 3.0.x still downloads the **Python** zip (old updater).
 2. Old applyUpdate copies `core/` (including `core/applyUpdate.py` shipped in the Python zip).
-3. New `DataDoctor.py` moves that file to `Project Files\scripts\applyUpdate.py` and rewrites `applyUpdate.cmd`.
+3. New `DataDoctor.py` moves that file to `pythonFiles\scripts\applyUpdate.py` (or `Project Files\scripts\` on 3.0.x) and rewrites `applyUpdate.cmd`.
 4. New updater sees no `python-embed\pythonw.exe` and offers **`DataDoctor-Windows-*.zip`**.
 5. User **closes** Data Doctor (the running `.exe` cannot replace itself) and double-clicks `applyUpdate.cmd`.
 
@@ -61,8 +61,8 @@ Do not tell them to "restart" for that hop.
 Data Doctor.exe
 applyUpdate.cmd
 Update\                    (first-install Python zip)
-Project Files\
-  DataDoctor.pyw
+pythonFiles\
+  app.pyw
   python-embed\            (python.exe, pythonw.exe, python314.dll, vcruntime140.dll, …)
   core\  ui\  quickLook\  oracle\  certs\  scripts\
 ```
@@ -74,4 +74,4 @@ cd launcher\src
 vbc /nologo /target:winexe /out:"..\Data Doctor.exe" /win32icon:..\DataDoctor.ico App.vb
 ```
 
-`documentation/app.vb` is an old draft with the wrong paths (`pythonFiles\app.pyw`). Ignore it.
+Launcher source is `launcher/src/` (generic: `pythonFiles\app.pyw`). Compile on Windows; this Linux box has no `vbc`.

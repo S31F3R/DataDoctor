@@ -77,4 +77,4 @@ Limits come from that series’ dictionary row. Blank limit → that check is of
 - **Add row** / **Delete row**
 - Combo columns size to contents
 
-The live file is next to the app (`Project Files\core\bunker.db` on Windows). Packaged `temp/bunker.db` is only a merge source for updates.
+The live file is next to the app (`pythonFiles\core\bunker.db` on Windows). Packaged `temp/bunker.db` is only a merge source for updates.

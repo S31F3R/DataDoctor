@@ -1898,7 +1898,7 @@ if __name__ == '__main__':
         iconCandidates = (
             icoPath,
 
-            # Same folder as DataDoctor.pyw when packaged on Windows
+            # Same folder as app.pyw / DataDoctor.pyw when packaged on Windows
             Logic.resourcePath('DataDoctor.ico'),
             Logic.resourcePath('ui/icons/DataDoctor.png'),
         )

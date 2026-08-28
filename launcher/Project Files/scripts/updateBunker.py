@@ -89,6 +89,7 @@ def findDefaultPaths():
 
     candidatesPackaged = [
         projectFiles / "temp" / "bunker.db",
+        installRoot / "pythonFiles" / "temp" / "bunker.db",
         installRoot / "Project Files" / "temp" / "bunker.db",
         # Legacy fallbacks if someone still drops packaged DB in core/
         projectFiles / "core" / "bunker.db.packaged",
@@ -96,6 +97,7 @@ def findDefaultPaths():
     ]
     candidatesUser = [
         projectFiles / "core" / "bunker.db",
+        installRoot / "pythonFiles" / "core" / "bunker.db",
         installRoot / "Project Files" / "core" / "bunker.db",
         Path(os.environ.get("APPDATA", "")) / "Data Doctor" / "bunker.db",
         Path(os.environ.get("LOCALAPPDATA", "")) / "Data Doctor" / "bunker.db",
@@ -117,9 +119,9 @@ def cleanupTempFolder(packagedPath: Path):
         if tempDir.name.lower() != "temp":
             return
         # Only remove temp if it sits under Project Files
-        if tempDir.parent.name.lower() not in ("project files", "projectfiles"):
-            # Still allow plain "temp" under Project Files even if name casing differs
-            if "project" not in tempDir.parent.name.lower():
+        parentName = tempDir.parent.name.lower()
+        if parentName not in ("pythonfiles", "project files", "projectfiles"):
+            if "project" not in parentName and "python" not in parentName:
                 return
         if packagedPath.is_file():
             packagedPath.unlink()

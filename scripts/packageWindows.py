@@ -9,8 +9,8 @@ Zip layout (launcher is the zip root):
   UPDATE.txt               (how to apply updates / merge dictionary)
   LICENSE
   Update/                  (drop DataDoctor-Python-*.zip here)
-  Project Files/
-    DataDoctor.pyw
+  pythonFiles/
+    app.pyw                (DataDoctor.py renamed — generic launcher starts this)
     python-embed/          (official Windows embeddable Python 3.14 — no system Python)
     core/                  (live bunker.db stays here for the user)
     ui/
@@ -25,7 +25,7 @@ package time. Pip/site-packages are installed on the user's PC (first
 applyUpdate.cmd), not stored in git.
 
 Note: root updateBunker.cmd is intentionally NOT packaged — applyUpdate.cmd
-merges bunker.db. Dictionary-only merges use Project Files/scripts/updateBunker.py.
+merges bunker.db. Dictionary-only merges use pythonFiles/scripts/updateBunker.py.
 
 Run from project root:
   python scripts/packageWindows.py
@@ -129,7 +129,7 @@ def installPythonEmbed(root: Path, dest: Path) -> bool:
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True)
-    print(f"Extracting {zpath.name} → Project Files/python-embed/")
+    print(f"Extracting {zpath.name} → pythonFiles/python-embed/")
     with zipfile.ZipFile(zpath) as zf:
         zf.extractall(dest)
     enableEmbedSite(dest)
@@ -163,7 +163,7 @@ REQUIREMENTS
 ------------
 - Windows 10/11 (64-bit)
 - No system Python install is required. This zip ships Python 3.14
-  (Project Files\\python-embed\\).
+  (pythonFiles\\python-embed\\).
 
 FIRST RUN
 ---------
@@ -185,19 +185,20 @@ See UPDATE.txt next to this file.
   Launcher + bundled Python (first 3.1 / coming from a 3.0.x .venv install):
     Drop DataDoctor-Windows-*.zip into Update\\ and run applyUpdate.cmd.
     That replaces Data Doctor.exe and installs python-embed. Your
-    Project Files\\core\\bunker.db is merged, not overwritten.
+    live bunker.db (pythonFiles\\core\\ or leftover Project Files\\core\\)
+    is merged, not overwritten.
 
   Do NOT copy a zip's core\\bunker.db over your live dictionary.
 
 AQUARIUS CERTIFICATES
 ---------------------
-Project Files\\certs\\ is included (empty). Place aquarius.pem or a .cer/.crt
+pythonFiles\\certs\\ is included (empty). Place aquarius.pem or a .cer/.crt
 there. Updates do not replace this folder. .pfx is not supported.
 
 SUPPORT NOTES
 -------------
 - Logs live under your user AppData config folder for Data Doctor.
-- SQL / Oracle Instant Client may be under Project Files\\oracle\\ when packaged.
+- SQL / Oracle Instant Client may be under pythonFiles\\oracle\\ when packaged.
 - python-embed already includes vcruntime140.dll (numpy / PyQt).
 """
     if not embedOk:
@@ -217,15 +218,15 @@ CODE UPDATE (already on bundled python-embed)
 2) Drop DataDoctor-Python-*.zip into Update\\
 3) Double-click applyUpdate.cmd  (or restart Data Doctor.exe — it applies
    zips in Update\\ first).
-4) applyUpdate refreshes Project Files code (DataDoctor.pyw, ui/, core/*
+4) applyUpdate refreshes pythonFiles code (app.pyw, ui/, core/*
    except live bunker.db), merges the dictionary, pip-installs into
    python-embed, and deletes the zip.
 
 LAUNCHER + BUNDLED PYTHON (3.0.x .venv installs → 3.1+)
 ------------------------------------------------------
 The old zip needed a system Python + Project Files\\.venv. This one ships
-Python 3.14 under Project Files\\python-embed\\ and a launcher that starts
-pythonw.exe there.
+Python 3.14 under pythonFiles\\python-embed\\ and a launcher that starts
+pythonFiles\\app.pyw.
 
 1) Close Data Doctor.
 2) Drop DataDoctor-Windows-*.zip (the full Windows package) into Update\\
@@ -238,7 +239,7 @@ DICTIONARY-ONLY MERGE
 --------------------
 1) Close Data Doctor.
 2) From the install root:
-     "Project Files\\python-embed\\python.exe" "Project Files\\scripts\\updateBunker.py"
+     "pythonFiles\\python-embed\\python.exe" "pythonFiles\\scripts\\updateBunker.py"
 """
     (stage / "UPDATE.txt").write_text(text.strip() + "\n", encoding="utf-8")
 
@@ -274,18 +275,19 @@ def main():
     stage.mkdir(parents=True)
 
     # 1) Everything under launcher → zip root
-    #    Skip nested Project Files content we rebuild below (except we re-add scripts).
+    #    Skip nested Project Files / src (VB project) — we rebuild pythonFiles below.
     #    updateBunker.cmd is NOT shipped — applyUpdate.cmd handles bunker merge.
     copyTree(
         launcher,
         stage,
         ignoreNames={
-            '.git', 'src', '__pycache__', 'updateBunker.cmd',
+            '.git', 'src', 'obj', 'bin', '.vs', '__pycache__',
+            'updateBunker.cmd', 'Project Files',
             # Full CPython installer — replaced by python-embed
             'python-3.13.14-amd64.exe',
         },
     )
-    # Never ship the embed *zip* at zip root; it is extracted into Project Files.
+    # Never ship the embed *zip* at zip root; it is extracted into pythonFiles.
     for leftover in stage.glob("python-*-embed-amd64.zip"):
         leftover.unlink()
     for leftover in stage.glob("python-*.exe"):
@@ -297,8 +299,8 @@ def main():
     if licenseSrc.is_file():
         shutil.copy2(licenseSrc, stage / "LICENSE")
 
-    # 3) Project Files/
-    projectFiles = stage / "Project Files"
+    # 3) pythonFiles/ (generic launcher: pythonFiles\app.pyw)
+    projectFiles = stage / "pythonFiles"
     projectFiles.mkdir(parents=True, exist_ok=True)
 
     for name in ("core", "ui", "quickLook", "oracle"):
@@ -307,10 +309,10 @@ def main():
             copyTree(src, projectFiles / name, ignoreNames={'.git', '__pycache__', 'client'})
     installOracleClient(root, projectFiles / "oracle" / "client", "windows")
 
-    # DataDoctor.py → DataDoctor.pyw
+    # DataDoctor.py → pythonFiles/app.pyw (generic VB launcher)
     pySrc = root / "DataDoctor.py"
     if pySrc.is_file():
-        shutil.copy2(pySrc, projectFiles / "DataDoctor.pyw")
+        shutil.copy2(pySrc, projectFiles / "app.pyw")
     else:
         print("WARN: DataDoctor.py missing", file=sys.stderr)
 
@@ -319,7 +321,7 @@ def main():
     if req.is_file():
         shutil.copy2(req, projectFiles / "requirements.txt")
 
-    # scripts under Project Files/scripts (not zip root)
+    # scripts under pythonFiles/scripts (not zip root)
     scriptsDir = projectFiles / "scripts"
     scriptsDir.mkdir(parents=True, exist_ok=True)
     updateBunkerSrc = (
@@ -369,15 +371,15 @@ def main():
             "Updates never replace files in this folder.\n",
             encoding="utf-8",
         )
-    print("Packaged Project Files/certs/")
+    print("Packaged pythonFiles/certs/")
 
-    # Packaged bunker.db for merge → Project Files/temp/ (live user DB is core/)
+    # Packaged bunker.db for merge → pythonFiles/temp/ (live user DB is core/)
     bunkerSrc = root / "core" / "bunker.db"
     tempDir = projectFiles / "temp"
     if bunkerSrc.is_file():
         tempDir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(bunkerSrc, tempDir / "bunker.db")
-        print(f"Packaged bunker.db → Project Files/temp/bunker.db")
+        print(f"Packaged bunker.db → pythonFiles/temp/bunker.db")
     else:
         print("WARN: core/bunker.db missing — temp merge payload not packaged", file=sys.stderr)
 
@@ -390,11 +392,14 @@ def main():
                 "setlocal",
                 'cd /d "%~dp0"',
                 'set "PY="',
-                'if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
+                'if exist "pythonFiles\\python-embed\\python.exe" set "PY=pythonFiles\\python-embed\\python.exe"',
+                'if not defined PY if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
+                'if not defined PY if exist "pythonFiles\\.venv\\Scripts\\python.exe" set "PY=pythonFiles\\.venv\\Scripts\\python.exe"',
                 'if not defined PY if exist "Project Files\\.venv\\Scripts\\python.exe" set "PY=Project Files\\.venv\\Scripts\\python.exe"',
                 'if not defined PY if exist ".venv\\Scripts\\python.exe" set "PY=.venv\\Scripts\\python.exe"',
                 'if not defined PY set "PY=python"',
                 f'set "SCRIPT=%~dp0{scriptRel}"',
+                'if not exist "%SCRIPT%" set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
                 'if not exist "%SCRIPT%" (',
                 f"  echo ERROR: script not found at {scriptRel}",
                 "  pause",
@@ -417,7 +422,7 @@ def main():
 
     writeRootCmd(
         "applyUpdate.cmd",
-        "Project Files\\scripts\\applyUpdate.py",
+        "pythonFiles\\scripts\\applyUpdate.py",
         "Apply newest zip in Update\\ (code refresh + bunker merge + pip into python-embed)",
     )
 
@@ -431,14 +436,14 @@ def main():
 
     writeReadme(stage, embedOk)
     writeUpdateReadme(stage)
-    print("Skipping .venv (replaced by Project Files\\python-embed)")
+    print("Skipping .venv (replaced by pythonFiles\\python-embed)")
 
     # First-install payload: same layout as packagePython.py so applyUpdate.cmd
     # can create the Windows venv and pip-install without a second download.
     pyZip = updateDrop / "DataDoctor-Python.zip"
     print(f"Writing first-install payload {pyZip.name} ...")
     with zipfile.ZipFile(pyZip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        pyw = projectFiles / "DataDoctor.pyw"
+        pyw = projectFiles / "app.pyw"
         if pyw.is_file():
             zf.write(pyw, "DataDoctor.py")
         reqPf = projectFiles / "requirements.txt"

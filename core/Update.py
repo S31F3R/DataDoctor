@@ -110,7 +110,7 @@ def detectInstallKind() -> str:
     if appimage and os.path.isfile(appimage):
         return "appimage"
 
-    # Launcher layout: .../Project Files/DataDoctor.py[w] with sibling Update/ or applyUpdate
+    # Launcher layout: pythonFiles/app.pyw or Project Files/DataDoctor.py[w]
     try:
         appRoot = getattr(Config, "appRoot", "") or ""
         candidates = []
@@ -119,12 +119,13 @@ def detectInstallKind() -> str:
             candidates.append(Path(appRoot).parent)
         candidates.append(Path.cwd())
         for base in candidates:
-            pf = base / "Project Files"
-            if pf.is_dir() and (
-                (pf / "DataDoctor.py").is_file()
-                or (pf / "DataDoctor.pyw").is_file()
+            for folder, entries in (
+                ("pythonFiles", ("app.pyw", "DataDoctor.py", "DataDoctor.pyw")),
+                ("Project Files", ("DataDoctor.py", "DataDoctor.pyw", "app.pyw")),
             ):
-                return "launcher"
+                pf = base / folder
+                if pf.is_dir() and any((pf / n).is_file() for n in entries):
+                    return "launcher"
             if (base / "Data Doctor.exe").is_file() or (base / "Data Doctor.command").is_file():
                 return "launcher"
     except Exception:
@@ -146,10 +147,10 @@ def installRoot() -> Path | None:
         return Path.cwd()
 
     root = Path(appRoot)
-    # If we're inside Project Files, install root is parent
-    if root.name == "Project Files":
+    # If we're inside pythonFiles / Project Files, install root is parent
+    if root.name in ("pythonFiles", "Project Files"):
         return root.parent
-    if (root / "Project Files").is_dir():
+    if (root / "pythonFiles").is_dir() or (root / "Project Files").is_dir():
         return root
     # Dev: project root is fine for a local Update/ folder
     return root
@@ -174,8 +175,11 @@ def windowsNeedsLauncherRefresh() -> bool:
         return False
     if not (root / "Data Doctor.exe").is_file():
         return False
-    embed = root / "Project Files" / "python-embed" / "pythonw.exe"
-    return not embed.is_file()
+    embed = root / "pythonFiles" / "python-embed" / "pythonw.exe"
+    if embed.is_file():
+        return False
+    legacy = root / "Project Files" / "python-embed" / "pythonw.exe"
+    return not legacy.is_file()
 
 
 _APPLY_UPDATE_CMD = "\r\n".join([
@@ -184,10 +188,13 @@ _APPLY_UPDATE_CMD = "\r\n".join([
     "setlocal",
     'cd /d "%~dp0"',
     'set "PY="',
-    'if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
+    'if exist "pythonFiles\\python-embed\\python.exe" set "PY=pythonFiles\\python-embed\\python.exe"',
+    'if not defined PY if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
+    'if not defined PY if exist "pythonFiles\\.venv\\Scripts\\python.exe" set "PY=pythonFiles\\.venv\\Scripts\\python.exe"',
     'if not defined PY if exist "Project Files\\.venv\\Scripts\\python.exe" set "PY=Project Files\\.venv\\Scripts\\python.exe"',
     'if not defined PY set "PY=python"',
-    'set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
+    'set "SCRIPT=%~dp0pythonFiles\\scripts\\applyUpdate.py"',
+    'if not exist "%SCRIPT%" set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
     'if not exist "%SCRIPT%" (',
     "  echo ERROR: applyUpdate.py not found",
     "  pause",
@@ -605,6 +612,7 @@ def launcherApplyScript() -> Path | None:
     for rel in (
         "applyUpdate.cmd",
         "applyUpdate.sh",
+        "pythonFiles/scripts/applyUpdate.py",
         "Project Files/scripts/applyUpdate.py",
         "scripts/applyUpdate.py",
     ):
@@ -810,7 +818,7 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
                 "This Windows install still uses a system Python (.venv).\n\n"
                 "3.1+ needs the Windows package (DataDoctor-Windows-*.zip), which\n"
                 "replaces Data Doctor.exe and installs Python 3.14 under\n"
-                "Project Files\\python-embed\\.\n\n"
+                "pythonFiles\\python-embed\\.\n\n"
                 "Download that zip from GitHub Releases into Update\\, close\n"
                 "Data Doctor, and double-click applyUpdate.cmd.",
             )
@@ -1135,7 +1143,7 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                 "Close Data Doctor completely, then double-click applyUpdate.cmd\n"
                 "next to Data Doctor.exe.\n\n"
                 "That replaces the launcher and installs Python 3.14 under\n"
-                "Project Files\\python-embed\\. Your dictionary and certs are kept.\n\n"
+                "pythonFiles\\python-embed\\. Your dictionary and certs are kept.\n\n"
                 "Do not restart the app first — the running .exe cannot replace itself.",
             )
             return

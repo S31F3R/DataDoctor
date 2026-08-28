@@ -5,20 +5,21 @@ Apply a DataDoctor zip from the install's Update/ folder.
 Expected install layout (Windows launcher package):
   <install root>/
     Data Doctor.exe | Data Doctor.command | …
-    applyUpdate.cmd | applyUpdate.sh | this script (or under Project Files/scripts/)
+    applyUpdate.cmd | applyUpdate.sh | this script (or under pythonFiles/scripts/)
     Update/                 ← DataDoctor-Python-*.zip (code) or
                               DataDoctor-Windows-*.zip (launcher + python-embed)
-    Project Files/
-      DataDoctor.py[w]
-      python-embed/         ← bundled CPython 3.14 (Windows); no system Python
+    pythonFiles/            ← Windows (generic launcher: app.pyw)
+      app.pyw               ← DataDoctor.py renamed at package/apply time
+      python-embed/         ← bundled CPython 3.14; no system Python
       core/                 ← live bunker.db stays here
       ui/
       …
+    Project Files/          ← 3.0.x / macOS leftover; still accepted
 
 What this does:
   1) Pick a zip in Update/ (Windows zip if python-embed is missing, else Python zip)
   2) Extract to a temp dir under Update/
-  3) Copy DataDoctor.py as DataDoctor.pyw on Windows (or when .pyw already exists),
+  3) Copy DataDoctor.py as app.pyw on Windows (pythonFiles/),
      plus ui/, core/* (except bunker.db), quickLook/, requirements
   4) Windows zip also replaces Data Doctor.exe and installs python-embed
   5) If temp/bunker.db or core/bunker.db present → merge via updateBunker.py
@@ -29,12 +30,12 @@ Does NOT:
   - Touch user config / keyring / AppData
   - Delete user-added quickLook files (only overwrites same names)
   - Overwrite live core/bunker.db wholesale (merge only)
-  - Copy or replace Project Files/certs (user Aquarius certs stay)
+  - Copy or replace pythonFiles/certs (user Aquarius certs stay)
 
 Run from install root:
   python applyUpdate.py
   python applyUpdate.py --zip Update/DataDoctor-Python-20260808.zip
-  python "Project Files/scripts/applyUpdate.py"
+  python "pythonFiles/scripts/applyUpdate.py"
 """
 
 from __future__ import annotations
@@ -48,22 +49,53 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+WIN_CODE_DIR = "pythonFiles"
+LEGACY_CODE_DIR = "Project Files"
+CODE_DIR_NAMES = (WIN_CODE_DIR, LEGACY_CODE_DIR)
+WIN_APP_ENTRY = "app.pyw"
+
 
 def findInstallRoot(start: Path) -> Path:
     """
-    Walk up from start to find Project Files/ (install root is its parent).
-    Also accept start itself if it contains Project Files/.
+    Walk up from start to find pythonFiles/ or Project Files/
+    (install root is its parent).
     """
     cur = start.resolve()
     for _ in range(6):
-        if (cur / "Project Files").is_dir():
-            return cur
-        if cur.name == "Project Files" and cur.parent.is_dir():
-            return cur.parent
+        for name in CODE_DIR_NAMES:
+            if (cur / name).is_dir():
+                return cur
+            if cur.name == name and cur.parent.is_dir():
+                return cur.parent
         if cur.parent == cur:
             break
         cur = cur.parent
     return start.resolve()
+
+
+def isWindowsInstall(installRoot: Path) -> bool:
+    return (installRoot / "Data Doctor.exe").is_file() or sys.platform.startswith("win")
+
+
+def resolveCodeDir(installRoot: Path) -> Path:
+    """Prefer pythonFiles/ (new Windows launcher); keep Project Files/ for 3.0.x / macOS."""
+    win = installRoot / WIN_CODE_DIR
+    legacy = installRoot / LEGACY_CODE_DIR
+    if win.is_dir():
+        return win
+    if legacy.is_dir():
+        return legacy
+    if isWindowsInstall(installRoot):
+        return win
+    return legacy
+
+
+def payloadCodeDir(payload: Path) -> Path:
+    for name in CODE_DIR_NAMES:
+        d = payload / name
+        if d.is_dir():
+            return d
+    return payload
 
 
 def pickNewestZip(updateDir: Path) -> Path | None:
@@ -292,11 +324,15 @@ def isWindowsFullPayload(payload: Path) -> bool:
     """True if this zip is a DataDoctor-Windows package, not a Python-only payload."""
     if (payload / "Data Doctor.exe").is_file():
         return True
-    pf = payload / "Project Files"
-    if (pf / "python-embed" / "pythonw.exe").is_file():
-        return True
-    if (pf / "DataDoctor.pyw").is_file() and (payload / "applyUpdate.cmd").is_file():
-        return True
+    for name in CODE_DIR_NAMES:
+        pf = payload / name
+        if (pf / "python-embed" / "pythonw.exe").is_file():
+            return True
+        if (
+            ((pf / WIN_APP_ENTRY).is_file() or (pf / "DataDoctor.pyw").is_file())
+            and (payload / "applyUpdate.cmd").is_file()
+        ):
+            return True
     return False
 
 
@@ -354,14 +390,53 @@ def applyWindowsLauncherBits(payload: Path, installRoot: Path) -> None:
     copyFileIfPresent(payload / "applyUpdate.cmd", installRoot / "applyUpdate.cmd")
     copyFileIfPresent(payload / "README.txt", installRoot / "README.txt")
     copyFileIfPresent(payload / "UPDATE.txt", installRoot / "UPDATE.txt")
-    srcEmbed = payload / "Project Files" / "python-embed"
-    destEmbed = installRoot / "Project Files" / "python-embed"
-    if srcEmbed.is_dir() and (srcEmbed / "pythonw.exe").is_file():
+    srcEmbed = None
+    for name in CODE_DIR_NAMES:
+        cand = payload / name / "python-embed"
+        if cand.is_dir() and (cand / "pythonw.exe").is_file():
+            srcEmbed = cand
+            break
+    destEmbed = installRoot / WIN_CODE_DIR / "python-embed"
+    if srcEmbed is not None:
+        destEmbed.parent.mkdir(parents=True, exist_ok=True)
         if destEmbed.exists():
             shutil.rmtree(destEmbed)
         shutil.copytree(srcEmbed, destEmbed)
         enableEmbedSite(destEmbed)
-        print("Installed Project Files/python-embed/")
+        print(f"Installed {WIN_CODE_DIR}/python-embed/")
+
+
+def migrateLegacyProjectFiles(installRoot: Path, dest: Path) -> None:
+    """Copy live bunker.db / certs / extra quickLooks from 3.0.x Project Files/."""
+    legacy = installRoot / LEGACY_CODE_DIR
+    if not legacy.is_dir():
+        return
+    try:
+        if legacy.resolve() == dest.resolve():
+            return
+    except Exception:
+        pass
+    liveBunker = legacy / "core" / "bunker.db"
+    destBunker = dest / "core" / "bunker.db"
+    if liveBunker.is_file():
+        destBunker.parent.mkdir(parents=True, exist_ok=True)
+        if destBunker.is_file():
+            # Keep the live dictionary: it wins over the packaged copy in dest.
+            bak = destBunker.with_suffix(".db.fromzip")
+            try:
+                destBunker.replace(bak)
+            except Exception:
+                pass
+        shutil.copy2(liveBunker, destBunker)
+        print(f"Migrated live bunker.db → {WIN_CODE_DIR}/core/")
+    liveCerts = legacy / "certs"
+    if liveCerts.is_dir():
+        copyTreeMerge(liveCerts, dest / "certs")
+        print(f"Migrated certs/ → {WIN_CODE_DIR}/certs/")
+    liveQl = legacy / "quickLook"
+    if liveQl.is_dir():
+        copyTreeMerge(liveQl, dest / "quickLook")
+        print(f"Merged quickLook/ from {LEGACY_CODE_DIR}/")
 
 
 def dataDoctorExeRunning() -> bool:
@@ -419,10 +494,13 @@ def writeApplyUpdateCmd(installRoot: Path) -> None:
         "setlocal",
         'cd /d "%~dp0"',
         'set "PY="',
-        'if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
+        'if exist "pythonFiles\\python-embed\\python.exe" set "PY=pythonFiles\\python-embed\\python.exe"',
+        'if not defined PY if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
+        'if not defined PY if exist "pythonFiles\\.venv\\Scripts\\python.exe" set "PY=pythonFiles\\.venv\\Scripts\\python.exe"',
         'if not defined PY if exist "Project Files\\.venv\\Scripts\\python.exe" set "PY=Project Files\\.venv\\Scripts\\python.exe"',
         'if not defined PY set "PY=python"',
-        'set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
+        'set "SCRIPT=%~dp0pythonFiles\\scripts\\applyUpdate.py"',
+        'if not exist "%SCRIPT%" set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
         'if not exist "%SCRIPT%" (',
         "  echo ERROR: applyUpdate.py not found",
         "  pause",
@@ -478,23 +556,37 @@ def runPipInstall(py: str, requirements: Path) -> int:
 
 def installAppEntry(payload: Path, projectFiles: Path) -> str | None:
     """
-    Copy DataDoctor.py[.pyw] from the zip payload into Project Files/.
+    Copy DataDoctor.py[.pyw] / app.pyw from the zip into the live code dir.
 
-    Windows launcher packages ship DataDoctor.pyw and the VB launcher starts
-    that file. Update zips from packagePython.py only contain DataDoctor.py.
-    If the live install already has DataDoctor.pyw, or the host is Windows,
-    write DataDoctor.pyw and delete any leftover DataDoctor.py.
+    Windows generic launcher starts pythonFiles\\app.pyw. Python zips still
+    ship DataDoctor.py; we rename on Windows. macOS/source keep DataDoctor.py.
     """
     src = payload / "DataDoctor.py"
+    if not src.is_file():
+        src = payload / WIN_APP_ENTRY
     if not src.is_file():
         src = payload / "DataDoctor.pyw"
     if not src.is_file():
         return None
 
-    wantPyw = (projectFiles / "DataDoctor.pyw").is_file() or sys.platform.startswith("win")
-    destName = "DataDoctor.pyw" if wantPyw else "DataDoctor.py"
+    windows = (
+        sys.platform.startswith("win")
+        or projectFiles.name == WIN_CODE_DIR
+        or (projectFiles / WIN_APP_ENTRY).is_file()
+    )
+    if windows:
+        destName = WIN_APP_ENTRY
+    elif (projectFiles / "DataDoctor.pyw").is_file():
+        destName = "DataDoctor.pyw"
+    else:
+        destName = "DataDoctor.py"
     shutil.copy2(src, projectFiles / destName)
-    if wantPyw:
+    if destName == WIN_APP_ENTRY:
+        for leftover in ("DataDoctor.py", "DataDoctor.pyw"):
+            p = projectFiles / leftover
+            if p.is_file():
+                p.unlink()
+    elif destName == "DataDoctor.pyw":
         leftover = projectFiles / "DataDoctor.py"
         if leftover.is_file():
             leftover.unlink()
@@ -527,10 +619,6 @@ def runBunkerMerge(py: str, projectFiles: Path, packagedBunker: Path) -> int:
 
 
 def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
-    projectFiles = installRoot / "Project Files"
-    if not projectFiles.is_dir():
-        print(f"ERROR: Project Files/ not found under {installRoot}", file=sys.stderr)
-        return 1
     if not zipPath.is_file():
         print(f"ERROR: zip not found: {zipPath}", file=sys.stderr)
         return 1
@@ -546,7 +634,12 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
 
         # Payload may be at extract root or nested one level
         payload = extractDir
-        if not (payload / "DataDoctor.py").is_file() and not (payload / "core").is_dir():
+        if (
+            not (payload / "DataDoctor.py").is_file()
+            and not (payload / "core").is_dir()
+            and not (payload / WIN_CODE_DIR).is_dir()
+            and not (payload / LEGACY_CODE_DIR).is_dir()
+        ):
             if not isWindowsFullPayload(payload):
                 kids = [p for p in extractDir.iterdir() if p.is_dir()]
                 if len(kids) == 1:
@@ -557,14 +650,23 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
         if windowsFull:
             print("Windows full package: replacing launcher + python-embed")
             applyWindowsLauncherBits(payload, installRoot)
-            pf = payload / "Project Files"
-            if pf.is_dir():
-                codeRoot = pf
+            projectFiles = installRoot / WIN_CODE_DIR
+            projectFiles.mkdir(parents=True, exist_ok=True)
+            migrateLegacyProjectFiles(installRoot, projectFiles)
+            nested = payloadCodeDir(payload)
+            if nested != payload:
+                codeRoot = nested
+        else:
+            projectFiles = resolveCodeDir(installRoot)
+            if not projectFiles.is_dir():
+                print(
+                    f"ERROR: {WIN_CODE_DIR}/ or {LEGACY_CODE_DIR}/ not found under {installRoot}",
+                    file=sys.stderr,
+                )
+                return 1
 
-        # App entry: raw Python zip ships DataDoctor.py. Windows launcher
-        # installs run DataDoctor.pyw (no console). If .pyw is already live
-        # or we are on Windows, write .pyw and drop leftover .py so an old
-        # .pyw is not left sitting next to a new .py.
+        # App entry: Python zip ships DataDoctor.py. Windows launcher starts
+        # pythonFiles/app.pyw. Write that name on Windows and drop leftovers.
         destName = installAppEntry(codeRoot, projectFiles)
         if destName:
             print(f"Updated {destName}")
@@ -617,9 +719,9 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
                     "Place aquarius.pem or a .cer/.crt here. .pfx is not supported.\n",
                     encoding="utf-8",
                 )
-            print("Created empty Project Files/certs/ (not overwritten on later updates)")
+            print(f"Created empty {projectFiles.name}/certs/ (not overwritten on later updates)")
         else:
-            print("Left Project Files/certs/ unchanged")
+            print(f"Left {projectFiles.name}/certs/ unchanged")
 
         py = ensurePython(projectFiles)
         print(f"Using Python: {py}")
@@ -671,7 +773,7 @@ def main() -> int:
         "--install-root",
         dest="installRoot",
         default=None,
-        help="Install root (folder that contains Project Files/). Default: auto-detect",
+        help="Install root (folder that contains pythonFiles/ or Project Files/). Default: auto-detect",
     )
     parser.add_argument(
         "--keep-extract",
@@ -684,7 +786,7 @@ def main() -> int:
     if args.installRoot:
         installRoot = Path(args.installRoot).expanduser().resolve()
     else:
-        # Script may live at install root or Project Files/scripts/
+        # Script may live at install root or pythonFiles/scripts/ (or Project Files/)
         installRoot = findInstallRoot(Path(__file__).resolve().parent)
 
     print(f"Install root: {installRoot}")
@@ -694,7 +796,7 @@ def main() -> int:
     if args.zip:
         zipPath = Path(args.zip).expanduser().resolve()
     else:
-        projectFiles = installRoot / "Project Files"
+        projectFiles = resolveCodeDir(installRoot)
         zipPath = pickUpdateZip(updateDir, projectFiles)
         if zipPath is None:
             print(

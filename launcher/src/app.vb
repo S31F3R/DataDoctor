@@ -33,6 +33,18 @@ Module app
         Dim pythonwPath As String = Path.Combine(projectDir, "python-embed", "pythonw.exe")
         Dim scriptPath As String = Path.Combine(projectDir, "app.pyw")
 
+        If Not File.Exists(pythonwPath) OrElse Not File.Exists(scriptPath) Then
+            Try
+                MsgBox(
+                    "Could not start." & vbCrLf & vbCrLf &
+                    "Need:" & vbCrLf & pythonwPath & vbCrLf & scriptPath,
+                    MsgBoxStyle.Critical,
+                    "Launcher")
+            Catch
+            End Try
+            Environment.Exit(1)
+        End If
+
         ' Build the start info for a true no-console launch
         Dim psi As New ProcessStartInfo With {
             .FileName = pythonwPath,
@@ -44,6 +56,10 @@ Module app
         Try
             Process.Start(psi)
         Catch ex As Exception
+            Try
+                MsgBox(ex.Message, MsgBoxStyle.Critical, "Launcher")
+            Catch
+            End Try
             Environment.Exit(1)
         End Try
     End Sub

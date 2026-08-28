@@ -30,7 +30,7 @@ Passwords and API keys are **not** in `user.config`. They go to the OS keyring, 
 
 | File | Role |
 |------|------|
-| `core/bunker.db` | Live data dictionary (Windows: `Project Files\core\bunker.db`) |
+| `core/bunker.db` | Live data dictionary (Windows: `pythonFiles\core\bunker.db`) |
 | `core/valuePrecision.json` | Aquarius identifier → rounding spec |
 | Packaged `temp/bunker.db` | Merge source only — do not replace the live DB with this |
 

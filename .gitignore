@@ -59,6 +59,11 @@ secret.grok
 # Local update downloads (launcher / AppImage / dev)
 Update/
 
+# Visual Studio launcher build
+launcher/src/bin/
+launcher/src/obj/
+launcher/src/.vs/
+
 
 # Oracle client
 oracle/client

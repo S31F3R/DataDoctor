@@ -31,8 +31,8 @@ applyUpdate.cmd
 README.txt
 UPDATE.txt
 Update\                 (includes a DataDoctor-Python-*.zip for first run)
-Project Files\
-  DataDoctor.pyw
+pythonFiles\
+  app.pyw        (DataDoctor.py renamed — launcher always starts this name)
   python-embed\  (official Windows embeddable Python 3.14 — no system Python)
   core\          (live bunker.db stays here)
   ui\
@@ -51,7 +51,7 @@ No system Python and no `.venv`. `python-embed` is the interpreter.
 
 Coming from a **3.0.x** install that used system Python + `Project Files\.venv`: do **not** drop only the Python zip. Use `DataDoctor-Windows-*.zip` (see [Updates and Releases](Updates-and-Releases)).
 
-Do **not** overwrite `Project Files\core\bunker.db` with a zip’s copy if the dictionary has local edits. Updates merge via `applyUpdate.cmd`.
+Do **not** overwrite `pythonFiles\core\bunker.db` with a zip’s copy if the dictionary has local edits. Updates merge via `applyUpdate.cmd`. A 3.0.x `Project Files\core\bunker.db` is migrated on the Windows-zip hop.
 
 ## Linux AppImage
 
@@ -76,14 +76,14 @@ A portable zip can be built with `python scripts/packageMac.py`. A native `.app`
 
 ## Oracle Instant Client
 
-Packaged Windows / Linux / macOS trees may include Instant Client **Basic Lite** (raw library files, no extra Oracle installer) under `oracle/client` (or `Project Files\oracle\client`). **That packaged client is always used when it is present** — a system Oracle install is only a fallback if the package has no client.
+Packaged Windows / Linux / macOS trees may include Instant Client **Basic Lite** (raw library files, no extra Oracle installer) under `oracle/client` (Windows: `pythonFiles\oracle\client`). **That packaged client is always used when it is present** — a system Oracle install is only a fallback if the package has no client.
 
 `tnsnames.ora` and `sqlnet.ora` are read from the **same folder**:
 
 1. `TNS_ADMIN` environment variable, if set
 2. Else **Options → Oracle → TNS Names Location** (defaults to packaged `oracle/network/admin`)
 
-The package ships `sqlnet.ora` in `oracle/network/admin` (Windows: `Project Files\oracle\network\admin`). It does **not** ship `tnsnames.ora`. Copy yours into that folder (or point `TNS_ADMIN` at a folder that already has both files). Instant Client will not look under `oracle/client/network/admin`.
+The package ships `sqlnet.ora` in `oracle/network/admin` (Windows: `pythonFiles\oracle\network\admin`). It does **not** ship `tnsnames.ora`. Copy yours into that folder (or point `TNS_ADMIN` at a folder that already has both files). Instant Client will not look under `oracle/client/network/admin`.
 
 The Python update zip does not include Instant Client (it is OS-specific).
 

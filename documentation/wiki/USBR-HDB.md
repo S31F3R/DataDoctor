@@ -2,7 +2,7 @@
 
 Internal queries talk to Reclamation Hydrologic Databases over **Oracle** (`oracledb`). Set **Options → Oracle** user and password (OS keyring). Hourly BOP/EOP and the overwrite flag are under **Options → USBR**.
 
-The packaged Instant Client is used whenever it is in the install (`oracle/client` or `Project Files\oracle\client`). TNS names and `sqlnet.ora` come from one folder: `TNS_ADMIN` if that env var is set, otherwise **Options → Oracle → TNS Names Location** (default packaged `oracle/network/admin`). `tnsnames.ora` is not shipped — copy yours into that folder. Both files must live together.
+The packaged Instant Client is used whenever it is in the install (`oracle/client` or `pythonFiles\oracle\client` on Windows). TNS names and `sqlnet.ora` come from one folder: `TNS_ADMIN` if that env var is set, otherwise **Options → Oracle → TNS Names Location** (default packaged `oracle/network/admin`). `tnsnames.ora` is not shipped — copy yours into that folder. Both files must live together.
 
 **Options → Oracle → Access List** is which HDBs you actually use. Unchecked names drop out of Internal Query and SQL Query Builder. Public Query still shows every database. A wrong password on one HDB pauses **that** database for five minutes (or until you save new credentials) so the others stay usable.
 
