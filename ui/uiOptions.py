@@ -197,6 +197,8 @@ class uiOptions(QDialog):
             self.btnExportProfile.clicked.connect(self.onExportProfile)
         if self.btnImportProfile is not None:
             self.btnImportProfile.clicked.connect(self.onImportProfile)
+        self._dirtyWired = False
+        self._savedSnapshot = None
 
         # Populate UTC offset combobox
         self.cbUTCOffset.addItem("UTC-12:00 | Baker Island")
@@ -267,8 +269,6 @@ class uiOptions(QDialog):
         self.tabsUSBR = self.findChild(QTabWidget, "tabsUSBR")
         self.tabsUSGS = self.findChild(QTabWidget, "tabsUSGS")
         self.cbUTCOffset = self.findChild(QComboBox, "cbUTCOffset")
-        self.chkbRawData = self.findChild(QCheckBox, "chkbRawData")
-        self.chkbQAQC = self.findChild(QCheckBox, "chkbQAQC")
         self.chkbDebug = self.findChild(QCheckBox, "chkbDebug")
         self.chkbBetaUpdates = self.findChild(QCheckBox, "chkbBetaUpdates")
         self.btnExportProfile = self.findChild(QPushButton, "btnExportProfile")
@@ -432,8 +432,6 @@ class uiOptions(QDialog):
 
         chain([
             self.cbUTCOffset,
-            self.chkbRawData,
-            self.chkbQAQC,
             self.chkbDebug,
             self.chkbBetaUpdates,
             self.btnExportProfile,
@@ -519,6 +517,9 @@ class uiOptions(QDialog):
         # Always start with secrets masked when the dialog opens
         self.maskSensitiveFields()
         self.onOptionsTabChanged()
+        self._wireDirtyTracking()
+        self._captureFormSnapshot()
+        self._syncCancelCloseText()
 
         if Config.debug:
             Logic.logMessage("DEBUG", "uiOptions showEvent")
@@ -618,15 +619,7 @@ class uiOptions(QDialog):
         self.chkbRetroMode.setChecked(bool(config.get('retroMode', True)))
 
         if Config.debug:
-            Logic.logMessage("DEBUG", "Set chkbRetroMode to: {}".format(self.chkbRetroMode.isChecked()))            
-        self.chkbQAQC.setChecked(bool(config.get('qaqc', True)))
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", "Set chkbQAQC to: {}".format(self.chkbQAQC.isChecked()))
-        self.chkbRawData.setChecked(bool(config.get('rawData', False)))
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", "Set chkbRawData to: {}".format(self.chkbRawData.isChecked()))
+            Logic.logMessage("DEBUG", "Set chkbRetroMode to: {}".format(self.chkbRetroMode.isChecked()))
         self.chkbDebug.setChecked(bool(config.get('debugMode', False)))
 
         if Config.debug:
@@ -639,18 +632,31 @@ class uiOptions(QDialog):
                     "DEBUG",
                     f"Set chkbBetaUpdates to: {self.chkbBetaUpdates.isChecked()} (channel={channel})",
                 )
-        tnsPath = config.get('tnsNamesLocation', '')
-
+        try:
+            from core.Oracle import resolveTnsAdmin
+            tnsPath = resolveTnsAdmin()
+        except Exception:
+            tnsPath = config.get('tnsNamesLocation', '') or Logic.resourcePath('oracle/network/admin')
+        try:
+            from core.Oracle import inheritedTnsAdmin
+            envTns = inheritedTnsAdmin()
+        except Exception:
+            envTns = (os.environ.get('TNS_ADMIN') or '').strip()
         if tnsPath.startswith(Config.appRoot):
             tnsPath = tnsPath.replace(Config.appRoot, '%AppRoot%')
         self.qleTNSNames.setText(tnsPath)
-
-        if not self.qleTNSNames.text():
-            envTns = os.environ.get('TNS_ADMIN', Logic.resourcePath('oracle/network/admin'))
-
-            if envTns.startswith(Config.appRoot):
-                envTns = envTns.replace(Config.appRoot, '%AppRoot%')
-            self.qleTNSNames.setText(envTns)
+        self.qleTNSNames.setReadOnly(bool(envTns))
+        if envTns:
+            self.qleTNSNames.setToolTip(
+                "TNS_ADMIN environment variable is set — that folder is used for "
+                "tnsnames.ora and sqlnet.ora."
+            )
+        else:
+            self.qleTNSNames.setToolTip(
+                "Folder for tnsnames.ora and sqlnet.ora. Default is packaged "
+                "oracle/network/admin (tnsnames.ora is not shipped — copy yours here). "
+                "TNS_ADMIN env, if set, wins."
+            )
 
         if Config.debug:
             Logic.logMessage("DEBUG", "Set qleTNSNames to: {}".format(tnsPath))
@@ -696,6 +702,85 @@ class uiOptions(QDialog):
             self.qleOraclePassword.setText("")
         if Config.debug:
             Logic.logMessage("DEBUG", "Settings loaded")
+
+    def _formSnapshot(self):
+        def txt(w):
+            return w.text() if w is not None else ''
+
+        def ck(w):
+            return bool(w.isChecked()) if w is not None else False
+
+        hdb = []
+        if self.listHdbAccess is not None:
+            for i in range(self.listHdbAccess.count()):
+                item = self.listHdbAccess.item(i)
+                if item is not None:
+                    hdb.append((item.text(), item.checkState() == Qt.CheckState.Checked))
+        theme = ''
+        if self.cbColorTheme is not None:
+            theme = self.cbColorTheme.currentData() or self.cbColorTheme.currentText()
+        utc = self.cbUTCOffset.currentText() if self.cbUTCOffset is not None else ''
+        return {
+            'utc': utc,
+            'debug': ck(self.chkbDebug),
+            'beta': ck(self.chkbBetaUpdates),
+            'retro': ck(self.chkbRetroMode),
+            'theme': theme,
+            'tns': txt(self.qleTNSNames),
+            'oracleUser': txt(self.qleOracleUser),
+            'oraclePassword': txt(self.qleOraclePassword),
+            'aqServer': txt(self.qleAQServer),
+            'aqUser': txt(self.qleAQUser),
+            'aqPassword': txt(self.qleAQPassword),
+            'usgsKey': txt(self.qleUSGSAPIKey),
+            'bop': ck(self.rbBOP),
+            'eop': ck(self.rbEOP),
+            'overwrite': ck(self.chkbOverwriteFlag),
+            'labelUSBR': ck(self.chkbLabelDataTypeUSBR),
+            'labelAQ': ck(self.chkbLabelDataTypeAquarius),
+            'labelUSGS': ck(self.chkbLabelDataTypeUSGS),
+            'hdb': tuple(hdb),
+        }
+
+    def _captureFormSnapshot(self):
+        self._savedSnapshot = self._formSnapshot()
+
+    def _syncCancelCloseText(self):
+        if self.btnbOptions is None:
+            return
+        btn = self.btnbOptions.button(QDialogButtonBox.StandardButton.Cancel)
+        if btn is None:
+            return
+        dirty = self._formSnapshot() != getattr(self, '_savedSnapshot', None)
+        btn.setText('Cancel' if dirty else 'Close')
+
+    def _wireDirtyTracking(self):
+        if getattr(self, '_dirtyWired', False):
+            return
+        self._dirtyWired = True
+
+        def mark(*_args):
+            self._syncCancelCloseText()
+
+        for w in (
+            self.cbUTCOffset, self.cbColorTheme,
+            self.chkbDebug, self.chkbBetaUpdates, self.chkbRetroMode,
+            self.qleTNSNames, self.qleOracleUser, self.qleOraclePassword,
+            self.qleAQServer, self.qleAQUser, self.qleAQPassword,
+            self.qleUSGSAPIKey, self.rbBOP, self.rbEOP,
+            self.chkbOverwriteFlag, self.chkbLabelDataTypeUSBR,
+            self.chkbLabelDataTypeAquarius, self.chkbLabelDataTypeUSGS,
+        ):
+            if w is None:
+                continue
+            if isinstance(w, QLineEdit):
+                w.textChanged.connect(mark)
+            elif isinstance(w, (QCheckBox, QRadioButton)):
+                w.toggled.connect(mark)
+            elif isinstance(w, QComboBox):
+                w.currentIndexChanged.connect(mark)
+        if self.listHdbAccess is not None:
+            self.listHdbAccess.itemChanged.connect(mark)
 
     def onSavePressed(self):
         # --- Capture prior Oracle credentials before keyring overwrite ---
@@ -758,8 +843,6 @@ class uiOptions(QDialog):
         config.update({
             'utcOffset': self.cbUTCOffset.currentText(),
             'retroMode': newRetro,
-            'qaqc': self.chkbQAQC.isChecked(),
-            'rawData': self.chkbRawData.isChecked(),
             'debugMode': self.chkbDebug.isChecked(),
             'updateChannel': updateChannel,
             'tnsNamesLocation': tnsPath,
@@ -778,7 +861,7 @@ class uiOptions(QDialog):
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(config, configFile, indent=2)
         if Config.debug:
-            Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}, qaqc: {}, rawData: {}".format(newRetro, self.chkbQAQC.isChecked(), self.chkbRawData.isChecked()))
+            Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}".format(newRetro))
         # Reload non-visual globals only. Config.retroMode stays at the session
         # value for the whole process — fonts/layouts apply only at next start.
         sessionRetro = bool(Config.retroMode)
@@ -869,8 +952,20 @@ class uiOptions(QDialog):
 
         self._refreshDatabaseCombos()
 
-        # Close Options (we disconnected the UI auto-accept)
-        super().accept()
+        # Apply TNS_ADMIN now so the next Oracle connect uses the saved folder
+        # when the environment variable is not set. Already-initialized Instant
+        # Client still needs this env for name lookup.
+        try:
+            from core.Oracle import applyTnsAdmin, inheritedTnsAdmin
+            if not inheritedTnsAdmin() and tnsPath:
+                applyTnsAdmin(tnsPath)
+        except Exception as e:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"applyTnsAdmin after Options save skipped: {e}")
+
+        # Keep Options open after Save. Cancel/Close text goes back to Close.
+        self._captureFormSnapshot()
+        self._syncCancelCloseText()
 
         # Beta checkbox: check GitHub after save so a first-time beta user
         # is offered the RC, and unchecking reverts to the last published tag.
@@ -1300,6 +1395,8 @@ class uiOptions(QDialog):
         Utils.reloadGlobals()
         Utils.applyColorTheme()
         self.loadSettings()
+        self._captureFormSnapshot()
+        self._syncCancelCloseText()
         win = self.winMain
         if win is None:
             return

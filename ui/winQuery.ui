@@ -455,6 +455,32 @@
      <string>Overlay Pairs</string>
     </property>
    </widget>
+   <widget class="QCheckBox" name="chkbRawData">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>448</y>
+      <width>136</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>Raw Data</string>
+    </property>
+   </widget>
+   <widget class="QCheckBox" name="chkbQAQC">
+    <property name="geometry">
+     <rect>
+      <x>150</x>
+      <y>448</y>
+      <width>131</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>QAQC</string>
+    </property>
+   </widget>
    <widget class="QPushButton" name="btnUpMax">
     <property name="geometry">
      <rect>
@@ -730,6 +756,8 @@
    </widget>
    <zorder>chkbDelta</zorder>
    <zorder>chkbOverlay</zorder>
+   <zorder>chkbRawData</zorder>
+   <zorder>chkbQAQC</zorder>
    <zorder>qleDataID</zorder>
    <zorder>btnQuery</zorder>
    <zorder>label</zorder>
@@ -783,6 +811,8 @@
   <tabstop>rbPrevWeekToCurrent</tabstop>
   <tabstop>chkbDelta</tabstop>
   <tabstop>chkbOverlay</tabstop>
+  <tabstop>chkbRawData</tabstop>
+  <tabstop>chkbQAQC</tabstop>
   <tabstop>listQueryList</tabstop>
   <tabstop>cbQuickLook</tabstop>
   <tabstop>btnLoadQuickLook</tabstop>

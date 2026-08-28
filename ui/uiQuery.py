@@ -3,7 +3,7 @@
 import json
 import os
 from PyQt6.QtWidgets import (QMainWindow, QLineEdit, QComboBox, QDateTimeEdit, QListWidget, QPushButton, QRadioButton,
-                            QButtonGroup, QCheckBox, QMessageBox, QInputDialog, QMenu)
+                            QButtonGroup, QCheckBox, QMessageBox, QInputDialog, QMenu, QAbstractItemView)
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6 import uic
@@ -76,6 +76,8 @@ class uiQuery(QMainWindow):
         self.rbPrevWeekToCurrent = self.findChild(QRadioButton, 'rbPrevWeekToCurrent')
         self.chkbDelta = self.findChild(QCheckBox, 'chkbDelta')
         self.chkbOverlay = self.findChild(QCheckBox, 'chkbOverlay')
+        self.chkbRawData = self.findChild(QCheckBox, 'chkbRawData')
+        self.chkbQAQC = self.findChild(QCheckBox, 'chkbQAQC')
         self.btnUpMax = self.findChild(QPushButton, 'btnUpMax')
         self.btnUp15 = self.findChild(QPushButton, 'btnUp15')
         self.btnUp5 = self.findChild(QPushButton, 'btnUp5')
@@ -145,6 +147,9 @@ class uiQuery(QMainWindow):
         self.cbDatabase.currentTextChanged.connect(self.onDatabaseChanged)
         # NOTE: empty QListWidget is falsy in PyQt6 (len==0) — always test is not None
         if self.listQueryList is not None:
+            self.listQueryList.setSelectionMode(
+                QAbstractItemView.SelectionMode.ExtendedSelection
+            )
             self.listQueryList.itemDoubleClicked.connect(self.onQueryListDoubleClicked)
             self.listQueryList.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             self.listQueryList.customContextMenuRequested.connect(self.showQueryListContextMenu)
@@ -353,8 +358,10 @@ class uiQuery(QMainWindow):
             elif not queryItems:
                 Logic.logMessage("WARN", "No valid query items.")
                 return
-            deltaChecked = self.chkbDelta.isChecked()
-            overlayChecked = self.chkbOverlay.isChecked()
+            deltaChecked = bool(self.chkbDelta.isChecked()) if self.chkbDelta is not None else False
+            overlayChecked = bool(self.chkbOverlay.isChecked()) if self.chkbOverlay is not None else False
+            rawChecked = bool(self.chkbRawData.isChecked()) if self.chkbRawData is not None else False
+            qaqcChecked = bool(self.chkbQAQC.isChecked()) if self.chkbQAQC is not None else False
 
             if self.winMain:
                 if not Upload.confirmDiscardPendingEdits(self, "run a new query"):
@@ -371,8 +378,12 @@ class uiQuery(QMainWindow):
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", "Stored last query as {}".format(self.queryType))
-                Query.executeQuery(self.winMain, queryItems, startDate, endDate,
-                                  self.queryType == 'internal', self.winMain.winDataDictionary.mainTable, deltaChecked, overlayChecked)
+                Query.executeQuery(
+                    self.winMain, queryItems, startDate, endDate,
+                    self.queryType == 'internal', self.winMain.winDataDictionary.mainTable,
+                    deltaChecked, overlayChecked,
+                    rawDataChecked=rawChecked, qaqcChecked=qaqcChecked,
+                )
                 self.close()
 
                 if Config.debug:
@@ -423,11 +434,25 @@ class uiQuery(QMainWindow):
                     return
             deltaChecked = bool(self.chkbDelta.isChecked()) if self.chkbDelta is not None else False
             overlayChecked = bool(self.chkbOverlay.isChecked()) if self.chkbOverlay is not None else False
+            rawChecked = bool(self.chkbRawData.isChecked()) if self.chkbRawData is not None else False
+            qaqcChecked = bool(self.chkbQAQC.isChecked()) if self.chkbQAQC is not None else False
+            dateMode = self._queryDateMode()
+            startStr = endStr = None
+            if dateMode == 'custom':
+                if self.dteStartDate is not None:
+                    startStr = self.dteStartDate.dateTime().toString('yyyy-MM-dd HH:mm')
+                if self.dteEndDate is not None:
+                    endStr = self.dteEndDate.dateTime().toString('yyyy-MM-dd HH:mm')
             Logic.saveQuickLook(
                 name,
                 self.listQueryList,
                 displayDelta=deltaChecked,
                 overlayPairs=overlayChecked,
+                rawData=rawChecked,
+                qaqc=qaqcChecked,
+                dateMode=dateMode,
+                startDate=startStr,
+                endDate=endStr,
             )
             Utils.loadQuickLooks(self.cbQuickLook)
             if self.cbQuickLook is not None:
@@ -439,7 +464,8 @@ class uiQuery(QMainWindow):
                 Logic.logMessage(
                     "DEBUG",
                     f"btnSaveQuickLookPressed: Saved '{name}' "
-                    f"(displayDelta={deltaChecked}, overlayPairs={overlayChecked})",
+                    f"(displayDelta={deltaChecked}, overlayPairs={overlayChecked}, "
+                    f"rawData={rawChecked}, qaqc={qaqcChecked}, dateMode={dateMode})",
                 )
 
     def btnLoadQuickLookPressed(self):
@@ -448,8 +474,17 @@ class uiQuery(QMainWindow):
             self.listQueryList,
             chkbDelta=self.chkbDelta,
             chkbOverlay=self.chkbOverlay,
+            chkbRawData=self.chkbRawData,
+            chkbQAQC=self.chkbQAQC,
+            dateRadios={
+                'custom': self.rbCustomDateTime,
+                'prevDay': self.rbPrevDayToCurrent,
+                'prevWeek': self.rbPrevWeekToCurrent,
+            },
+            dteStartDate=self.dteStartDate,
+            dteEndDate=self.dteEndDate,
         )
-        # Relative date ranges should be "now" after loading a quick look too
+        # Prev Day / Prev Week: snap to now (custom timestamps already restored)
         self.refreshRelativeQueryTimes()
         configPath = Utils.getConfigPath()
         config = {}
@@ -587,15 +622,14 @@ class uiQuery(QMainWindow):
         self.editingQueryIndex = None
         if self.qleDataID:
             self.qleDataID.clear()
-        # Clear Display Deltas / Overlay Pairs when the list is wiped
-        if self.chkbDelta is not None:
-            self.chkbDelta.setChecked(False)
-        if self.chkbOverlay is not None:
-            self.chkbOverlay.setChecked(False)
+        # Clear query-option checkboxes when the list is wiped
+        for box in (self.chkbDelta, self.chkbOverlay, self.chkbRawData, self.chkbQAQC):
+            if box is not None:
+                box.setChecked(False)
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
-                "btnClearQueryPressed: Cleared query list and unchecked delta/overlay",
+                "btnClearQueryPressed: Cleared query list and unchecked query options",
             )
 
     def refreshRelativeQueryTimes(self):
@@ -683,16 +717,20 @@ class uiQuery(QMainWindow):
             self.listQueryList.setCurrentItem(item)
 
         dataID = self.qleDataID.text().strip() if self.qleDataID is not None else ''
+        nSel = len(self.listQueryList.selectedItems())
         menu = QMenu(self)
         actAbove = menu.addAction("Insert Query Above")
         actBelow = menu.addAction("Insert Query Below")
-        actAbove.setEnabled(bool(dataID))
-        actBelow.setEnabled(bool(dataID))
-        if not dataID:
+        canInsert = bool(dataID) and nSel <= 1
+        actAbove.setEnabled(canInsert)
+        actBelow.setEnabled(canInsert)
+        if nSel > 1:
+            actAbove.setToolTip("Insert is disabled when multiple rows are selected")
+            actBelow.setToolTip("Insert is disabled when multiple rows are selected")
+        elif not dataID:
             actAbove.setToolTip("Enter a Data ID first")
             actBelow.setToolTip("Enter a Data ID first")
         menu.addSeparator()
-        nSel = len(self.listQueryList.selectedItems())
         actDelete = menu.addAction("Delete" if nSel <= 1 else f"Delete ({nSel})")
 
         chosen = menu.exec(self.listQueryList.mapToGlobal(pos))
@@ -749,190 +787,114 @@ class uiQuery(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", "Interval info displayed")
 
-    def btnUpMaxPressed(self):
-        selectedItems = self.listQueryList.selectedItems()
-        if not selectedItems:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnUpMaxPressed: No items selected, skipping")
+    def _moveSelectedQueryRows(self, delta, toEnd=False):
+        """
+        Move selected query-list rows without reversing them or crossing the
+        edge. The topmost selected row is the stopper going up; the bottommost
+        is the stopper going down. Relative order is kept.
+        """
+        lst = self.listQueryList
+        if lst is None:
             return
-        for item in selectedItems:
-            currentRow = self.listQueryList.row(item)
+        selected = lst.selectedItems()
+        if not selected:
+            return
+        n = lst.count()
+        if n <= 0:
+            return
+        rows = sorted({lst.row(it) for it in selected})
+        if toEnd:
+            if delta < 0:
+                newRows = list(range(len(rows)))
+            else:
+                start = n - len(rows)
+                newRows = list(range(start, n))
+        elif delta < 0:
+            newRows = []
+            ceiling = -1
+            for r in rows:
+                dest = max(ceiling + 1, r + delta)
+                newRows.append(dest)
+                ceiling = dest
+        else:
+            newRows = [0] * len(rows)
+            floor = n
+            for i in range(len(rows) - 1, -1, -1):
+                dest = min(floor - 1, rows[i] + delta)
+                newRows[i] = dest
+                floor = dest
+        if newRows == rows:
+            return
+        original = [lst.item(i) for i in range(n)]
+        moving = set(rows)
+        destOf = {old: new for old, new in zip(rows, newRows)}
+        result = [None] * n
+        for old, new in destOf.items():
+            result[new] = original[old]
+        remaining = [original[i] for i in range(n) if i not in moving]
+        ri = 0
+        for i in range(n):
+            if result[i] is None:
+                result[i] = remaining[ri]
+                ri += 1
+        selectedSet = {original[r] for r in rows}
+        lst.blockSignals(True)
+        try:
+            for i in range(n - 1, -1, -1):
+                lst.takeItem(i)
+            for it in result:
+                lst.addItem(it)
+                it.setSelected(it in selectedSet)
+            if result:
+                current = original[rows[0]] if rows else result[0]
+                if current in selectedSet:
+                    lst.setCurrentItem(current)
+        finally:
+            lst.blockSignals(False)
 
-            if currentRow == 0:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"btnUpMaxPressed: Item at row {currentRow} already at top")
-                continue
-
-            self.listQueryList.takeItem(currentRow)
-            self.listQueryList.insertItem(0, item)
-            self.listQueryList.setCurrentItem(item)
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnUpMaxPressed: Moved selected items to top")
+    def btnUpMaxPressed(self):
+        self._moveSelectedQueryRows(-1, toEnd=True)
 
     def btnUp15Pressed(self):
-        selectedItems = self.listQueryList.selectedItems()
-
-        if not selectedItems:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnUp15Pressed: No items selected, skipping")
-            return
-        for item in selectedItems:
-            currentRow = self.listQueryList.row(item)
-            newRow = max(0, currentRow - 15)
-
-            if currentRow == newRow:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"btnUp15Pressed: Item at row {currentRow} already at top")
-                continue
-
-            self.listQueryList.takeItem(currentRow)
-            self.listQueryList.insertItem(newRow, item)
-            self.listQueryList.setCurrentItem(item)
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnUp15Pressed: Moved selected items up by 15")
+        self._moveSelectedQueryRows(-15)
 
     def btnUp5Pressed(self):
-        selectedItems = self.listQueryList.selectedItems()
-
-        if not selectedItems:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnUp5Pressed: No items selected, skipping")
-            return
-        for item in selectedItems:
-            currentRow = self.listQueryList.row(item)
-            newRow = max(0, currentRow - 5)
-
-            if currentRow == newRow:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"btnUp5Pressed: Item at row {currentRow} already at top")
-                continue
-
-            self.listQueryList.takeItem(currentRow)
-            self.listQueryList.insertItem(newRow, item)
-            self.listQueryList.setCurrentItem(item)
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnUp5Pressed: Moved selected items up by 5")
+        self._moveSelectedQueryRows(-5)
 
     def btnUp1Pressed(self):
-        selectedItems = self.listQueryList.selectedItems()
-
-        if not selectedItems:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnUp1Pressed: No items selected, skipping")
-            return
-        for item in selectedItems:
-            currentRow = self.listQueryList.row(item)
-            newRow = max(0, currentRow - 1)
-
-            if currentRow == newRow:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"btnUp1Pressed: Item at row {currentRow} already at top")
-                continue
-
-            self.listQueryList.takeItem(currentRow)
-            self.listQueryList.insertItem(newRow, item)
-            self.listQueryList.setCurrentItem(item)
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnUp1Pressed: Moved selected items up by 1")
+        self._moveSelectedQueryRows(-1)
 
     def btnDownMaxPressed(self):
-        selectedItems = self.listQueryList.selectedItems()
-        
-        if not selectedItems:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnDownMaxPressed: No items selected, skipping")
-            return
-        bottomRow = self.listQueryList.count() - 1
-
-        for item in reversed(selectedItems):
-            currentRow = self.listQueryList.row(item)
-
-            if currentRow == bottomRow:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"btnDownMaxPressed: Item at row {currentRow} already at bottom")
-                continue
-
-            self.listQueryList.takeItem(currentRow)
-            self.listQueryList.addItem(item)
-            self.listQueryList.setCurrentItem(item)
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnDownMaxPressed: Moved selected items to bottom")
+        self._moveSelectedQueryRows(1, toEnd=True)
 
     def btnDown15Pressed(self):
-        selectedItems = self.listQueryList.selectedItems()
-
-        if not selectedItems:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnDown15Pressed: No items selected, skipping")
-            return
-        bottomRow = self.listQueryList.count() - 1
-
-        for item in reversed(selectedItems):
-            currentRow = self.listQueryList.row(item)
-            newRow = min(bottomRow, currentRow + 15)
-
-            if currentRow == newRow:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"btnDown15Pressed: Item at row {currentRow} already at bottom")
-                continue
-
-            self.listQueryList.takeItem(currentRow)
-            self.listQueryList.insertItem(newRow, item)
-            self.listQueryList.setCurrentItem(item)
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnDown15Pressed: Moved selected items down by 15")
+        self._moveSelectedQueryRows(15)
 
     def btnDown5Pressed(self):
-        selectedItems = self.listQueryList.selectedItems()
-
-        if not selectedItems:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnDown5Pressed: No items selected, skipping")
-            return
-        bottomRow = self.listQueryList.count() - 1
-
-        for item in reversed(selectedItems):
-            currentRow = self.listQueryList.row(item)
-            newRow = min(bottomRow, currentRow + 5)
-
-            if currentRow == newRow:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"btnDown5Pressed: Item at row {currentRow} already at bottom")
-                continue
-
-            self.listQueryList.takeItem(currentRow)
-            self.listQueryList.insertItem(newRow, item)
-            self.listQueryList.setCurrentItem(item)
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnDown5Pressed: Moved selected items down by 5")
+        self._moveSelectedQueryRows(5)
 
     def btnDown1Pressed(self):
-        selectedItems = self.listQueryList.selectedItems()
+        self._moveSelectedQueryRows(1)
 
-        if not selectedItems:
-            if Config.debug:
-                Logic.logMessage("DEBUG", "btnDown1Pressed: No items selected, skipping")
-            return
-        bottomRow = self.listQueryList.count() - 1
-
-        for item in reversed(selectedItems):
-            currentRow = self.listQueryList.row(item)
-            newRow = min(bottomRow, currentRow + 1)
-
-            if currentRow == newRow:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"btnDown1Pressed: Item at row {currentRow} already at bottom")
-                continue
-            
-            self.listQueryList.takeItem(currentRow)
-            self.listQueryList.insertItem(newRow, item)
-            self.listQueryList.setCurrentItem(item)
-        if Config.debug:
-            Logic.logMessage("DEBUG", "btnDown1Pressed: Moved selected items down by 1")
+    def _queryDateMode(self):
+        if self.rbPrevDayToCurrent is not None and self.rbPrevDayToCurrent.isChecked():
+            return 'prevDay'
+        if self.rbPrevWeekToCurrent is not None and self.rbPrevWeekToCurrent.isChecked():
+            return 'prevWeek'
+        return 'custom'
 
     def btnQueryOptionsInfoPressed(self):
-        QMessageBox.information(self, "Query Options Info",
-                                "Delta: Calculate and display the change between consecutive values.\n\nOverlay: Display multiple datasets in a single view for comparison.")
+        QMessageBox.information(
+            self,
+            "Query Options Info",
+            "Display Deltas: extra column of secondary − primary for each pair "
+            "(1–2, 3–4, …).\n\n"
+            "Overlay Pairs: one column per pair; primary value where both exist, "
+            "secondary fill where only the second series has a value.\n\n"
+            "Raw Data: skip display rounding in the table (full fixed-point text).\n\n"
+            "QAQC: color cells from the data dictionary limits (missing, expected, "
+            "cutoff, rate of change). Delta columns are skipped.",
+        )
         if Config.debug:
             Logic.logMessage("DEBUG", "btnQueryOptionsInfoPressed: Showed Query Options info dialog")
 

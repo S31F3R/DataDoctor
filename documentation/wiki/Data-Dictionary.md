@@ -10,8 +10,19 @@ Open it from the book/database button on the main window. **Ctrl+S** or **Save**
 
 (`cuttoffMin` is the historical spelling in the schema.)
 
-- **database** is a dropdown (internal + public sources).
-- **valuePrecision** is a dropdown of Aquarius identifiers from `core/valuePrecision.json`.
+## What dataID and siteID mean
+
+These two columns are **not** the same thing, and the ID you type in Query is the **dataID**. What that string is depends on the source:
+
+| Source | dataID (what you query) | siteID (dictionary / search) |
+|--------|-------------------------|------------------------------|
+| **USBR / HDB** | Site datatype ID (**SDID**). Optional model-run suffix: `SDID-MRID` | HDB site ID (numeric) |
+| **Aquarius** | Timeseries **UID** (32-char hex) | Location identifier (e.g. `TFLC`) |
+| **USGS-NWIS** | Dictionary stores the `time_series_id` hex. Query accepts `Site-tsid[-parameter]`, `Site-parameter`, or legacy `Site-methodID-parameter` | USGS site number (e.g. `09429100`) |
+
+**Data ID Search** in the Query window lists `dataID`, `siteID`, database, commonName, and datatype. Sorting those ID columns puts **all-digit values first** (numeric order), then mixed/text IDs alphabetically.
+
+**database** is a dropdown (internal + public sources). **valuePrecision** is a dropdown of Aquarius identifiers from `core/valuePrecision.json`.
 
 ## How header labels are built
 
@@ -40,13 +51,13 @@ Display rounding is a **RoundingSpec**: `DEC(n)` (decimal places) or `SIG(n)` (s
 2. **precisionOverride** — if set (e.g. `DEC(2)`), it wins for that row.
 3. If both are blank → **DEC(2)**.
 
-**Options → Raw data** skips rounding in the table (full fixed-point text, never scientific notation). Overlay/delta still compare through the limiter so tiny binary leftovers do not show as a fake delta. See [Overlay and Delta](Overlay-and-Delta).
+Query window **Raw Data** skips rounding in the table (full fixed-point text, never scientific notation). Overlay/delta still compare through the limiter so tiny binary leftovers do not show as a fake delta. See [Overlay and Delta](Overlay-and-Delta). The box is per query (and stored on a Quick Look); default is unchecked.
 
 USGS rows are matched on the **bare time_series_id** (the hex in the DataID), so `precisionOverride` applies even when the query string is `site-tsid-parameter`.
 
 ## QAQC coloring
 
-Enabled by **Options → QAQC** (`qaqc` in `user.config`). Runs after the table is filled. **Delta columns are skipped** (they have their own +/− colors).
+Enabled by the Query window **QAQC** checkbox (stored on a Quick Look; default unchecked). Runs after the table is filled. **Delta columns are skipped** (they have their own +/− colors).
 
 | Condition | Typical color |
 |-----------|----------------|

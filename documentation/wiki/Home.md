@@ -12,8 +12,8 @@ The installed version is shown in **About**.
 
 ## Using the app
 
-- [Querying](Querying) — public vs internal, intervals, timestamps
-- [Data Dictionary](Data-Dictionary) — labels, QAQC, valuePrecision
+- [Querying](Querying) — public vs internal, intervals, timestamps, Query Options
+- [Data Dictionary](Data-Dictionary) — dataID / siteID, labels, QAQC, valuePrecision
 - [Overlay and Delta](Overlay-and-Delta)
 - [Quick Looks](Quick-Looks)
 - [Graph](Graph)

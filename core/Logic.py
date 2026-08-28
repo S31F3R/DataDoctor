@@ -16,6 +16,25 @@ from PyQt6.QtCore import QThreadPool, QDir, QObject, pyqtSignal
 from PyQt6.QtWidgets import QTableWidgetItem, QFileDialog, QSplitter, QTreeView
 from core import Config, Utils
 
+
+def mixedIdSortKey(text):
+    """
+    Sort key for dataID / siteID: all-digit values first (numeric order),
+    then everything else case-insensitively.
+    """
+    s = "" if text is None else str(text).strip()
+    if s.isdigit():
+        return (0, int(s), s)
+    return (1, s.casefold(), s)
+
+
+class MixedIdTableItem(QTableWidgetItem):
+    """QTableWidgetItem that sorts mixed numeric/text IDs (numbers, then text)."""
+
+    def __lt__(self, other):
+        otherText = other.text() if isinstance(other, QTableWidgetItem) else str(other or "")
+        return mixedIdSortKey(self.text()) < mixedIdSortKey(otherText)
+
 # Flag to prevent multiple initializations (module-level for encapsulation)
 loggingInitialized = False
 faultLogFile = None
@@ -853,11 +872,15 @@ def buildDataDictionary(table, columns=None, whereClause=None):
                 item = QTableWidgetItem(header.strip())
                 table.setHorizontalHeaderItem(c, item)
             table.setRowCount(len(rows))
+            idCols = {
+                i for i, h in enumerate(headers)
+                if str(h).strip().lower() in ('dataid', 'siteid')
+            }
 
             for r, row in enumerate(rows):
                 for c, value in enumerate(row):
                     valStr = str(value) if value is not None else ''
-                    item = QTableWidgetItem(valStr)
+                    item = MixedIdTableItem(valStr) if c in idCols else QTableWidgetItem(valStr)
                     table.setItem(r, c, item)
     except Exception as e:
         logException("Failed to build DataDictionary from DB", e)
@@ -966,7 +989,17 @@ def convertLegacyQuickLooks():
             except Exception as e:                
                 logMessage("ERROR", f"convertLegacyQuickLooks: Failed to convert {txtPath}: {e}")
 
-def saveQuickLook(textQuickLookName, listQueryList, displayDelta=False, overlayPairs=False):
+def saveQuickLook(
+    textQuickLookName,
+    listQueryList,
+    displayDelta=False,
+    overlayPairs=False,
+    rawData=False,
+    qaqc=False,
+    dateMode='custom',
+    startDate=None,
+    endDate=None,
+):
     """
     Save query list + optional UI metadata to quickLook JSON.
 
@@ -974,9 +1007,14 @@ def saveQuickLook(textQuickLookName, listQueryList, displayDelta=False, overlayP
       {
         "queries": ["dataID|interval|database", ...],
         "displayDelta": true/false,
-        "overlayPairs": true/false
+        "overlayPairs": true/false,
+        "rawData": true/false,
+        "qaqc": true/false,
+        "dateMode": "custom" | "prevDay" | "prevWeek",
+        "startDate" / "endDate": only when dateMode is custom
       }
 
+    Prev Day / Prev Week do not store timestamps — load refreshes from now.
     Legacy plain-array files still load; new saves always write the object form.
     """
     name = textQuickLookName.toPlainText().strip() if hasattr(textQuickLookName, 'toPlainText') else str(textQuickLookName).strip()
@@ -986,11 +1024,20 @@ def saveQuickLook(textQuickLookName, listQueryList, displayDelta=False, overlayP
             logMessage("WARN", "Empty quick look name—skipped.")
         return
     queries = [listQueryList.item(x).text() for x in range(listQueryList.count())]
+    mode = dateMode if dateMode in ('custom', 'prevDay', 'prevWeek') else 'custom'
     payload = {
         'queries': queries,
         'displayDelta': bool(displayDelta),
         'overlayPairs': bool(overlayPairs),
+        'rawData': bool(rawData),
+        'qaqc': bool(qaqc),
+        'dateMode': mode,
     }
+    if mode == 'custom':
+        if startDate:
+            payload['startDate'] = startDate
+        if endDate:
+            payload['endDate'] = endDate
     quicklookPath = os.path.join(Utils.getQuickLookDir(), f'{name}.json')
     os.makedirs(os.path.dirname(quicklookPath), exist_ok=True)
 
@@ -1001,22 +1048,53 @@ def saveQuickLook(textQuickLookName, listQueryList, displayDelta=False, overlayP
             logMessage(
                 "DEBUG",
                 "saveQuickLook: Saved Quick Look to {} "
-                "(displayDelta={}, overlayPairs={})".format(
-                    quicklookPath, displayDelta, overlayPairs
+                "(displayDelta={}, overlayPairs={}, rawData={}, qaqc={}, dateMode={})".format(
+                    quicklookPath, displayDelta, overlayPairs, rawData, qaqc, mode
                 ),
             )
     except Exception as e:        
         logMessage("ERROR", "saveQuickLook: Failed to save Quick Look to {}: {}".format(quicklookPath, e))
 
 
+def _parseQuickLookDate(rawDt):
+    """Parse a Quick Look custom start/end string to datetime, or None."""
+    if rawDt is None:
+        return None
+    if isinstance(rawDt, datetime):
+        return rawDt
+    text = str(rawDt).strip().replace('T', ' ')
+    if not text:
+        return None
+    for fmt in (
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d %H:%M',
+        '%m/%d/%y %H:%M:00',
+        '%m/%d/%y %H:%M',
+    ):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def _parseQuickLookPayload(data):
     """
     Normalize loaded JSON/txt content into (queryStrings, metaDict).
 
-    metaDict keys: displayDelta, overlayPairs (bools).
-    Missing keys default to False so legacy files uncheck the boxes.
+    metaDict keys: displayDelta, overlayPairs, rawData, qaqc (bools),
+    dateMode ('custom'|'prevDay'|'prevWeek'), startDate, endDate.
+    Missing keys default to False / custom so legacy files uncheck the boxes.
     """
-    meta = {'displayDelta': False, 'overlayPairs': False}
+    meta = {
+        'displayDelta': False,
+        'overlayPairs': False,
+        'rawData': False,
+        'qaqc': False,
+        'dateMode': 'custom',
+        'startDate': None,
+        'endDate': None,
+    }
     if isinstance(data, dict):
         queries = data.get('queries')
         if queries is None:
@@ -1031,6 +1109,19 @@ def _parseQuickLookPayload(data):
             meta['overlayPairs'] = bool(data.get('overlayPairs'))
         elif 'overlay' in data:
             meta['overlayPairs'] = bool(data.get('overlay'))
+        if 'rawData' in data:
+            meta['rawData'] = bool(data.get('rawData'))
+        if 'qaqc' in data:
+            meta['qaqc'] = bool(data.get('qaqc'))
+        mode = str(data.get('dateMode') or data.get('dateRange') or 'custom').strip()
+        if mode in ('prevDay', 'prevWeek', 'custom'):
+            meta['dateMode'] = mode
+        elif mode in ('prevDayToCurrent', 'previousDay'):
+            meta['dateMode'] = 'prevDay'
+        elif mode in ('prevWeekToCurrent', 'previousWeek', 'prev7'):
+            meta['dateMode'] = 'prevWeek'
+        meta['startDate'] = data.get('startDate') or data.get('start')
+        meta['endDate'] = data.get('endDate') or data.get('end')
         return queries, meta
     if isinstance(data, list):
         # Legacy plain array — no metadata stored → checkboxes off
@@ -1038,11 +1129,22 @@ def _parseQuickLookPayload(data):
     return [], meta
 
 
-def loadQuickLook(cbQuickLook, listQueryList, chkbDelta=None, chkbOverlay=None):
+def loadQuickLook(
+    cbQuickLook,
+    listQueryList,
+    chkbDelta=None,
+    chkbOverlay=None,
+    chkbRawData=None,
+    chkbQAQC=None,
+    dateRadios=None,
+    dteStartDate=None,
+    dteEndDate=None,
+):
     """
-    Load quick look into listQueryList. Always restore Display Deltas /
-    Overlay Pairs checkboxes when those widgets are passed: saved True/False,
-    or False when the file has no metadata (legacy array JSON).
+    Load quick look into listQueryList. Always restore query-option checkboxes
+    when those widgets are passed: saved True/False, or False when the file
+    has no metadata (legacy array JSON). Date radios: prevDay/prevWeek refresh
+    from now; custom restores stored timestamps.
     """
     quickLookName = cbQuickLook.currentText()
 
@@ -1119,16 +1221,53 @@ def loadQuickLook(cbQuickLook, listQueryList, chkbDelta=None, chkbOverlay=None):
             chkbDelta.setChecked(bool(meta.get('displayDelta')))
         if chkbOverlay is not None:
             chkbOverlay.setChecked(bool(meta.get('overlayPairs')))
+        if chkbRawData is not None:
+            chkbRawData.setChecked(bool(meta.get('rawData')))
+        if chkbQAQC is not None:
+            chkbQAQC.setChecked(bool(meta.get('qaqc')))
+
+        mode = meta.get('dateMode') or 'custom'
+        radios = dateRadios or {}
+        rbCustom = radios.get('custom')
+        rbDay = radios.get('prevDay')
+        rbWeek = radios.get('prevWeek')
+        targetRb = {'custom': rbCustom, 'prevDay': rbDay, 'prevWeek': rbWeek}.get(mode)
+        if targetRb is not None:
+            targetRb.setChecked(True)
+        if dteStartDate is not None and dteEndDate is not None:
+            now = datetime.now()
+            if mode == 'prevDay':
+                start = (now - timedelta(days=1)).replace(hour=1, minute=0, second=0)
+                dteStartDate.setDateTime(start)
+                dteEndDate.setDateTime(now)
+                dteStartDate.setEnabled(False)
+                dteEndDate.setEnabled(False)
+            elif mode == 'prevWeek':
+                start = (now - timedelta(days=7)).replace(hour=1, minute=0, second=0)
+                dteStartDate.setDateTime(start)
+                dteEndDate.setDateTime(now)
+                dteStartDate.setEnabled(False)
+                dteEndDate.setEnabled(False)
+            else:
+                dteStartDate.setEnabled(True)
+                dteEndDate.setEnabled(True)
+                for key, widget in (('startDate', dteStartDate), ('endDate', dteEndDate)):
+                    parsed = _parseQuickLookDate(meta.get(key))
+                    if parsed is not None:
+                        widget.setDateTime(parsed)
         
         if Config.debug:
             logMessage(
                 "DEBUG",
                 "loadQuickLook: Loaded '{}' with {} items "
-                "(displayDelta={}, overlayPairs={})".format(
+                "(displayDelta={}, overlayPairs={}, rawData={}, qaqc={}, dateMode={})".format(
                     quickLookName,
                     listQueryList.count(),
                     meta.get('displayDelta'),
                     meta.get('overlayPairs'),
+                    meta.get('rawData'),
+                    meta.get('qaqc'),
+                    mode,
                 ),
             )
         
@@ -1136,7 +1275,17 @@ def loadQuickLook(cbQuickLook, listQueryList, chkbDelta=None, chkbOverlay=None):
         if quickLookPath == userTxtPath:
             deltaVal = bool(chkbDelta.isChecked()) if chkbDelta is not None else False
             overlayVal = bool(chkbOverlay.isChecked()) if chkbOverlay is not None else False
-            saveQuickLook(quickLookName, listQueryList, displayDelta=deltaVal, overlayPairs=overlayVal)
+            rawVal = bool(chkbRawData.isChecked()) if chkbRawData is not None else False
+            qaqcVal = bool(chkbQAQC.isChecked()) if chkbQAQC is not None else False
+            saveQuickLook(
+                quickLookName,
+                listQueryList,
+                displayDelta=deltaVal,
+                overlayPairs=overlayVal,
+                rawData=rawVal,
+                qaqc=qaqcVal,
+                dateMode=mode,
+            )
             os.remove(userTxtPath)
             if Config.debug:
                 logMessage("DEBUG", f"loadQuickLook: Converted legacy {userTxtPath} to .json and deleted .txt")

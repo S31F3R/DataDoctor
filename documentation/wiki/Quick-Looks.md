@@ -1,6 +1,6 @@
 # Quick Looks
 
-A Quick Look is a **saved query list** (databases, DataIDs, intervals, overlay/delta flags, time-range mode) so you can reload a stretch or station set without rebuilding it.
+A Quick Look is a **saved query list** (databases, DataIDs, intervals, Query Options flags, time-range mode) so you can reload a stretch or station set without rebuilding it.
 
 ## Where they live
 
@@ -20,14 +20,19 @@ See [App Data](App-Data).
 
 In the Query window:
 
-1. Build the list (and set Delta / Overlay if you want them stored).
+1. Build the list (and set Display Deltas / Overlay Pairs / Raw Data / QAQC if you want them stored).
 2. **Save Quick Look** — the name box is filled from the combo when a Quick Look is already selected. If that name exists, confirm overwrite.
 3. Pick it in the combo and **Load Quick Look**.
 4. **Delete Quick Look** removes that saved file.
 
-If an older file is missing overlay/delta metadata, those checkboxes stay **unchecked** when loaded.
+If an older file is missing overlay/delta/raw/QAQC metadata, those checkboxes stay **unchecked** when loaded.
 
-**Prev Day / Prev Week** stored in a Quick Look still mean “rolling to now” — they refresh when you load and when you Query.
+Date range:
+
+- **Custom** (default) — the start/end pickers are stored and restored
+- **Prev Day to current** / **Prev Week to current** — only the mode is stored; load and Query refresh from *now* (same rolling window as the radio buttons)
+
+**Prev Day / Prev Week** still mean “rolling to now” — they refresh when you load and when you Query.
 
 ## Export / Import
 

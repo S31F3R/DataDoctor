@@ -722,11 +722,14 @@ class SqlWorkbench:
         mainSplitter.setHandleWidth(SNIPPET_HANDLE_PX)
         # No solid-bar stylesheet — handle paints tab/window color + center dots.
         mainSplitter.setChildrenCollapsible(True)
-        mainSplitter.setCollapsible(0, False)
-        mainSplitter.setCollapsible(1, True)
         snippetPanel.setMinimumWidth(0)
         mainSplitter.addWidget(leftWidget)
         mainSplitter.addWidget(snippetPanel)
+        # setCollapsible indexes are valid only after widgets are added
+        if mainSplitter.count() > 0:
+            mainSplitter.setCollapsible(0, False)
+        if mainSplitter.count() > 1:
+            mainSplitter.setCollapsible(1, True)
         mainSplitter.setSizes([1281, 256])
         self.snippetPanel = snippetPanel
         self.mainSplitter = mainSplitter

@@ -950,9 +950,11 @@ class uiMain(QMainWindow):
                 if not Upload.confirmDiscardPendingEdits(self, "refresh the query"):
                     if Config.debug: Logic.logMessage("DEBUG", "btnRefreshPressed: Canceled due to pending edits")
                     return
-                # Retrieve last delta and overlay states from globals, default to False if not set
+                # Retrieve last query-option states from globals, default to False if not set
                 deltaChecked = getattr(Config, 'lastDeltaChecked', False)
                 overlayChecked = getattr(Config, 'lastOverlayChecked', False)
+                rawChecked = getattr(Config, 'lastRawDataChecked', False)
+                qaqcChecked = getattr(Config, 'lastQaqcChecked', False)
                 startDate = self.lastStartDate
                 endDate = self.refreshEndDateForQuery(self.lastEndDate)
 
@@ -963,12 +965,14 @@ class uiMain(QMainWindow):
                     Logic.logMessage(
                         "DEBUG",
                         f"btnRefreshPressed: Refreshing start={startDate}, end={endDate}, "
-                        f"deltaChecked={deltaChecked}, overlayChecked={overlayChecked}",
+                        f"deltaChecked={deltaChecked}, overlayChecked={overlayChecked}, "
+                        f"rawData={rawChecked}, qaqc={qaqcChecked}",
                     )
                 Query.executeQuery(
                     self, self.lastQueryItems, startDate, endDate,
                     self.lastQueryType == 'internal', self.winDataDictionary.mainTable,
                     deltaChecked=deltaChecked, overlayChecked=overlayChecked,
+                    rawDataChecked=rawChecked, qaqcChecked=qaqcChecked,
                 )
 
                 if Config.debug: Logic.logMessage("DEBUG", "btnRefreshPressed: Refreshed query with last parameters")

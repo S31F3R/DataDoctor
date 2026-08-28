@@ -72,7 +72,14 @@ A portable zip can be built with `python scripts/packageMac.py`. A native `.app`
 
 ## Oracle Instant Client
 
-Packaged Windows / Linux / macOS trees may include Instant Client **Basic Lite** (raw library files, no extra Oracle installer) under `oracle/client` (or `Project Files\oracle\client`). The app prefers that copy and falls back to a system Instant Client. Set **Options → Oracle** to the `tnsnames.ora` path if TNS names are not in the default location.
+Packaged Windows / Linux / macOS trees may include Instant Client **Basic Lite** (raw library files, no extra Oracle installer) under `oracle/client` (or `Project Files\oracle\client`). **That packaged client is always used when it is present** — a system Oracle install is only a fallback if the package has no client.
+
+`tnsnames.ora` and `sqlnet.ora` are read from the **same folder**:
+
+1. `TNS_ADMIN` environment variable, if set
+2. Else **Options → Oracle → TNS Names Location** (defaults to packaged `oracle/network/admin`)
+
+The package ships `sqlnet.ora` in `oracle/network/admin` (Windows: `Project Files\oracle\network\admin`). It does **not** ship `tnsnames.ora`. Copy yours into that folder (or point `TNS_ADMIN` at a folder that already has both files). Instant Client will not look under `oracle/client/network/admin`.
 
 The Python update zip does not include Instant Client (it is OS-specific).
 

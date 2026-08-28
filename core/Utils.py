@@ -66,6 +66,7 @@ controlLayouts = {
         'btnIntervalInfo': (100, 76, 31, 20),
         'btnQueryOptionsInfo': (110, 401, 31, 20),
         'chkbOverlay': (150, 424, 131, 22),         # .ui
+        'chkbQAQC': (150, 448, 131, 22),
     },
     'retro': {
         # Press Start — same row as default, +34 x / +2 y (historical Refresh offset)
@@ -76,6 +77,7 @@ controlLayouts = {
         'btnIntervalInfo': (164, 76, 31, 20),
         'btnQueryOptionsInfo': (164, 401, 31, 20),
         'chkbOverlay': (162, 424, 131, 22),
+        'chkbQAQC': (162, 448, 131, 22),
     },
 }
 
@@ -90,6 +92,8 @@ retroSmallFontControls = frozenset({
     'rbPrevWeekToCurrent',
     'chkbDelta',
     'chkbOverlay',
+    'chkbRawData',
+    'chkbQAQC',
     'lblTimeStampMethod',
     'rbBOP',
     'rbEOP',
@@ -1335,7 +1339,11 @@ def buttonStyle(button, iconName=None, iconSize=None):
                         except Exception:
                             obj.setIcon(normalIcon)
                     syncIcon()
+                    # Modals (info, History, Options) pump a nested loop;
+                    # Windows then posts a fake Enter. Re-sync after that.
                     QTimer.singleShot(0, syncIcon)
+                    QTimer.singleShot(50, syncIcon)
+                    QTimer.singleShot(100, syncIcon)
                 return super().eventFilter(obj, event)
 
         # Install filter (remove any existing to avoid duplicates)
@@ -1345,6 +1353,25 @@ def buttonStyle(button, iconName=None, iconSize=None):
         filt = ButtonEventFilter(button)
         button._ddIconFilter = filt
         button.installEventFilter(filt)
+        # After clicked slots (which may open a modal), wait until the modal
+        # is gone then restore the icon — same idea as History's hand call.
+        def _syncAfterClick(*_args, _btn=button):
+            def tick(retries=40):
+                app = QApplication.instance()
+                if app is not None and app.activeModalWidget() is not None:
+                    if retries > 0:
+                        QTimer.singleShot(50, lambda: tick(retries - 1))
+                    return
+                resetStyledButtonHover(_btn)
+            QTimer.singleShot(0, lambda: tick())
+        oldClick = getattr(button, '_ddHoverClickHook', None)
+        if oldClick is not None:
+            try:
+                button.clicked.disconnect(oldClick)
+            except TypeError:
+                pass
+        button._ddHoverClickHook = _syncAfterClick
+        button.clicked.connect(_syncAfterClick)
 
         # Apply flat stylesheet
         button.setStyleSheet("""
@@ -1577,7 +1604,7 @@ def loadConfig():
         'periodOffset': True,
         'hourTimestampMethod': 'EOP',
         'retroMode': False,
-        'qaqc': True,
+        'qaqc': False,
         'rawData': False,
         'lastQuickLook': '',
         # stable = GitHub full releases only; beta = include pre-releases (-rc / -beta)
@@ -1656,12 +1683,9 @@ def loadConfig():
                     Logic.logMessage("DEBUG", "Removing obsolete colorMode")
                 config.pop('colorMode')
 
-            # Check os env for existing TNS_ADMIN
-            envTns = os.environ.get('TNS_ADMIN')
-
-            # If existing TNS_ADMIN, overwrite config TNS_ADMIN location
-            if envTns:
-                config['tnsNamesLocation'] = envTns
+            # Do not copy TNS_ADMIN into tnsNamesLocation. Env is read at
+            # Instant Client setup; persisting it made Options show a system
+            # Oracle path on machines that should use packaged network/admin.
 
             # Write updated config back to file if migrations occurred
             with open(configPath, 'w', encoding='utf-8') as configFile:
@@ -1741,7 +1765,7 @@ def convertConfigToJson():
         settings = {
             'utcOffset': "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
             'retroFont': True,
-            'qaqc': True,
+            'qaqc': False,
             'rawData': False,
             'debugMode': False,
             'tnsNamesLocation': '',
@@ -1996,6 +2020,14 @@ def _restoreNativePalette(app):
 def _applyForcedTheme(app, wantDark):
     scheme = Qt.ColorScheme.Dark if wantDark else Qt.ColorScheme.Light
     _applyHintScheme(app, scheme)
+    # Windows 11 native style paints checkbox/radio indicators from the OS
+    # theme and ignores a pushed palette (dark boxes on a light System UI).
+    # Fusion honors Light/Dark palettes for those indicators on every machine.
+    if sys.platform == 'win32':
+        current = _styleKey(app)
+        if current.lower() != 'fusion':
+            _setAppStyle(app, 'Fusion')
+            _applyHintScheme(app, scheme)
     pal = app.style().standardPalette()
     if _paletteIsDark(pal) != wantDark:
         current = _styleKey(app)
@@ -2117,8 +2149,8 @@ def reloadGlobals():
     Config.debug = settings['debugMode']
     Config.utcOffset = settings['utcOffset']
     Config.periodOffset = resolvePeriodOffset(settings)
-    Config.qaqcEnabled = settings['qaqc']
-    Config.rawData = settings['rawData']
+    # rawData / qaqcEnabled are Query-window flags (Quick Look + last query),
+    # not Options globals. Do not reload them from user.config.
     theme = str(settings.get('colorTheme') or 'system').strip().lower()
     if theme not in ('system', 'light', 'dark'):
         theme = 'system'

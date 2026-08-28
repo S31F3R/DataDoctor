@@ -7,7 +7,7 @@ The export button writes **whichever table is on the active tab**:
 | **Data Query** | The series table (timestamps + every column as displayed) |
 | **SQL Query Builder** | The **focused** result tab of the active worksheet (not every result tab) |
 
-Display text is what you get (raw vs rounded follows **Options → Raw data**). Overlay/delta columns export as they appear.
+Display text is what you get (raw vs rounded follows the Query **Raw Data** checkbox from the last run). Overlay/delta columns export as they appear.
 
 You pick the file path. The last folder is remembered as `lastExportPath` in `user.config`.
 
