@@ -19,18 +19,9 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
-[x] Hardening (TLS / updates)
-[x] Leftover DataDoctor.ico removed
-[x] Data Doctor.exe launches after applyUpdate (fresh Windows zip)
-[x] Options Appearance table height + Restore Defaults button
-[x] pythonFiles leftover cleanup
-[x] Appearance table colors
-[x] Windows python-embed 3.14 (fresh zip)
-[x] 3.0.x → 3.1 Windows hop (launcher replace)
-[x] Light System theme checkboxes (Windows)
-[x] Data Query Excel-style formulas (internal)
 
 Deferred / known
 --------------------------------------------------------------------------------
 [!] USGS monthly/yearly (OGC has no products)
 [!] AppImage applyUpdate path not wired the same as launcher packages yet
+

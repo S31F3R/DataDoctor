@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 
 # Bump this when cutting a release (tag should match: v3.0.0 or v3.0.0-rc.1)
-VERSION = "3.1.0-rc.3.2"
+VERSION = "3.1.0"
 
 # GitHub repo for release checks (owner/name)
 GITHUB_REPO = "S31F3R/DataDoctor"
