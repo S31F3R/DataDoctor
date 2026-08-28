@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import re
+
 from PyQt6.QtCore import Qt, QEvent, QObject
 from PyQt6.QtGui import QColor, QCursor, QPainter, QPen, QMouseEvent
 from PyQt6.QtWidgets import (
@@ -178,7 +180,34 @@ class FormulaDelegate(QStyledItemDelegate):
         applyCellInput(self.mainWindow, index.row(), index.column(), editor.text())
         recalculateAll(self.mainWindow)
 
-    def insertRef(self, col: int, row: int):
+    def isPointing(self) -> bool:
+        """True while the in-cell editor is a formula (`=…`)."""
+        editor = self._editor
+        if editor is None:
+            return False
+        return (editor.text() or "").strip().startswith("=")
+
+    def eventFilter(self, obj, event):
+        # Qt commits/closes the editor on FocusOut before the table sees the
+        # click. Swallow that when the click is still on the grid so pointing
+        # at another cell can insert A1 instead of selecting it.
+        if obj is self._editor and event.type() == QEvent.Type.FocusOut:
+            if self.isPointing() and self._clickIsOnTable():
+                return True
+        return super().eventFilter(obj, event)
+
+    def _clickIsOnTable(self) -> bool:
+        table = self.mainWindow.mainTable if self.mainWindow is not None else None
+        if table is None:
+            return False
+        vp = table.viewport()
+        try:
+            pos = vp.mapFromGlobal(QCursor.pos())
+        except Exception:
+            return False
+        return vp.rect().contains(pos)
+
+    def insertRef(self, col: int, row: int, asRange=False):
         editor = self._editor
         if editor is None:
             return False
@@ -187,9 +216,14 @@ class FormulaDelegate(QStyledItemDelegate):
             return False
         ref = f"{colToLetters(col)}{row + 1}"
         cursor = editor.cursorPosition()
-        new = text[:cursor] + ref + text[cursor:]
+        prefix = text[:cursor]
+        suffix = text[cursor:]
+        if asRange and re.search(r"\$?[A-Za-z]+\$?\d+$", prefix):
+            if not prefix.endswith(":"):
+                ref = ":" + ref
+        new = prefix + ref + suffix
         editor.setText(new)
-        editor.setCursorPosition(cursor + len(ref))
+        editor.setCursorPosition(len(prefix) + len(ref))
         editor.setFocus(Qt.FocusReason.OtherFocusReason)
         return True
 
@@ -320,20 +354,27 @@ class FormulaTableFilter(QObject):
         et = event.type()
         viewport = table.viewport()
 
-        if obj is viewport and et == QEvent.Type.MouseButtonPress:
-            if isinstance(event, QMouseEvent) and event.button() == Qt.MouseButton.LeftButton:
-                if getattr(table, "_formulaPointing", False):
-                    pos = event.position().toPoint()
+        if et == QEvent.Type.MouseButtonPress and isinstance(event, QMouseEvent):
+            if event.button() == Qt.MouseButton.LeftButton:
+                d = self._delegate()
+                if d is not None and d.isPointing():
+                    if obj is viewport:
+                        pos = event.position().toPoint()
+                    elif obj is table:
+                        pos = viewport.mapFrom(table, event.position().toPoint())
+                    else:
+                        pos = viewport.mapFromGlobal(event.globalPosition().toPoint())
                     idx = table.indexAt(pos)
-                    d = self._delegate()
                     if (
                         idx.isValid()
-                        and d is not None
                         and d._editIndex is not None
                         and (idx.row(), idx.column())
                         != (d._editIndex.row(), d._editIndex.column())
                     ):
-                        if d.insertRef(idx.column(), idx.row()):
+                        asRange = bool(
+                            event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+                        )
+                        if d.insertRef(idx.column(), idx.row(), asRange=asRange):
                             return True
 
         if self._drag is not None and et == QEvent.Type.MouseMove:
