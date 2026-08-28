@@ -10,7 +10,7 @@ and runs applyUpdate.cmd first if Update\ contains a .zip.
 Rebuild on Windows only (this Linux packager has no vbc / Visual Studio):
 
   cd launcher\src
-  vbc /nologo /target:winexe /out:"..\Data Doctor.exe" /win32icon:..\DataDoctor.ico App.vb
+  vbc /nologo /target:winexe /out:"..\Data Doctor.exe" /win32icon:..\DataDoctor.ico app.vb
 
 Do NOT compile documentation/app.vb — that is a generic template
 (pythonFiles\app.pyw). Data Doctor's layout is Project Files\DataDoctor.pyw.
