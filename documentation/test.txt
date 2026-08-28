@@ -8,7 +8,7 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] Windows silent launch (VM + laptop)
+[x] Windows silent launch (VM + laptop)
    Steps:
      a. Work laptop: existing install still opens; About (Info) still plays music.
      b. VM that previously died with no window: unzip a build with this app.pyw
