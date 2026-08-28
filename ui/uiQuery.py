@@ -769,21 +769,27 @@ class uiQuery(QMainWindow):
             )
 
     def btnDataIdInfoPressed(self):
-        QMessageBox.information(
-            self,
-            "DataID Formats",
-            "AQUARIUS Format:\nUID\n\n"
-            "USBR Format:\nSDID\nSDID-MRID\n\n"
-            "USGS Format:\n"
-            "  Site-time_series_id[-parameter]  (OGC; parameter optional)\n"
-            "  Site-parameter  (looks up time_series_id; picker if multiple)\n"
-            "  Site-methodID-parameter  (legacy waterservices)",
-        )
+        try:
+            QMessageBox.information(
+                self,
+                "DataID Formats",
+                "AQUARIUS Format:\nUID\n\n"
+                "USBR Format:\nSDID\nSDID-MRID\n\n"
+                "USGS Format:\n"
+                "  Site-time_series_id[-parameter]  (OGC; parameter optional)\n"
+                "  Site-parameter  (looks up time_series_id; picker if multiple)\n"
+                "  Site-methodID-parameter  (legacy waterservices)",
+            )
+        finally:
+            Utils.resetStyledButtonHover(self.sender() or self.btnDataIdInfo)
         if Config.debug:
             Logic.logMessage("DEBUG", "Data ID info displayed")
 
     def btnIntervalInfoPressed(self):
-        QMessageBox.information(self, "Interval Info", "Interval determines what timestamps are displayed and what table the data is queried from (USBR).\n\nIn a query list, timestamp interval is determined by first dataID in the list.")
+        try:
+            QMessageBox.information(self, "Interval Info", "Interval determines what timestamps are displayed and what table the data is queried from (USBR).\n\nIn a query list, timestamp interval is determined by first dataID in the list.")
+        finally:
+            Utils.resetStyledButtonHover(self.sender() or self.btnIntervalInfo)
         if Config.debug:
             Logic.logMessage("DEBUG", "Interval info displayed")
 
@@ -799,58 +805,63 @@ class uiQuery(QMainWindow):
         selected = lst.selectedItems()
         if not selected:
             return
-        n = lst.count()
-        if n <= 0:
-            return
-        rows = sorted({lst.row(it) for it in selected})
-        if toEnd:
-            if delta < 0:
-                newRows = list(range(len(rows)))
-            else:
-                start = n - len(rows)
-                newRows = list(range(start, n))
-        elif delta < 0:
-            newRows = []
-            ceiling = -1
-            for r in rows:
-                dest = max(ceiling + 1, r + delta)
-                newRows.append(dest)
-                ceiling = dest
-        else:
-            newRows = [0] * len(rows)
-            floor = n
-            for i in range(len(rows) - 1, -1, -1):
-                dest = min(floor - 1, rows[i] + delta)
-                newRows[i] = dest
-                floor = dest
-        if newRows == rows:
-            return
-        original = [lst.item(i) for i in range(n)]
-        moving = set(rows)
-        destOf = {old: new for old, new in zip(rows, newRows)}
-        result = [None] * n
-        for old, new in destOf.items():
-            result[new] = original[old]
-        remaining = [original[i] for i in range(n) if i not in moving]
-        ri = 0
-        for i in range(n):
-            if result[i] is None:
-                result[i] = remaining[ri]
-                ri += 1
-        selectedSet = {original[r] for r in rows}
-        lst.blockSignals(True)
+        senderBtn = self.sender()
         try:
-            for i in range(n - 1, -1, -1):
-                lst.takeItem(i)
-            for it in result:
-                lst.addItem(it)
-                it.setSelected(it in selectedSet)
-            if result:
-                current = original[rows[0]] if rows else result[0]
-                if current in selectedSet:
-                    lst.setCurrentItem(current)
+            n = lst.count()
+            if n <= 0:
+                return
+            rows = sorted({lst.row(it) for it in selected})
+            if toEnd:
+                if delta < 0:
+                    newRows = list(range(len(rows)))
+                else:
+                    start = n - len(rows)
+                    newRows = list(range(start, n))
+            elif delta < 0:
+                newRows = []
+                ceiling = -1
+                for r in rows:
+                    dest = max(ceiling + 1, r + delta)
+                    newRows.append(dest)
+                    ceiling = dest
+            else:
+                newRows = [0] * len(rows)
+                floor = n
+                for i in range(len(rows) - 1, -1, -1):
+                    dest = min(floor - 1, rows[i] + delta)
+                    newRows[i] = dest
+                    floor = dest
+            if newRows == rows:
+                return
+            original = [lst.item(i) for i in range(n)]
+            moving = set(rows)
+            destOf = {old: new for old, new in zip(rows, newRows)}
+            result = [None] * n
+            for old, new in destOf.items():
+                result[new] = original[old]
+            remaining = [original[i] for i in range(n) if i not in moving]
+            ri = 0
+            for i in range(n):
+                if result[i] is None:
+                    result[i] = remaining[ri]
+                    ri += 1
+            # QListWidgetItem is unhashable — compare by identity, not a set.
+            selectedIds = {id(original[r]) for r in rows}
+            lst.blockSignals(True)
+            try:
+                for i in range(n - 1, -1, -1):
+                    lst.takeItem(i)
+                for it in result:
+                    lst.addItem(it)
+                    it.setSelected(id(it) in selectedIds)
+                if result and rows:
+                    current = original[rows[0]]
+                    if id(current) in selectedIds:
+                        lst.setCurrentItem(current)
+            finally:
+                lst.blockSignals(False)
         finally:
-            lst.blockSignals(False)
+            Utils.resetStyledButtonHover(senderBtn)
 
     def btnUpMaxPressed(self):
         self._moveSelectedQueryRows(-1, toEnd=True)
@@ -884,17 +895,20 @@ class uiQuery(QMainWindow):
         return 'custom'
 
     def btnQueryOptionsInfoPressed(self):
-        QMessageBox.information(
-            self,
-            "Query Options Info",
-            "Display Deltas: extra column of secondary − primary for each pair "
-            "(1–2, 3–4, …).\n\n"
-            "Overlay Pairs: one column per pair; primary value where both exist, "
-            "secondary fill where only the second series has a value.\n\n"
-            "Raw Data: skip display rounding in the table (full fixed-point text).\n\n"
-            "QAQC: color cells from the data dictionary limits (missing, expected, "
-            "cutoff, rate of change). Delta columns are skipped.",
-        )
+        try:
+            QMessageBox.information(
+                self,
+                "Query Options Info",
+                "Display Deltas: extra column of secondary − primary for each pair "
+                "(1–2, 3–4, …).\n\n"
+                "Overlay Pairs: one column per pair; primary value where both exist, "
+                "secondary fill where only the second series has a value.\n\n"
+                "Raw Data: skip display rounding in the table (full fixed-point text).\n\n"
+                "QAQC: color cells from the data dictionary limits (missing, expected, "
+                "cutoff, rate of change). Delta columns are skipped.",
+            )
+        finally:
+            Utils.resetStyledButtonHover(self.sender() or self.btnQueryOptionsInfo)
         if Config.debug:
             Logic.logMessage("DEBUG", "btnQueryOptionsInfoPressed: Showed Query Options info dialog")
 
