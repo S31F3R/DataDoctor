@@ -5,62 +5,7 @@ Workflow / publish how-to: documentation/status.grok (gitignored).
 
 Current Tests
 --------------------------------------------------------------------------------
-
-[x] Options Save stays open; Close vs Cancel
-   Steps:
-     a. Open Options. Bottom-right button says Close. Change UTC offset — it
-        says Cancel. Save. Window stays open; button says Close again.
-     b. Change something, Cancel. Window closes and the change is not kept.
-        Reopen Options: previous saved values are back.
-     c. Change nothing, Close. Window closes.
-
-[ ] Query Select Quick Look vs Raw Data spacing
-   Steps:
-     a. Open Query. "Select Quick Look" is fully below Raw Data / QAQC, not
-        overlapping. Combo and Load/Save still sit above Query Data.
-
-[ ] Options Profile: label; Raw Data / QAQC gone from General
-   Steps:
-     a. Options → General: left of Export… / Import… is a "Profile:" label.
-     b. Raw Data and Quality Control Checks are not on Options. Debug and
-        Beta updates are still there.
-
-[x] Query Options Raw Data + QAQC (defaults off; Quick Look)
-   Steps:
-     a. New Query window: Display Deltas, Overlay Pairs, Raw Data, QAQC all
-        unchecked. Info dialog describes all four.
-     b. Check Raw Data + QAQC, run a query. Table is unrounded; QAQC colors
-        apply. Refresh keeps both. Graph hover matches the raw table text.
-     c. Save Quick Look with those boxes (and Overlay/Delta as you like).
-        Clear Query List unchecks all four. Load the Quick Look — boxes
-        restore. A Quick Look with no metadata still unchecks them.      
-
-[x] Quick Look date mode (Custom / Prev Day / Prev Week)
-   Steps:
-     a. Prev Day to current → Save Quick Look. Load it later: Prev Day is
-        selected, end time is now (not the old clock). Same for Prev Week.
-     b. Custom with a historical range → Save → Load: Custom stays on and
-        the pickers have the stored times (not refreshed to now).
-     c. New Query / unspecified Quick Look: Custom is the default.
-
-[ ] Query list multi-select move / delete (retest — move crashed TypeError)
-   Steps:
-     a. Ctrl/Shift select several rows. Delete button and context Delete
-        remove all of them. Insert Above / Below are disabled while several
-        are selected.
-     b. Select a block, Up 1 / Down 1: order inside the block stays; they
-        stop at the top (or bottom) instead of wrapping or reversing.
-     c. Up-MAX packs the selection to the top in the same order. Down-MAX
-        packs to the bottom. A selection that includes row 0 does not crash
-        or jump past the top.
-
-[x] Data ID Search siteID + numeric/text sort
-   Steps:
-     a. Query → Search: columns include dataID and siteID. Typing a site
-        number or location tag filters rows.
-     b. Double-click still adds dataID|interval|database (not siteID).
-     c. Sort dataID and siteID headers: all-digit IDs first (1, 2, 10 not
-        1, 10, 2), then text/hex IDs. Same in Data Dictionary.
+Later, on the machines that showed them (not this Linux box):
 
 [ ] Packaged Oracle + TNS_ADMIN
    Steps:
@@ -71,18 +16,18 @@ Current Tests
         Client. sqlnet.ora / tnsnames.ora come from that TNS folder.
         Copy tnsnames.ora into packaged network/admin if TNS_ADMIN is unset.
 
-[ ] Icon hover after a dialog (retest — still stuck after info / crash)
-   Steps:
-     a. Click a Query info button, dismiss the dialog. Icon is normal unless
-        the cursor is still on the button (then hover is OK).
-     b. Same for main-window Refresh / Upload / Reset / About after their
-        dialogs. SQL History still OK.
-
 [ ] Light System theme checkboxes (Windows)
    Steps:
      a. Appearance = System, OS in light mode. Radio and checkbox indicators
         are light with a visible check. Same on a fresh Windows 11 install.
      b. Dark mode still looks dark. Linux System is unchanged.
+
+[ ] Windows bundled Noto (controls fit)
+   Steps:
+     a. Non-retro. app.log: "UI font" requested and actual both Noto Sans
+        (not Segoe UI / Arial). After Options Save (theme apply) still Noto.
+     b. Query radios, Options checkboxes, and Quick Look buttons fit their
+        boxes the way they do on Linux.
 
 [ ] Mac package script
    Steps:
@@ -92,18 +37,18 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[x] Update check after a real release (when you publish one)
-   Steps:
-     a. Bump Version.VERSION lower than a published tag OR publish a higher tag with assets:
-        - Launcher: DataDoctor-Python.zip (or *python*.zip)
-        - AppImage: DataDoctor-x86_64.AppImage (or zip containing it)
-     b. Stable channel ignores Pre-release tags; Beta channel includes them (-rc / -beta).
-     c. Prompt → Download → file lands in Update/ next to install / AppImage.
-     d. Launcher: close + applyUpdate. AppImage: Quit and apply (or applyAppImageUpdate.sh).
-
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Options Save stays open; Close vs Cancel
+[x] Query Select Quick Look vs Raw Data spacing
+[x] Options Profile: label; Raw Data / QAQC gone from General
+[x] Query Options Raw Data + QAQC (defaults off; Quick Look)
+[x] Quick Look date mode (Custom / Prev Day / Prev Week)
+[x] Query list multi-select move / delete
+[x] Data ID Search siteID + numeric/text sort
+[x] Icon hover after a dialog
+[x] Update check after a real release
 [x] Graph Ctrl + mouse wheel zoom
 [x] AppImage tab close buttons
 [x] Oracle auth lock is per-database + timed

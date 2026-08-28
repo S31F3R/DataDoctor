@@ -24,4 +24,5 @@ resets this file to this template.
 - Query: Select Quick Look no longer overlaps Raw Data
 - Query list multi-select move no longer crashes (QListWidgetItem is unhashable)
 - Icon hover: re-sync from real cursor after dialogs, errors, and mouse moves
+- Re-apply bundled Noto/Press Start after theme style changes (Windows was dropping to Segoe UI)
 
