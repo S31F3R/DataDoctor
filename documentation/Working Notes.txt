@@ -10,3 +10,6 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Windows python-embed: put pythonFiles on sys.path (._pth `..` + sitecustomize + app.pyw) so Data Doctor.exe can start; import failures write startup-error.log and show a MessageBox
+- applyUpdate / packager remove leftover DataDoctor.ico (icon is Data Doctor.ico)
+

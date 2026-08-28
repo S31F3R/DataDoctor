@@ -9,18 +9,22 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 Current Tests
 --------------------------------------------------------------------------------
 
-[x] Options Appearance table height + Restore Defaults button
+[ ] Data Doctor.exe launches after applyUpdate (fresh Windows zip)
    Steps:
-     a. Options → Appearance. Last table-color row is fully visible (no slider).
-     b. Restore Defaults looks like Export / Import / Update Password (a real
-        button, not plain text). Click it; swatches return to defaults.
+     a. Unzip a new DataDoctor-Windows-*.zip to an empty folder. Double-click
+        Data Doctor.exe. applyUpdate.cmd runs (pip into python-embed), then
+        the app window opens (not a silent close).
+     b. pythonFiles\\python-embed\\python314._pth contains `..` and
+        sitecustomize.py exists next to pythonw.exe.
+     c. If start still fails: pythonFiles\\startup-error.log exists and a
+        MessageBox shows the import error (not silent).
 
-[ ] pythonFiles leftover cleanup
+[ ] Leftover DataDoctor.ico removed
    Steps:
-     a. 3.0.x hop / Windows zip: after applyUpdate, Project Files\ is gone
-        (or Project Files.old if the old venv was still running). Next start
-        from python-embed removes Project Files.old. Update\ / Updates\
-        is now updates\.
+     a. Place DataDoctor.ico next to Data Doctor.exe and under
+        pythonFiles\\ui\\icons\\. Apply a Python or Windows zip.
+     b. Those DataDoctor.ico files are gone. Data Doctor.ico remains
+        (zip root and pythonFiles\\ui\\icons\\).
 
 [ ] Hardening (TLS / updates)
    Steps:
@@ -42,6 +46,8 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Options Appearance table height + Restore Defaults button
+[x] pythonFiles leftover cleanup
 [x] Appearance table colors
 [x] Windows python-embed 3.14 (fresh zip)
 [x] 3.0.x → 3.1 Windows hop (launcher replace)
