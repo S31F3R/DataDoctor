@@ -19,15 +19,6 @@ Current Tests
 
 Later, on the machines that showed them (not this Linux box):
 
-[x] Packaged Oracle + TNS_ADMIN
-   Steps:
-     a. Options → Oracle → TNS Names Location shows TNS_ADMIN if that env
-        is set (read-only), else the packaged oracle/network/admin path
-        (or a path you saved). Not oracle/client/network/admin.
-     b. A machine without a system Oracle still uses packaged Instant
-        Client. sqlnet.ora / tnsnames.ora come from that TNS folder.
-        Copy tnsnames.ora into packaged network/admin if TNS_ADMIN is unset.
-
 [ ] Light System theme checkboxes (Windows)
    Steps:
      a. Appearance = System, OS in light mode. Radio and checkbox indicators
@@ -45,6 +36,7 @@ Later, on the machines that showed them (not this Linux box):
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Packaged Oracle + TNS_ADMIN
 [x] Windows bundled Noto (controls fit)
 [x] Options Save stays open; Close vs Cancel
 [x] Query Select Quick Look vs Raw Data spacing

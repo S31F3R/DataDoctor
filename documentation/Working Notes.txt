@@ -16,4 +16,5 @@ resets this file to this template.
   version's rc/beta notes (avoids a blank 3.0.0-style change list)
 - To Do: CURRENT TASKS/BUGS are the work queue; FEATURES stay backlog until
   promoted
+- Formula editor: click another cell inserts A1 (does not leave the formula)
 
