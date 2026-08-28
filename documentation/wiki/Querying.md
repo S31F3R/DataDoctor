@@ -16,7 +16,7 @@ Both open the same Query window. The window title / `queryType` decides what is 
 1. Pick **database**, **DataID**, **interval**, and a time range.
 2. **Add Query** (or **Insert Above / Insert Below / Delete** from the list context menu).
 3. Repeat for more series.
-4. Optional Query Options (all default **unchecked**): **Display Deltas**, **Overlay Pairs**, **Raw Data**, **QAQC**. See [Overlay and Delta](Overlay-and-Delta).
+4. Optional Query Options (all default **unchecked**): **Display Deltas**, **Overlay Pairs**, **Raw Data**, **QAQC**. See [Overlay and Delta](Overlay-and-Delta) and [Table colors](Table-Colors).
 5. **Query**.
 
 Double-click a list row to edit it (interval and database can change). Select more than one row (Ctrl / Shift) to **Delete** or move with the up/down buttons; Insert Above / Below is disabled while several rows are selected. Moving stops at the topmost selected row going up, and the bottommost going down. **Clear Query List** also unchecks the Query Options boxes.

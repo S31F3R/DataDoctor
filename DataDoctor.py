@@ -1894,11 +1894,12 @@ if __name__ == '__main__':
 
         # Windows: .ico next to app (and under ui/icons). Linux: DataDoctor.png.
         # About splash art (ui/DataDoctor.png large) is NOT used as the app icon.
-        icoPath = Logic.resourcePath('ui/icons/DataDoctor.ico')
+        icoPath = Logic.resourcePath('ui/icons/Data Doctor.ico')
         iconCandidates = (
             icoPath,
-
-            # Same folder as app.pyw / DataDoctor.pyw when packaged on Windows
+            Logic.resourcePath('ui/icons/DataDoctor.ico'),
+            # Same folder as app.pyw when packaged on Windows
+            Logic.resourcePath('Data Doctor.ico'),
             Logic.resourcePath('DataDoctor.ico'),
             Logic.resourcePath('ui/icons/DataDoctor.png'),
         )

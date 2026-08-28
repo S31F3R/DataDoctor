@@ -11,12 +11,13 @@ from PyQt6.QtWidgets import (
     QDialog, QComboBox, QLineEdit, QRadioButton, QDialogButtonBox, QCheckBox,
     QPushButton, QTabWidget, QMessageBox, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QListWidget, QListWidgetItem, QStackedWidget, QAbstractItemView,
-    QSizePolicy, QFileDialog, QInputDialog,
+    QSizePolicy, QFileDialog, QInputDialog, QTableWidget, QTableWidgetItem,
+    QHeaderView, QColorDialog,
 )
 from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal, Qt, QSize
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtGui import QIcon, QPixmap, QColor, QBrush
 from PyQt6 import uic
-from core import Logic, Utils, Config
+from core import Logic, Utils, Config, TableColors
 
 PROFILE_MANIFEST = "datadoctor-profile.json"
 PROFILE_KIND = "DataDoctorProfile"
@@ -161,6 +162,8 @@ class uiOptions(QDialog):
         self._passwordChangeSignals = None  # keep alive while worker runs
         uic.loadUi(Logic.resourcePath("ui/winOptions.ui"), self)
         self._bindLoadedWidgets()
+        self._tableColorOverrides = {}
+        self._buildTableColorUi()
         self.qleAQPassword = self._replaceWithPasswordEdit("qleAQPassword")
         self.qleOraclePassword = self._replaceWithPasswordEdit(
             "qleOraclePassword",
@@ -316,6 +319,92 @@ class uiOptions(QDialog):
         tabs = page.findChild(QTabWidget) if page is not None else None
         self.tabWidget = tabs if tabs is not None else self.tabsGeneral
         self.onOptionsTabChanged()
+
+    def _buildTableColorUi(self):
+        page = self.findChild(QWidget, "tabsAppearanceGeneral")
+        lay = page.layout() if page is not None else None
+        if lay is None:
+            return
+        insertAt = max(0, lay.count() - 1)
+        lbl = QLabel("Table colors")
+        lbl.setToolTip(
+            "Colors used in Data Query (QAQC, overlay, delta, pending upload). "
+            "Double-click a color to change it. Save to keep."
+        )
+        self.tblTableColors = QTableWidget(0, 2)
+        self.tblTableColors.setObjectName("tblTableColors")
+        self.tblTableColors.setHorizontalHeaderLabels(("Meaning", "Color"))
+        self.tblTableColors.verticalHeader().setVisible(False)
+        self.tblTableColors.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.tblTableColors.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.tblTableColors.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.tblTableColors.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
+        self.tblTableColors.setColumnWidth(1, 88)
+        self.tblTableColors.setShowGrid(True)
+        self.tblTableColors.cellDoubleClicked.connect(self._onTableColorDoubleClick)
+        self.btnRestoreTableColors = QPushButton("Restore Defaults")
+        self.btnRestoreTableColors.setObjectName("btnRestoreTableColors")
+        self.btnRestoreTableColors.clicked.connect(self._onRestoreTableColors)
+        Utils.buttonStyle(self.btnRestoreTableColors, None, None)
+        lay.insertWidget(insertAt, lbl)
+        lay.insertWidget(insertAt + 1, self.tblTableColors)
+        lay.insertWidget(insertAt + 2, self.btnRestoreTableColors)
+        self._fillTableColorTable()
+
+    def _fillTableColorTable(self):
+        tbl = getattr(self, "tblTableColors", None)
+        if tbl is None:
+            return
+        TableColors.setOverrides(self._tableColorOverrides)
+        tbl.setRowCount(len(TableColors.ROWS))
+        for i, (key, label, desc, _part) in enumerate(TableColors.ROWS):
+            nameItem = QTableWidgetItem(label)
+            nameItem.setToolTip(desc)
+            nameItem.setData(Qt.ItemDataRole.UserRole, key)
+            spec = TableColors.resolved(key)
+            swatch = QTableWidgetItem("Aa")
+            swatch.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            swatch.setToolTip(desc + "\nDouble-click to change.")
+            bg = QColor(spec["bg"]) if spec.get("bg") else QColor()
+            fg = QColor(spec["fg"]) if spec.get("fg") else QColor()
+            if bg.isValid():
+                swatch.setBackground(bg)
+            if fg.isValid():
+                swatch.setForeground(fg)
+            else:
+                swatch.setForeground(QBrush())
+            tbl.setItem(i, 0, nameItem)
+            tbl.setItem(i, 1, swatch)
+        tbl.resizeRowsToContents()
+        rowsH = tbl.horizontalHeader().height() + sum(
+            tbl.rowHeight(r) for r in range(tbl.rowCount())
+        ) + 4
+        tbl.setMinimumHeight(min(max(rowsH, 160), 320))
+
+    def _onTableColorDoubleClick(self, row, _col):
+        nameItem = self.tblTableColors.item(row, 0)
+        if nameItem is None:
+            return
+        key = nameItem.data(Qt.ItemDataRole.UserRole)
+        part = "bg"
+        for k, _label, _desc, p in TableColors.ROWS:
+            if k == key:
+                part = "fg" if p == "fg" else "bg"
+                break
+        current = TableColors.qcolor(key, part) or QColor("#808080")
+        picked = QColorDialog.getColor(current, self, "Table color")
+        if not picked.isValid():
+            return
+        over = dict(self._tableColorOverrides.get(key) or {})
+        over[part] = picked.name()
+        self._tableColorOverrides[key] = over
+        TableColors.setOverrides(self._tableColorOverrides)
+        self._fillTableColorTable()
+
+    def _onRestoreTableColors(self):
+        self._tableColorOverrides = {}
+        TableColors.setOverrides({})
+        self._fillTableColorTable()
 
     def _checkedHdbAccess(self):
         names = []
@@ -673,6 +762,9 @@ class uiOptions(QDialog):
         if idx < 0:
             idx = self.cbColorTheme.findText(theme.capitalize())
         self.cbColorTheme.setCurrentIndex(idx if idx >= 0 else 0)
+        self._tableColorOverrides = dict(config.get("tableColors") or {})
+        TableColors.setOverrides(self._tableColorOverrides)
+        self._fillTableColorTable()
         self.chkbOverwriteFlag.setChecked(bool(config.get('hdbOverwriteFlag')))
         self.chkbLabelDataTypeUSBR.setChecked(bool(config.get('labelDataTypeUSBR', True)))
         self.chkbLabelDataTypeAquarius.setChecked(bool(config.get('labelDataTypeAquarius', True)))
@@ -856,7 +948,10 @@ class uiOptions(QDialog):
             'labelDataTypeAquarius': bool(self.chkbLabelDataTypeAquarius.isChecked()),
             'labelDataTypeUSGS': bool(self.chkbLabelDataTypeUSGS.isChecked()),
             'hdbAccessUnchecked': self._uncheckedHdbAccess(),
+            'tableColors': dict(self._tableColorOverrides or {}),
         })
+        TableColors.setOverrides(self._tableColorOverrides)
+        self._fillTableColorTable()
 
         with open(configPath, 'w', encoding='utf-8') as configFile:
             json.dump(config, configFile, indent=2)

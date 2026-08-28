@@ -14,6 +14,7 @@
 - [Graph](Graph)
 - [CSV Export](CSV-Export)
 - [Formulas](Formulas)
+- [Table colors](Table-Colors)
 
 **Sources**
 

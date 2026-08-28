@@ -6,7 +6,7 @@ from datetime import datetime
 from PyQt6.QtCore import Qt, QCoreApplication
 from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem
-from core import Logic, Config, Utils
+from core import Logic, Config, Utils, TableColors
 from DataDoctor import uiMain
 
 
@@ -336,9 +336,9 @@ def modifyTable(
                 try:
                     val = float(text)
                     if val > 0:
-                        item.setForeground(QColor(255, 165, 0))
+                        TableColors.applyToItem(item, "deltaPositive")
                     elif val < 0:
-                        item.setForeground(QColor(68, 165, 255))
+                        TableColors.applyToItem(item, "deltaNegative")
                     else:
                         item.setForeground(Config.systemTextColor)
                 except ValueError:
@@ -464,13 +464,11 @@ def applyOverlayColorOverrides(table, progressDialog=None):
 
             if hasP and hasS:
                 if np.isfinite(d) and d != 0:
-                    item.setForeground(QColor(255, 0, 0))  # Red for mismatch
+                    TableColors.applyToItem(item, "overlayMismatch")
             elif not hasP and hasS:
-                item.setBackground(QColor(221, 160, 221))  # Light purple — secondary only
-                item.setForeground(QColor(0, 0, 0))
+                TableColors.applyToItem(item, "overlaySecondaryOnly")
             elif hasP and not hasS:
-                item.setBackground(QColor(255, 182, 193))  # Light pink — primary only
-                item.setForeground(QColor(0, 0, 0))
+                TableColors.applyToItem(item, "overlayPrimaryOnly")
 
         if progressDialog is not None and (c % 5 == 0 or c == numCols - 1):
             progressDialog.setLabelText(f"Overlay colors... ({c + 1}/{numCols})")
@@ -494,8 +492,6 @@ def applyUsbrRbaseFallbackColors(table, mainWindow, progressDialog=None):
     if not seriesResponses or not columnMetadata:
         return
 
-    blue = QColor(100, 195, 247)
-    black = QColor(0, 0, 0)
     numRows = table.rowCount()
 
     table.setUpdatesEnabled(False)
@@ -576,8 +572,7 @@ def applyUsbrRbaseFallbackColors(table, mainWindow, progressDialog=None):
             if intervalVal or not baseVal:
                 continue
 
-            item.setBackground(blue)
-            item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(black))
+            TableColors.applyToItem(item, "qaqcMissing")
             user = item.data(Qt.ItemDataRole.UserRole)
             if isinstance(user, dict):
                 user = dict(user)
@@ -691,9 +686,9 @@ def addDeltaColumn(table, insertIdx, deltas):
             try:
                 val = float(dStr)
                 if val > 0:
-                    item.setForeground(QColor(255, 165, 0))
+                    TableColors.applyToItem(item, "deltaPositive")
                 elif val < 0:
-                    item.setForeground(QColor(68, 165, 255))
+                    TableColors.applyToItem(item, "deltaNegative")
             except ValueError:
                 pass
         table.setItem(r, insertIdx, item)

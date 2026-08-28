@@ -19,6 +19,7 @@ The installed version is shown in **About**.
 - [Graph](Graph)
 - [CSV Export](CSV-Export)
 - [Formulas](Formulas) — Excel-style `=` in Internal Data Query
+- [Table colors](Table-Colors) — QAQC, overlay, delta, pending upload (same as Options → Appearance)
 
 ## Data sources
 

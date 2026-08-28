@@ -71,7 +71,7 @@ pythonFiles\
 
 ```
 cd launcher\src
-vbc /nologo /target:winexe /out:"..\Data Doctor.exe" /win32icon:..\DataDoctor.ico App.vb
+vbc /nologo /target:winexe /out:"..\Data Doctor.exe" /win32icon:"..\Data Doctor.ico" app.vb
 ```
 
 Launcher source is `launcher/src/` (generic: `pythonFiles\app.pyw`). Compile on Windows; this Linux box has no `vbc`.

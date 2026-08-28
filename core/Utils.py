@@ -1809,10 +1809,10 @@ def loadConfig():
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Loaded full config: {config}")
 
-            return config
+            return _applyTableColorOverrides(config)
         except Exception as e:
             Logic.logException("Failed to load user.config; using defaults", e)
-            return defaults
+            return _applyTableColorOverrides(defaults)
     else:
         try:
             with open(configPath, 'w', encoding='utf-8') as configFile:
@@ -1821,7 +1821,16 @@ def loadConfig():
                 Logic.logMessage("DEBUG", f"Created default user.config with defaults: {defaults}")
         except Exception as e:
             Logic.logException("Failed to create default user.config", e)
-        return defaults
+        return _applyTableColorOverrides(defaults)
+
+
+def _applyTableColorOverrides(settings):
+    try:
+        from core import TableColors
+        TableColors.setOverrides((settings or {}).get("tableColors"))
+    except Exception:
+        pass
+    return settings
 
 def ensurePrivateDir(path):
     """Create a user-only directory on POSIX (no-op mode on Windows)."""
@@ -2302,6 +2311,11 @@ def reloadGlobals():
     Config.labelDataTypeAquarius = bool(settings.get('labelDataTypeAquarius', True))
     Config.labelDataTypeUSGS = bool(settings.get('labelDataTypeUSGS', True))
     Config.hdbOverwriteFlag = 'O' if settings.get('hdbOverwriteFlag') else None
+    try:
+        from core import TableColors
+        TableColors.reloadFromConfig(settings)
+    except Exception:
+        pass
 
     if Config.debug:
         Logic.logMessage(

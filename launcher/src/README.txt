@@ -15,7 +15,7 @@ If there is no zip, it starts pythonw + app.pyw.
 Data Doctor packaging (scripts/packageWindows.py) copies DataDoctor.py →
 pythonFiles\app.pyw and extracts embeddable CPython into pythonFiles\python-embed\.
 
-Icon: DataDoctor.ico in this folder is the ApplicationIcon (taskbar / exe).
+Icon: Data Doctor.ico in this folder is the ApplicationIcon (taskbar / exe).
 Rebuild on Windows (Visual Studio or Developer Command Prompt):
 
   msbuild "Data Doctor.vbproj" /p:Configuration=Release
@@ -23,7 +23,7 @@ Rebuild on Windows (Visual Studio or Developer Command Prompt):
 
   or:
 
-  vbc /nologo /target:winexe /win32icon:DataDoctor.ico /out:"..\Data Doctor.exe" app.vb
+  vbc /nologo /target:winexe /win32icon:"Data Doctor.ico" /out:"..\Data Doctor.exe" app.vb
 
 This Linux packager cannot produce a new .exe. After compiling on Windows,
 put Data Doctor.exe in launcher\ (zip root).

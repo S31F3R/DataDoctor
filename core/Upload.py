@@ -12,15 +12,30 @@ from PyQt6.QtCore import Qt, QObject, QEvent, QRunnable, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QAbstractItemView, QMessageBox
 
-from core import Logic, Config, Oracle
+from core import Logic, Config, Oracle, TableColors
 from core.Formula import isErrorValue
 
-# User-edited / pending upload (magenta + white) — not used by QAQC
-editBg = QColor(0xC2, 0x18, 0x5B)  # #C2185B
-editFg = QColor(255, 255, 255)
 
-# Uploaded successfully this session (deep teal + white) — unused elsewhere
-uploadOkBg = QColor(0x00, 0x69, 0x5C)  # #00695C
+def _editBg():
+    return TableColors.qcolor("editPending", "bg") or QColor(0xC2, 0x18, 0x5B)
+
+
+def _editFg():
+    return TableColors.qcolor("editPending", "fg") or QColor(255, 255, 255)
+
+
+def _uploadOkBg():
+    return TableColors.qcolor("uploadOk", "bg") or QColor(0x00, 0x69, 0x5C)
+
+
+def _uploadOkFg():
+    return TableColors.qcolor("uploadOk", "fg") or QColor(255, 255, 255)
+
+
+# Back-compat aliases (tests / older call sites)
+editBg = QColor(0xC2, 0x18, 0x5B)
+editFg = QColor(255, 255, 255)
+uploadOkBg = QColor(0x00, 0x69, 0x5C)
 uploadOkFg = QColor(255, 255, 255)
 
 editKey = 'uploadEdit'
@@ -270,15 +285,11 @@ def applyColors(item, bg, fg):
 
 
 def applyEditStyle(item):
-    item.setBackground(editBg)
-    item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(editFg))
-    item.setForeground(editFg)
+    TableColors.applyToItem(item, "editPending")
 
 
 def applyUploadOkStyle(item):
-    item.setBackground(uploadOkBg)
-    item.setData(Qt.ItemDataRole.ForegroundRole, QBrush(uploadOkFg))
-    item.setForeground(uploadOkFg)
+    TableColors.applyToItem(item, "uploadOk")
 
 
 def parseQueryInfo(queryInfo):
@@ -1674,8 +1685,8 @@ def markUploaded(mainWindow, uploadRows):
             edit['originalText'] = newText
             edit['dirty'] = False
             edit['uploaded'] = True
-            edit['baselineBg'] = QColor(uploadOkBg)
-            edit['baselineFg'] = QColor(uploadOkFg)
+            edit['baselineBg'] = QColor(_uploadOkBg())
+            edit['baselineFg'] = QColor(_uploadOkFg())
             user[editKey] = edit
             # Keep overlay UserRole in sync with the value the user uploaded to primary
             if user.get('overlay'):

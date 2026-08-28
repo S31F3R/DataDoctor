@@ -59,17 +59,19 @@ USGS rows are matched on the **bare time_series_id** (the hex in the DataID), so
 
 Enabled by the Query window **QAQC** checkbox (stored on a Quick Look; default unchecked). Runs after the table is filled. **Delta columns are skipped** (they have their own +/− colors).
 
-| Condition | Typical color |
-|-----------|----------------|
-| Empty cell, timestamp ≤ now | Blue (missing) |
-| Value &lt; `expectedMin` | Yellow |
-| Value &gt; `expectedMax` | Amber |
-| Value &lt; `cuttoffMin` | Orange |
-| Value &gt; `cutoffMax` | Red |
-| Adjacent-step change &gt; `rateOfChange` | Coral |
-| Consecutive values equal | Green |
+| Condition | Color |
+|-----------|-------|
+| Empty cell, timestamp ≤ now | <span style="background:#64C3F7;color:#000;padding:2px 14px;border:1px solid #888">Aa</span> Missing |
+| Value &lt; `expectedMin` | <span style="background:#F9F06B;color:#000;padding:2px 14px;border:1px solid #888">Aa</span> |
+| Value &gt; `expectedMax` | <span style="background:#F9C211;color:#000;padding:2px 14px;border:1px solid #888">Aa</span> |
+| Value &lt; `cuttoffMin` | <span style="background:#FFA348;color:#000;padding:2px 14px;border:1px solid #888">Aa</span> |
+| Value &gt; `cutoffMax` | <span style="background:#C01C28;color:#FFF;padding:2px 14px;border:1px solid #888">Aa</span> |
+| Adjacent-step change &gt; `rateOfChange` | <span style="background:#F66151;color:#000;padding:2px 14px;border:1px solid #888">Aa</span> |
+| Consecutive values equal | <span style="background:#57E389;color:#000;padding:2px 14px;border:1px solid #888">Aa</span> |
 
 Limits come from that series’ dictionary row. Blank limit → that check is off.
+
+Overlay, delta, pending-edit, and upload colors: [Table colors](Table-Colors) (same swatches as **Options → Appearance**).
 
 ## Editing
 

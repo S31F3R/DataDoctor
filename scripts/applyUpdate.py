@@ -55,7 +55,7 @@ LEGACY_CODE_DIR = "Project Files"
 CODE_DIR_NAMES = (WIN_CODE_DIR, LEGACY_CODE_DIR)
 WIN_APP_ENTRY = "app.pyw"
 UPDATES_DIR = "updates"
-LEGACY_UPDATES_DIRS = ("Update", "update")
+LEGACY_UPDATES_DIRS = ("Update", "Updates", "update", "UPDATES")
 
 
 def findInstallRoot(start: Path) -> Path:
@@ -472,6 +472,100 @@ def migrateLegacyProjectFiles(installRoot: Path, dest: Path) -> None:
     if liveQl.is_dir():
         copyTreeMerge(liveQl, dest / "quickLook")
         print(f"Merged quickLook/ from {LEGACY_CODE_DIR}/")
+    removeLegacyProjectFiles(installRoot, dest)
+
+
+def runningFromLegacyProjectFiles(installRoot: Path) -> bool:
+    exe = (sys.executable or "").replace("\\", "/").lower()
+    root = str(installRoot).replace("\\", "/").lower()
+    return "project files" in exe and root in exe
+
+
+def removeLegacyProjectFiles(installRoot: Path, dest: Path) -> None:
+    """Delete leftover Project Files/ once pythonFiles/ is the live tree."""
+    legacy = installRoot / LEGACY_CODE_DIR
+    if not legacy.is_dir() or not dest.is_dir():
+        return
+    try:
+        if legacy.resolve() == dest.resolve():
+            return
+    except Exception:
+        pass
+    if runningFromLegacyProjectFiles(installRoot):
+        leftover = installRoot / "Project Files.old"
+        try:
+            if leftover.exists():
+                shutil.rmtree(leftover, ignore_errors=True)
+            legacy.rename(leftover)
+            print("Renamed Project Files/ → Project Files.old (in use; remove on next start)")
+        except Exception as e:
+            print(f"WARN: could not remove Project Files/ while in use: {e}", file=sys.stderr)
+        return
+    try:
+        shutil.rmtree(legacy)
+        print("Removed leftover Project Files/")
+    except Exception as e:
+        print(f"WARN: could not remove Project Files/: {e}", file=sys.stderr)
+
+
+def cleanupStaleLegacyDirs(installRoot: Path) -> None:
+    """Next start from python-embed: delete Project Files leftover if still present."""
+    if runningFromLegacyProjectFiles(installRoot):
+        return
+    live = installRoot / WIN_CODE_DIR
+    if not live.is_dir():
+        return
+    for name in (LEGACY_CODE_DIR, "Project Files.old"):
+        p = installRoot / name
+        if p.is_dir():
+            try:
+                shutil.rmtree(p)
+                print(f"Removed leftover {name}/")
+            except Exception as e:
+                print(f"WARN: could not remove {name}/: {e}", file=sys.stderr)
+
+
+def migrateLegacyUpdatesFolder(installRoot: Path) -> None:
+    """Merge Update/ / Updates/ into updates/, then remove the old folder."""
+    dest = installRoot / UPDATES_DIR
+    dest.mkdir(parents=True, exist_ok=True)
+    destKey = os.path.normcase(str(dest.resolve())) if dest.exists() else ""
+    for name in ("Update", "Updates", "update", "UPDATES"):
+        src = installRoot / name
+        if not src.is_dir():
+            continue
+        try:
+            srcKey = os.path.normcase(str(src.resolve()))
+        except Exception:
+            srcKey = os.path.normcase(str(src))
+        if destKey and srcKey == destKey:
+            # Same folder on a case-insensitive volume (Update vs updates).
+            if src.name != UPDATES_DIR:
+                tmp = installRoot / "_updates_rename_tmp"
+                try:
+                    if tmp.exists():
+                        shutil.rmtree(tmp, ignore_errors=True)
+                    src.rename(tmp)
+                    tmp.rename(dest)
+                    print(f"Renamed {name}/ → {UPDATES_DIR}/")
+                except Exception as e:
+                    print(f"WARN: could not rename {name}/ to {UPDATES_DIR}/: {e}", file=sys.stderr)
+            continue
+        for item in list(src.iterdir()):
+            target = dest / item.name
+            try:
+                if target.exists():
+                    if item.is_file():
+                        item.unlink()
+                    continue
+                shutil.move(str(item), str(target))
+            except Exception:
+                pass
+        try:
+            shutil.rmtree(src)
+            print(f"Removed leftover {name}/ (now {UPDATES_DIR}/)")
+        except Exception as e:
+            print(f"WARN: could not remove {name}/: {e}", file=sys.stderr)
 
 
 def dataDoctorExeRunning() -> bool:
@@ -666,6 +760,9 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
     if not zipPath.is_file():
         print(f"ERROR: zip not found: {zipPath}", file=sys.stderr)
         return 1
+
+    migrateLegacyUpdatesFolder(installRoot)
+    cleanupStaleLegacyDirs(installRoot)
 
     updateDir = resolveUpdatesDir(installRoot, create=True)
     extractDir = Path(tempfile.mkdtemp(prefix="dd-update-", dir=str(updateDir)))

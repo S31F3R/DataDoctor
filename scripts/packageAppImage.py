@@ -197,7 +197,7 @@ exit 1
 def findIcon(root: Path) -> Path | None:
     for rel in (
         "ui/icons/DataDoctor.png",
-        "ui/icons/DataDoctor.ico",
+        "ui/icons/Data Doctor.ico",
         "ui/DataDoctor.png",
     ):
         p = root / rel

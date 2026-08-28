@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QCoreApplication, QTimer
 from PyQt6.QtGui import QColor, QBrush, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
-from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils, Upload
+from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils, Upload, TableColors
 
 # ---------------------------------------------------------------------------
 # Display timestamps by interval
@@ -1015,8 +1015,6 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
     now = datetime.now()
     numCols = min(table.columnCount(), len(lookupIds) if lookupIds is not None else table.columnCount())
     numRows = table.rowCount()
-    blackBrush = QBrush(QColor(0, 0, 0))
-    blueMissing = QColor(100, 195, 247)
 
     table.setUpdatesEnabled(False)
     table.blockSignals(True)
@@ -1071,7 +1069,7 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
                     try:
                         tsDt = parseDisplayTimestamp(tsStr)
                         if tsDt is not None and tsDt <= now:
-                            item.setBackground(blueMissing)
+                            TableColors.applyToItem(item, "qaqcMissing")
                     except (ValueError, TypeError):
                         pass
                 continue
@@ -1081,21 +1079,18 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
                 continue
             if rowIndex != -1:
                 if expectedMin is not None and val < expectedMin:
-                    item.setBackground(QColor(249, 240, 107))
-                    item.setData(Qt.ItemDataRole.ForegroundRole, blackBrush)
+                    TableColors.applyToItem(item, "qaqcExpectedMin")
                 elif expectedMax is not None and val > expectedMax:
-                    item.setBackground(QColor(249, 194, 17))
-                    item.setData(Qt.ItemDataRole.ForegroundRole, blackBrush)
+                    TableColors.applyToItem(item, "qaqcExpectedMax")
                 elif cutoffMin is not None and val < cutoffMin:
-                    item.setBackground(QColor(255, 163, 72))
+                    TableColors.applyToItem(item, "qaqcCutoffMin")
                 elif cutoffMax is not None and val > cutoffMax:
-                    item.setBackground(QColor(192, 28, 40))
+                    TableColors.applyToItem(item, "qaqcCutoffMax")
             if rateOfChange is not None and prevVal is not None:
                 if abs(val - prevVal) > rateOfChange:
-                    item.setBackground(QColor(246, 97, 81))
+                    TableColors.applyToItem(item, "qaqcRateOfChange")
             if prevVal is not None and val == prevVal:
-                item.setBackground(QColor(87, 227, 137))
-                item.setData(Qt.ItemDataRole.ForegroundRole, blackBrush)
+                TableColors.applyToItem(item, "qaqcEqual")
             prevVal = val
 
         if progressDialog is not None and (col % 5 == 0 or col == numCols - 1):

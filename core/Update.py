@@ -255,6 +255,15 @@ def bootstrapWindowsApplyTools() -> None:
         if (root / "Data Doctor.exe").is_file() or (root / "applyUpdate.cmd").is_file():
             cmd = root / "applyUpdate.cmd"
             cmd.write_text(_APPLY_UPDATE_CMD, encoding="utf-8", newline="\r\n")
+        try:
+            scriptsDir = projectFiles / "scripts"
+            if str(scriptsDir) not in sys.path:
+                sys.path.insert(0, str(scriptsDir))
+            import applyUpdate as _au
+            _au.migrateLegacyUpdatesFolder(root)
+            _au.cleanupStaleLegacyDirs(root)
+        except Exception:
+            pass
     except Exception as e:
         Logic.logMessage("DEBUG", f"bootstrapWindowsApplyTools: {e}")
 
