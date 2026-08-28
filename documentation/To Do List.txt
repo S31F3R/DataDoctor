@@ -1,12 +1,11 @@
 ####### CURRENT TASKS #######
-
-####### CURRENT BUGS #######
-
-####### 3.1.0 FEATURES #######
 -Update to newest python and packages
 -Add python-embed to Windows version
     -Auto update to this version will need to let windows users know they need there is a launcher update
         -This means have them run applyUpdate.cmd manually and allow it to replace the launcher files. So the windows update will need the windows.zip and not the python.zip
+####### CURRENT BUGS #######
+
+####### 3.1.0 FEATURES #######
 -Complete review of the code to harden and fix any potential vulnerabilities
 
 ####### 3.2.0 FEATURES #######
@@ -15,4 +14,3 @@
     -Add a plot that graphs delta pair and overlays delta as a seperate line
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)
 -Get OAuth App for GitHub stuffs
-

@@ -6,7 +6,7 @@ Workflow / publish how-to: documentation/status.grok (gitignored).
 Current Tests
 --------------------------------------------------------------------------------
 
-[ ] Data Query Excel-style formulas (internal)
+[x] Data Query Excel-style formulas (internal)
    Steps:
      a. Internal query. Type = in a cell, click another cell — A1-style ref
         is inserted. Enter. Cell shows the computed number (not the formula).
@@ -16,8 +16,6 @@ Current Tests
         formula on the overlay column changes primary only. Delta stays locked.
      c. Formula result is magenta (edit). Upload sends the number. #DIV/0!
         is not uploaded. Public Query still cannot edit.
-
-Later, on the machines that showed them (not this Linux box):
 
 [ ] Light System theme checkboxes (Windows)
    Steps:
