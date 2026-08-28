@@ -10,3 +10,6 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Windows silent launch: do not construct About (QtMultimedia / pygame) at startup; log launcher + applyUpdate + python heartbeats to AppData app.log; faulthandler before Qt; software Qt on Windows VMs
+- Windows launcher (app.vb): append to app.log and wait ~8s if pythonw dies immediately (rebuild Data Doctor.exe on Windows)
+

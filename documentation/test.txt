@@ -8,6 +8,20 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
+[ ] Windows silent launch (VM + laptop)
+   Steps:
+     a. Work laptop: existing install still opens; About (Info) still plays music.
+     b. VM that previously died with no window: unzip a build with this app.pyw
+        (Python zip via applyUpdate.cmd is enough; new Data Doctor.exe is optional).
+        Double-click Data Doctor.exe. Main window should appear.
+     c. If it still does not: open %LOCALAPPDATA%\Data Doctor\logs\app.log.
+        Expect applyUpdate: / startup: / launcher: lines. Last startup: line is
+        how far it got. fault.log if python aborted natively.
+     d. Optional: rebuild launcher on Windows
+        (see launcher/src/README.txt). Immediate pythonw death should then
+        MessageBox instead of a silent return.
+     e. Info button on the VM: About should open. Missing audio is OK (no crash).
+
 [ ] Mac package script
    Steps:
      a. From project root: python scripts/packageMac.py --skip-venv
