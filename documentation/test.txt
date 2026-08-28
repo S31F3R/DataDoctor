@@ -6,16 +6,35 @@ Workflow / publish how-to: documentation/status.grok (gitignored).
 Current Tests
 --------------------------------------------------------------------------------
 
-[x] Data Query Excel-style formulas (internal)
+[ ] Windows python-embed 3.14 (fresh zip)
    Steps:
-     a. Internal query. Type = in a cell, click another cell — A1-style ref
-        is inserted. Enter. Cell shows the computed number (not the formula).
-        Double-click shows the formula again.
-     b. =SUM(A1:A5), =A1-B1, =IF(A1>0, A1, 0). $A1 fill-down keeps column A.
-        Fill handle (square at bottom-right) copies down/right. Overlay:
-        formula on the overlay column changes primary only. Delta stays locked.
-     c. Formula result is magenta (edit). Upload sends the number. #DIV/0!
-        is not uploaded. Public Query still cannot edit.
+     a. python scripts/packageWindows.py → dist zip has Data Doctor.exe,
+        applyUpdate.cmd, Project Files\python-embed\pythonw.exe (no .venv,
+        no python-3.13 installer, no embed zip at zip root).
+     b. Unzip on Windows. Double-click Data Doctor.exe. Launcher runs
+        applyUpdate.cmd (Update\ has a Python zip), pip-installs into
+        python-embed, then the app opens. No system Python on PATH.
+     c. About / goat / graph still work (pygame-ce, PyQt6, numpy).
+
+[ ] 3.0.x → 3.1 Windows hop (launcher replace)
+   Steps:
+     a. On a 3.0.x install (system Python + .venv, no python-embed): apply
+        DataDoctor-Python-*.zip with the old applyUpdate. App starts on .venv.
+     b. Prompt says this needs a launcher update. Download puts
+        DataDoctor-Windows-*.zip in Update\. Message: close the app and run
+        applyUpdate.cmd (not Restart).
+     c. After applyUpdate.cmd: Data Doctor.exe replaced, python-embed present,
+        bunker.db and certs kept, app launches via pythonw.exe. Later code
+        updates use the Python zip again.
+
+[ ] Hardening (TLS / updates)
+   Steps:
+     a. Aquarius with a bad/missing cert fails the query (does not connect
+        unverified). Server URL stored as http:// is used as https://.
+     b. USGS legacy still queries with TLS verified after an SSL error retry
+        (no "verification disabled" in the log).
+     c. In-app Update → Download → Cancel does not leave a zip in Update/
+        that applyUpdate.cmd would apply on next start.
 
 [ ] Light System theme checkboxes (Windows)
    Steps:
@@ -34,6 +53,7 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+[x] Data Query Excel-style formulas (internal)
 [x] Packaged Oracle + TNS_ADMIN
 [x] Windows bundled Noto (controls fit)
 [x] Options Save stays open; Close vs Cancel
