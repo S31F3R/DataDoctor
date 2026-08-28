@@ -100,12 +100,14 @@ See [App Data](https://github.com/S31F3R/DataDoctor/wiki/App-Data).
 
 ## Aquarius TLS certificates
 
-Create a `certs/` folder (the app never creates one) and place the server cert as one of:
+Aquarius is internal/VPN. Verification uses the **OS certificate store** first (Windows Trusted Root — not Mozilla certifi). If the issuing CA is already on the machine (Group Policy), you do not need a yearly `aquarius.pem` on every PC.
 
-- `aquarius.pem` (preferred)
+`certs/` is optional. If you add a file, prefer the **issuing CA**, not the yearly server leaf:
+
+- `aquarius.pem`
 - `.cer` / `.crt` (converted to `aquarius.pem` on first use; source file removed after success)
 
-`.pfx` / `.p12` are not supported — export as `.cer` or `.pem` first.
+`.pfx` / `.p12` are not supported. If OS trust and `certs/` both fail, Aquarius still uses HTTPS but skips certificate checks and logs a WARN. USGS never skips verification.
 
 Search locations (existing folders only): project `certs/`, app root, parent of app root (Windows zip / launcher folder), current working directory, and the user-config `certs/` folder.
 

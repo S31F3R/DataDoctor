@@ -1,5 +1,6 @@
 # Aquarius.py
 
+import ssl
 import requests
 import json
 import keyring
@@ -7,10 +8,70 @@ import os
 import threading
 import queue
 from datetime import datetime, timedelta
+from requests.adapters import HTTPAdapter
 from core import Logic, Config, Query
 
 queryLimit = 30000 # Configurable max points per API call
 maxThreads = 50 # Configurable max number of threads
+
+# Aquarius is internal (VPN). Do not spam this if several queries fall back.
+_unverifiedWarned = False
+
+
+class _SslAdapter(HTTPAdapter):
+    """urllib3 uses this SSLContext (OS trust store), not certifi."""
+
+    def __init__(self, ssl_context=None, **kwargs):
+        self._ssl_context = ssl_context
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        if self._ssl_context is not None:
+            pool_kwargs["ssl_context"] = self._ssl_context
+        return super().init_poolmanager(connections, maxsize, block, **pool_kwargs)
+
+    def proxy_manager_for(self, proxy, **proxy_kwargs):
+        if self._ssl_context is not None:
+            proxy_kwargs["ssl_context"] = self._ssl_context
+        return super().proxy_manager_for(proxy, **proxy_kwargs)
+
+
+def _httpsSession(ssl_context=None, verify=True):
+    session = requests.Session()
+    if ssl_context is not None:
+        session.mount("https://", _SslAdapter(ssl_context=ssl_context))
+    session.verify = verify
+    return session
+
+
+def _verifiedSslContext(certPath):
+    """
+    Windows/macOS/Linux OS CA store (not Mozilla certifi).
+    Optional certs/aquarius.pem is extra CAs — prefer the issuing CA, not the
+    yearly server leaf, so machines do not need a new file each rotation.
+    """
+    ctx = ssl.create_default_context()
+    if certPath and os.path.isfile(certPath):
+        try:
+            ctx.load_verify_locations(cafile=certPath)
+        except Exception as e:
+            Logic.logMessage("WARN", f"Aquarius: could not load {certPath}: {e}")
+    return ctx
+
+
+def _warnUnverified():
+    global _unverifiedWarned
+    if _unverifiedWarned:
+        return
+    _unverifiedWarned = True
+    Logic.logMessage(
+        "WARN",
+        "Aquarius TLS: OS trust store and certs/ failed; connecting without "
+        "certificate verification. Traffic is still HTTPS. Aquarius is "
+        "internal-only (VPN). To verify without a yearly file on every PC, "
+        "put the issuing CA in the Windows certificate store (Group Policy) "
+        "or as certs/aquarius.pem (the CA, not the server leaf).",
+    )
 
 
 def _httpsServer(server: str) -> str:
@@ -78,51 +139,65 @@ def apiRead(dataIDs, startDate, endDate, interval):
         Logic.logMessage("ERROR", "Missing Aquarius credentials.")
         return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
 
-    # TLS: system trust, then certs/aquarius.pem. Never verify=False — that
-    # would send username/password to a MITM.
+    # TLS: OS certificate store (Windows CA store, not certifi), plus optional
+    # certs/aquarius.pem. Last resort: unverified HTTPS (internal/VPN only).
     authData = {'Username': user, 'EncryptedPassword': password}
     certPath = Logic.ensureAquariusPem()
+    sslContext = None
     verifyMode = True
+    authSession = None
+    authResponse = None
 
-    for attempt in ('system', 'customCert'):
+    for attempt in ('verified', 'unverified'):
+        session = None
         try:
-            if attempt == 'customCert' and (not certPath or not os.path.exists(certPath)):
-                if Config.debug:
-                    Logic.logMessage(
-                        "DEBUG",
-                        "No Aquarius certificate found in any existing certs/ folder "
-                        "(.pem / .cer); skipping customCert.",
-                    )
-                continue
-            verifyMode = certPath if attempt == 'customCert' else True
-            authResponse = requests.post(
+            if attempt == 'verified':
+                sslContext = _verifiedSslContext(certPath)
+                verifyMode = True
+                session = _httpsSession(ssl_context=sslContext, verify=True)
+            else:
+                sslContext = None
+                verifyMode = False
+                session = _httpsSession(ssl_context=None, verify=False)
+            authResponse = session.post(
                 f'{server}/AQUARIUS/Provisioning/v1/session',
                 data=authData,
-                verify=verifyMode,
                 timeout=30,
             )
             authResponse.raise_for_status()
-
-            if Config.debug:
-                Logic.logMessage("DEBUG", f"Authentication succeeded with verify={verifyMode}")
+            if attempt == 'unverified':
+                _warnUnverified()
+            elif Config.debug:
+                Logic.logMessage("DEBUG", "Aquarius authentication succeeded with OS/certs TLS")
+            authSession = session
             break
         except requests.exceptions.SSLError as e:
+            if session is not None:
+                try:
+                    session.close()
+                except Exception:
+                    pass
             if Config.debug:
-                Logic.logMessage("DEBUG", f"SSL error with verify={verifyMode}: {e}")
+                Logic.logMessage("DEBUG", f"SSL error on Aquarius {attempt}: {e}")
             continue
         except requests.exceptions.RequestException as e:
+            if session is not None:
+                try:
+                    session.close()
+                except Exception:
+                    pass
             Logic.logMessage("ERROR", f"Authentication failed: {e}")
             return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
     else:
-        Logic.logMessage(
-            "ERROR",
-            "Aquarius TLS failed (system trust and certs/aquarius.pem). "
-            "Place the server certificate as aquarius.pem or .cer in certs/ "
-            "— unverified HTTPS is not used.",
-        )
+        Logic.logMessage("ERROR", "Aquarius TLS failed (OS store, certs/, and unverified).")
         return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
     token = authResponse.text.strip('"')
     headers = {'X-Authentication-Token': token}
+    if authSession is not None:
+        try:
+            authSession.close()
+        except Exception:
+            pass
 
     # Clear creds immediately after use
     user = None
@@ -170,7 +245,7 @@ def apiRead(dataIDs, startDate, endDate, interval):
     if Config.debug:
         Logic.logMessage("DEBUG", f"Created {numTasks} tasks for {len(dataIDs)} UIDs across {len(subRanges)} sub-ranges, using {numThreads} threads")
 
-    def queryTask(uid, subStart, subEnd, threadId):
+    def queryTask(uid, subStart, subEnd, threadId, http):
         if Config.debug:
             Logic.logMessage("DEBUG", f"Thread {threadId} processing task for UID {uid}, range {subStart} to {subEnd}")
         subStartDt = datetime.strptime(subStart, '%Y-%m-%d %H:%M')
@@ -187,9 +262,9 @@ def apiRead(dataIDs, startDate, endDate, interval):
         subEndMinute = f'{subEndDt.minute:02d}'
         subStartStr = f'{subStartYear}-{subStartMonth}-{subStartDay} {subStartHour}:{subStartMinute}'
         subEndStr = f'{subEndYear}-{subEndMonth}-{subEndDay} {subEndHour}:{subEndMinute}'
-        response = requests.get(
+        response = http.get(
             f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={subStartStr}&QueryTo={subEndStr}&utcOffset={offsetHours}&GetParts=All&format=json',
-            headers=headers, verify=verifyMode, timeout=60,
+            headers=headers, timeout=60,
         )
 
         try:
@@ -228,15 +303,22 @@ def apiRead(dataIDs, startDate, endDate, interval):
     threads = []
 
     def worker(threadId):
-        while True:
+        http = _httpsSession(ssl_context=sslContext, verify=verifyMode)
+        try:
+            while True:
+                try:
+                    uid, subStart, subEnd = taskQueue.get_nowait()
+                    queryTask(uid, subStart, subEnd, threadId, http)
+                    taskQueue.task_done()
+                except queue.Empty:
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", f"Thread {threadId} found no more tasks")
+                    break
+        finally:
             try:
-                uid, subStart, subEnd = taskQueue.get_nowait()
-                queryTask(uid, subStart, subEnd, threadId)
-                taskQueue.task_done()
-            except queue.Empty:
-                if Config.debug:
-                    Logic.logMessage("DEBUG", f"Thread {threadId} found no more tasks")
-                break
+                http.close()
+            except Exception:
+                pass
     for i in range(numThreads):
         t = threading.Thread(target=worker, args=(i,))
         threads.append(t)

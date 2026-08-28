@@ -12,23 +12,21 @@ Entra vs credential-account login is not implemented. Username and password are 
 
 ## TLS certificates
 
-Windows and macOS launcher zips include an empty `pythonFiles/certs/` folder. Updates never replace files there. Place the server cert:
+Aquarius is **HTTPS** on an internal/VPN network. Verification order:
+
+1. **OS certificate store** (Windows Trusted Root, not the Mozilla `certifi` bundle). If IT already deploys the **issuing CA** with Group Policy, you do **not** need a yearly file on each PC — a new server leaf signed by that CA still verifies.
+2. Optional `certs/aquarius.pem` (extra CA). Prefer the **issuing CA**, not the yearly server certificate.
+3. If both fail: still connect over HTTPS **without** checking the certificate, and write a **WARN** in the log. USGS (public internet) never uses this fallback.
+
+A `certs/` file is optional. Windows/macOS zips include an empty `pythonFiles/certs/`; updates never replace it.
 
 | File | Behavior |
 |------|----------|
-| `aquarius.pem` | Used as-is (preferred) |
+| `aquarius.pem` | Extra CA (or leaf) loaded into the OS trust context |
 | `.cer` / `.crt` | Converted to `aquarius.pem` on first use; source file removed after success |
 | `.pfx` / `.p12` | **Not supported** — export `.cer` or `.pem` first |
 
-Search order (existing folders only):
-
-1. Project `certs/`
-2. App root
-3. Parent of app root (Windows zip / launcher folder)
-4. Current working directory
-5. User config `certs/` (see [App Data](App-Data))
-
-Converted `aquarius.pem` is written **next to** the source file. TLS uses system trust first, then `certs/aquarius.pem`. There is **no unverified HTTPS fallback** (that would send the password to a MITM). If both fail, add the server cert or put it in the OS trust store.
+Search order (existing folders only): project `certs/`, app root, parent of app root (launcher folder), cwd, user config `certs/` (see [App Data](App-Data)).
 
 The server URL is always `https://` (a stored `http://` host is upgraded).
 
