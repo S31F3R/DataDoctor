@@ -1,4 +1,8 @@
 ####### CURRENT TASKS #######
+-Update message for Windows is too "wordy". Don't need to say anything after "Restart Data Doctor to apply the update"
+    -Since applyUpdate.cmd can start up Data Doctor.exe, could we add a message box with a button that says "Restart"
+        -Restart could close the program but launch applyUpdate.cmd
+        -If this can be done, change the message to "Hit restart to update or close window to restart later" or something like that
 
 ####### CURRENT BUGS #######
 
