@@ -36,6 +36,4 @@ Confirmed
 
 Deferred / known
 --------------------------------------------------------------------------------
-[!] USGS monthly/yearly (OGC has no products)
 [!] AppImage applyUpdate path not wired the same as launcher packages yet
-
