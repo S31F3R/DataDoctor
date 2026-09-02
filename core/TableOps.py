@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import uuid
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QBrush
+from PyQt6.QtCore import Qt, QPoint
+from PyQt6.QtGui import QBrush, QColor, QPainter
 from PyQt6.QtWidgets import (
     QAbstractItemView, QHeaderView, QInputDialog, QMenu, QMessageBox,
-    QTableWidgetItem,
+    QTableWidgetItem, QWidget, QApplication,
 )
 
 from core import Config, Logic, Upload, Utils
@@ -141,32 +141,269 @@ def _dictDatatype(mainWindow, dataId, database=None) -> str:
     return item.text().strip() if item and item.text() else ""
 
 
+def allColumnBlocks(mainWindow):
+    """
+    Partition the table into move-blocks:
+
+      overlay + its delta          → 2 columns
+      primary + secondary + delta  → 3 columns (deltas without overlay)
+      custom / leftover            → 1 column
+    """
+    table = _table(mainWindow)
+    if table is None:
+        return []
+    n = table.columnCount()
+    blocks = []
+    i = 0
+    while i < n:
+        t = columnType(mainWindow, i)
+        if t == "overlay" and i + 1 < n and columnType(mainWindow, i + 1) == "delta":
+            blocks.append([i, i + 1])
+            i += 2
+        elif (
+            t == "normal"
+            and i + 2 < n
+            and columnType(mainWindow, i + 1) == "normal"
+            and columnType(mainWindow, i + 2) == "delta"
+        ):
+            blocks.append([i, i + 1, i + 2])
+            i += 3
+        else:
+            blocks.append([i])
+            i += 1
+    return blocks
+
+
 def columnGroup(mainWindow, col):
     """
     Columns that must move together.
-    Overlay + its delta (next column) are locked. Custom columns are free.
+    Overlay + delta stay locked. Non-overlay deltas lock primary, secondary,
+    and delta as a trio. Custom columns move freely.
+    """
+    for block in allColumnBlocks(mainWindow):
+        if col in block:
+            return block
+    return [col]
+
+
+class ColumnDropMarker(QWidget):
+    """Excel-style 3px insert line over the table while dragging a header."""
+
+    def __init__(self, table):
+        super().__init__(table)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.hide()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        if Config.retroMode:
+            color = QColor("#00FF00")
+        else:
+            app = QApplication.instance()
+            pal = app.palette() if app is not None else self.palette()
+            color = pal.color(pal.ColorRole.Highlight)
+        painter.fillRect(self.rect(), color)
+        painter.end()
+
+    def showAtX(self, x):
+        table = self.parent()
+        if table is None:
+            return
+        h = table.height()
+        self.setGeometry(int(x) - 1, 0, 3, max(h, 8))
+        self.show()
+        self.raise_()
+
+
+def dropMarkerFor(table):
+    if table is None:
+        return None
+    marker = getattr(table, "_colDropMarker", None)
+    if marker is None:
+        marker = ColumnDropMarker(table)
+        table._colDropMarker = marker
+    return marker
+
+
+def hideDropMarker(table):
+    marker = getattr(table, "_colDropMarker", None) if table is not None else None
+    if marker is not None:
+        marker.hide()
+
+
+def dropInsertIndex(header, pos, group):
+    """
+    Column index to insert *before* (in the current table), based on mouse x.
+    Left half of a section → that section; right half → the next one.
+    """
+    if header is None or pos is None:
+        return -1
+    x = pos.x()
+    n = header.count()
+    if n <= 0:
+        return 0
+    for visual in range(n):
+        logical = header.logicalIndex(visual)
+        start = header.sectionViewportPosition(logical)
+        width = header.sectionSize(logical)
+        if x < start + width / 2:
+            return logical
+    return n
+
+
+def updateDropMarker(mainWindow, header, pos, srcCol):
+    table = _table(mainWindow)
+    marker = dropMarkerFor(table)
+    if marker is None or header is None or pos is None:
+        return
+    group = columnGroup(mainWindow, srcCol)
+    insertAt = dropInsertIndex(header, pos, group)
+    insertAt = snapInsertIndex(mainWindow, insertAt, group, srcCol)
+    n = header.count()
+    if n <= 0:
+        return
+    if insertAt >= n:
+        last = header.logicalIndex(n - 1)
+        edge = header.sectionViewportPosition(last) + header.sectionSize(last)
+    else:
+        logical = header.logicalIndex(insertAt) if insertAt < n else header.logicalIndex(n - 1)
+        edge = header.sectionViewportPosition(logical)
+    vp = header.viewport()
+    pt = vp.mapTo(table, QPoint(int(edge), 0))
+    marker.showAtX(pt.x())
+
+
+def snapInsertIndex(mainWindow, insertAt, movingGroup, srcCol):
+    """Do not drop into the middle of another pair; land before or after it."""
+    table = _table(mainWindow)
+    if table is None:
+        return insertAt
+    n = table.columnCount()
+    insertAt = max(0, min(int(insertAt), n))
+    moving = set(movingGroup or [])
+    draggingRight = insertAt > (movingGroup[0] if movingGroup else srcCol)
+    for block in allColumnBlocks(mainWindow):
+        if not block or set(block) == moving:
+            continue
+        start, end = block[0], block[-1] + 1
+        if start < insertAt < end:
+            return end if draggingRight else start
+    return insertAt
+
+
+def dropColumns(mainWindow, srcCol, destInsertAt):
+    """
+    Apply a header drop.
+
+    Non-overlay delta trio: dragging one data column onto the other (still
+    inside the 3) swaps primary/secondary and recalculates the delta sign.
+    Dropping outside the trio moves all three, snapped to pair boundaries.
+    Overlay + delta always move as a pair.
     """
     table = _table(mainWindow)
-    if table is None or col < 0 or col >= table.columnCount():
-        return [col]
-    t = columnType(mainWindow, col)
-    if t == "custom":
-        return [col]
-    if t == "delta":
-        if col > 0:
-            prev = columnType(mainWindow, col - 1)
-            if prev in ("overlay", "normal"):
-                prevMeta = _meta(mainWindow, col - 1)
-                thisMeta = _meta(mainWindow, col)
-                if prevMeta.get("pairIndex") == thisMeta.get("pairIndex") or prev == "overlay":
-                    return [col - 1, col]
-        return [col]
-    if col + 1 < table.columnCount() and isDeltaColumn(mainWindow, col + 1):
-        nxt = _meta(mainWindow, col + 1)
-        cur = _meta(mainWindow, col)
-        if nxt.get("pairIndex") == cur.get("pairIndex") or t == "overlay":
-            return [col, col + 1]
-    return [col]
+    hideDropMarker(table)
+    if table is None or srcCol < 0:
+        return False
+    group = columnGroup(mainWindow, srcCol)
+    destInsertAt = snapInsertIndex(mainWindow, destInsertAt, group, srcCol)
+
+    if len(group) == 3 and (
+        destInsertAt in group or destInsertAt == group[-1] + 1
+    ):
+        dataCols = [c for c in group if columnType(mainWindow, c) != "delta"]
+        destCol = destInsertAt if destInsertAt in group else group[-1]
+        if (
+            srcCol in dataCols
+            and destCol in dataCols
+            and srcCol != destCol
+        ):
+            _swapTwoColumns(mainWindow, srcCol, destCol)
+            _recalcDeltaForGroup(mainWindow, group)
+            return True
+        return False
+
+    if destInsertAt in group or destInsertAt == group[0] + len(group):
+        return False
+
+    return moveColumnRange(mainWindow, group[0], len(group), destInsertAt)
+
+
+def _swapTwoColumns(mainWindow, a, b):
+    if a == b:
+        return
+    if a > b:
+        a, b = b, a
+    moveColumnRange(mainWindow, b, 1, a)
+    # After moving b in front of a, original a is now at a+1. Swap done if
+    # we wanted b then a. If a < b and we move b to a: [b, a, ...]. Good.
+
+
+def _recalcDeltaForGroup(mainWindow, group):
+    if not group or len(group) < 2:
+        return
+    deltaCol = group[-1]
+    if columnType(mainWindow, deltaCol) != "delta":
+        return
+    dataCols = [c for c in group if columnType(mainWindow, c) != "delta"]
+    if len(dataCols) < 2:
+        return
+    primaryCol, secondaryCol = dataCols[0], dataCols[1]
+    table = _table(mainWindow)
+    if table is None:
+        return
+    rules = list(getattr(table, "columnRoundingRules", None) or [])
+    dRule = rules[deltaCol] if deltaCol < len(rules) else None
+    metas = _metas(mainWindow)
+    pMeta = _meta(mainWindow, primaryCol)
+    sMeta = _meta(mainWindow, secondaryCol)
+    dMeta = _meta(mainWindow, deltaCol)
+    pIds = list(pMeta.get("dataIds") or [])
+    sIds = list(sMeta.get("dataIds") or [])
+    pDbs = list(pMeta.get("dbs") or [])
+    sDbs = list(sMeta.get("dbs") or [])
+    pQi = list(pMeta.get("queryInfos") or [])
+    sQi = list(sMeta.get("queryInfos") or [])
+    dMeta["dataIds"] = (pIds[:1] or [""]) + (sIds[:1] or [""])
+    dMeta["dbs"] = (pDbs[:1] or [""]) + (sDbs[:1] or [""])
+    dMeta["queryInfos"] = (pQi[:1] or [""]) + (sQi[:1] or [""])
+    table.blockSignals(True)
+    try:
+        for r in range(table.rowCount()):
+            pItem = table.item(r, primaryCol)
+            sItem = table.item(r, secondaryCol)
+            pText = pItem.text() if pItem is not None else ""
+            sText = sItem.text() if sItem is not None else ""
+            pDec = parseDecimalText(pText)
+            sDec = parseDecimalText(sText)
+            if pDec is not None and sDec is not None:
+                text = formatDeltaValue(pDec - sDec, dRule)
+            else:
+                text = ""
+            dItem = table.item(r, deltaCol)
+            if dItem is None:
+                dItem = _centerItem(text)
+                table.setItem(r, deltaCol, dItem)
+            else:
+                dItem.setText(text)
+            if text:
+                try:
+                    val = float(text)
+                except ValueError:
+                    val = 0
+                if val > 0:
+                    TableColors.applyToItem(dItem, "deltaPositive")
+                elif val < 0:
+                    TableColors.applyToItem(dItem, "deltaNegative")
+                else:
+                    dItem.setForeground(Config.systemTextColor)
+                    dItem.setBackground(QBrush())
+            else:
+                dItem.setForeground(QBrush())
+                dItem.setBackground(QBrush())
+    finally:
+        table.blockSignals(False)
+    _rebuildQueryItemsFromTable(mainWindow)
+    _syncQueryList(mainWindow)
 
 
 def _shiftFormulas(table, insertAt, delta):

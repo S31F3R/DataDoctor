@@ -1050,6 +1050,12 @@ class _HeaderSelectFilter(QObject):
                 header.unsetCursor()
             except RuntimeError:
                 pass
+        try:
+            from core import TableOps
+            table = getattr(self.mainWindow, "mainTable", None)
+            TableOps.hideDropMarker(table)
+        except Exception:
+            pass
 
     def eventFilter(self, obj, event):
         if getattr(Logic, 'appIsQuitting', False):
@@ -1101,27 +1107,30 @@ class _HeaderSelectFilter(QObject):
                         header.setCursor(Qt.CursorShape.ClosedHandCursor)
                     except Exception:
                         pass
+            if self._dragging:
+                try:
+                    from core import TableOps
+                    TableOps.updateDropMarker(
+                        self.mainWindow, header, pos, self._pressCol
+                    )
+                except Exception:
+                    pass
             return True if self._dragging else False
 
         if et == QEvent.Type.MouseButtonRelease:
             if event.button() != Qt.MouseButton.LeftButton:
                 return False
             if self._dragging:
-                dest = header.logicalIndexAt(pos) if pos is not None else -1
                 src = self._pressCol
-                self._resetDrag(header)
-                if dest >= 0 and src >= 0 and dest != src:
-                    try:
-                        from core import TableOps
-                        group = TableOps.columnGroup(self.mainWindow, src)
-                        srcStart = group[0]
-                        count = len(group)
-                        destStart = dest - (src - srcStart)
-                        TableOps.moveColumnRange(
-                            self.mainWindow, srcStart, count, destStart
-                        )
-                    except Exception as e:
-                        Logic.logException("header column drag failed", e)
+                try:
+                    from core import TableOps
+                    insertAt = TableOps.dropInsertIndex(header, pos, None)
+                    self._resetDrag(header)
+                    if src >= 0 and insertAt >= 0:
+                        TableOps.dropColumns(self.mainWindow, src, insertAt)
+                except Exception as e:
+                    self._resetDrag(header)
+                    Logic.logException("header column drag failed", e)
                 return True
             if self._atePress:
                 self._resetDrag(header)

@@ -52,6 +52,38 @@ defaultFontFiles = (
     'ui/fonts/NotoSans-BoldItalic.ttf',
 )
 
+# ---------------------------------------------------------------------------
+# Retro mode inventory — what is FONT vs SPACING vs CHROME, and where to edit.
+#
+# retroUseDefaultSpacing (below): True = Noto geometry/padding/row heights even
+# in retro, so Silkscreen can be judged on its own. Set False to restore the
+# old Press Start spacing after you pick which offsets to keep.
+#
+# FONT (always on in retro):
+#   ensureRetroFontLoaded()     this file — Silkscreen TTF in ui/fonts/
+#   fontRoleSizes               this file — (Noto pt, retro pt) per role
+#   retroSmallFontControls      this file — named radios/checkboxes at 6pt
+#   retroSmallFontPt            this file
+#   winRetroSmallerControls     this file — Windows Query buttons −1pt
+#   applyRoleFonts()            this file
+#   ui/uiAbout.py               Press Start 2P for arcade games only
+#
+# SPACING (gated by retroUseDefaultSpacing):
+#   controlLayouts['retro']     this file — Main/Query button x,y vs default
+#   applyModeControlLayouts()   this file
+#   tableDefaultRowHeight()     this file — extra row pad
+#   tableHeaderBarHeight()      this file — extra header band
+#   formatTableHeaderLabel()    this file — blank line in two-line headers
+#   retroSpacingStylesheet()    this file — tab/list/checkbox padding
+#   applyCompactListStyle()     this file — retro skips Windows compact lists
+#
+# CHROME (always on in retro):
+#   setRetroStyles()            this file — neon scrollbar handles
+#   retroSpacingStylesheet()    this file — green tabs + retro close icons
+#   retroNeonGreen              this file
+# ---------------------------------------------------------------------------
+retroUseDefaultSpacing = True
+
 # Absolute geometries that differ by font mode: (x, y, width, height)
 # Default = Noto (Seifer-tuned 2026-07-24). Retro = pre-Noto baseline until tuned.
 # Only controls listed here are moved; everything else stays at .ui geometry.
@@ -575,11 +607,11 @@ def tableDefaultRowHeight(font=None, metrics=None):
             font = makeFontForRole('table')
         metrics = QFontMetrics(font)
     h = metrics.height()
-    if Config.retroMode:
+    if Config.retroMode and not retroUseDefaultSpacing:
         # Press Start metrics.height() is tiny (~11 at 8pt); force real row height
         # Seifer: -2 from prior (was h+18 / min 32)
         return max(h + 16, 30)
-    # Non-retro Noto Sans
+    # Non-retro Noto Sans (also used as retro baseline when retroUseDefaultSpacing)
     if sys.platform == 'win32':
         return max(h + 4, 20)
     return max(h + 10, 22)
@@ -595,7 +627,7 @@ def tableHeaderBarHeight(font=None, metrics=None):
             font = makeFontForRole('table')
         metrics = QFontMetrics(font)
     h = metrics.height()
-    if Config.retroMode:
+    if Config.retroMode and not retroUseDefaultSpacing:
         # part1 + blank spacer + part2
         return max(h * 3 + 6, 42)
     return 0  # leave native
@@ -611,7 +643,7 @@ def formatTableHeaderLabel(text):
     if text is None:
         return ''
     s = str(text)
-    if not Config.retroMode:
+    if not Config.retroMode or retroUseDefaultSpacing:
         return s
     s = s.strip('\n')
     if '\n' not in s:
@@ -643,7 +675,7 @@ def applyTableRowMetrics(table, font=None):
         # Interactive so "selected" chrome does not resize sections.
         hHeader.setHighlightSections(True)
         vHeader.setHighlightSections(False)
-        if Config.retroMode:
+        if Config.retroMode and not retroUseDefaultSpacing:
             hHeader.setMinimumHeight(tableHeaderBarHeight(font, metrics))
         else:
             # Restore native header band when leaving retro (toggle / restart)
@@ -719,7 +751,7 @@ def nonRetroPlatformStylesheet():
     Table item padding only here — listSnippets/listQueryList use applyCompactListStyle.
     Never QTabBar/QPushButton chrome.
     """
-    if Config.retroMode:
+    if Config.retroMode and not retroUseDefaultSpacing:
         return ""
     if sys.platform == 'win32':
         # Optional table tightening (harmless; row height is the main table control)
@@ -754,7 +786,7 @@ def applyCompactListStyle(listWidget):
                 "background-color: palette(base);\n"
                 "color: palette(text);\n"
             )
-        if Config.retroMode:
+        if Config.retroMode and not retroUseDefaultSpacing:
             # Clear compact-list override so app-level retro padding applies.
             # Keep sql-pane-base so the snippet list stays Base in dark mode.
             listWidget.setStyleSheet(panePrefix)
@@ -791,7 +823,7 @@ def applyModeControlLayouts(app=None, root=None):
     Call after UI load / on mode apply. Unknown names are skipped.
     Windows default mode can apply platformLayoutYNudge (e.g. Refresh/Undo +3 y).
     """
-    mode = 'retro' if Config.retroMode else 'default'
+    mode = 'retro' if (Config.retroMode and not retroUseDefaultSpacing) else 'default'
     coords = controlLayouts.get(mode) or {}
     if not coords:
         return
@@ -857,16 +889,34 @@ def retroSpacingStylesheet():
     # (readBaseStylesheet / setRetroStyles rebuild without this block).
     # Hover for close is a 2nd image (same pattern as default dark/light pair).
     green = retroNeonGreen
+    # Padding is spacing (gated). Colors / close icons are chrome (always on).
+    if retroUseDefaultSpacing:
+        pad = "padding: 4px 6px;"
+        listPad = ""
+        checkPad = ""
+    else:
+        pad = "padding-top: 6px; padding-bottom: 6px; padding-left: 8px; padding-right: 8px;"
+        listPad = """
+    QListWidget::item, QListView::item {
+        padding-top: 5px;
+        padding-bottom: 5px;
+        padding-left: 3px;
+        padding-right: 3px;
+        min-height: 1.2em;
+    }
+    QCheckBox, QRadioButton {
+        spacing: 10px;
+        min-height: 1.3em;
+    }
+"""
+        checkPad = ""
     return f"""
     /* Retro tabs: neon green + black text. NO tab:hover fill — that lit the whole
        tab and stole hover from the close button. Only close-button:hover changes. */
     QTabBar::tab {{
         background: {green};
         color: #000000;
-        padding-top: 6px;
-        padding-bottom: 6px;
-        padding-left: 8px;
-        padding-right: 8px;
+        {pad}
         border: 1px solid #00aa00;
         margin-right: 2px;
     }}
@@ -910,18 +960,7 @@ def retroSpacingStylesheet():
         image: url(ui/icons/Tab-close-retro-pressed.png);
         background: transparent;
     }}
-    /* List item air (vertical); keep horizontal small */
-    QListWidget::item, QListView::item {{
-        padding-top: 5px;
-        padding-bottom: 5px;
-        padding-left: 3px;
-        padding-right: 3px;
-        min-height: 1.2em;
-    }}
-    QCheckBox, QRadioButton {{
-        spacing: 10px;
-        min-height: 1.3em;
-    }}
+    {listPad}
     """
 
 
