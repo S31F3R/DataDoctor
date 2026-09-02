@@ -1027,12 +1027,29 @@ class _HeaderSelectFilter(QObject):
     only on the header never sees the press, so Qt still runs
     sectionPressed→selectColumn and sectionClicked→our handler. Ctrl then
     adds (us) and immediately toggles off (Qt).
+
+    Drag-to-reorder is handled here too (Qt setSectionsMovable is off so it
+    cannot steal the press or look like a sort).
     """
 
     def __init__(self, mainWindow):
         super().__init__(mainWindow)
         self.mainWindow = mainWindow
         self._atePress = False
+        self._dragging = False
+        self._pressCol = -1
+        self._pressPos = None
+
+    def _resetDrag(self, header):
+        self._atePress = False
+        self._dragging = False
+        self._pressCol = -1
+        self._pressPos = None
+        if header is not None:
+            try:
+                header.unsetCursor()
+            except RuntimeError:
+                pass
 
     def eventFilter(self, obj, event):
         if getattr(Logic, 'appIsQuitting', False):
@@ -1054,23 +1071,98 @@ class _HeaderSelectFilter(QObject):
             return False
 
         et = event.type()
+        pos = None
+        if hasattr(event, "position"):
+            try:
+                pos = event.position().toPoint()
+            except Exception:
+                pos = None
+        if pos is None and hasattr(event, "pos"):
+            try:
+                pos = event.pos()
+            except Exception:
+                pos = None
+
+        if et == QEvent.Type.MouseMove and self._atePress and pos is not None:
+            if not self._dragging and self._pressPos is not None:
+                try:
+                    dist = (pos - self._pressPos).manhattanLength()
+                except Exception:
+                    dist = 0
+                threshold = 8
+                try:
+                    from PyQt6.QtWidgets import QApplication
+                    threshold = max(8, int(QApplication.startDragDistance()))
+                except Exception:
+                    pass
+                if dist >= threshold:
+                    self._dragging = True
+                    try:
+                        header.setCursor(Qt.CursorShape.ClosedHandCursor)
+                    except Exception:
+                        pass
+            return True if self._dragging else False
+
         if et == QEvent.Type.MouseButtonRelease:
-            if self._atePress and event.button() == Qt.MouseButton.LeftButton:
-                self._atePress = False
+            if event.button() != Qt.MouseButton.LeftButton:
+                return False
+            if self._dragging:
+                dest = header.logicalIndexAt(pos) if pos is not None else -1
+                src = self._pressCol
+                self._resetDrag(header)
+                if dest >= 0 and src >= 0 and dest != src:
+                    try:
+                        from core import TableOps
+                        group = TableOps.columnGroup(self.mainWindow, src)
+                        srcStart = group[0]
+                        count = len(group)
+                        destStart = dest - (src - srcStart)
+                        TableOps.moveColumnRange(
+                            self.mainWindow, srcStart, count, destStart
+                        )
+                    except Exception as e:
+                        Logic.logException("header column drag failed", e)
+                return True
+            if self._atePress:
+                self._resetDrag(header)
                 return True
             return False
+
+        if et == QEvent.Type.MouseButtonDblClick:
+            if event.button() != Qt.MouseButton.LeftButton:
+                return False
+            if pos is None or _headerResizeHandleAt(header, pos):
+                return False
+            col = header.logicalIndexAt(pos)
+            if col < 0:
+                return False
+            # Filter ate the first click, so Qt may not emit sectionDoubleClicked.
+            handler = getattr(self.mainWindow, "onMainHeaderDoubleClicked", None)
+            if callable(handler):
+                handler(col)
+            return True
+
         if et != QEvent.Type.MouseButtonPress:
             return False
         if event.button() != Qt.MouseButton.LeftButton:
             return False
-        pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+        if pos is None:
+            return False
         if _headerResizeHandleAt(header, pos):
             return False
         col = header.logicalIndexAt(pos)
         if col < 0:
             return False
+        table.setSortingEnabled(False)
+        try:
+            header.setSortIndicatorShown(False)
+        except Exception:
+            pass
         selectEntireColumn(self.mainWindow, col, None, defer=False)
         self._atePress = True
+        self._dragging = False
+        self._pressCol = col
+        self._pressPos = pos
         return True
 
 
@@ -1139,6 +1231,12 @@ def ensureHeaderSelectionSync(mainWindow):
         if viewport is not None:
             viewport.installEventFilter(filt)
         table._headerSelectFilterInstalled = True
+        table.setSortingEnabled(False)
+        try:
+            header.setSortIndicatorShown(False)
+            header.sectionClicked.disconnect(table.sortByColumn)
+        except Exception:
+            pass
 
     # Kill Qt header→selectColumn and our sectionClicked (filter owns clicks).
     # C++ sectionPressed often ignores a Python disconnect(); still try.

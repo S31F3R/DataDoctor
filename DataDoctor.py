@@ -600,6 +600,21 @@ class uiMain(QMainWindow):
         self._quitting = True
         Logic.appIsQuitting = True
         self._removeHeaderSelectFilters()
+        table = getattr(self, "mainTable", None)
+        formulaFilt = getattr(table, "_formulaFilter", None) if table is not None else None
+        if formulaFilt is not None:
+            try:
+                table.removeEventFilter(formulaFilt)
+            except Exception:
+                pass
+            try:
+                vp = table.viewport()
+                if vp is not None:
+                    vp.removeEventFilter(formulaFilt)
+            except RuntimeError:
+                pass
+            except Exception:
+                pass
 
         try:
             sqlTab = self.tabSQL or self.findChild(QWidget, 'tabSQL')
@@ -2244,7 +2259,11 @@ if __name__ == '__main__':
         class _PygameWarmup(QRunnable):
             def run(self):
                 try:
-                    import pygame  # noqa: F401
+                    os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore", message=".*avx2.*")
+                        import pygame  # noqa: F401
                 except Exception:
                     pass
 

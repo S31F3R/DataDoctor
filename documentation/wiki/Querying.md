@@ -59,7 +59,7 @@ Right-click a **header** for series details / Graph, **Insert column left/right*
 
 Right-click a **cell** for value details (internal, plus USGS public “Show details”). Overlay cells that differ also offer **Update from secondary** (HDB only).
 
-**Ctrl+Z** / **Ctrl+Y** undo and redo table edits (and SQL uses the editor’s built-in undo). The toolbar Reset button still re-sorts by timestamp.
+**Ctrl+Z** / **Ctrl+Y** undo and redo table edits. SQL Query Builder uses the same shortcuts (Ctrl+Y is wired even on Linux, where Qt’s default redo is Ctrl+Shift+Z). The toolbar Reset button still re-sorts by timestamp. Single-click a header to highlight the column; **double-click** sorts. Drag a header to reorder.
 
 Internal tables accept Excel-style **formulas** (`=A1+B1`, fill handle, `$` locks). See [Formulas](Formulas). Custom columns survive **Refresh** (formulas re-run). A new query drops them.
 

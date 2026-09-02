@@ -364,11 +364,16 @@ class FormulaTableFilter(QObject):
         self._band.show()
 
     def eventFilter(self, obj, event):
+        if getattr(Logic, "appIsQuitting", False):
+            return False
         table = self._table()
         if table is None:
             return super().eventFilter(obj, event)
         et = event.type()
-        viewport = table.viewport()
+        try:
+            viewport = table.viewport()
+        except RuntimeError:
+            return False
 
         if et == QEvent.Type.MouseButtonPress and isinstance(event, QMouseEvent):
             if event.button() == Qt.MouseButton.LeftButton:

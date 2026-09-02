@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 
-from PyQt6.QtCore import Qt, QObject
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QBrush
 from PyQt6.QtWidgets import (
     QAbstractItemView, QHeaderView, QInputDialog, QMenu, QMessageBox,
@@ -429,47 +429,22 @@ def _syncQueryList(mainWindow):
         lst.blockSignals(False)
 
 
-class _HeaderMoveFilter(QObject):
-    def __init__(self, mainWindow):
-        super().__init__(mainWindow)
-        self.mainWindow = mainWindow
-        self._busy = False
-
-    def onSectionMoved(self, logical, oldVisual, newVisual):
-        if self._busy or oldVisual == newVisual:
-            return
-        table = _table(self.mainWindow)
-        if table is None:
-            return
-        header = table.horizontalHeader()
-        # Undo Qt's visual-only move, then physically reorder so
-        # columnMetadata[i] always matches table column i.
-        self._busy = True
-        header.blockSignals(True)
-        try:
-            header.moveSection(newVisual, oldVisual)
-        finally:
-            header.blockSignals(False)
-        group = columnGroup(self.mainWindow, oldVisual)
-        srcStart = group[0]
-        count = len(group)
-        dest = newVisual - (oldVisual - srcStart)
-        dest = max(0, min(dest, table.columnCount() - count))
-        moveColumnRange(self.mainWindow, srcStart, count, dest)
-        self._busy = False
-
-
 def enableColumnDrag(mainWindow):
+    """
+    Column reorder is owned by Upload._HeaderSelectFilter (click vs drag).
+    Qt setSectionsMovable is left OFF so a header click cannot look like a sort.
+    """
     table = _table(mainWindow)
     if table is None:
         return
+    table.setSortingEnabled(False)
     header = table.horizontalHeader()
-    header.setSectionsMovable(True)
-    filt = getattr(table, "_columnMoveFilter", None)
-    if filt is None:
-        filt = _HeaderMoveFilter(mainWindow)
-        table._columnMoveFilter = filt
-        header.sectionMoved.connect(filt.onSectionMoved)
+    header.setSectionsMovable(False)
+    try:
+        header.setSortIndicatorShown(False)
+    except Exception:
+        pass
+    Upload.ensureHeaderSelectionSync(mainWindow)
 
 
 def renameHeader(mainWindow, col):

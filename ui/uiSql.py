@@ -647,6 +647,7 @@ class SqlWorkbench:
             self.pteSQL.setObjectName("pteSQL")
         editor = self.pteSQL
         editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._installEditorRedo(editor)
         self.worksheetTabs.addTab(editor, "Query 1")
 
         resultTabs = self._newResultTabs(sqlTab)
@@ -751,6 +752,16 @@ class SqlWorkbench:
             handle.setToolTip("Double-click to collapse or expand SQL quick looks")
         self._applySnippetHidden(bool(Utils.loadConfig().get("sqlSnippetsHidden", False)))
         self._stylePanes()
+
+    def _installEditorRedo(self, editor):
+        """Linux QPlainTextEdit redo is Ctrl+Shift+Z; add Ctrl+Y to match Windows habit."""
+        if editor is None or getattr(editor, "_ctrlYRedo", None) is not None:
+            return
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        sc = QShortcut(QKeySequence("Ctrl+Y"), editor)
+        sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        sc.activated.connect(editor.redo)
+        editor._ctrlYRedo = sc
 
     def _stylePanes(self, *widgets):
         if widgets:
@@ -883,6 +894,7 @@ class SqlWorkbench:
         editor = QPlainTextEdit(self.win.tabSQL)
         editor.setObjectName(f"pteSQL_{self._wsSeq}")
         editor.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._installEditorRedo(editor)
         self._stylePanes(editor)
         self._setWorksheetDatabase(editor, self.currentDatabase())
         name = f"Query {self._wsSeq}"

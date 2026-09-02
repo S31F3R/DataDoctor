@@ -76,10 +76,25 @@ class qtLogHandler(logging.Handler):
 
     def emit(self, record):
         try:
+            notifier = self.notifier
+            if notifier is None:
+                return
+            try:
+                from PyQt6 import sip
+                if sip.isdeleted(notifier):
+                    return
+            except Exception:
+                pass
             msg = self.format(record)
-            self.notifier.newLogEntry.emit(record.levelname, msg)
+            notifier.newLogEntry.emit(record.levelname, msg)
+        except RuntimeError:
+            # LogNotifier already destroyed during quit
+            return
         except Exception:
-            self.handleError(record)
+            try:
+                self.handleError(record)
+            except Exception:
+                pass
 
 
 def getLogNotifier():

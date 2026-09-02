@@ -24,23 +24,24 @@ from core import Logic, Config, Utils
 
 # Bundled fonts (cross-platform):
 #   non-retro → Noto Sans  (matches Seifer's Linux system UI font)
-#   retro     → Pixelify Sans (Press Start 2P stays for About arcade games)
+#   retro     → Silkscreen (same 8-bit arcade look as Press Start 2P, different maker)
+#               Press Start 2P stays for About arcade games
 defaultFontFamilyCache = None   # Noto Sans
 defaultFontLoadAttempted = False
-retroFontFamilyCache = None     # Pixelify Sans
+retroFontFamilyCache = None     # Silkscreen
 retroFontLoadAttempted = False
 
 # Point sizes by control role: (non-retro, retro)
 # Non-retro: 10pt Noto Sans — matches this machine's GNOME/Qt default.
-# Retro: Pixelify Sans is denser than Press Start, so UI sizes stay close to Noto.
+# Retro: Silkscreen is a Press Start–class pixel font; keep the old 8/6 sizes.
 fontRoleSizes = {
-    'ui':     (10, 10),  # labels, checkboxes, radios, combos, tabs, general
-    'button': (10, 9),   # QPushButton
-    'list':   (10, 10),  # list widgets / snippets / quick looks
-    'table':  (10, 10),  # data tables
+    'ui':     (10, 8),   # labels, checkboxes, radios, combos, tabs, general
+    'button': (10, 6),   # QPushButton — retro size kept at tuned 6pt
+    'list':   (10, 8),   # list widgets / snippets / quick looks
+    'table':  (10, 8),   # data tables
     'log':    (10, 10),  # log viewer
-    'code':   (10, 10),  # SQL / plain text editors
-    'about':  (10, 10),  # about dialog body (arcade still uses Press Start)
+    'code':   (10, 9),   # SQL / plain text editors
+    'about':  (10, 9),   # about dialog body (arcade still uses Press Start)
 }
 
 # Bundled default (non-retro) font faces — all register as family "Noto Sans"
@@ -99,7 +100,7 @@ retroSmallFontControls = frozenset({
     'rbBOP',
     'rbEOP',
 })
-retroSmallFontPt = 8  # one step under general ui 10pt Pixelify
+retroSmallFontPt = 6  # one step under general ui 8pt Silkscreen
 
 # Query window text buttons: one point larger than normal button role (retro 6→7, default 10→11)
 queryLargeButtonControls = frozenset({
@@ -325,9 +326,12 @@ def restartApplication():
                 Logic.logMessage("INFO", f"restartApplication: subprocess.Popen {args}")
 
         # Quit after a short delay so the restart spawn is fully underway
+        from core import Logic as _Logic
+        _Logic.appIsQuitting = True
         app = QApplication.instance()
 
         def quitApp():
+            _Logic.appIsQuitting = True
             try:
                 if app is not None:
                     app.closeAllWindows()
@@ -447,7 +451,7 @@ def ensureDefaultFontLoaded():
 
 
 def ensureRetroFontLoaded():
-    """Bundled Pixelify Sans — retro mode UI (Press Start 2P remains for About games)."""
+    """Bundled Silkscreen — retro UI (Press Start 2P remains for About games)."""
     global retroFontFamilyCache, retroFontLoadAttempted
     if retroFontLoadAttempted:
         return retroFontFamilyCache
@@ -455,8 +459,8 @@ def ensureRetroFontLoaded():
 
     family = None
     for rel, label in (
-        ('ui/fonts/PixelifySans-Regular.ttf', 'retro (Pixelify Sans)'),
-        ('ui/fonts/PixelifySans-Bold.ttf', 'retro bold (Pixelify Sans)'),
+        ('ui/fonts/Silkscreen-Regular.ttf', 'retro (Silkscreen)'),
+        ('ui/fonts/Silkscreen-Bold.ttf', 'retro bold (Silkscreen)'),
     ):
         loaded = registerBundledFont(rel, label)
         if loaded and not family:
@@ -474,7 +478,7 @@ def ensureRetroFontLoaded():
 def activeFontFamily():
     """
     Family for the current mode.
-    Retro → bundled Pixelify Sans.
+    Retro → bundled Silkscreen.
     Default → bundled Noto Sans (cross-platform); '' only if load failed.
     """
     if Config.retroMode:
@@ -510,7 +514,7 @@ def makeFontForRole(role='ui', pointSize=None):
     Build a QFont for a control role.
     Roles: ui, button, list, table, log, code, about — see fontRoleSizes.
     Non-retro: bundled Noto Sans at role size (fallback OS font if missing).
-    Retro: bundled Pixelify Sans.
+    Retro: bundled Silkscreen.
     """
     family = activeFontFamily()
     if pointSize is not None:
@@ -526,7 +530,9 @@ def makeFontForRole(role='ui', pointSize=None):
         except Exception:
             font.setFamily(family)
         font.setPointSize(pt)
-        if Config.retroMode and family and 'Press Start' in family:
+        if Config.retroMode and family and (
+            'Press Start' in family or 'Silkscreen' in family
+        ):
             font.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
         else:
             # PreferMatch: do not silently substitute Segoe UI / Arial on Windows
