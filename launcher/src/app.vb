@@ -14,14 +14,33 @@ Module app
         Return Path.Combine(root, "app.log")
     End Function
 
+    Function LogStamp() As String
+        ' Match Python logging asctime: YYYY-MM-DD HH:MM:SS,mmm
+        Return DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss,fff")
+    End Function
+
     Sub LogToApp(level As String, message As String)
         Try
-            Dim line As String = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") &
+            If String.Equals(level, "WARN", StringComparison.OrdinalIgnoreCase) Then
+                level = "WARNING"
+            End If
+            Dim line As String = LogStamp() &
                 " [" & level & "] launcher: " & message & Environment.NewLine
             File.AppendAllText(AppLogPath(), line, New UTF8Encoding(False))
         Catch
         End Try
     End Sub
+
+    Function LooksLikeZipTemp(root As String) As Boolean
+        Dim lower As String = If(root, "").ToLowerInvariant()
+        If lower.IndexOf(".zip") < 0 Then
+            Return False
+        End If
+        Return lower.Contains("\temp\") OrElse
+            lower.Contains("\tmp\") OrElse
+            lower.Contains("/temp/") OrElse
+            lower.Contains("/tmp/")
+    End Function
 
     Function HasUpdateZip(root As String) As Boolean
         For Each name As String In New String() {"updates", "Updates", "Update", "update"}
@@ -37,12 +56,12 @@ Module app
     End Function
 
     Sub FailAndExit(message As String)
-        LogToApp("ERROR", message)
+        LogToApp("ERROR", message.Replace(vbCrLf, " / "))
         Try
             MsgBox(
                 message & vbCrLf & vbCrLf & "See the log:" & vbCrLf & AppLogPath(),
                 MsgBoxStyle.Critical,
-                "Launcher")
+                "Data Doctor")
         Catch
         End Try
         Environment.Exit(1)
@@ -76,9 +95,26 @@ Module app
         Dim pythonwPath As String = Path.Combine(projectDir, "python-embed", "pythonw.exe")
         Dim scriptPath As String = Path.Combine(projectDir, "app.pyw")
 
-        If Not File.Exists(pythonwPath) OrElse Not File.Exists(scriptPath) Then
+        If LooksLikeZipTemp(root) Then
             FailAndExit(
-                "Could not start." & vbCrLf & vbCrLf &
+                "Data Doctor cannot run from inside the zip." & vbCrLf & vbCrLf &
+                "Extract the entire DataDoctor-Windows zip to a folder " &
+                "(for example Documents\DataDoctor), then double-click " &
+                "Data Doctor.exe in that folder.")
+        End If
+
+        If Not File.Exists(pythonwPath) OrElse Not File.Exists(scriptPath) Then
+            Dim extra As String = ""
+            If HasUpdateZip(root) AndAlso File.Exists(updateScript) Then
+                extra = vbCrLf & vbCrLf &
+                    "An updates zip is present. If applyUpdate.cmd failed, " &
+                    "run it from the same folder as Data Doctor.exe."
+            End If
+            FailAndExit(
+                "Could not find the bundled Python files." & vbCrLf & vbCrLf &
+                "Extract the entire DataDoctor-Windows zip to a folder, " &
+                "then run Data Doctor.exe from that folder. " &
+                "Do not copy only the .exe out of the zip." & extra & vbCrLf & vbCrLf &
                 "Need:" & vbCrLf & pythonwPath & vbCrLf & scriptPath)
         End If
 

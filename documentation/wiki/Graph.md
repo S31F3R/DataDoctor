@@ -8,6 +8,7 @@ The **Graph** button plots the Data Query table into a Graph tab (or a detached 
 - **Ctrl + mouse wheel** zooms the time axis toward the pointer. Y still fits the data in the current X view. Wheel without Ctrl does not zoom.
 - **Middle-mouse** pans. Arrow keys also pan. The view stays clamped to the data range.
 - Legend click toggles a series (`☑` / `☐`) and rescales. That does **not** reset X zoom.
+- Missing timestamps leave a **gap** in the line (no straight connector across the hole).
 - Multiple Y axes when series live on different value bands. Hide an axis from the legend the same way.
 - Y scale fits data in the **current X view** (an off-screen outlier should not squash the visible range). Zoomed Y stays in **absolute** values (no offset “delta scale”).
 - Markers (dots) are always on and stay dense when you zoom into 1-minute data.

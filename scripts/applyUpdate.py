@@ -71,11 +71,22 @@ def userLogDir() -> Path:
     return root / "Data Doctor" / "logs"
 
 
+def logStamp() -> str:
+    """Match Python logging asctime: YYYY-MM-DD HH:MM:SS,mmm"""
+    now = time.time()
+    ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
+    ms = int((now % 1) * 1000)
+    return f"{ts},{ms:03d}"
+
+
 def appendAppLog(level: str, message: str) -> None:
     try:
         logDir = userLogDir()
         logDir.mkdir(parents=True, exist_ok=True)
-        line = time.strftime("%Y-%m-%d %H:%M:%S") + f" [{level}] applyUpdate: {message}\n"
+        levelName = str(level or "INFO").upper()
+        if levelName == "WARN":
+            levelName = "WARNING"
+        line = f"{logStamp()} [{levelName}] applyUpdate: {message}\n"
         with (logDir / "app.log").open("a", encoding="utf-8") as f:
             f.write(line)
     except Exception:
@@ -166,6 +177,64 @@ def pickNewestZip(updateDir: Path) -> Path | None:
         reverse=True,
     )
     return zips[0] if zips else None
+
+
+def maybeDownloadWindowsZip(installRoot: Path) -> Path | None:
+    """
+    If python-embed is still missing after a Python-zip hop, download the
+    matching DataDoctor-Windows-*.zip from GitHub (user already confirmed).
+    """
+    import json
+    import urllib.request
+
+    repo = "S31F3R/DataDoctor"
+    api = f"https://api.github.com/repos/{repo}/releases?per_page=15"
+    destDir = resolveUpdatesDir(installRoot, create=True)
+    try:
+        req = urllib.request.Request(
+            api,
+            headers={"User-Agent": "DataDoctor-applyUpdate", "Accept": "application/vnd.github+json"},
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            releases = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"WARN: could not list GitHub releases for Windows zip ({e})", file=sys.stderr)
+        appendAppLog("WARNING", f"Windows zip fetch list failed: {e}")
+        return None
+    if not isinstance(releases, list):
+        return None
+    for rel in releases:
+        if rel.get("draft"):
+            continue
+        for asset in rel.get("assets") or []:
+            name = (asset.get("name") or "").lower()
+            url = asset.get("browser_download_url") or ""
+            if name.endswith(".zip") and "windows" in name and url.startswith("https://"):
+                dest = destDir / Path(asset.get("name") or "DataDoctor-Windows.zip").name
+                print(f"Downloading {dest.name} (launcher + python-embed)…")
+                appendAppLog("INFO", f"downloading {dest.name}")
+                try:
+                    req = urllib.request.Request(
+                        url, headers={"User-Agent": "DataDoctor-applyUpdate"}
+                    )
+                    with urllib.request.urlopen(req, timeout=120) as resp, dest.open("wb") as out:
+                        while True:
+                            chunk = resp.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            out.write(chunk)
+                    if dest.is_file() and dest.stat().st_size > 0:
+                        return dest
+                except Exception as e:
+                    print(f"WARN: Windows zip download failed ({e})", file=sys.stderr)
+                    appendAppLog("WARNING", f"Windows zip download failed: {e}")
+                    try:
+                        dest.unlink()
+                    except Exception:
+                        pass
+                    return None
+    appendAppLog("WARNING", "no DataDoctor-Windows-*.zip on recent GitHub releases")
+    return None
 
 
 def pickUpdateZip(installRoot: Path, projectFiles: Path) -> Path | None:
@@ -722,6 +791,7 @@ def writeApplyUpdateCmd(installRoot: Path) -> None:
         'if not defined PY set "PY=python"',
         'set "SCRIPT=%~dp0pythonFiles\\scripts\\applyUpdate.py"',
         'if not exist "%SCRIPT%" set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
+        'if not exist "%SCRIPT%" set "SCRIPT=%~dp0applyUpdate.py"',
         'if not exist "%SCRIPT%" (',
         "  echo ERROR: applyUpdate.py not found",
         "  pause",
@@ -992,6 +1062,26 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
 
         print("Update complete.")
         appendAppLog("INFO", f"update complete ({zipPath.name})")
+
+        # User already confirmed the download. If this was a Python-zip hop
+        # and python-embed is still missing, apply (or fetch) the Windows
+        # package in the same run so they are not asked to do a second hop.
+        if not getattr(apply, "_windowsHop", False):
+            embedOk = (projectFiles / "python-embed" / "pythonw.exe").is_file()
+            if (
+                isWindowsInstall(installRoot)
+                and not embedOk
+                and not windowsFull
+            ):
+                apply._windowsHop = True
+                nxt = pickUpdateZip(installRoot, projectFiles)
+                if nxt is None or "windows" not in nxt.name.lower():
+                    nxt = maybeDownloadWindowsZip(installRoot)
+                if nxt is not None and nxt.is_file() and "windows" in nxt.name.lower():
+                    print(f"Launcher still needs python-embed — applying {nxt.name}")
+                    appendAppLog("INFO", f"chaining Windows zip {nxt.name}")
+                    return apply(nxt, installRoot, keepExtract=keepExtract)
+
         launchDataDoctorIfIdle(installRoot)
         return 0
     finally:

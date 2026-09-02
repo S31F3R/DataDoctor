@@ -7,6 +7,9 @@ On the Query window, **Overlay Pairs** and **Display Deltas** apply to **pairs**
 One table column holds two series. Where both have a value, you see the **primary**. Where only the secondary exists, that value is filled in and **auto-marked for upload** (magenta edit) so a Refresh does not treat it as an untouched blank.
 
 - Overlay cells that differ (after the display limiter) paint <span style="color:#FF0000">red</span>.
+- With **Raw Data** off, both sides use the **primary** rounding spec (a DEC(3) primary formats a DEC(2) secondary as DEC(3)).
+- Header **Swap Primary/Secondary** flips the pair in the table and in the query list. Deltas change sign.
+- Cell **Update from secondary** writes the secondary value into primary for cells that differ. USGS and Aquarius primaries are skipped.
 - Overlay Details shows Primary Value, Secondary Value, and Delta using the **same strings as the limiter** — in raw mode, two DB floats that only differ past display precision show as equal and Delta `0`.
 - Graph overlay legends use each series’ first header line (`commonName-datatype`).
 

@@ -43,9 +43,10 @@ pythonFiles\
   temp\bunker.db (packaged dictionary for merge only)
 ```
 
-1. Unzip to a writable folder.
-2. Double-click **Data Doctor.exe**. If `updates\` has a zip, the launcher starts **applyUpdate.cmd** and exits (so the `.exe` can be replaced). applyUpdate pip-installs into `python-embed` (needs internet the first time), merges the dictionary, then starts **Data Doctor.exe** again, which then opens `app.pyw`.
-3. Or run **applyUpdate.cmd** yourself — it starts the exe when it finishes.
+1. Unzip the **entire** package to a writable folder (Documents, not the Desktop zip window).
+2. Double-click **Data Doctor.exe** *in that folder*. Do not run the exe from inside the zip / Compressed Folder view — Windows only extracts the exe, not `pythonFiles\`.
+3. If `updates\` has a zip, the launcher starts **applyUpdate.cmd** and exits (so the `.exe` can be replaced). applyUpdate pip-installs into `python-embed` (needs internet the first time), merges the dictionary, then starts **Data Doctor.exe** again, which then opens `app.pyw`.
+4. Or run **applyUpdate.cmd** yourself — it starts the exe when it finishes.
 
 No system Python and no `.venv`. `python-embed` is the interpreter. If the window never appears, check:
 

@@ -43,6 +43,8 @@ No spaces around the dash. If `datatype` is blank, or **Options → USBR / Aquar
 
 Misses (or a weak USGS hit) fall back to site name / interval / raw DataID. Graph legends use the **first** header line (`commonName-datatype`), not the source tag.
 
+**Rename header** (header context menu) changes only the common-name part, not `-datatype`. After the next new query, Data Doctor can save or update that common name in the dictionary (dataID / database / USGS site fields filled from the query when the row is new).
+
 ## valuePrecision and precisionOverride
 
 Display rounding is a **RoundingSpec**: `DEC(n)` (decimal places) or `SIG(n)` (significant figures). Bankers rounding (half to even).

@@ -753,12 +753,28 @@ class SqlWorkbench:
         self._stylePanes()
 
     def _stylePanes(self, *widgets):
-        targets = widgets or (
-            getattr(self, "pteSQL", None),
-            getattr(self, "sqlTable", None),
-            getattr(self, "listSnippets", None),
-            getattr(self, "snippetPanel", None),
-        )
+        if widgets:
+            targets = widgets
+        else:
+            targets = [
+                getattr(self, "listSnippets", None),
+                getattr(self, "snippetPanel", None),
+                getattr(self, "cbDatabase", None),
+                getattr(self, "cbCategory", None),
+            ]
+            tabs = getattr(self, "worksheetTabs", None)
+            if tabs is not None:
+                for i in range(tabs.count()):
+                    targets.append(tabs.widget(i))
+            stack = getattr(self, "resultStack", None)
+            if stack is not None:
+                for i in range(stack.count()):
+                    host = stack.widget(i)
+                    if isinstance(host, QTabWidget):
+                        for j in range(host.count()):
+                            targets.append(host.widget(j))
+                    else:
+                        targets.append(host)
         for w in targets:
             Utils.applyBasePaneBackground(w)
 

@@ -591,7 +591,7 @@ def logMessage(level, message):
             logger.debug(message)
         elif level == 'INFO':
             logger.info(message)
-        elif level == 'WARN':
+        elif level in ('WARN', 'WARNING'):
             logger.warning(message)
         elif level == 'ERROR':
             logger.error(message)

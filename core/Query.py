@@ -1220,13 +1220,25 @@ def timestampSortTable(table, dataDictionaryTable):
 def executeQuery(
     mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable,
     deltaChecked=False, overlayChecked=False, rawDataChecked=False, qaqcChecked=False,
+    isRefresh=False,
 ):
     progressDialog = None
+    if getattr(mainWindow, "_queryRunning", False):
+        Logic.logMessage("WARN", "executeQuery: already running — ignored")
+        return
+    if mainWindow is not None:
+        mainWindow._queryRunning = True
     try:
         Config.deltaChecked = deltaChecked
         Config.overlayChecked = overlayChecked
         Config.rawData = bool(rawDataChecked)
         Config.qaqcEnabled = bool(qaqcChecked)
+        if isRefresh and mainWindow is not None:
+            try:
+                from core import TableOps
+                TableOps.snapshotCustomColumns(mainWindow)
+            except Exception as e:
+                Logic.logException("executeQuery: snapshot custom columns failed", e)
 
         if Config.debug:
             Logic.logMessage(
@@ -1724,6 +1736,13 @@ def executeQuery(
                 f"lastQaqcChecked={qaqcChecked}",
             )
 
+        # Custom columns / header renames / column drag (after overlay+QAQC, before baseline)
+        try:
+            from core import TableOps
+            TableOps.afterQuery(mainWindow, isRefresh=isRefresh)
+        except Exception as e:
+            Logic.logException("executeQuery: TableOps.afterQuery failed", e)
+
         # Baseline for edit/upload tracking + public/delta lock (after QAQC colors)
         try:
             Upload.snapshotBaseline(mainWindow.mainTable, mainWindow)
@@ -1778,6 +1797,8 @@ def executeQuery(
                 progressDialog.close()
             except Exception:
                 pass
+        if mainWindow is not None:
+            mainWindow._queryRunning = False
 
 
 def roundDownToInterval(dt, interval):

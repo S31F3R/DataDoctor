@@ -139,12 +139,22 @@ def modifyTable(
             sText = grid[sIdx][r] if sIdx < len(grid) else ''
             pDec = parseDecimalText(pText)
             sDec = parseDecimalText(sText)
+            # Overlay display uses the *primary* rounding spec so a DEC(3)
+            # primary and DEC(2) secondary still compare/format as DEC(3).
+            # Raw Data keeps full fixed-point text (no limiter).
+            overlayRule = pRule
             if pDec is not None:
                 primaryVals[r] = float(pDec)
-                pDispCol[r] = Logic.valuePrecision(pText, rule=pRule)
+                if Config.rawData:
+                    pDispCol[r] = Logic.formatRawNumber(pText)
+                else:
+                    pDispCol[r] = Logic.valuePrecision(pText, rule=overlayRule)
             if sDec is not None:
                 secondaryVals[r] = float(sDec)
-                sDispCol[r] = Logic.valuePrecision(sText, rule=sRule)
+                if Config.rawData:
+                    sDispCol[r] = Logic.formatRawNumber(sText)
+                else:
+                    sDispCol[r] = Logic.valuePrecision(sText, rule=overlayRule)
             # Delta off the limiter, not the raw database strings. Matching
             # display text → exact 0 (never 1e-15 / 0.000000000002).
             if pDec is not None and sDec is not None:

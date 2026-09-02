@@ -55,8 +55,12 @@ Timestamps in the table: day / month / year / water-year use display formats (no
 
 The **Data Query** tab is selected (re-added at index 0 if you had closed it). Graph stays available via the Graph button or header/cell context menu.
 
-Right-click a **header** for series details / Graph. Right-click a **cell** for value details (internal, plus USGS public “Show details”).
+Right-click a **header** for series details / Graph, **Insert column left/right** (blank custom column), **Rename header** (common name only), and on overlay columns **Swap Primary/Secondary**. Drag a header to reorder columns — the query list follows. Overlay + its Delta column stay locked together; custom columns move on their own.
 
-Internal tables accept Excel-style **formulas** (`=A1+B1`, fill handle, `$` locks). See [Formulas](Formulas).
+Right-click a **cell** for value details (internal, plus USGS public “Show details”). Overlay cells that differ also offer **Update from secondary** (HDB only).
+
+**Ctrl+Z** / **Ctrl+Y** undo and redo table edits (and SQL uses the editor’s built-in undo). The toolbar Reset button still re-sorts by timestamp.
+
+Internal tables accept Excel-style **formulas** (`=A1+B1`, fill handle, `$` locks). See [Formulas](Formulas). Custom columns survive **Refresh** (formulas re-run). A new query drops them.
 
 See [Data Dictionary](Data-Dictionary) for how column titles are built.

@@ -635,7 +635,10 @@ class uiDetails(QWidget):
         
         # Add query info
         queryInfos = meta.get('queryInfos', 'N/A')
-        queryStr = queryInfos[0] if isinstance(queryInfos, list) else str(queryInfos)
+        if isinstance(queryInfos, list):
+            queryStr = queryInfos[0] if queryInfos else 'Custom column'
+        else:
+            queryStr = str(queryInfos or 'N/A')
         self.addRow("Query Info", queryStr)
         
         # Add stats (with timestamps for max/min)

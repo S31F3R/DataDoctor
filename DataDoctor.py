@@ -34,9 +34,14 @@ def _appendAppLog(level, message):
         logDir = _userLogDir()
         os.makedirs(logDir, exist_ok=True)
         path = os.path.join(logDir, "app.log")
-        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        now = time.time()
+        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
+        ms = int((now % 1) * 1000)
+        levelName = str(level or "INFO").upper()
+        if levelName == "WARN":
+            levelName = "WARNING"
         with open(path, "a", encoding="utf-8") as f:
-            f.write(f"{ts} [{level}] {message}\n")
+            f.write(f"{ts},{ms:03d} [{levelName}] {message}\n")
     except Exception:
         pass
     return path
@@ -273,6 +278,14 @@ class mainTableKeyFilter(QObject):
             if ctrl and key == Qt.Key.Key_V:
                 if Upload.pasteClipboardToSelection(self.mainWindow):
                     return True
+            if ctrl and key == Qt.Key.Key_Z:
+                from core import Undo
+                if Undo.stackFor(self.mainWindow).undo(self.mainWindow):
+                    return True
+            if ctrl and key == Qt.Key.Key_Y:
+                from core import Undo
+                if Undo.stackFor(self.mainWindow).redo(self.mainWindow):
+                    return True
         return super().eventFilter(obj, event)
 
 class sqlQuerySignals(QObject):
@@ -349,6 +362,10 @@ class uiMain(QMainWindow):
         self.columnMetadata = []
         self.seriesResponses = {} # Dict to store {seriesLabel: responseDict} post-query
         self.currentQueryType = "" # str: "AQUARIUS", etc., set post-query
+        self.customColumns = []
+        self.headerRenames = {}
+        self.tableUndo = None
+        self._queryRunning = False
         self.uploadBaselineReady = False
         self.uploadTrackingBlocked = False
 
@@ -1146,6 +1163,7 @@ class uiMain(QMainWindow):
                     self.lastQueryType == 'internal', self.winDataDictionary.mainTable,
                     deltaChecked=deltaChecked, overlayChecked=overlayChecked,
                     rawDataChecked=rawChecked, qaqcChecked=qaqcChecked,
+                    isRefresh=True,
                 )
 
                 if Config.debug: Logic.logMessage("DEBUG", "btnRefreshPressed: Refreshed query with last parameters")
@@ -1207,12 +1225,32 @@ class uiMain(QMainWindow):
                 if meta.get('type') == 'normal':
                     action = menu.addAction("Show Query Info")
                     action.triggered.connect(lambda: self.showHeaderDetails("headerNormal", meta))
-                elif meta.get('type') == 'delta':
+                elif meta.get('type') in ('delta', 'overlay', 'custom'):
                     action = menu.addAction("Show details")
-                    action.triggered.connect(lambda: self.showHeaderDetails("headerDelta", meta))
-                elif meta.get('type') == 'overlay':
-                    action = menu.addAction("Show details")
-                    action.triggered.connect(lambda: self.showHeaderDetails("headerOverlay", meta))
+                    qType = {
+                        'delta': 'headerDelta',
+                        'overlay': 'headerOverlay',
+                        'custom': 'headerNormal',
+                    }.get(meta.get('type'), 'headerNormal')
+                    action.triggered.connect(lambda qt=qType, m=meta: self.showHeaderDetails(qt, m))
+            from core import TableOps
+            insertLeft = menu.addAction("Insert column left")
+            insertLeft.triggered.connect(
+                lambda checked=False, c=col: TableOps.insertBlankColumn(self, c, "left")
+            )
+            insertRight = menu.addAction("Insert column right")
+            insertRight.triggered.connect(
+                lambda checked=False, c=col: TableOps.insertBlankColumn(self, c, "right")
+            )
+            renameAction = menu.addAction("Rename header")
+            renameAction.triggered.connect(
+                lambda checked=False, c=col: TableOps.renameHeader(self, c)
+            )
+            if meta is not None and meta.get('type') == 'overlay':
+                swapAction = menu.addAction("Swap Primary/Secondary")
+                swapAction.triggered.connect(
+                    lambda checked=False, c=col: TableOps.swapOverlayPrimarySecondary(self, c)
+                )
             graphAction = menu.addAction("Graph")
 
             # Multi-column selection: graph all selected columns (include the
@@ -1376,6 +1414,28 @@ class uiMain(QMainWindow):
                 # Add single action
                 detailsAction = menu.addAction("Show details")
                 detailsAction.triggered.connect(lambda: self.showMetadataDetails(row, col, timestampStr, seriesLabel, response, 'overlay', multiTypes=types))
+                from core import TableOps
+                dbs = meta.get('dbs') or []
+                primaryDb = dbs[0] if dbs else ''
+                canUpdate = (
+                    isInternal
+                    and not Upload.isUsgsDb(primaryDb)
+                    and not Upload.isAquariusDb(primaryDb)
+                )
+                if canUpdate:
+                    cells = TableOps.selectedCells(self.mainTable)
+                    cells.add((row, col))
+                    overlayCells = [
+                        (r, c) for r, c in cells
+                        if c < len(self.columnMetadata)
+                        and (self.columnMetadata[c] or {}).get('type') == 'overlay'
+                        and TableOps.overlayDiffers(self.mainTable.item(r, c))
+                    ]
+                    if overlayCells:
+                        upd = menu.addAction("Update from secondary")
+                        upd.triggered.connect(
+                            lambda checked=False, cells=overlayCells: TableOps.updateFromSecondary(self, cells)
+                        )
 
             # Graph selection (highlighted rows/cols); always available when table has data
             if menu.actions(): menu.addSeparator()
@@ -2162,6 +2222,45 @@ if __name__ == '__main__':
 
         # Warm keyring off the critical path so first Options open is not cold
         QTimer.singleShot(0, warmKeyringCache)
+
+        def _warmOptions():
+            try:
+                opts = getattr(winMain, "winOptions", None)
+                if opts is not None and hasattr(opts, "loadSettings"):
+                    opts.loadSettings()
+            except Exception as e:
+                Logic.logException("warm Options settings failed", e)
+
+        QTimer.singleShot(600, _warmOptions)
+
+        def _warmMatplotlib():
+            # Matplotlib's Qt backend must load on the GUI thread.
+            try:
+                from ui import uiGraph
+                uiGraph._ensureMatplotlib()
+            except Exception as e:
+                Logic.logException("warm matplotlib failed", e)
+
+        class _PygameWarmup(QRunnable):
+            def run(self):
+                try:
+                    import pygame  # noqa: F401
+                except Exception:
+                    pass
+
+        QTimer.singleShot(800, _warmMatplotlib)
+        QTimer.singleShot(
+            900,
+            lambda: QThreadPool.globalInstance().start(_PygameWarmup()),
+        )
+
+        def _warmGraphPanel():
+            try:
+                winMain.ensureGraphPanel()
+            except Exception as e:
+                Logic.logException("warm GraphPanel failed", e)
+
+        QTimer.singleShot(1800, _warmGraphPanel)
 
         # GitHub release check (silent if no releases / offline / already current)
         Update.scheduleStartupUpdateCheck(winMain, delayMs=3000)

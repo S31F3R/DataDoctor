@@ -11,8 +11,12 @@ replace the launcher. applyUpdate.py starts Data Doctor.exe when the zip is
 done.
 
 If there is no zip, it starts pythonw + app.pyw, appends to
-`%LOCALAPPDATA%\Data Doctor\logs\app.log`, and waits ~8 seconds. If pythonw
-exits in that window, it shows a MessageBox pointing at the log.
+`%LOCALAPPDATA%\Data Doctor\logs\app.log` using the same timestamp format as
+Python (`YYYY-MM-DD HH:MM:SS,mmm [LEVEL] launcher: …`), and waits ~8 seconds.
+If pythonw exits in that window, it shows a MessageBox pointing at the log.
+
+Running Data Doctor.exe from inside the zip (Windows Compressed Folder / %TEMP%
+extract) is rejected with a message to extract the entire package first.
 
 app.pyw also writes startup heartbeats to the same app.log (and fault.log for
 native crashes) so a silent pythonw death is still diagnosable with an older

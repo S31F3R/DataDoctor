@@ -2,7 +2,9 @@
 
 Internal **Data Query** cells can hold Excel-style formulas. Type `=` then an expression. The cell **shows the result**; upload / graph / CSV use that number. Double-click (or F2) to see and edit the formula.
 
-Public Query tables stay read-only (no formulas). **Delta** columns stay locked. On **Overlay** columns the formula writes the **primary** value (the number you see), not the secondary series.
+Public Query tables stay read-only (no formulas). **Delta** columns stay locked. On **Overlay** columns the formula writes the **primary** value (the number you see), not the secondary series. Blank columns inserted from the header menu are normal formula cells; they stay on **Refresh** and re-evaluate.
+
+**Ctrl+Z** / **Ctrl+Y** undo and redo table edits (no extra menu). SQL Query Builder uses the editor’s own undo.
 
 ## Cell references
 

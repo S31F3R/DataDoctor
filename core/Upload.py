@@ -251,10 +251,16 @@ def brushToColor(brushOrColor):
     if brushOrColor is None:
         return None
     if isinstance(brushOrColor, QColor):
-        return QColor(brushOrColor)
+        return QColor(brushOrColor) if brushOrColor.isValid() else None
     if isinstance(brushOrColor, QBrush):
+        # Default / NoBrush items report black + isValid() — that is what
+        # painted empty cells black after a no-op double-click commit.
+        try:
+            if brushOrColor.style() == Qt.BrushStyle.NoBrush:
+                return None
+        except Exception:
+            pass
         c = brushOrColor.color()
-        # Style-role / empty brushes — treat as no override
         if not c.isValid():
             return None
         return QColor(c)
@@ -282,6 +288,22 @@ def applyColors(item, bg, fg):
     else:
         item.setData(Qt.ItemDataRole.ForegroundRole, None)
         item.setForeground(QBrush())
+
+
+def reapplyItemStyle(mainWindow, item):
+    """Restore edit / uploaded / baseline colors after the in-cell editor closes."""
+    if item is None:
+        return
+    _user, edit = getEditState(item)
+    if not edit:
+        applyColors(item, None, None)
+        return
+    if edit.get("dirty"):
+        applyEditStyle(item)
+    elif edit.get("uploaded"):
+        applyUploadOkStyle(item)
+    else:
+        applyColors(item, edit.get("baselineBg"), edit.get("baselineFg"))
 
 
 def applyEditStyle(item):

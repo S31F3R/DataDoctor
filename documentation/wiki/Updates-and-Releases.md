@@ -30,9 +30,11 @@ Tags use `vMAJOR.MINOR.PATCH`. Release candidates and betas use `vX.Y.Z-rc.N` or
 
 ### Already on bundled Python 3.14 (`pythonFiles\python-embed\`)
 
-1. Close Data Doctor (or leave it closed).
-2. Put `DataDoctor-Python-*.zip` in the install’s `updates\` folder (next to `Data Doctor.exe`).
+1. Close Data Doctor (or leave it closed), **or** hit **Restart** on the download-complete dialog.
+2. Put `DataDoctor-Python-*.zip` in the install’s `updates\` folder (next to `Data Doctor.exe`) if you chose Later.
 3. Restart **Data Doctor.exe**, or run `applyUpdate.cmd`. The exe starts the cmd and exits so launcher files can be replaced; the cmd starts the exe when it finishes.
+
+**Restart** on the update dialog closes Data Doctor and runs `applyUpdate.cmd` for you. Closing the dialog without Restart leaves the zip in `updates\` for later.
 
 That refreshes `pythonFiles` code (`app.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary, pip-installs into `python-embed`, and deletes the zip. `pythonFiles\certs\` is left alone so Aquarius certificates survive updates.
 

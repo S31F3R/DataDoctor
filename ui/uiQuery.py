@@ -378,11 +378,15 @@ class uiQuery(QMainWindow):
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", "Stored last query as {}".format(self.queryType))
+                # Close this window *before* executeQuery so the progress
+                # dialog is visible and Query cannot be clicked again.
+                self.hide()
                 Query.executeQuery(
                     self.winMain, queryItems, startDate, endDate,
                     self.queryType == 'internal', self.winMain.winDataDictionary.mainTable,
                     deltaChecked, overlayChecked,
                     rawDataChecked=rawChecked, qaqcChecked=qaqcChecked,
+                    isRefresh=False,
                 )
                 self.close()
 
@@ -847,6 +851,8 @@ class uiQuery(QMainWindow):
                     ri += 1
             # QListWidgetItem is unhashable — compare by identity, not a set.
             selectedIds = {id(original[r]) for r in rows}
+            bar = lst.verticalScrollBar()
+            oldScroll = bar.value() if bar is not None else 0
             lst.blockSignals(True)
             try:
                 for i in range(n - 1, -1, -1):
@@ -860,6 +866,19 @@ class uiQuery(QMainWindow):
                         lst.setCurrentItem(current)
             finally:
                 lst.blockSignals(False)
+            # Keep the list where it was unless the moved rows left the view.
+            if bar is not None:
+                bar.setValue(oldScroll)
+            current = lst.currentItem()
+            if current is not None:
+                rect = lst.visualItemRect(current)
+                vp = lst.viewport()
+                if vp is not None and (
+                    rect.top() < 0 or rect.bottom() > vp.height()
+                ):
+                    lst.scrollToItem(
+                        current, QAbstractItemView.ScrollHint.EnsureVisible
+                    )
         finally:
             Utils.resetStyledButtonHover(senderBtn)
 

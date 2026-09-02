@@ -383,6 +383,8 @@ def main():
     applyUpdateSrc = root / "scripts" / "applyUpdate.py"
     if applyUpdateSrc.is_file():
         shutil.copy2(applyUpdateSrc, scriptsDir / "applyUpdate.py")
+        # Zip-root copy so applyUpdate.cmd can run even if pythonFiles is missing
+        shutil.copy2(applyUpdateSrc, stage / "applyUpdate.py")
     else:
         print("WARN: applyUpdate.py not found", file=sys.stderr)
 
@@ -439,6 +441,7 @@ def main():
                 'if not defined PY set "PY=python"',
                 f'set "SCRIPT=%~dp0{scriptRel}"',
                 'if not exist "%SCRIPT%" set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
+                'if not exist "%SCRIPT%" set "SCRIPT=%~dp0applyUpdate.py"',
                 'if not exist "%SCRIPT%" (',
                 f"  echo ERROR: script not found at {scriptRel}",
                 "  pause",

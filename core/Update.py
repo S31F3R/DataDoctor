@@ -212,6 +212,7 @@ _APPLY_UPDATE_CMD = "\r\n".join([
     'if not defined PY set "PY=python"',
     'set "SCRIPT=%~dp0pythonFiles\\scripts\\applyUpdate.py"',
     'if not exist "%SCRIPT%" set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
+    'if not exist "%SCRIPT%" set "SCRIPT=%~dp0applyUpdate.py"',
     'if not exist "%SCRIPT%" (',
     "  echo ERROR: applyUpdate.py not found",
     "  pause",
@@ -631,6 +632,53 @@ def applyAppImageScriptPath() -> Path | None:
     return None
 
 
+def spawnApplyAndExit(mainWindow=None) -> bool:
+    """
+    Start applyUpdate.cmd / applyUpdate.sh and quit so launcher files can be
+    replaced. applyUpdate starts Data Doctor again when it finishes.
+    """
+    import subprocess
+    from PyQt6.QtWidgets import QApplication
+
+    script = launcherApplyScript()
+    root = installRoot()
+    if script is None or root is None:
+        Logic.logMessage("WARN", "spawnApplyAndExit: no apply script / install root")
+        return False
+    try:
+        kwargs = {
+            "cwd": str(root),
+            "close_fds": True,
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+        }
+        if sys.platform == "win32":
+            kwargs["creationflags"] = 0x00000008 | 0x00000200  # DETACHED | NEW_GROUP
+            subprocess.Popen(["cmd.exe", "/c", str(script)], **kwargs)
+        else:
+            kwargs["start_new_session"] = True
+            subprocess.Popen(["bash", str(script)], **kwargs)
+        Logic.logMessage("INFO", f"spawnApplyAndExit: started {script}")
+    except Exception as e:
+        Logic.logException("spawnApplyAndExit failed", e)
+        return False
+
+    def _quit():
+        try:
+            if mainWindow is not None:
+                mainWindow.close()
+        except Exception:
+            pass
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+
+    from PyQt6.QtCore import QTimer
+    QTimer.singleShot(200, _quit)
+    return True
+
+
 def launcherApplyScript() -> Path | None:
     root = installRoot()
     if root is None:
@@ -857,9 +905,7 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
         box.setText(
             "This Windows install still uses a system Python (.venv).\n\n"
             f"Available:  {ver}\n\n"
-            "Download the Windows package, then restart Data Doctor.\n"
-            "The launcher runs applyUpdate.cmd and exits so the .exe can\n"
-            "be replaced; applyUpdate starts the app when it finishes."
+            "Download the Windows package, then hit Restart to apply."
         )
         downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
@@ -1013,30 +1059,21 @@ def _promptUpdate(parent, info: dict) -> None:
     if kind == "appimage":
         lines.append("")
         lines.append(
-            "Download will place the new AppImage in an updates/ folder next to "
-            "this AppImage. You can then replace the current file (the app will "
-            "offer to quit and apply, or you can run applyAppImageUpdate.sh)."
+            "Download will place the new AppImage in updates/. "
+            "You can Quit and apply, or run applyAppImageUpdate.sh later."
         )
     elif kind == "launcher":
         lines.append("")
         if needsWindowsZip:
             lines.append(
-                "This version ships a new Windows launcher and bundled Python 3.14. "
-                "Download the Windows zip into updates\\, then restart Data Doctor. "
-                "The launcher starts applyUpdate.cmd and exits so the .exe can be replaced; "
-                "applyUpdate.cmd starts Data Doctor again when it finishes."
+                "This version also updates the Windows launcher. "
+                "Download, then hit Restart to apply."
             )
         else:
-            lines.append(
-                "Download will place a zip in updates/. Restart Data Doctor "
-                "to apply the update."
-            )
+            lines.append("Download, then hit Restart to apply.")
     else:
         lines.append("")
-        lines.append(
-            "Dev/source install: the package will download into updates/ under "
-            "the project root. Apply manually if desired."
-        )
+        lines.append("The package will download into updates/ under the project root.")
 
     box = QMessageBox(parent)
     box.setWindowTitle("Update available")
@@ -1163,14 +1200,23 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
             or "windows" in assetName
             or windowsNeedsLauncherRefresh()
         )
-        QMessageBox.information(
-            parent,
-            "Download complete",
-            f"Downloaded:\n{path}\n\n"
-            "Restart Data Doctor to apply the update.\n"
-            "The launcher runs applyUpdate.cmd and exits so launcher files "
-            "can be replaced; applyUpdate starts the app when it is done.",
+        box = QMessageBox(parent)
+        box.setWindowTitle("Download complete")
+        box.setText(
+            "Hit Restart to update, or close this window to restart later."
         )
+        restartBtn = box.addButton("Restart", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(restartBtn)
+        box.exec()
+        if box.clickedButton() is restartBtn:
+            if not spawnApplyAndExit(parent):
+                QMessageBox.warning(
+                    parent,
+                    "Update",
+                    "Could not start applyUpdate.\n"
+                    "Close Data Doctor and run applyUpdate.cmd from the install folder.",
+                )
 
     signals = _Signals()
     app = QApplication.instance()

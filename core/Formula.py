@@ -695,3 +695,35 @@ def adjustFormula(formula: str, dCol: int, dRow: int) -> str:
         prefix = "="
         body = body[1:]
     return prefix + _REF_IN_FORMULA.sub(repl, body)
+
+
+def shiftFormulaColumns(formula: str, insertAt: int, delta: int = 1) -> str:
+    """
+    Shift every cell-ref column >= insertAt by delta (insert/delete columns).
+    Absolute $ columns move too — the grid itself shifted, same as Excel.
+    Refs that land on a deleted column (delta < 0 and col == insertAt) → #REF!.
+    """
+    if not looksLikeFormula(formula) or not delta:
+        return formula
+
+    def repl(m):
+        token = m.group(1)
+        parsed = parseCellRef(token)
+        if parsed is None:
+            return token
+        col, row, absCol, absRow = parsed
+        if delta < 0 and col == insertAt:
+            return ERR_REF
+        if col >= insertAt:
+            newCol = col + delta
+            if newCol < 0:
+                return ERR_REF
+            return formatCellRef(newCol, row, absCol, absRow)
+        return token
+
+    body = formula.strip()
+    prefix = ""
+    if body.startswith("="):
+        prefix = "="
+        body = body[1:]
+    return prefix + _REF_IN_FORMULA.sub(repl, body)

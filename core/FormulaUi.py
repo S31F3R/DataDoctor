@@ -90,6 +90,8 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False):
     if not (item.flags() & Qt.ItemFlag.ItemIsEditable):
         return False
     raw = "" if text is None else str(text).strip()
+    oldText = item.text() if item is not None else ""
+    oldFormula = _itemFormula(item)
     if looksLikeFormula(raw):
         try:
             result = evaluateOnTable(table, raw, col, row)
@@ -99,14 +101,18 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False):
         _setItemFormula(item, raw)
         if item.text() != display:
             item.setText(display)
-        else:
-            Upload.onItemChanged(mainWindow, item)
+        from core import Undo
+        Undo.pushCellEdit(
+            mainWindow, row, col, oldText, oldFormula, item.text(), raw
+        )
         return True
     _setItemFormula(item, None)
     if item.text() != raw:
         item.setText(raw)
-    elif not asFill:
-        Upload.onItemChanged(mainWindow, item)
+    from core import Undo
+    Undo.pushCellEdit(
+        mainWindow, row, col, oldText, oldFormula, item.text(), None
+    )
     return True
 
 
@@ -168,6 +174,16 @@ class FormulaDelegate(QStyledItemDelegate):
         self._editor = None
         self._editIndex = None
         super().destroyEditor(editor, index)
+        # Qt copies the editor palette onto items with no explicit brush.
+        # Re-apply baseline / edit / upload colors so a no-op double-click
+        # does not leave a black cell.
+        if table is not None and index is not None and index.isValid():
+            try:
+                Upload.reapplyItemStyle(
+                    self.mainWindow, table.item(index.row(), index.column())
+                )
+            except Exception:
+                pass
 
     def setEditorData(self, editor, index):
         table = self.mainWindow.mainTable
@@ -415,6 +431,8 @@ class FormulaTableFilter(QObject):
         up = endR < sMinR
         left = endC < sMinC
         filled = 0
+        from core import Undo
+        Undo.stackFor(self.mainWindow).beginMacro()
         if down:
             destMax = endR
             for r in range(sMaxR + 1, destMax + 1):
@@ -443,6 +461,8 @@ class FormulaTableFilter(QObject):
                     srcC = sMinC + ((c - destMin) % nCols)
                     srcR = r
                     filled += int(self._copyCell(srcR, srcC, r, c))
+        from core import Undo
+        Undo.stackFor(self.mainWindow).endMacro()
         if filled:
             recalculateAll(self.mainWindow)
         if Config.debug:

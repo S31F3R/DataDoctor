@@ -24,23 +24,23 @@ from core import Logic, Config, Utils
 
 # Bundled fonts (cross-platform):
 #   non-retro → Noto Sans  (matches Seifer's Linux system UI font)
-#   retro     → Press Start 2P
+#   retro     → Pixelify Sans (Press Start 2P stays for About arcade games)
 defaultFontFamilyCache = None   # Noto Sans
 defaultFontLoadAttempted = False
-retroFontFamilyCache = None     # Press Start 2P
+retroFontFamilyCache = None     # Pixelify Sans
 retroFontLoadAttempted = False
 
 # Point sizes by control role: (non-retro, retro)
 # Non-retro: 10pt Noto Sans — matches this machine's GNOME/Qt default.
-# Retro: buttons stay at 6 (width/fit tuned); other roles larger so labels/lists/logs aren't tiny.
+# Retro: Pixelify Sans is denser than Press Start, so UI sizes stay close to Noto.
 fontRoleSizes = {
-    'ui':     (10, 8),   # labels, checkboxes, radios, combos, tabs, general
-    'button': (10, 6),   # QPushButton — retro size kept at tuned 6pt
-    'list':   (10, 8),   # list widgets / snippets / quick looks
-    'table':  (10, 8),   # data tables
+    'ui':     (10, 10),  # labels, checkboxes, radios, combos, tabs, general
+    'button': (10, 9),   # QPushButton
+    'list':   (10, 10),  # list widgets / snippets / quick looks
+    'table':  (10, 10),  # data tables
     'log':    (10, 10),  # log viewer
-    'code':   (10, 9),   # SQL / plain text editors
-    'about':  (10, 9),   # about dialog body (About always forces Press Start)
+    'code':   (10, 10),  # SQL / plain text editors
+    'about':  (10, 10),  # about dialog body (arcade still uses Press Start)
 }
 
 # Bundled default (non-retro) font faces — all register as family "Noto Sans"
@@ -99,7 +99,7 @@ retroSmallFontControls = frozenset({
     'rbBOP',
     'rbEOP',
 })
-retroSmallFontPt = 6  # one step under general ui 8pt
+retroSmallFontPt = 8  # one step under general ui 10pt Pixelify
 
 # Query window text buttons: one point larger than normal button role (retro 6→7, default 10→11)
 queryLargeButtonControls = frozenset({
@@ -447,16 +447,25 @@ def ensureDefaultFontLoaded():
 
 
 def ensureRetroFontLoaded():
-    """Bundled Press Start 2P — retro mode only."""
+    """Bundled Pixelify Sans — retro mode UI (Press Start 2P remains for About games)."""
     global retroFontFamilyCache, retroFontLoadAttempted
     if retroFontLoadAttempted:
         return retroFontFamilyCache
     retroFontLoadAttempted = True
 
-    family = registerBundledFont(
-        'ui/fonts/PressStart2P-Regular.ttf',
-        'retro (Press Start 2P)',
-    )
+    family = None
+    for rel, label in (
+        ('ui/fonts/PixelifySans-Regular.ttf', 'retro (Pixelify Sans)'),
+        ('ui/fonts/PixelifySans-Bold.ttf', 'retro bold (Pixelify Sans)'),
+    ):
+        loaded = registerBundledFont(rel, label)
+        if loaded and not family:
+            family = loaded
+    if not family:
+        family = registerBundledFont(
+            'ui/fonts/PressStart2P-Regular.ttf',
+            'retro fallback (Press Start 2P)',
+        )
     retroFontFamilyCache = family
     Config.retroFontLoaded = bool(family)
     return family
@@ -465,7 +474,7 @@ def ensureRetroFontLoaded():
 def activeFontFamily():
     """
     Family for the current mode.
-    Retro → bundled Press Start 2P.
+    Retro → bundled Pixelify Sans.
     Default → bundled Noto Sans (cross-platform); '' only if load failed.
     """
     if Config.retroMode:
@@ -501,7 +510,7 @@ def makeFontForRole(role='ui', pointSize=None):
     Build a QFont for a control role.
     Roles: ui, button, list, table, log, code, about — see fontRoleSizes.
     Non-retro: bundled Noto Sans at role size (fallback OS font if missing).
-    Retro: bundled Press Start 2P, no antialias.
+    Retro: bundled Pixelify Sans.
     """
     family = activeFontFamily()
     if pointSize is not None:
@@ -517,7 +526,7 @@ def makeFontForRole(role='ui', pointSize=None):
         except Exception:
             font.setFamily(family)
         font.setPointSize(pt)
-        if Config.retroMode:
+        if Config.retroMode and family and 'Press Start' in family:
             font.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
         else:
             # PreferMatch: do not silently substitute Segoe UI / Arial on Windows
@@ -1134,12 +1143,12 @@ def applyStylesAndFonts(app, mainTable, queryList):
     Config.retroMode = config.get('retroMode', True)
     Config.hdbOverwriteFlag = 'O' if config.get('hdbOverwriteFlag') else None
 
-    # Pre-register the font for the active mode (and About always wants Press Start)
+    # Pre-register the font for the active mode (About arcade still wants Press Start)
     if Config.retroMode:
         ensureRetroFontLoaded()
     else:
         ensureDefaultFontLoaded()
-        ensureRetroFontLoaded()  # About dialog always uses pixel font
+        ensureRetroFontLoaded()  # About dialog still loads a pixel font
 
     app.setStyleSheet(readBaseStylesheet())
     propagateUiFont(app)
@@ -1614,9 +1623,15 @@ def thickScrollBarStyle(retro=None, minHandle=48, track=20):
     """
     if retro is None:
         retro = bool(getattr(Config, 'retroMode', True))
-    handle = "#00FF00" if retro else "#6a6a6a"
-    handleHover = "#66FF66" if retro else "#8a8a8a"
-    trackBg = "#333333" if retro else "#2a2a2a"
+    if retro:
+        handle, handleHover, trackBg = "#00FF00", "#66FF66", "#333333"
+    else:
+        app = QApplication.instance()
+        dark = _paletteIsDark(app.palette()) if app is not None else True
+        if dark:
+            handle, handleHover, trackBg = "#6a6a6a", "#8a8a8a", "#2a2a2a"
+        else:
+            handle, handleHover, trackBg = "#9a9a9a", "#7a7a7a", "#e0e0e0"
     return f"""
         QScrollBar:vertical {{
             width: {track}px;
@@ -2101,16 +2116,52 @@ def applyBasePaneBackground(widget):
                     view.setBackgroundRole(QPalette.ColorRole.Base)
                     view.setAutoFillBackground(True)
         existing = widget.styleSheet() or ""
-        if "/*sql-pane-base*/" not in existing:
-            widget.setStyleSheet(
-                "/*sql-pane-base*/\n"
-                "background-color: palette(base);\n"
-                "color: palette(text);\n"
-                + existing
-            )
+        prefix = (
+            "/*sql-pane-base*/\n"
+            "background-color: palette(base);\n"
+            "color: palette(text);\n"
+        )
+        rest = existing
+        if existing.startswith("/*sql-pane-base*/"):
+            parts = existing.split("\n", 3)
+            rest = parts[3] if len(parts) > 3 else ""
+        widget.setStyleSheet(prefix + rest)
+        try:
+            st = widget.style()
+            if st is not None:
+                st.unpolish(widget)
+                st.polish(widget)
+        except Exception:
+            pass
+        widget.update()
+        _restyleTextDocument(widget)
     except Exception as e:
         if Config.debug:
             Logic.logMessage("DEBUG", f"applyBasePaneBackground failed: {e}")
+
+
+def _restyleTextDocument(widget):
+    """QPlainTextEdit keeps the char color from construction; palette changes
+    do not rewrite existing text. Force the current Text role onto the document."""
+    if widget is None or not isinstance(widget, (QPlainTextEdit, QTextEdit)):
+        return
+    try:
+        pal = widget.palette()
+        text = pal.color(QPalette.ColorRole.Text)
+        from PyQt6.QtGui import QTextCharFormat, QTextCursor
+        fmt = QTextCharFormat()
+        fmt.setForeground(text)
+        cursor = widget.textCursor()
+        savedPos = cursor.position()
+        savedAnchor = cursor.anchor()
+        cursor.select(QTextCursor.SelectionType.Document)
+        cursor.mergeCharFormat(fmt)
+        cursor.setPosition(savedAnchor)
+        cursor.setPosition(savedPos, QTextCursor.MoveMode.KeepAnchor if savedPos != savedAnchor else QTextCursor.MoveMode.MoveAnchor)
+        widget.setTextCursor(cursor)
+        widget.setCurrentCharFormat(fmt)
+    except Exception:
+        pass
 
 
 def _restyleMarkedPanes(app):
@@ -2122,6 +2173,16 @@ def _restyleMarkedPanes(app):
         try:
             if w.property("sqlPane"):
                 applyBasePaneBackground(w)
+            elif isinstance(w, (QPlainTextEdit, QTextEdit, QComboBox, QTableWidget, QListWidget)):
+                _restyleTextDocument(w)
+                try:
+                    st = w.style()
+                    if st is not None:
+                        st.unpolish(w)
+                        st.polish(w)
+                    w.update()
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -2216,6 +2277,18 @@ def applyColorTheme(theme=None):
         _applyForcedTheme(app, wantDark=(name == 'dark'))
 
     _restyleMarkedPanes(app)
+    try:
+        from ui.uiSql import SqlWorkbench
+        appWin = None
+        for w in app.topLevelWidgets():
+            if type(w).__name__ == "uiMain":
+                appWin = w
+                break
+        wb = getattr(appWin, "sqlWorkbench", None) if appWin is not None else None
+        if wb is not None and hasattr(wb, "_stylePanes"):
+            wb._stylePanes()
+    except Exception:
+        pass
     # QApplication.setStyle() resets widget fonts to the style default
     # (Segoe UI on Windows). Re-apply bundled Noto / Press Start so Linux
     # and Windows match. Skip the pre-logging startup call — widgets and

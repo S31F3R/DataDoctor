@@ -858,11 +858,6 @@ class GraphPanel(QWidget):
             return
 
         legend = self._ax.legend(lines, labels, loc='best', fontsize=8)
-        legend.set_title("Click to show/hide")
-        try:
-            legend.get_title().set_fontsize(7)
-        except Exception:
-            pass
 
         if theme == 'dark':
             try:
@@ -870,7 +865,6 @@ class GraphPanel(QWidget):
                 legend.get_frame().set_edgecolor('#888888')
                 for text in legend.get_texts():
                     text.set_color('#e0e0e0')
-                legend.get_title().set_color('#aaaaaa')
             except Exception:
                 pass
         elif theme == 'retro':
@@ -879,7 +873,6 @@ class GraphPanel(QWidget):
                 legend.get_frame().set_edgecolor('#00FF00')
                 for text in legend.get_texts():
                     text.set_color('#00FF00')
-                legend.get_title().set_color('#00FF00')
             except Exception:
                 pass
 
@@ -1471,20 +1464,21 @@ class GraphPanel(QWidget):
                 mask = np.isfinite(x) & np.isfinite(y)
                 if not np.any(mask):
                     continue
-                # Always show point markers. Density is view-aware (see
-                # _refreshMarkerDensity): zoomed-in 1-min data marks every point;
-                # full-range dense series thin so the line stays readable.
+                # Keep NaNs in the plotted arrays so matplotlib breaks the
+                # line at missing data instead of drawing a straight gap fill.
                 nPts = int(mask.sum())
                 markEvery = self._markerEveryForCount(nPts)
                 markerSize = self._markerSizeForCount(nPts)
+                finiteIdx = np.flatnonzero(mask)
+                markerIdx = finiteIdx[::markEvery] if markEvery else finiteIdx
                 (line,) = axTarget.plot(
-                    x[mask], y[mask],
+                    x, y,
                     label=label,
                     color=color,
                     linewidth=1.4,
                     marker='o',
                     markersize=markerSize,
-                    markevery=markEvery,
+                    markevery=markerIdx.tolist() if markerIdx.size else None,
                     picker=5,
                 )
                 yTexts = None
@@ -1758,17 +1752,24 @@ class GraphPanel(QWidget):
         try:
             for entry in self._lineData:
                 line = entry.get('line')
-                xs = entry.get('xs')
-                if line is None or xs is None:
+                if line is None:
                     continue
-                xs = np.asarray(xs, dtype=float)
-                if xs.size == 0:
+                try:
+                    xs = np.asarray(line.get_xdata(), dtype=float)
+                    ys = np.asarray(line.get_ydata(), dtype=float)
+                except Exception:
+                    xs = np.asarray(entry.get('xs'), dtype=float) if entry.get('xs') is not None else None
+                    ys = None
+                if xs is None or xs.size == 0:
                     continue
-                inView = np.isfinite(xs) & (xs >= x0) & (xs <= x1)
+                finite = np.isfinite(xs)
+                if ys is not None and ys.size == xs.size:
+                    finite = finite & np.isfinite(ys)
+                inView = finite & (xs >= x0) & (xs <= x1)
                 nVis = int(np.count_nonzero(inView))
                 if nVis <= 0:
-                    me = self._markerEveryForCount(xs.size)
-                    idxs = np.arange(0, xs.size, me, dtype=int)
+                    me = self._markerEveryForCount(int(np.count_nonzero(finite)) or xs.size)
+                    idxs = np.flatnonzero(finite)[::me]
                 else:
                     me = self._markerEveryForCount(nVis)
                     idxs = np.flatnonzero(inView)[::me]
