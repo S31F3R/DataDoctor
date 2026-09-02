@@ -10,3 +10,19 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Windows update dialog: short “Hit Restart to update…” with a Restart button that runs applyUpdate.cmd; Python-zip hops can chain-download the Windows package when python-embed is still missing
+- First-run launcher: refuse zip-preview / exe-only extracts with a clear message; log format matches Python `YYYY-MM-DD HH:MM:SS,mmm [LEVEL]`; applyUpdate.py also shipped at zip root
+- Graph, Options, and About first-open: matplotlib/pygame import and Graph panel warm up after the main window shows (About UI still lazy — constructing it at startup killed some VMs)
+- Retro UI font is Pixelify Sans (Press Start 2P remains for About arcade games)
+- Data Query Ctrl+Z / Ctrl+Y undo and redo (SQL keeps the editor’s built-in undo)
+- Header Insert column left/right (blank custom columns survive Refresh, graph, CSV, formulas, details)
+- Drag headers to reorder columns; query list follows; overlay+delta stay locked; custom columns move independently
+- Overlay header Swap Primary/Secondary; cell Update from secondary (HDB only, differing cells)
+- Rename any header’s common name; next new query can save/update the Data Dictionary
+- Overlay display uses the primary rounding spec when Raw Data is off
+- Graph legend no longer has a “Click to show/hide” title; missing data leaves a gap instead of a straight line
+- Query list up/down arrows keep scroll position unless the moved row leaves the view
+- Double-clicking a cell without changing it no longer paints a black background
+- Light/Dark theme switch restyles SQL editors, snippet pane, and scrollbars (no more stale light-grey SQL text)
+- Query Data closes the query window before the progress dialog so a second query cannot hide behind it
+

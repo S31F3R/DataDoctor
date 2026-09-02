@@ -8,20 +8,6 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[x] Windows silent launch (VM + laptop)
-   Steps:
-     a. Work laptop: existing install still opens; About (Info) still plays music.
-     b. VM that previously died with no window: unzip a build with this app.pyw
-        (Python zip via applyUpdate.cmd is enough; new Data Doctor.exe is optional).
-        Double-click Data Doctor.exe. Main window should appear.
-     c. If it still does not: open %LOCALAPPDATA%\Data Doctor\logs\app.log.
-        Expect applyUpdate: / startup: / launcher: lines. Last startup: line is
-        how far it got. fault.log if python aborted natively.
-     d. Optional: rebuild launcher on Windows
-        (see launcher/src/README.txt). Immediate pythonw death should then
-        MessageBox instead of a silent return.
-     e. Info button on the VM: About should open. Missing audio is OK (no crash).
-
 [ ] Mac package script
    Steps:
      a. From project root: python scripts/packageMac.py --skip-venv
@@ -30,9 +16,85 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
+[ ] Windows update Restart + launcher hop
+   Steps:
+     a. Accept an in-app download. Dialog should say “Hit Restart to update…” with Restart / Later.
+     b. Restart closes Data Doctor and runs applyUpdate.cmd (app comes back).
+     c. Later leaves the zip in updates\; next Data Doctor.exe apply still works.
+     d. 3.0.x / no python-embed: after a Python zip apply, Windows zip should chain
+        (or be the asset downloaded in the first place). No second manual applyUpdate.
+
+[ ] Windows first-run extract
+   Steps:
+     a. Double-click Data Doctor.exe inside the zip (Compressed Folder). Should pop a
+        message: extract the entire zip, do not run from inside it.
+     b. Copy only the exe to Desktop — same kind of message, not raw pythonw paths.
+     c. Full Extract All, then Data Doctor.exe — launches (or applyUpdate then launches).
+     d. app.log launcher lines use `YYYY-MM-DD HH:MM:SS,mmm [LEVEL] launcher: …`
+        (WARNING not WARN). Same pattern as Python lines.
+
+[ ] First-open Graph / Options / About
+   Steps:
+     a. After main window appears, wait ~2s, then Graph — should open without a long freeze.
+     b. Options should open quickly (keyring already warmed).
+     c. About still opens; first click may load UI but should not hang as long as before.
+
+[ ] Retro Pixelify Sans
+   Steps:
+     a. Options → Appearance → Retro on, restart.
+     b. UI should use Pixelify Sans (lowercase visible, denser than Press Start).
+     c. About arcade games can still use Press Start 2P.
+
+[ ] Table undo/redo
+   Steps:
+     a. Internal query, edit a cell, Ctrl+Z restores, Ctrl+Y re-applies.
+     b. SQL editor Ctrl+Z/Y still undoes typing (built-in).
+     c. Toolbar Reset still re-sorts by timestamp (not undo).
+
+[ ] Insert / drag / rename columns
+   Steps:
+     a. Header → Insert column left/right. Blank column; type a formula; Graph and CSV include it.
+     b. Header → Rename header (common name only; datatype stays).
+     c. Refresh: custom column and its formulas come back. New query: custom columns drop.
+     d. Drag a data header: query list order matches. Overlay pair moves together.
+     e. With Deltas on, overlay+delta stay adjacent. Custom column drags alone.
+     f. New query after a rename: prompt to save/update Data Dictionary common name.
+
+[ ] Overlay swap / update from secondary / primary format
+   Steps:
+     a. Overlay query, header Swap Primary/Secondary — values, query list, and delta sign flip.
+     b. Differing overlay cell → Update from secondary (single and multi-select). Identical cells stay.
+     c. USGS/Aquarius primary: no Update from secondary (or it does nothing).
+     d. Raw Data off: secondary displays with the primary’s DEC/SIG rule.
+
+[ ] Query list scroll / no double query
+   Steps:
+     a. Long query list, move a row with Up/Down 1 — list does not jump unless the row left the view.
+     b. Query Data: query window closes, progress shows on main. Cannot start a second query behind it.
+
+[ ] Double-click cell (no edit) colors
+   Steps:
+     a. Dark mode, QAQC on. Double-click a default (white text) cell, Enter with no change.
+        Background and text stay normal (not black-on-black).
+     b. Overlay-red cell: red text stays, background not black.
+     c. QAQC-colored cells unchanged.
+
+[ ] Light/Dark SQL theme
+   Steps:
+     a. Open SQL, switch Appearance to Light (no restart). SQL text readable (not light grey).
+        Snippet pane / combobox / result scrollbars follow Light (not black tracks).
+     b. Switch back to Dark in the same session — SQL stays readable, no reverse of the bug.
+     c. New worksheet also looks correct.
+
+[ ] Graph missing-data gaps
+   Steps:
+     a. Query a series with a hole. Graph must break the line at the gap (no diagonal connector).
+     b. Legend has no “Click to show/hide” title; ☑/☐ click still toggles series.
+
 
 Confirmed
 --------------------------------------------------------------------------------
+Windows silent launch (VM + laptop)
 
 Deferred / known
 --------------------------------------------------------------------------------
