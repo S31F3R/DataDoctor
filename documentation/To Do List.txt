@@ -61,6 +61,33 @@
 -Just graphed data with missing data. Instead of the graph showing the missing data, it drew a straight line between the last good reading and the first reading that came back in. Need the grpah to not draw that so it's easier to see the gap
 -Had a bug where I queried some data and it looked like it didn't go through so I hit Query Data again. I had 2 of the same queries running at the same time. They were hidden behind the query window. So two things, that shouldn't have been possible. Second, this can be fixed by just closing the query window, then showing the status window/progress barley
     -Good news is this double query didn't crash the program, it handled it. The 2nd query just overwrote the first query and the data looks complete
+-First time user downloaded program from github and it won't launch. Here is app.log:
+    2026-08-29 05:36:01 [INFO] launcher: start root=C:\Users\unnamd\OneDrive - DOI\Desktop\DataDoc\
+    2026-08-29 05:36:01 [ERROR] launcher: Could not start.
+
+    Need:
+    C:\Users\unnamd\OneDrive - DOI\Desktop\DataDoc\pythonFiles\python-embed\pythonw.exe
+    C:\Users\unnamd\OneDrive - DOI\Desktop\DataDoc\pythonFiles\app.pyw
+    2026-08-29 06:12:42 [INFO] launcher: start root=C:\Users\unnamd\OneDrive - DOI\Desktop\DataDoc\
+    2026-08-29 06:12:42 [ERROR] launcher: Could not start.
+
+    Need:
+    C:\Users\unnamd\OneDrive - DOI\Desktop\DataDoc\pythonFiles\python-embed\pythonw.exe
+    C:\Users\unnamd\OneDrive - DOI\Desktop\DataDoc\pythonFiles\app.pyw
+    2026-08-29 06:42:18 [INFO] launcher: start root=C:\Users\unnamd\OneDrive - DOI\Desktop\DataDoc\
+    2026-08-29 06:42:18 [ERROR] launcher: Could not start.
+
+    Need:
+    C:\Users\unnamd\OneDrive - DOI\Desktop\DataDoc\pythonFiles\python-embed\pythonw.exe
+    C:\Users\unnamd\OneDrive - DOI\Desktop\DataDoc\pythonFiles\app.pyw
+    2026-08-29 11:42:29 [INFO] launcher: start root=C:\Users\unnamd\AppData\Local\Temp\1\643b6b89-a4b5-4731-ace2-632afd0aaae8_DataDoctor-Windows-v3.1.1.zip.ae8\
+    2026-08-29 11:42:29 [ERROR] launcher: Could not start.
+
+    Need:
+    C:\Users\unnamd\AppData\Local\Temp\1\643b6b89-a4b5-4731-ace2-632afd0aaae8_DataDoctor-Windows-v3.1.1.zip.ae8\pythonFiles\python-embed\pythonw.exe
+    C:\Users\unnamd\AppData\Local\Temp\1\643b6b89-a4b5-4731-ace2-632afd0aaae8_DataDoctor-Windows-v3.1.1.zip.ae8\pythonFiles\app.pyw
+-The above app.log doesn't follow logging formats from the python logger. Need to implement the SAME logging, at least the same format
+
 
 ####### 3.3.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
