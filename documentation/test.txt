@@ -24,49 +24,60 @@ Current Tests
      d. 3.0.x / no python-embed: after a Python zip apply, Windows zip should chain
         (or be the asset downloaded in the first place). No second manual applyUpdate.
 
-[ ] First-open Graph / Options / About
+[x] First-open Graph / Options / About
    Steps:
      a. After main window appears, wait ~2s, then Graph — should open without a long freeze.
      b. Options should open quickly (keyring already warmed).
      c. About still opens; first click may load UI but should not hang as long as before.
 
-[ ] Table undo/redo
+[x] Table undo/redo
    Steps:
      a. Internal query, edit a cell, Ctrl+Z restores, Ctrl+Y re-applies.
      b. SQL editor: Ctrl+Z undoes typing; Ctrl+Y redoes (retest — was missing on Linux).
      c. Toolbar Reset still re-sorts by timestamp (not undo).
       RESPONSE: SQL Ctrl+Z worked; Ctrl+Y did not (Linux). Ctrl+Y is now wired.
 
-[ ] Insert / drag / rename columns
+[x] Insert / drag / rename columns
    Steps:
      a. Header → Insert column left/right. Blank column; type a formula; Graph and CSV include it.
+        -WORKS!
      b. Header → Rename header (common name only; datatype stays).
      c. Refresh: custom column and its formulas come back. New query: custom columns drop.
-     d. Drag a data header: query list order matches. Overlay pair moves together.
+     d. Drag a data header: query list order matches. Overlay pair moves together. 
+        -WORKS!
      e. Deltas ON, Overlay OFF: primary + secondary + Delta move as a trio.
+        -WORKS with Overlay!
+        -WORKS with Deltas!
         Dragging one data column onto the other *inside* the trio swaps them and
         the Delta sign flips. Dragging outside moves all three. Dropping into
         the middle of the next pair inserts after that pair (not inside it).
+        -WORKS!
      f. While dragging, a highlight line shows the insert point.
+        -WORKS!
      g. New query after a rename: prompt to save/update Data Dictionary common name.
       RESPONSE: Public query — insert/rename/refresh OK; drag was broken then fixed.
         Follow-up: non-overlay deltas were not locked as a trio (now they are).
+        -WORKS!      
 
 [ ] Overlay swap / update from secondary / primary format
    Steps:
      a. Overlay query, header Swap Primary/Secondary — values, query list, and delta sign flip.
+        RESPONSE: Swap works but it doesn't change the \n dataID, just the label. Deltas breaks, makes all values 0. Changes colors first swap, swap again gets rid of all colors
      b. Differing overlay cell → Update from secondary (single and multi-select). Identical cells stay.
+        -WORKS! RESPONSE: This doesn't work with ctrl+z or ctrl+y. I ran the update from secondary then tried to undo it, didn't work
      c. USGS/Aquarius primary: no Update from secondary (or it does nothing).
+        -WORKS!
      d. Raw Data off: secondary displays with the primary’s DEC/SIG rule.
+        RESPONSE: This isn't working. USBR primary shows 642.272, Aquarius secondary shows 642.2724. It's flagged as red text for being -0.0004 different. This needs to not flag as red, show delta based on the rounding from the primary, Overlay Details shows both using same precision, but individual details can show their proper rounding based on their own rules
 
-[ ] Double-click cell (no edit) colors
+[x] Double-click cell (no edit) colors
    Steps:
      a. Dark mode, QAQC on. Double-click a default (white text) cell, Enter with no change.
         Background and text stay normal (not black-on-black).
      b. Overlay-red cell: red text stays, background not black.
      c. QAQC-colored cells unchanged.
 
-[ ] Light/Dark SQL theme
+[x] Light/Dark SQL theme
    Steps:
      a. Open SQL, switch Appearance to Light (no restart). SQL text readable (not light grey).
         Snippet pane / combobox / result scrollbars follow Light (not black tracks).
@@ -80,7 +91,9 @@ Current Tests
      b. Neon green tabs + scrollbars still on. Font is still Silkscreen.
      c. Inventory of FONT vs SPACING vs CHROME: core/Utils.py (search “RETRO MODE INVENTORY”).
         Toggle `retroUseDefaultSpacing` there when you want the old extra pad back.
-
+        RESPONE: Most of retro works with default UI layout. Before I start changing, I'm going to list the only things we need to change when retro mode is enabled:
+            -Info buttons in query
+            -Refresh, refresh query, and upload buttons on data table
 
 Confirmed
 --------------------------------------------------------------------------------

@@ -1,8 +1,30 @@
 ####### CURRENT TASKS #######
-(empty — 3.2.0 queue moved to test.txt)
+-When typing = to start an equation, see if there is a way to put some auto complete options. Like if a user types =RO, have options for completing =ROUND. Not sure how other apps do it but maybe it's something like terminal where they can press tab? Then it says =ROUND(
+    -There is also options that show a tooltip of how it works. For instance =ROUND( could show a tool tip that says value, decimal or something like that. Use the same type of hint logic other programs use to make it more familar 
+-When typing = then selecting a cell for the equation, there is no identifier that shows that cell is selected. Similar to excel, lets add a border around the cell with a color, then the cell locaiton within the equation can hold that color also. For instance, if I hit = then clicked cell D10, D10 could be outlined a color then the text D10 would match that color
+    -Take care when seleccting colors to use. It needs to stand out on dark mode and different color scheme for light mode. Since there is no QAQC formatting on these cells if it's created in a new column, shouldn't have to worry about other cell colors impacting it
+    -This made me think of something. If a equation is placed in a cell that originally had data during a query then is replaced by an equation, remove cell formatting
+        -If ctrl+z is hit, put formatting back
+-Previous task made me realized ctrl+z and ctrl+y might not take formatting (cell colors, backgrounds, etc) into account. Need to make sure formatting is part of it
+-When putting an equation into a cell, make esc button get out of the cell and make not changes
+-The custom dot grab handle we put on SQL snippet is awesome. The one that we didn't create for the query and result is standard with Qt. Lets make the standard one match our custom one
+    -I noticed this more when I was in retro mode. Ours turned the dots green! I want both of them to follow the same color logic so they are easy to see in any mode
 
 ####### CURRENT BUGS #######
-(empty — 3.2.0 queue moved to test.txt)
+-Public query allows right click and insert columns and rename that header, but the cells are locked so unable to add formulas. These custom columns need to be unlocked
+-Right click header show details is blank
+-I created a equation in a column I inserted, it worked. When I dragged it down to copy the equation, everything got flagged as a data edit. This isn't tied to a database so it doesn't need to be flagged as something to send back to the database
+-Right click swap primary/secondary doesn't resize header to fit. Since labels can change and take up more or less space, we need to resize column width
+    -Right click rename also needs to resize
+-Rename header doesn't prompt to save/update it. I tried with the Refresh query button and a fres Query
+    -it DID as on a fresh query after the query was completed. It needs to be like data edits, asking before starting the query
+    -The refresh query button did keep the label, but didn't save it or prompt, even after the query. Not sure if this was a save in memory or what but it shouldn't keep a label without saving it, which makes me think the refresh query button didn't refresh everything or go through Data Dictionary for labels again? Need to validate
+-In winAbout, it looks like this new font has an extra line in between all of the text. If so, remove those. If not, the text is only showing 4 lines, AUTHOR: S31F3R being the last, which means some are missing or hidden
+    -This may have only happned when I changed base retro size from 2 to 4, keeping it at 4
+-Every time I hit F5 to view the program in my debugger, I get this in terminal:
+    Renamed Updates/ → updates/
+    Renamed UPDATES/ → updates/
+    -This doesn't need to be displayed at all, especially since it got fixed after the first time it renamed. It can check each time but don't have it as a terminal output
 
 ####### 3.3.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
