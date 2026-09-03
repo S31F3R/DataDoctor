@@ -31,4 +31,5 @@ resets this file to this template.
 - Query Data closes the query window before the progress dialog so a second query cannot hide behind it
 - Retro spacing matches non-retro for now (`Utils.retroUseDefaultSpacing`); font + neon chrome stay. Inventory is in `core/Utils.py` (search RETRO MODE INVENTORY)
 - Column drag: insert line while dragging; non-overlay delta trios (primary+secondary+delta) stay locked; intra-trio data swap recalculates delta; drop into another pair lands after that pair
+- Utils.py font knobs: `defaultFontSizeAdjust` / `retroFontSizeAdjust` (retro starts at +2 so Silkscreen is not tiny; 0 = previous sizes)
 
