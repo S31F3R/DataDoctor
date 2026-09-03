@@ -9,6 +9,9 @@
 -When putting an equation into a cell, make esc button get out of the cell and make not changes
 -The custom dot grab handle we put on SQL snippet is awesome. The one that we didn't create for the query and result is standard with Qt. Lets make the standard one match our custom one
     -I noticed this more when I was in retro mode. Ours turned the dots green! I want both of them to follow the same color logic so they are easy to see in any mode
+-To enable retro mode, we have to restart, but to switch from light to dark we don't have to, why? If there is a way to switch to retro without restart then lets do it
+-Retro mode tabs are retro green, the font is black it looks like. Instead of RGB 0,0,0, lets use 50,50,50
+-In retro mode, is there anyway to make the buttons at the top left of the graph the retro green?
 
 ####### CURRENT BUGS #######
 -Public query allows right click and insert columns and rename that header, but the cells are locked so unable to add formulas. These custom columns need to be unlocked
@@ -21,10 +24,20 @@
     -The refresh query button did keep the label, but didn't save it or prompt, even after the query. Not sure if this was a save in memory or what but it shouldn't keep a label without saving it, which makes me think the refresh query button didn't refresh everything or go through Data Dictionary for labels again? Need to validate
 -In winAbout, it looks like this new font has an extra line in between all of the text. If so, remove those. If not, the text is only showing 4 lines, AUTHOR: S31F3R being the last, which means some are missing or hidden
     -This may have only happned when I changed base retro size from 2 to 4, keeping it at 4
+        -Small font is also at 4, fits well at this size
 -Every time I hit F5 to view the program in my debugger, I get this in terminal:
     Renamed Updates/ → updates/
     Renamed UPDATES/ → updates/
     -This doesn't need to be displayed at all, especially since it got fixed after the first time it renamed. It can check each time but don't have it as a terminal output
+-When using retro mode and light mode, the query scroll bar background is black. This seems to be something we're forcing because the background color is normal is retro mode is off
+    -The paddle needs to stay the retro mode green, it's just the background that needs to change
+-When graph is up, switching from dark mode to light mode doesn't change graph colors
+    -Tested with retro colors, same issue
+    -Tested light to dark, same issue
+-This is in my terminal/trace when closing winAbout:
+    [WARNING] Qt [default]: QObject::disconnect: wildcard call disconnects from destroyed signal of QFFmpeg::AudioRenderer::unnamed
+    [WARNING] Qt [default]: QObject::disconnect: wildcard call disconnects from destroyed signal of QFFmpeg::StreamDecoder::unnamed
+    [WARNING] Qt [default]: QObject::disconnect: wildcard call disconnects from destroyed signal of QFFmpeg::Demuxer::unnamed
 
 ####### 3.3.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look

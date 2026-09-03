@@ -92,8 +92,10 @@ Current Tests
      c. Inventory of FONT vs SPACING vs CHROME: core/Utils.py (search “RETRO MODE INVENTORY”).
         Toggle `retroUseDefaultSpacing` there when you want the old extra pad back.
         RESPONE: Most of retro works with default UI layout. Before I start changing, I'm going to list the only things we need to change when retro mode is enabled:
-            -Info buttons in query
+            -Info buttons in query (for some reasdon the into button near dataID is fine)
             -Refresh, refresh query, and upload buttons on data table
+            -NEW query window needs to be wider when retro is selected. That means the dataID input box, the search icon, the add query icon, and the query list need a default size/locaion and a retro version
+               -With the retro text, the window needs to grow 4 chracters. in one of my query items, USGS-NWIS shows USGS- then I have to slide over, so a with/move of thoes controls to show NWIS without a horzonital slider
 
 Confirmed
 --------------------------------------------------------------------------------
