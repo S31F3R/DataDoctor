@@ -141,7 +141,7 @@ retroSmallFontControls = frozenset({
     'rbBOP',
     'rbEOP',
 })
-retroSmallFontPt = 6  # one step under general ui 8pt; also gets retroFontSizeAdjust
+retroSmallFontPt = 4  # one step under general ui 8pt; also gets retroFontSizeAdjust
 
 # Query window text buttons: one point larger than normal button role (retro 6→7, default 10→11)
 queryLargeButtonControls = frozenset({
