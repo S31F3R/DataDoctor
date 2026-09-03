@@ -37,7 +37,7 @@ retroFontLoadAttempted = False
 # Retro Silkscreen looks small at those pts; raise retroFontSizeAdjust
 # (e.g. 2 → UI 8→10, buttons 6→8). Non-retro: leave at 0 for 10pt Noto.
 defaultFontSizeAdjust = 0
-retroFontSizeAdjust = 2
+retroFontSizeAdjust = 4
 
 # Point sizes by control role: (non-retro, retro) before the knobs above.
 # Non-retro: 10pt Noto Sans — matches this machine's GNOME/Qt default.
