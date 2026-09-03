@@ -31,9 +31,17 @@ defaultFontLoadAttempted = False
 retroFontFamilyCache = None     # Silkscreen
 retroFontLoadAttempted = False
 
-# Point sizes by control role: (non-retro, retro)
+# ---------------------------------------------------------------------------
+# Font size knobs — edit these, then restart (Retro is restart-only).
+# 0 = the point sizes in fontRoleSizes below (the current live defaults).
+# Retro Silkscreen looks small at those pts; raise retroFontSizeAdjust
+# (e.g. 2 → UI 8→10, buttons 6→8). Non-retro: leave at 0 for 10pt Noto.
+defaultFontSizeAdjust = 0
+retroFontSizeAdjust = 2
+
+# Point sizes by control role: (non-retro, retro) before the knobs above.
 # Non-retro: 10pt Noto Sans — matches this machine's GNOME/Qt default.
-# Retro: Silkscreen is a Press Start–class pixel font; keep the old 8/6 sizes.
+# Retro: Silkscreen at the old Press Start 8/6 sizes (then + retroFontSizeAdjust).
 fontRoleSizes = {
     'ui':     (10, 8),   # labels, checkboxes, radios, combos, tabs, general
     'button': (10, 6),   # QPushButton — retro size kept at tuned 6pt
@@ -60,9 +68,10 @@ defaultFontFiles = (
 # old Press Start spacing after you pick which offsets to keep.
 #
 # FONT (always on in retro):
+#   defaultFontSizeAdjust / retroFontSizeAdjust  this file — global pt knobs
 #   ensureRetroFontLoaded()     this file — Silkscreen TTF in ui/fonts/
 #   fontRoleSizes               this file — (Noto pt, retro pt) per role
-#   retroSmallFontControls      this file — named radios/checkboxes at 6pt
+#   retroSmallFontControls      this file — named radios/checkboxes (ui − 2pt)
 #   retroSmallFontPt            this file
 #   winRetroSmallerControls     this file — Windows Query buttons −1pt
 #   applyRoleFonts()            this file
@@ -132,7 +141,7 @@ retroSmallFontControls = frozenset({
     'rbBOP',
     'rbEOP',
 })
-retroSmallFontPt = 6  # one step under general ui 8pt Silkscreen
+retroSmallFontPt = 6  # one step under general ui 8pt; also gets retroFontSizeAdjust
 
 # Query window text buttons: one point larger than normal button role (retro 6→7, default 10→11)
 queryLargeButtonControls = frozenset({
@@ -519,11 +528,17 @@ def activeFontFamily():
 
 
 def rolePointSize(role='ui', retro=None):
-    """Point size for a control role (see fontRoleSizes)."""
+    """Point size for a control role (see fontRoleSizes + the size knobs)."""
     if retro is None:
         retro = bool(getattr(Config, 'retroMode', False))
     defaultPt, retroPt = fontRoleSizes.get(role, fontRoleSizes['ui'])
     size = retroPt if retro else defaultPt
+    adjust = retroFontSizeAdjust if retro else defaultFontSizeAdjust
+    try:
+        size = int(size) + int(adjust)
+    except (TypeError, ValueError):
+        pass
+    size = max(5, size)
 
     # HiDPI: step down slightly so dense pixel fonts / tables stay readable
     if size > 0:
@@ -1109,7 +1124,10 @@ def applyRoleFonts(app=None, root=None):
     codeFont = makeFontForRole('code')
     retroSmallFont = None
     if Config.retroMode:
-        retroSmallFont = makeFontForRole('ui', pointSize=retroSmallFontPt)
+        retroSmallFont = makeFontForRole(
+            'ui',
+            pointSize=max(5, int(retroSmallFontPt) + int(retroFontSizeAdjust)),
+        )
     # Windows retro: named Query controls one point smaller
     winRetroSmaller = (
         Config.retroMode and sys.platform == 'win32'
