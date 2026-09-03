@@ -13,7 +13,11 @@ resets this file to this template.
 - Windows update dialog: short “Hit Restart to update…” with a Restart button that runs applyUpdate.cmd; Python-zip hops can chain-download the Windows package when python-embed is still missing
 - First-run launcher: refuse zip-preview / exe-only extracts with a clear message; log format matches Python `YYYY-MM-DD HH:MM:SS,mmm [LEVEL]`; applyUpdate.py also shipped at zip root
 - Graph, Options, and About first-open: matplotlib/pygame import and Graph panel warm up after the main window shows (About UI still lazy — constructing it at startup killed some VMs)
-- Retro UI font is Pixelify Sans (Press Start 2P remains for About arcade games)
+- Retro UI font is Silkscreen (same 8-bit arcade look as Press Start 2P, different maker; Press Start stays for About arcade games)
+- SQL editor Ctrl+Y redo (Linux default was Ctrl+Shift+Z only)
+- Drag column headers to reorder (header click filter no longer eats the press)
+- Single-click header highlights the column; double-click sorts (Qt built-in sort stays off)
+- Retro-mode restart: do not crash on deleted QTableWidget / LogNotifier; hide pygame support prompt
 - Data Query Ctrl+Z / Ctrl+Y undo and redo (SQL keeps the editor’s built-in undo)
 - Header Insert column left/right (blank custom columns survive Refresh, graph, CSV, formulas, details)
 - Drag headers to reorder columns; query list follows; overlay+delta stay locked; custom columns move independently
@@ -25,4 +29,6 @@ resets this file to this template.
 - Double-clicking a cell without changing it no longer paints a black background
 - Light/Dark theme switch restyles SQL editors, snippet pane, and scrollbars (no more stale light-grey SQL text)
 - Query Data closes the query window before the progress dialog so a second query cannot hide behind it
+- Retro spacing matches non-retro for now (`Utils.retroUseDefaultSpacing`); font + neon chrome stay. Inventory is in `core/Utils.py` (search RETRO MODE INVENTORY)
+- Column drag: insert line while dragging; non-overlay delta trios (primary+secondary+delta) stay locked; intra-trio data swap recalculates delta; drop into another pair lands after that pair
 

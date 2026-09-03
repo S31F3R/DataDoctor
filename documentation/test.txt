@@ -24,32 +24,18 @@ Current Tests
      d. 3.0.x / no python-embed: after a Python zip apply, Windows zip should chain
         (or be the asset downloaded in the first place). No second manual applyUpdate.
 
-[ ] Windows first-run extract
-   Steps:
-     a. Double-click Data Doctor.exe inside the zip (Compressed Folder). Should pop a
-        message: extract the entire zip, do not run from inside it.
-     b. Copy only the exe to Desktop — same kind of message, not raw pythonw paths.
-     c. Full Extract All, then Data Doctor.exe — launches (or applyUpdate then launches).
-     d. app.log launcher lines use `YYYY-MM-DD HH:MM:SS,mmm [LEVEL] launcher: …`
-        (WARNING not WARN). Same pattern as Python lines.
-
 [ ] First-open Graph / Options / About
    Steps:
      a. After main window appears, wait ~2s, then Graph — should open without a long freeze.
      b. Options should open quickly (keyring already warmed).
      c. About still opens; first click may load UI but should not hang as long as before.
 
-[ ] Retro Pixelify Sans
-   Steps:
-     a. Options → Appearance → Retro on, restart.
-     b. UI should use Pixelify Sans (lowercase visible, denser than Press Start).
-     c. About arcade games can still use Press Start 2P.
-
 [ ] Table undo/redo
    Steps:
      a. Internal query, edit a cell, Ctrl+Z restores, Ctrl+Y re-applies.
-     b. SQL editor Ctrl+Z/Y still undoes typing (built-in).
+     b. SQL editor: Ctrl+Z undoes typing; Ctrl+Y redoes (retest — was missing on Linux).
      c. Toolbar Reset still re-sorts by timestamp (not undo).
+      RESPONSE: SQL Ctrl+Z worked; Ctrl+Y did not (Linux). Ctrl+Y is now wired.
 
 [ ] Insert / drag / rename columns
    Steps:
@@ -57,8 +43,14 @@ Current Tests
      b. Header → Rename header (common name only; datatype stays).
      c. Refresh: custom column and its formulas come back. New query: custom columns drop.
      d. Drag a data header: query list order matches. Overlay pair moves together.
-     e. With Deltas on, overlay+delta stay adjacent. Custom column drags alone.
-     f. New query after a rename: prompt to save/update Data Dictionary common name.
+     e. Deltas ON, Overlay OFF: primary + secondary + Delta move as a trio.
+        Dragging one data column onto the other *inside* the trio swaps them and
+        the Delta sign flips. Dragging outside moves all three. Dropping into
+        the middle of the next pair inserts after that pair (not inside it).
+     f. While dragging, a highlight line shows the insert point.
+     g. New query after a rename: prompt to save/update Data Dictionary common name.
+      RESPONSE: Public query — insert/rename/refresh OK; drag was broken then fixed.
+        Follow-up: non-overlay deltas were not locked as a trio (now they are).
 
 [ ] Overlay swap / update from secondary / primary format
    Steps:
@@ -66,11 +58,6 @@ Current Tests
      b. Differing overlay cell → Update from secondary (single and multi-select). Identical cells stay.
      c. USGS/Aquarius primary: no Update from secondary (or it does nothing).
      d. Raw Data off: secondary displays with the primary’s DEC/SIG rule.
-
-[ ] Query list scroll / no double query
-   Steps:
-     a. Long query list, move a row with Up/Down 1 — list does not jump unless the row left the view.
-     b. Query Data: query window closes, progress shows on main. Cannot start a second query behind it.
 
 [ ] Double-click cell (no edit) colors
    Steps:
@@ -86,15 +73,24 @@ Current Tests
      b. Switch back to Dark in the same session — SQL stays readable, no reverse of the bug.
      c. New worksheet also looks correct.
 
-[ ] Graph missing-data gaps
+[ ] Retro spacing baseline
    Steps:
-     a. Query a series with a hole. Graph must break the line at the gap (no diagonal connector).
-     b. Legend has no “Click to show/hide” title; ☑/☐ click still toggles series.
+     a. Retro ON (Silkscreen). Query window / main toolbar / table row height should match
+        non-retro spacing (no extra offsets, no extra header blank line).
+     b. Neon green tabs + scrollbars still on. Font is still Silkscreen.
+     c. Inventory of FONT vs SPACING vs CHROME: core/Utils.py (search “RETRO MODE INVENTORY”).
+        Toggle `retroUseDefaultSpacing` there when you want the old extra pad back.
 
 
 Confirmed
 --------------------------------------------------------------------------------
 Windows silent launch (VM + laptop)
+Query list scroll / no double query
+Graph missing-data gaps
+Windows first-run extract
+Retro Silkscreen
+Header click vs sort vs drag
+Retro mode restart (no crash)
 
 Deferred / known
 --------------------------------------------------------------------------------

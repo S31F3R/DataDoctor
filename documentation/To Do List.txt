@@ -1,6 +1,8 @@
 ####### CURRENT TASKS #######
+(empty — 3.2.0 queue moved to test.txt)
 
 ####### CURRENT BUGS #######
+(empty — 3.2.0 queue moved to test.txt)
 
 ####### 3.3.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
