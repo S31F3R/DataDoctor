@@ -46,4 +46,10 @@ resets this file to this template.
 - Retro query width is Windows-only (~2 characters); Linux stays original. Load/Save/Clear/Delete Quick Look are 1pt smaller
 - Retro timestamp row pad reduced; live retro resizes Data Query columns; SQL pin moves 14px left; graph legend/ticks use Silkscreen
 - Overlay details no longer crash on a string UserRole / wrong-DB fallback; overlay cells stay editable after swap
+- Overlay swap clears red when the pair matches at the new primary rounding (no Refresh needed)
+- USBR Show details keeps list responses (was wrapping them and showing blank)
+- Live retro no longer inflates the timestamp rail; Query radios/checkboxes are small again; Windows query width ~56px extra; SQL pin 10px
+- Graph legend/ticks +1pt, axis labels +2pt in retro
+- Dragged columns keep their widths; renaming a header back to the dictionary name is not a pending save
+- `updateBunkerFromCsv.py` asks y/n to update Common Names and Data Types (#5)
 
