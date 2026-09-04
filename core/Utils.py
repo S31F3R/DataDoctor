@@ -724,12 +724,12 @@ def applyTableRowMetrics(table, font=None):
 
 def sizeVerticalHeader(table):
     """
-    Timestamp rail width locked to the painted ink of a sample label.
+    Timestamp rail width using the same measure as data columns.
 
-    minWidth cannot shrink the header: QTableWidget lays it out at sizeHint,
-    which is wider than Silkscreen ink, and center-alignment turns that extra
-    into a gap before the date and after the time. Fixed width + zero section
-    padding is what actually matches non-retro tightness.
+    Data cells: horizontalAdvance(text) + 22. The rail was too wide when
+    sizeHint won, then too tight when we used tightBoundingRect + 4 (clipped
+    the trailing 00). Lock to advance + 22 so Silkscreen matches the value
+    columns; zero section padding so that 22px is the only extra.
     """
     if table is None:
         return
@@ -748,13 +748,15 @@ def sizeVerticalHeader(table):
     font = vHeader.font() if vHeader.font() is not None else table.font()
     metrics = QFontMetrics(font)
     sample = "01/01/26 00:00:00"
+    best = metrics.horizontalAdvance(sample)
     n = table.rowCount()
     for r in range(min(n, 40)):
         it = table.verticalHeaderItem(r)
-        if it is not None and it.text() and len(it.text()) > len(sample):
-            sample = it.text()
-    ink = metrics.tightBoundingRect(sample).width()
-    w = max(ink + 4, 8)
+        if it is None or not it.text():
+            continue
+        best = max(best, metrics.horizontalAdvance(it.text()))
+    # Same fudge as autoSizeTableColumns for a cell-driven column
+    w = max(best + 22, 8)
     vHeader.setStyleSheet(
         "QHeaderView { padding: 0px; }"
         "QHeaderView::section { padding: 0px; margin: 0px; }"
@@ -763,8 +765,7 @@ def sizeVerticalHeader(table):
         vHeader.setContentsMargins(0, 0, 0, 0)
     except Exception:
         pass
-    # Left-align so any leftover style inset is after the time, not before 09/
-    align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    align = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
     vHeader.setDefaultAlignment(align)
     for r in range(n):
         it = table.verticalHeaderItem(r)
