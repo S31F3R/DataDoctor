@@ -96,6 +96,7 @@ class uiDetails(QWidget):
     """Details window: Displays metadata or overlay info for a specific timeseries cell."""    
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.mainWindow = parent
         
         # Load the UI file
         uic.loadUi(Logic.resourcePath('ui/winDetails.ui'), self)
@@ -632,42 +633,53 @@ class uiDetails(QWidget):
     
     def populateHeaderNormal(self, meta):
         """Internal method to populate for normal header metadata."""
-        
-        # Add query info
+        meta = meta or {}
         queryInfos = meta.get('queryInfos', 'N/A')
         if isinstance(queryInfos, list):
             queryStr = queryInfos[0] if queryInfos else 'Custom column'
         else:
             queryStr = str(queryInfos or 'N/A')
         self.addRow("Query Info", queryStr)
-        
-        # Add stats (with timestamps for max/min)
-        maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
+        dataIds = meta.get('dataIds') or []
+        if dataIds:
+            self.addRow("Data ID", str(dataIds[0]))
+        dbs = meta.get('dbs') or []
+        if dbs:
+            self.addRow("Database", str(dbs[0]))
+        col = meta.get('col')
+        if col is None:
+            col = -1
+        maxStr, minStr, meanStr = self.computeColumnStats(col)
         self.addRow("Max", maxStr)
         self.addRow("Min", minStr)
         self.addRow("Mean", meanStr)
     
     def populateHeaderDelta(self, meta):
         """Internal method to populate for delta header metadata."""
-        
-        # Add details
-        self.addRow("Calculation", f"{meta.get('dataIds', ['N/A', 'N/A'])[0]} - {meta.get('dataIds', ['N/A', 'N/A'])[1]}")
-        
-        # Add stats (with timestamps for max/min)
-        maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
+        meta = meta or {}
+        ids = meta.get('dataIds') or ['N/A', 'N/A']
+        left = ids[0] if len(ids) > 0 else 'N/A'
+        right = ids[1] if len(ids) > 1 else 'N/A'
+        self.addRow("Calculation", f"{left} - {right}")
+        infos = meta.get('queryInfos') or []
+        if infos:
+            self.addRow("Primary", infos[0] if len(infos) > 0 else 'N/A')
+            if len(infos) > 1:
+                self.addRow("Secondary", infos[1])
+        col = meta.get('col', -1)
+        maxStr, minStr, meanStr = self.computeColumnStats(col)
         self.addRow("Max", maxStr)
         self.addRow("Min", minStr)
         self.addRow("Mean", meanStr)
     
     def populateHeaderOverlay(self, meta):
         """Internal method to populate for overlay header metadata."""
-        
-        # Add primary/secondary
-        self.addRow("Primary", meta.get('queryInfos', ['N/A', 'N/A'])[0])
-        self.addRow("Secondary", meta.get('queryInfos', ['N/A', 'N/A'])[1])
-        
-        # Add stats (with timestamps for max/min)
-        maxStr, minStr, meanStr = self.computeColumnStats(meta['col'])
+        meta = meta or {}
+        infos = meta.get('queryInfos') or ['N/A', 'N/A']
+        self.addRow("Primary", infos[0] if len(infos) > 0 else 'N/A')
+        self.addRow("Secondary", infos[1] if len(infos) > 1 else 'N/A')
+        col = meta.get('col', -1)
+        maxStr, minStr, meanStr = self.computeColumnStats(col)
         self.addRow("Max", maxStr)
         self.addRow("Min", minStr)
         self.addRow("Mean", meanStr)
@@ -675,14 +687,18 @@ class uiDetails(QWidget):
     def computeColumnStats(self, col):
         """Compute stats for a column; max/min include the row timestamp."""
         values = []  # list of (float, timestampStr)
+        main = self.mainWindow if self.mainWindow is not None else self.parent()
+        table = getattr(main, "mainTable", None) if main is not None else None
+        if table is None or col is None or col < 0:
+            return "N/A", "N/A", "N/A"
 
-        for row in range(self.parent().mainTable.rowCount()):
-            item = self.parent().mainTable.item(row, col)
+        for row in range(table.rowCount()):
+            item = table.item(row, col)
 
             if item and item.text().strip():
                 try:
                     val = float(item.text())
-                    tsItem = self.parent().mainTable.verticalHeaderItem(row)
+                    tsItem = table.verticalHeaderItem(row)
                     ts = tsItem.text() if tsItem else ''
                     values.append((val, ts))
                 except ValueError:

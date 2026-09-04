@@ -5,20 +5,89 @@ from __future__ import annotations
 
 import re
 
-from PyQt6.QtCore import Qt, QEvent, QObject
-from PyQt6.QtGui import QColor, QCursor, QPainter, QPen, QMouseEvent
+from PyQt6.QtCore import Qt, QEvent, QObject, QPoint
+from PyQt6.QtGui import (
+    QColor, QCursor, QPainter, QPen, QMouseEvent, QTextCharFormat, QTextCursor,
+)
 from PyQt6.QtWidgets import (
     QLineEdit, QRubberBand, QStyledItemDelegate, QTableWidgetItem, QWidget,
+    QAbstractItemDelegate, QToolTip, QApplication, QTextEdit,
 )
 
 from core import Config, Logic, Upload
 from core.Formula import (
-    FORMULA_KEY, ERR_VALUE,
+    FORMULA_KEY, ERR_VALUE, FUNCTIONS, FUNCTION_HELP,
     adjustFormula, colToLetters, evaluateFormula, formatFormulaResult,
-    looksLikeFormula,
+    looksLikeFormula, parseCellRef,
 )
 
 HANDLE_PX = 7
+
+_REF_COLORS_DARK = (
+    QColor("#00E5FF"), QColor("#FF80AB"), QColor("#FFD54F"), QColor("#69F0AE"),
+)
+_REF_COLORS_LIGHT = (
+    QColor("#0066CC"), QColor("#C2185B"), QColor("#E65100"), QColor("#2E7D32"),
+)
+
+
+def _refColors():
+    app = QApplication.instance()
+    dark = True
+    if app is not None:
+        pal = app.palette()
+        dark = pal.color(pal.ColorRole.Window).lightness() < 128
+    if Config.retroMode:
+        return (QColor("#00FF00"), QColor("#00FFFF"), QColor("#FF00FF"), QColor("#FFFF00"))
+    return _REF_COLORS_DARK if dark else _REF_COLORS_LIGHT
+
+
+class FormulaEditor(QTextEdit):
+    """Single-line editor that can color A1 tokens to match cell rings."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setTabChangesFocus(False)
+        self.setAcceptRichText(False)
+        self.document().setDocumentMargin(2)
+
+    def text(self):
+        return self.toPlainText()
+
+    def setText(self, text):
+        self.setPlainText("" if text is None else str(text))
+
+    def cursorPosition(self):
+        return self.textCursor().position()
+
+    def setCursorPosition(self, pos):
+        cur = self.textCursor()
+        n = max(0, min(int(pos), len(self.toPlainText())))
+        cur.setPosition(n)
+        self.setTextCursor(cur)
+
+    def setAlignment(self, align):
+        super().setAlignment(align)
+
+
+class CellRefRing(QWidget):
+    """Colored outline on a formula-pointed cell (Excel-style)."""
+
+    def __init__(self, parent, color):
+        super().__init__(parent)
+        self.color = QColor(color)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        painter.setPen(QPen(self.color, 2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(self.rect().adjusted(1, 1, -2, -2))
+        painter.end()
 
 
 def _itemFormula(item) -> str:
@@ -70,7 +139,7 @@ def evaluateOnTable(table, formula: str, col: int, row: int):
     )
 
 
-def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False):
+def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, skipUndo=False):
     """
     Set a cell from typed/pasted/filled text. Formulas starting with '=' are
     stored and the display becomes the computed value (upload uses that).
@@ -92,6 +161,8 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False):
     raw = "" if text is None else str(text).strip()
     oldText = item.text() if item is not None else ""
     oldFormula = _itemFormula(item)
+    oldBg, oldFg = Upload.captureItemColors(item)
+    _, oldEdit = Upload.getEditState(item)
     if looksLikeFormula(raw):
         try:
             result = evaluateOnTable(table, raw, col, row)
@@ -101,18 +172,33 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False):
         _setItemFormula(item, raw)
         if item.text() != display:
             item.setText(display)
-        from core import Undo
-        Undo.pushCellEdit(
-            mainWindow, row, col, oldText, oldFormula, item.text(), raw
-        )
+        # Formula replaces queried QAQC/overlay paint; custom cols stay unflagged
+        metas = getattr(mainWindow, "columnMetadata", None) or []
+        meta = metas[col] if col < len(metas) else {}
+        if (meta or {}).get("type") != "custom":
+            Upload.applyColors(item, None, None)
+        if not skipUndo:
+            from core import Undo
+            newBg, newFg = Upload.captureItemColors(item)
+            _, newEdit = Upload.getEditState(item)
+            Undo.pushCellEdit(
+                mainWindow, row, col, oldText, oldFormula, item.text(), raw,
+                oldBg=oldBg, oldFg=oldFg, newBg=newBg, newFg=newFg,
+                oldEdit=oldEdit, newEdit=newEdit,
+            )
         return True
     _setItemFormula(item, None)
     if item.text() != raw:
         item.setText(raw)
-    from core import Undo
-    Undo.pushCellEdit(
-        mainWindow, row, col, oldText, oldFormula, item.text(), None
-    )
+    if not skipUndo:
+        from core import Undo
+        newBg, newFg = Upload.captureItemColors(item)
+        _, newEdit = Upload.getEditState(item)
+        Undo.pushCellEdit(
+            mainWindow, row, col, oldText, oldFormula, item.text(), None,
+            oldBg=oldBg, oldFg=oldFg, newBg=newBg, newFg=newFg,
+            oldEdit=oldEdit, newEdit=newEdit,
+        )
     return True
 
 
@@ -144,8 +230,8 @@ def recalculateAll(mainWindow):
 
 
 def formulaMayEdit(mainWindow, col: int) -> bool:
-    """Formulas only on editable primary cells (not public, not delta)."""
-    if mainWindow is None or Upload.isPublicQuery(mainWindow):
+    """Formulas on editable cells (custom columns even on public queries)."""
+    if mainWindow is None:
         return False
     return not Upload.columnIsLocked(mainWindow, col)
 
@@ -158,8 +244,20 @@ class FormulaDelegate(QStyledItemDelegate):
         self._editIndex = None
 
     def createEditor(self, parent, option, index):
-        editor = QLineEdit(parent)
+        editor = FormulaEditor(parent)
         editor.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        try:
+            from PyQt6.QtWidgets import QFrame
+            editor.setFrameShape(QFrame.Shape.NoFrame)
+        except Exception:
+            pass
+        editor.installEventFilter(self)
+        editor.textChanged.connect(self._onEditorTextChanged)
+        try:
+            h = option.rect.height() if option is not None else 24
+            editor.setFixedHeight(max(h, 22))
+        except Exception:
+            pass
         self._editor = editor
         self._editIndex = index
         table = self.mainWindow.mainTable
@@ -171,6 +269,8 @@ class FormulaDelegate(QStyledItemDelegate):
         table = self.mainWindow.mainTable
         if table is not None:
             table._formulaPointing = False
+        self._clearRefRings()
+        QToolTip.hideText()
         self._editor = None
         self._editIndex = None
         super().destroyEditor(editor, index)
@@ -210,7 +310,167 @@ class FormulaDelegate(QStyledItemDelegate):
         if obj is self._editor and event.type() == QEvent.Type.FocusOut:
             if self.isPointing() and self._clickIsOnTable():
                 return True
+        if obj is self._editor and event.type() == QEvent.Type.KeyPress:
+            key = event.key()
+            if key == Qt.Key.Key_Escape:
+                self._clearRefRings()
+                table = self.mainWindow.mainTable if self.mainWindow is not None else None
+                if table is not None:
+                    table.closeEditor(self._editor, QAbstractItemDelegate.EndEditHint.RevertModelCache)
+                return True
+            if key == Qt.Key.Key_Tab:
+                if self._tabComplete(self._editor):
+                    return True
         return super().eventFilter(obj, event)
+
+    def _tabComplete(self, editor) -> bool:
+        if editor is None:
+            return False
+        text = editor.text() or ""
+        if not text.strip().startswith("="):
+            return False
+        pos = editor.cursorPosition()
+        i = pos
+        while i > 1 and text[i - 1].isalpha():
+            i -= 1
+        prefix = text[i:pos]
+        if not prefix:
+            return False
+        names = [n for n in FUNCTIONS if n.startswith(prefix.upper())]
+        if not names:
+            return False
+        names.sort()
+        chosen = names[0]
+        if len(names) > 1:
+            common = prefix.upper()
+            for chs in zip(*names):
+                if len(set(chs)) == 1:
+                    common += chs[0]
+                else:
+                    break
+            if len(common) > len(prefix):
+                chosen = common
+            # unique name still gets "("
+            if chosen not in FUNCTIONS:
+                ins = chosen[len(prefix):]
+                editor.setText(text[:pos] + ins + text[pos:])
+                editor.setCursorPosition(pos + len(ins))
+                self._hintFunction(editor)
+                return True
+        ins = chosen[len(prefix):] + ("(" if chosen in FUNCTIONS else "")
+        editor.setText(text[:i] + chosen + ("(" if chosen in FUNCTIONS else "") + text[pos:])
+        editor.setCursorPosition(i + len(chosen) + (1 if chosen in FUNCTIONS else 0))
+        self._hintFunction(editor)
+        return True
+
+    def _onEditorTextChanged(self, _text=""):
+        self._hintFunction(self._editor)
+        self._syncRefRings()
+
+    def _hintFunction(self, editor):
+        if editor is None:
+            return
+        text = editor.text() or ""
+        pos = editor.cursorPosition()
+        chunk = text[:pos]
+        m = re.search(r"([A-Za-z]+)\s*\([^)]*$", chunk)
+        if not m:
+            QToolTip.hideText()
+            return
+        name = m.group(1).upper()
+        tip = None
+        for sig, helpText in FUNCTION_HELP:
+            if sig.upper().startswith(name + "(") or sig.upper().startswith(name + " "):
+                tip = f"{sig}  —  {helpText}"
+                break
+            if sig.upper().startswith(name):
+                tip = f"{sig}  —  {helpText}"
+                break
+        if not tip:
+            QToolTip.hideText()
+            return
+        QToolTip.showText(
+            editor.mapToGlobal(QPoint(8, editor.height() + 2)),
+            tip,
+            editor,
+        )
+
+    def _clearRefRings(self):
+        table = self.mainWindow.mainTable if self.mainWindow is not None else None
+        rings = getattr(table, "_formulaRefRings", None) if table is not None else None
+        if rings:
+            for w in rings:
+                try:
+                    w.hide()
+                    w.setParent(None)
+                    w.deleteLater()
+                except Exception:
+                    pass
+        if table is not None:
+            table._formulaRefRings = []
+
+    def _syncRefRings(self):
+        table = self.mainWindow.mainTable if self.mainWindow is not None else None
+        editor = self._editor
+        self._clearRefRings()
+        if table is None or editor is None or not self.isPointing():
+            return
+        vp = table.viewport()
+        colors = _refColors()
+        seen = {}
+        idx = 0
+        text = editor.text() or ""
+        for m in re.finditer(r"\$?[A-Za-z]+\$?\d+", text):
+            parsed = parseCellRef(m.group(0))
+            if parsed is None:
+                continue
+            col, row, _ac, _ar = parsed
+            key = (col, row)
+            if key in seen:
+                color = seen[key]
+            else:
+                color = colors[idx % len(colors)]
+                seen[key] = color
+                idx += 1
+            if col < 0 or row < 0 or col >= table.columnCount() or row >= table.rowCount():
+                continue
+            rect = table.visualRect(table.model().index(row, col))
+            if rect.isNull():
+                continue
+            ring = CellRefRing(vp, color)
+            ring.setGeometry(rect)
+            ring.show()
+            ring.raise_()
+            table._formulaRefRings.append(ring)
+        # Color matching tokens in the editor (QLineEdit palette per-char is limited;
+        # the cell rings carry the identity. Tint the whole editor when pointing.)
+        if isinstance(editor, FormulaEditor):
+            pal = editor.palette()
+            baseFmt = QTextCharFormat()
+            baseFmt.setForeground(pal.color(pal.ColorRole.Text))
+            doc = editor.document()
+            pos = editor.cursorPosition()
+            editor.blockSignals(True)
+            try:
+                cur = QTextCursor(doc)
+                cur.select(QTextCursor.SelectionType.Document)
+                cur.setCharFormat(baseFmt)
+                for m in re.finditer(r"\$?[A-Za-z]+\$?\d+", text):
+                    parsed = parseCellRef(m.group(0))
+                    if parsed is None:
+                        continue
+                    key = (parsed[0], parsed[1])
+                    color = seen.get(key)
+                    if color is None:
+                        continue
+                    fmt = QTextCharFormat()
+                    fmt.setForeground(color)
+                    cur.setPosition(m.start())
+                    cur.setPosition(m.end(), QTextCursor.MoveMode.KeepAnchor)
+                    cur.mergeCharFormat(fmt)
+                editor.setCursorPosition(pos)
+            finally:
+                editor.blockSignals(False)
 
     def _clickIsOnTable(self) -> bool:
         table = self.mainWindow.mainTable if self.mainWindow is not None else None
@@ -241,6 +501,7 @@ class FormulaDelegate(QStyledItemDelegate):
         editor.setText(new)
         editor.setCursorPosition(len(prefix) + len(ref))
         editor.setFocus(Qt.FocusReason.OtherFocusReason)
+        self._syncRefRings()
         return True
 
 
@@ -312,7 +573,7 @@ class FormulaTableFilter(QObject):
         handle = self._handle
         if table is None or handle is None:
             return
-        if Upload.isPublicQuery(self.mainWindow) or self._drag is not None:
+        if self._drag is not None:
             handle.hide()
             return
         bounds = Upload._selectionBounds(table)

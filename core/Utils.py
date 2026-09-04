@@ -32,10 +32,10 @@ retroFontFamilyCache = None     # Silkscreen
 retroFontLoadAttempted = False
 
 # ---------------------------------------------------------------------------
-# Font size knobs — edit these, then restart (Retro is restart-only).
-# 0 = the point sizes in fontRoleSizes below (the current live defaults).
+# Font size knobs — 0 = the point sizes in fontRoleSizes below.
 # Retro Silkscreen looks small at those pts; raise retroFontSizeAdjust
 # (e.g. 2 → UI 8→10, buttons 6→8). Non-retro: leave at 0 for 10pt Noto.
+# Live retro apply (Options) picks these up without a restart.
 defaultFontSizeAdjust = 0
 retroFontSizeAdjust = 4
 
@@ -92,6 +92,19 @@ defaultFontFiles = (
 #   retroNeonGreen              this file
 # ---------------------------------------------------------------------------
 retroUseDefaultSpacing = True
+
+# Extra retro geometries applied even when retroUseDefaultSpacing is True
+# (info buttons except Data ID, main-table Refresh/Undo/Upload, query width).
+# ~4 Silkscreen characters so USGS-NWIS fits the query list without a slider.
+QUERY_WINDOW_BASE = (960, 668)
+QUERY_RETRO_EXTRA_W = 48
+retroAlwaysLayouts = {
+    'btnRefresh': (38, 8, 32, 32),
+    'btnUndo': (74, 8, 32, 32),
+    'btnUpload': (110, 8, 32, 32),
+    'btnIntervalInfo': (164, 76, 31, 20),
+    'btnQueryOptionsInfo': (164, 401, 31, 20),
+}
 
 # Absolute geometries that differ by font mode: (x, y, width, height)
 # Default = Noto (Seifer-tuned 2026-07-24). Retro = pre-Noto baseline until tuned.
@@ -839,7 +852,9 @@ def applyModeControlLayouts(app=None, root=None):
     Windows default mode can apply platformLayoutYNudge (e.g. Refresh/Undo +3 y).
     """
     mode = 'retro' if (Config.retroMode and not retroUseDefaultSpacing) else 'default'
-    coords = controlLayouts.get(mode) or {}
+    coords = dict(controlLayouts.get(mode) or {})
+    if Config.retroMode:
+        coords.update(retroAlwaysLayouts)
     if not coords:
         return
 
@@ -876,12 +891,58 @@ def applyModeControlLayouts(app=None, root=None):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"applyModeControlLayouts {name}: {e}")
 
+    if root is not None and type(root).__name__ in ("uiQuery", "winInternalQuery"):
+        applyRetroQueryWindow(root)
+    elif app is not None:
+        try:
+            for w in app.topLevelWidgets():
+                if type(w).__name__ in ("uiQuery", "winInternalQuery") or w.objectName() == "winInternalQuery":
+                    applyRetroQueryWindow(w)
+        except Exception:
+            pass
+
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
             f"applyModeControlLayouts: mode={mode} platform={sys.platform} "
             f"applied={len(byName)}/{len(coords)} yNudges={yNudges or '{}'}",
         )
+
+
+def applyRetroQueryWindow(win):
+    """Widen query Data ID / list / add / search ~4 characters in retro."""
+    if win is None:
+        return
+    extra = QUERY_RETRO_EXTRA_W if Config.retroMode else 0
+    w = QUERY_WINDOW_BASE[0] + extra
+    h = QUERY_WINDOW_BASE[1]
+    try:
+        win.setMaximumSize(w, h)
+        win.setFixedSize(w, h)
+    except Exception:
+        try:
+            win.resize(w, h)
+        except Exception:
+            pass
+    geos = {
+        "qleDataID": (328, 29, 621 + extra, 32),
+        "listQueryList": (328, 128, 621 + extra, 529),
+        "btnSearch": (780 + extra, 65, 32, 32),
+        "btnAddQuery": (810 + extra, 65, 141, 31),
+    }
+    for name, (x, y, ww, hh) in geos.items():
+        widget = getattr(win, name, None)
+        if widget is None:
+            try:
+                widget = win.findChild(QWidget, name)
+            except Exception:
+                widget = None
+        if widget is None:
+            continue
+        try:
+            widget.setGeometry(x, y, ww, hh)
+        except Exception:
+            pass
 
 
 def retroSpacingStylesheet():
@@ -926,34 +987,33 @@ def retroSpacingStylesheet():
 """
         checkPad = ""
     return f"""
-    /* Retro tabs: neon green + black text. NO tab:hover fill — that lit the whole
-       tab and stole hover from the close button. Only close-button:hover changes. */
+    /* Retro tabs: neon green + #323232 text (not 0,0,0). */
     QTabBar::tab {{
         background: {green};
-        color: #000000;
+        color: #323232;
         {pad}
         border: 1px solid #00aa00;
         margin-right: 2px;
     }}
     QTabBar::tab:selected {{
         background: {green};
-        color: #000000;
+        color: #323232;
         font-weight: bold;
         border: 1px solid #003300;
     }}
     QTabBar::tab:!selected {{
         background: #00cc00;
-        color: #000000;
+        color: #323232;
     }}
     /* Keep tab fill stable under mouse (no whole-tab brighten) */
     QTabBar::tab:hover,
     QTabBar::tab:selected:hover {{
         background: {green};
-        color: #000000;
+        color: #323232;
     }}
     QTabBar::tab:!selected:hover {{
         background: #00cc00;
-        color: #000000;
+        color: #323232;
     }}
     /* Close only: black disc + green X; hover = 2nd image (brighter X) */
     QTabBar::close-button {{
@@ -1687,7 +1747,10 @@ def thickScrollBarStyle(retro=None, minHandle=48, track=20):
     if retro is None:
         retro = bool(getattr(Config, 'retroMode', True))
     if retro:
-        handle, handleHover, trackBg = "#00FF00", "#66FF66", "#333333"
+        handle, handleHover = "#00FF00", "#66FF66"
+        app = QApplication.instance()
+        light = app is not None and not _paletteIsDark(app.palette())
+        trackBg = "#e0e0e0" if light else "#333333"
     else:
         app = QApplication.instance()
         dark = _paletteIsDark(app.palette()) if app is not None else True
@@ -1733,22 +1796,24 @@ def thickScrollBarStyle(retro=None, minHandle=48, track=20):
 
 def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQueryList=None):
     """Apply or remove retro mode styles (e.g., scroll bars) dynamically."""
-    # Global app scrollbars: neon green, slightly thicker than stock for grab-ability
-    retroStyles = """
-        QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
-            background: #00FF00; /* Neon green handle */
+    light = app is not None and not _paletteIsDark(app.palette())
+    trackBg = "#e0e0e0" if light else "#333333"
+    # Neon green paddle; track follows light/dark (was always black).
+    retroStyles = f"""
+        QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
+            background: #00FF00;
             border-radius: 4px;
             min-height: 24px;
             min-width: 24px;
-        }
-        QScrollBar:vertical {
-            background: #333333; /* Dark track for contrast */
+        }}
+        QScrollBar:vertical {{
+            background: {trackBg};
             width: 14px;
-        }
-        QScrollBar:horizontal {
-            background: #333333;
+        }}
+        QScrollBar:horizontal {{
+            background: {trackBg};
             height: 14px;
-        }
+        }}
     """
     if enable:
         # Apply to specific widgets
@@ -2362,6 +2427,15 @@ def applyColorTheme(theme=None):
             logResolvedUiFont(app, where=f'applyColorTheme:{name}')
         except Exception as e:
             Logic.logMessage("WARN", f"applyColorTheme re-apply font failed: {e}")
+        try:
+            for w in app.topLevelWidgets():
+                if type(w).__name__ == "uiMain":
+                    graph = getattr(w, "tabGraph", None)
+                    if graph is not None and hasattr(graph, "reapplyTheme"):
+                        graph.reapplyTheme()
+                    break
+        except Exception:
+            pass
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
@@ -2425,18 +2499,56 @@ def hdbAccessDisplayNames():
     return names
 
 
-def reloadGlobals():
+def applyLiveAppearance(app=None):
     """
-    Refresh runtime flags from user.config.
+    Apply current Config.retroMode + colorTheme without restarting:
+    fonts, layouts, scrollbar chrome, SQL panes, open graph.
+    """
+    app = app or QApplication.instance()
+    if app is None:
+        return
+    if Config.retroMode:
+        ensureRetroFontLoaded()
+    else:
+        ensureDefaultFontLoaded()
+    applyColorTheme()
+    applyModeControlLayouts(app=app)
+    mainTable = None
+    queryList = None
+    graph = None
+    try:
+        for w in app.topLevelWidgets():
+            if type(w).__name__ == "uiMain":
+                mainTable = getattr(w, "mainTable", None)
+                q = getattr(w, "winQuery", None)
+                queryList = getattr(q, "listQueryList", None) if q is not None else None
+                graph = getattr(w, "tabGraph", None)
+                if q is not None:
+                    applyRetroQueryWindow(q)
+                break
+    except Exception:
+        pass
+    setRetroStyles(app, bool(Config.retroMode), mainTable, queryList)
+    try:
+        for w in app.allWidgets():
+            if isinstance(w, QListWidget):
+                applyCompactListStyle(w)
+    except Exception:
+        pass
+    if graph is not None and hasattr(graph, "reapplyTheme"):
+        try:
+            graph.reapplyTheme()
+        except Exception as e:
+            Logic.logException("applyLiveAppearance: graph reapplyTheme failed", e)
 
-    Config.retroMode is intentionally NOT updated here. Retro fonts/layouts must
-    only apply at process start (applyStylesAndFonts). Mid-session reloads of
-    retroMode caused Query / tables to partially flip after Options save.
-    """
+
+def reloadGlobals():
+    """Refresh runtime flags from user.config, including retroMode (live apply)."""
     settings = loadConfig()
     Config.debug = settings['debugMode']
     Config.utcOffset = settings['utcOffset']
     Config.periodOffset = resolvePeriodOffset(settings)
+    Config.retroMode = bool(settings.get('retroMode', False))
     # rawData / qaqcEnabled are Query-window flags (Quick Look + last query),
     # not Options globals. Do not reload them from user.config.
     theme = str(settings.get('colorTheme') or 'system').strip().lower()
@@ -2459,8 +2571,7 @@ def reloadGlobals():
             f"Globals reloaded from user.config, "
             f"periodOffset={Config.periodOffset}, "
             f"hourTimestampMethod={settings.get('hourTimestampMethod')}, "
-            f"sessionRetroMode={Config.retroMode} "
-            f"(file retroMode={settings.get('retroMode')} applies on next start)",
+            f"retroMode={Config.retroMode}",
         )
 
 def defaultConfigDir():

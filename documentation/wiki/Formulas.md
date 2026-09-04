@@ -2,9 +2,13 @@
 
 Internal **Data Query** cells can hold Excel-style formulas. Type `=` then an expression. The cell **shows the result**; upload / graph / CSV use that number. Double-click (or F2) to see and edit the formula.
 
-Public Query tables stay read-only (no formulas). **Delta** columns stay locked. On **Overlay** columns the formula writes the **primary** value (the number you see), not the secondary series. Blank columns inserted from the header menu are normal formula cells; they stay on **Refresh** and re-evaluate.
+Public Query **queried** cells stay read-only. **Custom** columns (Insert column left/right) are editable on public and internal tables, including formulas. Filling a formula down a custom column is not flagged as a database edit. **Delta** columns stay locked. On **Overlay** columns the formula writes the **primary** value (the number you see), not the secondary series. Putting a formula on a queried cell clears QAQC/overlay paint; **Ctrl+Z** restores it.
 
-**Ctrl+Z** / **Ctrl+Y** undo and redo table edits (no extra menu). SQL Query Builder uses the same shortcuts.
+**Ctrl+Z** / **Ctrl+Y** undo and redo table edits, including cell colors. SQL Query Builder uses the same shortcuts.
+
+**Tab** completes a function name (`=RO` → `ROUND(`). A tooltip shows the signature while the `(` is open. **Esc** cancels the in-cell editor and leaves the cell unchanged.
+
+While the editor starts with `=`, clicking another cell inserts its A1 name. That cell gets a colored outline and the matching token in the formula uses the same color.
 
 ## Cell references
 

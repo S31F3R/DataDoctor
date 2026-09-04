@@ -370,14 +370,18 @@ def primaryMeta(meta):
 
 
 def columnIsLocked(mainWindow, col, meta=None):
-    """Public queries lock all cells; delta columns always locked from edit."""
-    if mainWindow is not None and isPublicQuery(mainWindow):
-        return True
+    """Delta columns always locked. Public locks queried cells; custom stay editable."""
     if meta is None and mainWindow is not None:
         metas = getattr(mainWindow, 'columnMetadata', None) or []
         meta = metas[col] if col < len(metas) else {}
     colType = (meta.get('type') or 'normal') if isinstance(meta, dict) else 'normal'
-    return colType == 'delta'
+    if colType == 'custom':
+        return False
+    if colType == 'delta':
+        return True
+    if mainWindow is not None and isPublicQuery(mainWindow):
+        return True
+    return False
 
 
 def applyEditability(table, mainWindow=None):
@@ -393,7 +397,9 @@ def applyEditability(table, mainWindow=None):
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
 
     isPublic = isPublicQuery(mainWindow) if mainWindow is not None else False
-    if isPublic:
+    metas = getattr(mainWindow, 'columnMetadata', None) or [] if mainWindow is not None else []
+    hasCustom = any((m or {}).get('type') == 'custom' for m in metas)
+    if isPublic and not hasCustom:
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     else:
         table.setEditTriggers(
@@ -402,7 +408,6 @@ def applyEditability(table, mainWindow=None):
             | QAbstractItemView.EditTrigger.AnyKeyPressed
         )
 
-    metas = getattr(mainWindow, 'columnMetadata', None) or [] if mainWindow is not None else []
     table.blockSignals(True)
     try:
         for c in range(table.columnCount()):
@@ -572,6 +577,12 @@ def onItemChanged(mainWindow, item):
     if table is None or item.tableWidget() is not table:
         return
 
+    col = item.column()
+    metas = getattr(mainWindow, 'columnMetadata', None) or []
+    meta = metas[col] if col < len(metas) else {}
+    if (meta or {}).get('type') == 'custom':
+        return
+
     user, edit = getEditState(item)
     if not edit:
         # Late-created item: seed baseline from current (no prior snapshot)
@@ -622,8 +633,6 @@ def clearSelectedCells(mainWindow):
     Returns True if the key was handled (at least one editable cell in selection).
     """
     if mainWindow is None:
-        return False
-    if isPublicQuery(mainWindow):
         return False
     table = mainWindow.mainTable
     if table is None or table.rowCount() == 0:
@@ -736,12 +745,10 @@ def pasteClipboardToSelection(mainWindow):
     Paste TSV/CSV clipboard into the table starting at the top-left of the
     selection (or current cell). Each changed cell goes through setText so
     itemChanged / upload tracking marks them as edits.
-    Public queries and locked (delta) columns are skipped.
+    Locked (delta / public queried) columns are skipped; public custom cols paste.
     Returns True if paste was attempted with clipboard data.
     """
     if mainWindow is None:
-        return False
-    if isPublicQuery(mainWindow):
         return False
     table = mainWindow.mainTable
     if table is None or table.rowCount() == 0:

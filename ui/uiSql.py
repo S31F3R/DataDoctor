@@ -291,18 +291,69 @@ class SnippetPaneHandle(QSplitterHandle):
                 dot.setAlpha(150)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(dot)
-        cx = self.width() / 2.0
-        cy = self.height() / 2.0
-        radius = 1.25
-        gap = 5.0
+        _paintDottedGrabber(painter, self)
+        painter.end()
+
+
+def _paintDottedGrabber(painter, handle):
+    """Five dots along the handle's long axis (green in retro)."""
+    cx = handle.width() / 2.0
+    cy = handle.height() / 2.0
+    radius = 1.25
+    gap = 5.0
+    # Horizontal splitter → vertical handle (dots stacked). Vertical splitter → row.
+    if handle.orientation() == Qt.Orientation.Horizontal:
         for i in range(-2, 3):
             painter.drawEllipse(QPointF(cx, cy + i * gap), radius, radius)
-        painter.end()
+    else:
+        for i in range(-2, 3):
+            painter.drawEllipse(QPointF(cx + i * gap, cy), radius, radius)
 
 
 class SnippetPaneSplitter(QSplitter):
     def createHandle(self):
         return SnippetPaneHandle(self.orientation(), self)
+
+
+class QueryResultHandle(QSplitterHandle):
+    """Same dotted grabber as the snippet pane, for query / result split."""
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pal = self.palette()
+        sp = self.splitter()
+        wb = getattr(sp, "_sqlWorkbench", None) if sp is not None else None
+        ref = None
+        if wb is not None:
+            wt = getattr(wb, "worksheetTabs", None)
+            if wt is not None:
+                ref = wt.tabBar()
+        if ref is not None:
+            pal = ref.palette()
+        bg = pal.color(QPalette.ColorRole.Button)
+        window = pal.color(QPalette.ColorRole.Window)
+        if bg.lightness() <= window.lightness():
+            midlight = pal.color(QPalette.ColorRole.Midlight)
+            if midlight.lightness() > bg.lightness():
+                bg = midlight
+        painter.fillRect(self.rect(), bg)
+        if Config.retroMode:
+            dot = QColor("#00FF00")
+        else:
+            dot = pal.color(QPalette.ColorRole.Mid)
+            if abs(dot.lightness() - bg.lightness()) < 35:
+                dot = pal.color(QPalette.ColorRole.WindowText)
+                dot.setAlpha(150)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(dot)
+        _paintDottedGrabber(painter, self)
+        painter.end()
+
+
+class QueryResultSplitter(QSplitter):
+    def createHandle(self):
+        return QueryResultHandle(self.orientation(), self)
 
 
 class _CategoryDropList(QListWidget):
@@ -685,8 +736,10 @@ class SqlWorkbench:
         topLayout.addWidget(comboWrap)
         topLayout.addStretch()
 
-        sqlSplitter = QSplitter(Qt.Orientation.Vertical, sqlTab)
+        sqlSplitter = QueryResultSplitter(Qt.Orientation.Vertical, sqlTab)
         sqlSplitter.setObjectName("sqlSplitter")
+        sqlSplitter._sqlWorkbench = self
+        sqlSplitter.setHandleWidth(SNIPPET_HANDLE_PX)
         sqlSplitter.addWidget(self.worksheetTabs)
         sqlSplitter.addWidget(self.resultStack)
         sqlSplitter.setSizes([231, 291])

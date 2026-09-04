@@ -978,55 +978,10 @@ class uiOptions(QDialog):
             json.dump(config, configFile, indent=2)
         if Config.debug:
             Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}".format(newRetro))
-        # Reload non-visual globals only. Config.retroMode stays at the session
-        # value for the whole process — fonts/layouts apply only at next start.
-        sessionRetro = bool(Config.retroMode)
         Utils.reloadGlobals()
-        Config.retroMode = sessionRetro
-        Utils.applyColorTheme(colorTheme)
-
-        if newRetro != previousRetro:
-            # Never partially apply retro mid-session (Query showEvent, table
-            # metrics, button ABS layouts all read Config.retroMode live).
-            # Windows auto-restart has been unreliable — always ask for manual
-            # restart. Linux may still offer auto-restart.
-            import sys
-            if sys.platform == 'win32':
-                QMessageBox.information(
-                    self,
-                    "Restart Required",
-                    "Retro mode setting was saved.\n\n"
-                    "Please close and reopen DataDoctor for the change to take effect.\n"
-                    "Nothing will look different until you restart.",
-                )
-            else:
-                reply = QMessageBox.question(
-                    self, "Retro Mode Change",
-                    "Restart DataDoctor for the retro mode change to take effect?\n"
-                    "OK to restart now, Cancel to keep the previous setting on disk.",
-                    QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
-                )
-                if reply == QMessageBox.StandardButton.Ok:
-                    restarted = Utils.restartApplication()
-                    if not restarted:
-                        Config.retroMode = sessionRetro
-                        QMessageBox.warning(
-                            self,
-                            "Restart Failed",
-                            "Could not restart DataDoctor automatically.\n\n"
-                            "Please close and reopen the program for retro mode to apply.\n"
-                            "Your retro mode setting was saved.",
-                        )
-                else:
-                    # Revert file only; session visuals never left sessionRetro
-                    self.chkbRetroMode.setChecked(previousRetro)
-                    config['retroMode'] = previousRetro
-                    with open(configPath, 'w', encoding='utf-8') as configFile:
-                        json.dump(config, configFile, indent=2)
-                    Utils.reloadGlobals()
-                    Config.retroMode = sessionRetro
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", "Reverted retro mode to {}".format(previousRetro))
+        Utils.applyLiveAppearance()
+        if Config.debug and newRetro != previousRetro:
+            Logic.logMessage("DEBUG", f"Retro mode applied live: {previousRetro} → {newRetro}")
 
         credentials = [
             ("aqServer", self.qleAQServer.text()),

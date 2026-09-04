@@ -277,7 +277,7 @@ class uiAbout(QDialog):
         pad = max(24, int(round(50 * (pt / float(max(1, self._retroPt))))))
         html = (
             f'<html><body style="color: white; font-family: \'{fam}\'; '
-            f'font-size: {pt}pt; padding-left: {pad}px; line-height: 2.2;">'
+            f'font-size: {pt}pt; padding-left: {pad}px; line-height: 1.25;">'
         )
         for label, content in getattr(self, "_aboutInfo", []):
             if str(content).startswith("http://") or str(content).startswith("https://"):

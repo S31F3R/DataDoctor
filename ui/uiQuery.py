@@ -368,6 +368,11 @@ class uiQuery(QMainWindow):
                     if Config.debug:
                         Logic.logMessage("DEBUG", "btnQueryPressed: Canceled due to pending edits")
                     return
+                from core import TableOps
+                if not TableOps.confirmHeaderRenames(self, "run a new query"):
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", "btnQueryPressed: Canceled due to header renames")
+                    return
 
                 self.winMain.lastQueryType = self.queryType
                 self.winMain.lastQueryItems = queryItems

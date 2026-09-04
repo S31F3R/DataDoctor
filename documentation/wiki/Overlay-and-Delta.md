@@ -6,10 +6,10 @@ On the Query window, **Overlay Pairs** and **Display Deltas** apply to **pairs**
 
 One table column holds two series. Where both have a value, you see the **primary**. Where only the secondary exists, that value is filled in and **auto-marked for upload** (magenta edit) so a Refresh does not treat it as an untouched blank.
 
-- Overlay cells that differ (after the display limiter) paint <span style="color:#FF0000">red</span>.
-- With **Raw Data** off, both sides use the **primary** rounding spec (a DEC(3) primary formats a DEC(2) secondary as DEC(3)).
-- Header **Swap Primary/Secondary** flips the pair in the table and in the query list. Deltas change sign.
-- Cell **Update from secondary** writes the secondary value into primary for cells that differ. USGS and Aquarius primaries are skipped.
+- Overlay cells that differ (after the display limiter) paint <span style="color:#FF0000">red</span>. Values that match at the **primary** rounding (USBR `642.272` vs Aquarius `642.2724` at DEC(3)) are **not** flagged; Delta is `0`.
+- With **Raw Data** off, Overlay Details shows both values at the primary spec. Individual USBR / Aquarius / USGS details tabs keep each series’ own rounding.
+- Header **Swap Primary/Secondary** flips the pair (full header including the dataID line), the query list, and recalculates Delta from the new primary’s rounding. Column width is resized to fit.
+- Cell **Update from secondary** writes the secondary value into primary for cells that differ (Ctrl+Z / Ctrl+Y undo that). USGS and Aquarius primaries are skipped.
 - Overlay Details shows Primary Value, Secondary Value, and Delta using the **same strings as the limiter** — in raw mode, two DB floats that only differ past display precision show as equal and Delta `0`.
 - Graph overlay legends use each series’ first header line (`commonName-datatype`).
 
@@ -17,7 +17,7 @@ If a saved Quick Look is missing overlay/delta metadata, those checkboxes stay *
 
 ## Delta
 
-An extra column: secondary − primary (or the pair rule used at query time).
+An extra column: primary − secondary (same sign as overlay Delta).
 
 - Never shows signed zero (`-0.00`).
 - Uses the same display limiter as overlay (raw mode will not invent `2e-15`).
@@ -36,6 +36,6 @@ Internal queries only. Public tables are locked.
 - User edits and overlay auto-fills are <span style="background:#C2185B;color:#FFF;padding:1px 8px">magenta</span> until uploaded.
 - HDB writes go through `MODIFY_R_BASE` / `DELETE_R_BASE` (blank cells delete).
 - Aquarius writes are not implemented yet (stub popup).
-- **Undo** re-sorts by timestamp; it does not revert uploads.
+- **Ctrl+Z** / **Ctrl+Y** undo and redo cell edits (including Update from secondary). Toolbar **Reset** re-sorts by timestamp; it does not revert uploads.
 
 See [USBR HDB](USBR-HDB) for BOP/EOP on hourly writes.

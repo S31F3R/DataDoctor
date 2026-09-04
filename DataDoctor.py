@@ -1155,6 +1155,10 @@ class uiMain(QMainWindow):
                 if not Upload.confirmDiscardPendingEdits(self, "refresh the query"):
                     if Config.debug: Logic.logMessage("DEBUG", "btnRefreshPressed: Canceled due to pending edits")
                     return
+                from core import TableOps
+                if not TableOps.confirmHeaderRenames(self, "refresh the query"):
+                    if Config.debug: Logic.logMessage("DEBUG", "btnRefreshPressed: Canceled due to header renames")
+                    return
                 # Retrieve last query-option states from globals, default to False if not set
                 deltaChecked = getattr(Config, 'lastDeltaChecked', False)
                 overlayChecked = getattr(Config, 'lastOverlayChecked', False)
@@ -1233,13 +1237,17 @@ class uiMain(QMainWindow):
                 return
             # columnMetadata may be shorter than table (edge cases) — still allow Graph
             meta = self.columnMetadata[col] if col < len(self.columnMetadata) else None
-            if meta is not None: meta['col'] = col  # Add col for stats computation
+            if meta is not None:
+                meta = dict(meta)
+                meta['col'] = col
             menu = QMenu(self)
 
             if meta is not None:
                 if meta.get('type') == 'normal':
                     action = menu.addAction("Show Query Info")
-                    action.triggered.connect(lambda: self.showHeaderDetails("headerNormal", meta))
+                    action.triggered.connect(
+                        lambda checked=False, m=meta: self.showHeaderDetails("headerNormal", m)
+                    )
                 elif meta.get('type') in ('delta', 'overlay', 'custom'):
                     action = menu.addAction("Show details")
                     qType = {
@@ -1247,7 +1255,9 @@ class uiMain(QMainWindow):
                         'overlay': 'headerOverlay',
                         'custom': 'headerNormal',
                     }.get(meta.get('type'), 'headerNormal')
-                    action.triggered.connect(lambda qt=qType, m=meta: self.showHeaderDetails(qt, m))
+                    action.triggered.connect(
+                        lambda checked=False, qt=qType, m=meta: self.showHeaderDetails(qt, m)
+                    )
             from core import TableOps
             insertLeft = menu.addAction("Insert column left")
             insertLeft.triggered.connect(
@@ -1463,7 +1473,11 @@ class uiMain(QMainWindow):
             copyAction.setShortcut("Ctrl+C")
             copyAction.triggered.connect(lambda: Upload.copySelectionToClipboard(self))
 
-            if isInternal:
+            canPaste = isInternal or (
+                col < len(self.columnMetadata)
+                and (self.columnMetadata[col] or {}).get("type") == "custom"
+            )
+            if canPaste:
                 pasteAction = menu.addAction("Paste")
                 pasteAction.setShortcut("Ctrl+V")
                 pasteAction.triggered.connect(lambda: Upload.pasteClipboardToSelection(self))

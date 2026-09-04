@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 from core import Config, Logic, Upload, Utils
 from core.Formula import FORMULA_KEY, shiftFormulaColumns
 from core.FormulaUi import _itemFormula, applyCellInput, recalculateAll
-from core.QueryUtils import formatDeltaValue, parseDecimalText
+from core.QueryUtils import formatDeltaValue, parseDecimalText, overlayPairDisplays
 from core import TableColors, Undo
 
 
@@ -718,6 +718,7 @@ def renameHeader(mainWindow, col):
         meta["name"] = newCommon
         _setHeaderText(table, col, Utils.formatTableHeaderLabel(newCommon))
         _rememberCustomColumns(mainWindow)
+        Utils.autoSizeTableColumns(table)
         return
     if datatype and Utils.includeDataTypeInLabel(db):
         newFirst = f"{newCommon}-{datatype}"
@@ -737,6 +738,7 @@ def renameHeader(mainWindow, col):
             "col": col,
             "type": meta.get("type"),
         }
+    Utils.autoSizeTableColumns(table)
     if Config.debug:
         Logic.logMessage("DEBUG", f"TableOps.renameHeader col={col} → {newCommon!r}")
 
@@ -799,42 +801,67 @@ def _aquariusFieldsFromResponse(response) -> dict:
     return {"datatype": str(param or "")}
 
 
-def promptDictionaryRenames(mainWindow):
-    """After a new query, offer to save renamed commonNames into bunker.db."""
+def _pendingHeaderRenames(mainWindow):
     renames = getattr(mainWindow, "headerRenames", None) or {}
     if not renames:
-        return
-    # Only prompt for dataIDs that are in the current table
+        return {}
     present = set()
     for meta in _metas(mainWindow):
         for did in (meta.get("dataIds") or []):
             present.add(str(did))
-    pending = {k: v for k, v in renames.items() if k in present}
+    if not present:
+        # Before a query the old table may still hold the renamed series
+        return dict(renames)
+    return {k: v for k, v in renames.items() if k in present}
+
+
+def confirmHeaderRenames(parent, actionDescription="run a new query"):
+    """
+    Prompt to save renamed headers *before* a query/refresh (like unsaved edits).
+    Save writes Data Dictionary and clears the in-memory map. Don't save drops
+    the labels so Refresh cannot keep an unsaved name. Cancel aborts.
+    Returns True if it is safe to proceed.
+    """
+    mainWindow = parent
+    if hasattr(parent, "winMain") and parent.winMain is not None:
+        mainWindow = parent.winMain
+    pending = _pendingHeaderRenames(mainWindow)
     if not pending:
-        return
+        return True
     names = ", ".join(sorted({v.get("commonName") or k for k, v in pending.items()}))
-    box = QMessageBox(mainWindow)
+    box = QMessageBox(parent)
     box.setWindowTitle("Headers renamed")
     box.setText(
-        "Headers renamed, save/update Data Dictionary as Common Name?\n\n"
-        f"{names}"
+        "Headers renamed, save/update Data Dictionary as Common Name before "
+        f"you {actionDescription}?\n\n{names}"
     )
     saveBtn = box.addButton("Save / update", QMessageBox.ButtonRole.AcceptRole)
-    box.addButton("Not now", QMessageBox.ButtonRole.RejectRole)
+    skipBtn = box.addButton("Don't save", QMessageBox.ButtonRole.DestructiveRole)
+    box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
     box.exec()
-    if box.clickedButton() is not saveBtn:
-        return
-    for spec in pending.values():
-        _upsertDictionaryCommonName(mainWindow, spec)
-    try:
-        winDd = getattr(mainWindow, "winDataDictionary", None)
-        if winDd is not None and getattr(winDd, "mainTable", None) is not None:
-            Utils.loadDataDictionary(winDd.mainTable)
-    except Exception as e:
-        Logic.logException("promptDictionaryRenames: reload dictionary failed", e)
-    mainWindow.headerRenames = {
-        k: v for k, v in renames.items() if k not in pending
-    }
+    clicked = box.clickedButton()
+    if clicked is saveBtn:
+        for spec in pending.values():
+            _upsertDictionaryCommonName(mainWindow, spec)
+        try:
+            winDd = getattr(mainWindow, "winDataDictionary", None)
+            if winDd is not None and getattr(winDd, "mainTable", None) is not None:
+                Utils.loadDataDictionary(winDd.mainTable)
+        except Exception as e:
+            Logic.logException("confirmHeaderRenames: reload dictionary failed", e)
+        remaining = getattr(mainWindow, "headerRenames", None) or {}
+        mainWindow.headerRenames = {k: v for k, v in remaining.items() if k not in pending}
+        return True
+    if clicked is skipBtn:
+        remaining = getattr(mainWindow, "headerRenames", None) or {}
+        mainWindow.headerRenames = {k: v for k, v in remaining.items() if k not in pending}
+        return True
+    return False
+
+
+def promptDictionaryRenames(mainWindow):
+    """Legacy after-query prompt; prefer confirmHeaderRenames before executeQuery."""
+    confirmHeaderRenames(mainWindow, "continue")
 
 
 def _upsertDictionaryCommonName(mainWindow, spec):
@@ -916,7 +943,19 @@ def swapOverlayPrimarySecondary(mainWindow, col):
     dbs = list(meta.get("dbs") or [])
     queryInfos = list(meta.get("queryInfos") or [])
     lookupId = list(meta.get("lookupId") or []) if isinstance(meta.get("lookupId"), list) else meta.get("lookupId")
-    headers = list(meta.get("headerFirstLines") or [])
+    firstLines = list(meta.get("headerFirstLines") or [])
+    fullLines = list(meta.get("headerFullLines") or [])
+    roundRules = list(meta.get("roundRules") or [])
+    if len(fullLines) < 2:
+        current = _headerText(table, col)
+        pFull = current or (firstLines[0] if firstLines else "")
+        sFirst = firstLines[1] if len(firstLines) > 1 else ""
+        sId = dataIds[1] if len(dataIds) > 1 else ""
+        sFull = sFirst
+        if sId and sId not in sFirst:
+            sFull = f"{sFirst} \n{sId}" if sFirst else sId
+        fullLines = [pFull, sFull]
+        meta["headerFullLines"] = list(fullLines)
     if len(dataIds) < 2 or len(queryInfos) < 2:
         return
     dataIds[0], dataIds[1] = dataIds[1], dataIds[0]
@@ -926,12 +965,27 @@ def swapOverlayPrimarySecondary(mainWindow, col):
     if isinstance(lookupId, list) and len(lookupId) >= 2:
         lookupId[0], lookupId[1] = lookupId[1], lookupId[0]
         meta["lookupId"] = lookupId
-    if len(headers) >= 2:
-        headers[0], headers[1] = headers[1], headers[0]
-        meta["headerFirstLines"] = headers
+    if len(firstLines) >= 2:
+        firstLines[0], firstLines[1] = firstLines[1], firstLines[0]
+        meta["headerFirstLines"] = firstLines
+    if len(fullLines) >= 2:
+        fullLines[0], fullLines[1] = fullLines[1], fullLines[0]
+        meta["headerFullLines"] = fullLines
+    if len(roundRules) >= 2:
+        roundRules[0], roundRules[1] = roundRules[1], roundRules[0]
+        meta["roundRules"] = roundRules
     meta["dataIds"] = dataIds
     meta["dbs"] = dbs
     meta["queryInfos"] = queryInfos
+
+    pRule = roundRules[0] if roundRules else None
+    rules = getattr(table, "columnRoundingRules", None) or []
+    if not pRule and col < len(rules):
+        pRule = rules[col]
+    if isinstance(rules, list) and col < len(rules) and pRule is not None:
+        rules[col] = pRule
+        if col + 1 < len(rules) and isDeltaColumn(mainWindow, col + 1):
+            rules[col + 1] = pRule
 
     table.blockSignals(True)
     try:
@@ -942,26 +996,23 @@ def swapOverlayPrimarySecondary(mainWindow, col):
             user = Upload.getUserDict(item)
             if not user.get("overlay"):
                 continue
-            p, s = user.get("primaryVal", ""), user.get("secondaryVal", "")
-            user["primaryVal"], user["secondaryVal"] = s, p
+            pNative = user.get("primaryNative", user.get("primaryVal", ""))
+            sNative = user.get("secondaryNative", user.get("secondaryVal", ""))
+            user["primaryNative"], user["secondaryNative"] = sNative, pNative
             user["dataId1"], user["dataId2"] = user.get("dataId2"), user.get("dataId1")
             user["db1"], user["db2"] = user.get("db2"), user.get("db1")
-            pDec = parseDecimalText(s)
-            sDec = parseDecimalText(p)
-            dRule = None
-            rules = getattr(table, "columnRoundingRules", None) or []
-            if col < len(rules):
-                dRule = rules[col]
-            if pDec is not None and sDec is not None:
-                user["delta"] = formatDeltaValue(pDec - sDec, dRule)
-            else:
-                user["delta"] = ""
+            pDisp, sDisp, dStr = overlayPairDisplays(
+                user.get("primaryNative", ""),
+                user.get("secondaryNative", ""),
+                pRule,
+            )
+            user["primaryVal"] = pDisp
+            user["secondaryVal"] = sDisp
+            user["delta"] = dStr
             Upload.setUserDict(item, user)
-            # Display follows new primary (old secondary)
-            hasP = bool(str(user.get("primaryVal") or "").strip())
-            hasS = bool(str(user.get("secondaryVal") or "").strip())
-            item.setText(user["primaryVal"] if hasP else (user["secondaryVal"] if hasS else ""))
-        # Matching delta column: negate values / swap colors
+            hasP = bool(str(pDisp or "").strip())
+            hasS = bool(str(sDisp or "").strip())
+            item.setText(pDisp if hasP else (sDisp if hasS else ""))
         if col + 1 < table.columnCount() and isDeltaColumn(mainWindow, col + 1):
             dCol = col + 1
             dMeta = _meta(mainWindow, dCol)
@@ -970,21 +1021,20 @@ def swapOverlayPrimarySecondary(mainWindow, col):
             dMeta["queryInfos"] = list(queryInfos)
             for r in range(table.rowCount()):
                 dItem = table.item(r, dCol)
-                if dItem is None or not dItem.text().strip():
+                src = table.item(r, col)
+                user = Upload.getUserDict(src) if src is not None else {}
+                dStr = str(user.get("delta") or "")
+                if dItem is None:
                     continue
-                try:
-                    val = float(dItem.text())
-                except ValueError:
-                    continue
-                newVal = -val
-                dItem.setText(formatDeltaValue(parseDecimalText(str(newVal)), None) or ("0" if newVal == 0 else str(newVal)))
-                if newVal > 0:
-                    TableColors.applyToItem(dItem, "deltaPositive")
-                elif newVal < 0:
-                    TableColors.applyToItem(dItem, "deltaNegative")
-                else:
+                dItem.setText(dStr)
+                dDec = parseDecimalText(dStr)
+                if dDec is None or dDec == 0:
                     dItem.setForeground(Config.systemTextColor)
                     dItem.setBackground(QBrush())
+                elif dDec > 0:
+                    TableColors.applyToItem(dItem, "deltaPositive")
+                else:
+                    TableColors.applyToItem(dItem, "deltaNegative")
     finally:
         table.blockSignals(False)
 
@@ -992,12 +1042,14 @@ def swapOverlayPrimarySecondary(mainWindow, col):
     QueryUtils.applyOverlayColorOverrides(table)
     _rebuildQueryItemsFromTable(mainWindow)
     _syncQueryList(mainWindow)
-    # Swap header to the new primary's first line when we have it
-    if headers:
-        rest = headerRestLines(_headerText(table, col))
-        newFirst = headers[0]
-        newHeader = newFirst if not rest.strip() else f"{newFirst} \n{rest.lstrip()}"
+    newHeader = ""
+    if fullLines:
+        newHeader = fullLines[0]
+    elif firstLines:
+        newHeader = firstLines[0]
+    if newHeader:
         _setHeaderText(table, col, Utils.formatTableHeaderLabel(newHeader))
+    Utils.autoSizeTableColumns(table)
     if Config.debug:
         Logic.logMessage("DEBUG", f"TableOps.swapOverlay col={col} now primary={dataIds[0]}")
 
@@ -1046,8 +1098,43 @@ def updateFromSecondary(mainWindow, cells):
             secondary = str(user.get("secondaryVal") or "")
             oldText = item.text() if item is not None else ""
             oldFormula = _itemFormula(item)
-            applyCellInput(mainWindow, row, col, secondary)
-            Undo.pushCellEdit(mainWindow, row, col, oldText, oldFormula, secondary, None)
+            oldBg, oldFg = Upload.captureItemColors(item)
+            _, oldEdit = Upload.getEditState(item)
+            oldUser = dict(user)
+            applyCellInput(mainWindow, row, col, secondary, skipUndo=True)
+            item = table.item(row, col)
+            if item is None:
+                continue
+            user = Upload.getUserDict(item)
+            user["primaryVal"] = secondary
+            user["primaryNative"] = user.get("secondaryNative", secondary)
+            user["delta"] = formatDeltaValue(
+                parseDecimalText("0") or 0, None
+            ) or "0"
+            # After copy, overlay pair matches at display precision
+            pRule = None
+            rules = getattr(table, "columnRoundingRules", None) or []
+            if col < len(rules):
+                pRule = rules[col]
+            pDisp, sDisp, dStr = overlayPairDisplays(
+                user.get("primaryNative", secondary),
+                user.get("secondaryNative", user.get("secondaryVal", "")),
+                pRule,
+            )
+            user["primaryVal"] = pDisp
+            user["secondaryVal"] = sDisp
+            user["delta"] = dStr
+            Upload.setUserDict(item, user)
+            if item.text() != pDisp:
+                item.setText(pDisp)
+            newBg, newFg = Upload.captureItemColors(item)
+            _, newEdit = Upload.getEditState(item)
+            Undo.pushCellEdit(
+                mainWindow, row, col, oldText, oldFormula, item.text(), None,
+                oldBg=oldBg, oldFg=oldFg, newBg=newBg, newFg=newFg,
+                oldEdit=oldEdit, newEdit=newEdit,
+                oldUser=oldUser, newUser=dict(user),
+            )
             updated += 1
     finally:
         Undo.stackFor(mainWindow).endMacro()
@@ -1074,15 +1161,15 @@ def selectedCells(table):
 
 
 def afterQuery(mainWindow, isRefresh=False):
-    """Re-apply custom columns, header renames, and column-drag after a query."""
+    """Re-apply custom columns and column-drag after a query.
+
+    Header renames are prompted *before* executeQuery (confirmHeaderRenames).
+    Saved names come from the Data Dictionary on rebuild; unsaved names are
+    dropped so Refresh cannot keep a label that was never saved.
+    """
     if isRefresh:
         restoreCustomColumns(mainWindow)
-        reapplyHeaderRenames(mainWindow)
     else:
-        # New query: keep rename mapping (prompt below) but drop custom cols
-        # from the previous table unless the user re-inserts them.
         mainWindow.customColumns = []
-        reapplyHeaderRenames(mainWindow)
-        promptDictionaryRenames(mainWindow)
     enableColumnDrag(mainWindow)
     Undo.stackFor(mainWindow).clear()

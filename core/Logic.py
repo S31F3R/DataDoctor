@@ -553,6 +553,9 @@ def installQtMessageHandler():
         try:
             level = levelMap.get(mode, 'WARN')
             text = message if isinstance(message, str) else str(message)
+            # About / pygame QMediaPlayer teardown is noisy and harmless
+            if "QFFmpeg" in text and "disconnect" in text:
+                return
 
             category = ''
             fileName = ''

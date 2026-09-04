@@ -696,7 +696,6 @@ def migrateLegacyUpdatesFolder(installRoot: Path) -> None:
                         shutil.rmtree(tmp, ignore_errors=True)
                     src.rename(tmp)
                     tmp.rename(dest)
-                    print(f"Renamed {name}/ → {UPDATES_DIR}/")
                 except Exception as e:
                     print(f"WARN: could not rename {name}/ to {UPDATES_DIR}/: {e}", file=sys.stderr)
             continue
@@ -712,7 +711,6 @@ def migrateLegacyUpdatesFolder(installRoot: Path) -> None:
                 pass
         try:
             shutil.rmtree(src)
-            print(f"Removed leftover {name}/ (now {UPDATES_DIR}/)")
         except Exception as e:
             print(f"WARN: could not remove {name}/: {e}", file=sys.stderr)
 

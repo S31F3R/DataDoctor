@@ -130,43 +130,35 @@ def modifyTable(
         # Deltas: use primary series rule (same units as primary)
         dRule = pRule
 
-        # Display-limited strings (raw → formatRawNumber; else DEC/SIG). Overlay
-        # details and delta both use these so matching displayed values are 0.
+        # Native (each series' own buildTable rounding) plus overlay display
+        # strings (both with the primary spec). Matching overlay text → delta 0.
+        pNativeCol = [''] * numRows
+        sNativeCol = [''] * numRows
         pDispCol = [''] * numRows
         sDispCol = [''] * numRows
         for r in range(numRows):
             pText = grid[pIdx][r] if pIdx < len(grid) else ''
             sText = grid[sIdx][r] if sIdx < len(grid) else ''
+            pNativeCol[r] = pText
+            sNativeCol[r] = sText
             pDec = parseDecimalText(pText)
             sDec = parseDecimalText(sText)
-            # Overlay display uses the *primary* rounding spec so a DEC(3)
-            # primary and DEC(2) secondary still compare/format as DEC(3).
-            # Raw Data keeps full fixed-point text (no limiter).
-            overlayRule = pRule
             if pDec is not None:
                 primaryVals[r] = float(pDec)
-                if Config.rawData:
-                    pDispCol[r] = Logic.formatRawNumber(pText)
-                else:
-                    pDispCol[r] = Logic.valuePrecision(pText, rule=overlayRule)
             if sDec is not None:
                 secondaryVals[r] = float(sDec)
-                if Config.rawData:
-                    sDispCol[r] = Logic.formatRawNumber(sText)
-                else:
-                    sDispCol[r] = Logic.valuePrecision(sText, rule=overlayRule)
-            # Delta off the limiter, not the raw database strings. Matching
-            # display text → exact 0 (never 1e-15 / 0.000000000002).
-            if pDec is not None and sDec is not None:
-                if pDispCol[r] == sDispCol[r]:
-                    deltaDecimals[r] = Decimal(0)
-                else:
-                    pDispDec = parseDecimalText(pDispCol[r])
-                    sDispDec = parseDecimalText(sDispCol[r])
-                    if pDispDec is not None and sDispDec is not None:
-                        deltaDecimals[r] = pDispDec - sDispDec
-                    else:
-                        deltaDecimals[r] = pDec - sDec
+            if overlayChecked:
+                pDisp, sDisp, dStr = overlayPairDisplays(pText, sText, pRule)
+                pDispCol[r] = pDisp if pDec is not None else ''
+                sDispCol[r] = sDisp if sDec is not None else ''
+                if pDec is not None and sDec is not None:
+                    dDec = parseDecimalText(dStr)
+                    deltaDecimals[r] = dDec if dDec is not None else Decimal(0)
+            else:
+                pDispCol[r] = pText
+                sDispCol[r] = sText
+                if pDec is not None and sDec is not None:
+                    deltaDecimals[r] = pDec - sDec
 
         if overlayChecked:
             # Merge secondary into primary column offline
@@ -175,13 +167,14 @@ def modifyTable(
             for r in range(numRows):
                 hasP = np.isfinite(primaryVals[r])
                 hasS = np.isfinite(secondaryVals[r])
-                # Same limiter strings used for the delta check (not a re-float)
                 pStr = pDispCol[r] if hasP else ''
                 sStr = sDispCol[r] if hasS else ''
                 dStr = formatDeltaValue(deltaDecimals[r], dRule)
                 roles[r] = {
                     'primaryVal': pStr,
                     'secondaryVal': sStr,
+                    'primaryNative': pNativeCol[r],
+                    'secondaryNative': sNativeCol[r],
                     'delta': dStr,
                     'dataId1': dataIds[pairIndex * 2],
                     'dataId2': dataIds[pairIndex * 2 + 1],
@@ -206,8 +199,10 @@ def modifyTable(
                         return line
                 return str(h).strip()
 
-            pHeaderFirst = _firstHeaderLine(headers[pIdx] if pIdx < len(headers) else '')
-            sHeaderFirst = _firstHeaderLine(headers[sIdx] if sIdx < len(headers) else '')
+            pHeaderFull = headers[pIdx] if pIdx < len(headers) else ''
+            sHeaderFull = headers[sIdx] if sIdx < len(headers) else ''
+            pHeaderFirst = _firstHeaderLine(pHeaderFull)
+            sHeaderFirst = _firstHeaderLine(sHeaderFull)
 
             primaryDb = databases[pairIndex * 2]
             primaryId = dataIds[pairIndex * 2]
@@ -224,8 +219,9 @@ def modifyTable(
                 'queryInfos': [queryInfos[pairIndex * 2], queryInfos[pairIndex * 2 + 1]],
                 'pairIndex': pairIndex,
                 'lookupId': lookupId,
-                # First line of each pair's original header for graph legends
                 'headerFirstLines': [pHeaderFirst, sHeaderFirst],
+                'headerFullLines': [pHeaderFull, sHeaderFull],
+                'roundRules': [pRule, sRule],
             })
         else:
             # Keep both columns as normal (already formatted in buildTable; keep text)
@@ -616,6 +612,66 @@ def parseDecimalText(text):
         return Decimal(s)
     except (InvalidOperation, ValueError, ArithmeticError):
         return None
+
+
+def formatSeriesDisplay(text, rule=None):
+    """
+    Format a series value with an explicit rounding spec.
+
+    Uses applyRoundingSpec on the original string (Decimal path) so a DEC(3)
+    primary can pull an Aquarius 642.2724 down to 642.272. valuePrecision
+    goes through float first and is only the fallback.
+    """
+    if text is None:
+        return ''
+    s = str(text).strip()
+    if not s:
+        return ''
+    if Config.rawData:
+        return Logic.formatRawNumber(s)
+    try:
+        out = Logic.applyRoundingSpec(s, rule)
+        if out is not None and str(out).strip() != '':
+            return str(out)
+    except Exception:
+        pass
+    formatted = Logic.valuePrecision(s, rule=rule)
+    return formatted if formatted is not None else s
+
+
+def overlayPairDisplays(pNative, sNative, pRule):
+    """
+    Overlay display strings and delta, both rounded with the *primary* spec.
+
+    Matching displayed values (or equal after quantize to the primary's
+    decimal places) → delta 0 so a 0.0004 residual is not flagged red.
+    Native series strings stay on the cell as primaryNative/secondaryNative
+    for swap + individual details.
+    """
+    pDisp = formatSeriesDisplay(pNative, pRule)
+    sDisp = formatSeriesDisplay(sNative, pRule)
+    pDec = parseDecimalText(pDisp)
+    sDec = parseDecimalText(sDisp)
+    if pDec is None or sDec is None:
+        return pDisp, sDisp, ''
+    if pDisp == sDisp or pDec == sDec:
+        return pDisp, sDisp, formatDeltaValue(Decimal(0), pRule)
+    # Fallback when the primary rule did not land: match at primary's
+    # displayed decimals (642.272 vs 642.2724 → both 642.272, delta 0).
+    if '.' in str(pDisp):
+        n = len(str(pDisp).split('.', 1)[1])
+        try:
+            quant = Decimal('1').scaleb(-n)
+            pQ = pDec.quantize(quant)
+            sQ = sDec.quantize(quant)
+            if pQ == sQ:
+                sDisp = format(sQ, f'.{n}f')
+                if sDisp.startswith('-') and sQ == 0:
+                    sDisp = format(Decimal(0), f'.{n}f')
+                return pDisp, sDisp, formatDeltaValue(Decimal(0), pRule)
+        except Exception:
+            pass
+    return pDisp, sDisp, formatDeltaValue(pDec - sDec, pRule)
 
 
 def formatDeltaValue(deltaDec, rule=None):

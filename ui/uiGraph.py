@@ -389,24 +389,14 @@ def headerLabel(table, col):
 
 
 def isSystemDarkMode():
-    """True when the active Qt palette is dark (Window background is dark)."""
+    """True when the active Qt palette is dark (follows Options Light/Dark)."""
     try:
         app = QApplication.instance()
         if app is None:
             return False
-        # Prefer styleHints when available (Qt 6.5+)
-        try:
-            hints = app.styleHints()
-            scheme = hints.colorScheme()
-            from PyQt6.QtCore import Qt as _Qt
-            if scheme == _Qt.ColorScheme.Dark:
-                return True
-            if scheme == _Qt.ColorScheme.Light:
-                return False
-        except Exception:
-            pass
+        # Palette only — styleHints.colorScheme can still report the OS while
+        # applyColorTheme has already installed a forced light/dark palette.
         bg = app.palette().color(QPalette.ColorRole.Window)
-        # Relative luminance
         r, g, b = bg.redF(), bg.greenF(), bg.blueF()
         lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
         return lum < 0.45
@@ -812,9 +802,68 @@ class GraphPanel(QWidget):
                     spine.set_color(spineColor)
             return 'dark'
 
-        fig.patch.set_facecolor('#ffffff')
-        ax.set_facecolor('#ffffff')
+        figBg = '#ffffff'
+        axBg = '#ffffff'
+        textColor = '#222222'
+        spineColor = '#888888'
+        fig.patch.set_facecolor(figBg)
+        ax.set_facecolor(axBg)
+        ax.tick_params(colors=textColor)
+        ax.xaxis.label.set_color(textColor)
+        ax.yaxis.label.set_color(textColor)
+        for spine in ax.spines.values():
+            spine.set_color(spineColor)
+        ax.title.set_color(textColor)
+        for twin in twins:
+            twin.set_facecolor(axBg)
+            twin.tick_params(colors=textColor)
+            twin.yaxis.label.set_color(textColor)
+            for spine in twin.spines.values():
+                spine.set_color(spineColor)
         return 'light'
+
+    def reapplyTheme(self):
+        """Restyle an already-drawn graph after light/dark/retro change."""
+        if self.figure is None or self._ax is None:
+            self._applyToolbarTheme()
+            return
+        extra = list(self._yAxes[1:]) if self._yAxes else []
+        theme = self._applyTheme(self.figure, self._ax, *extra)
+        self._theme = theme
+        colorCycle = self._colorCycle(theme)
+        for i, entry in enumerate(self._lineData):
+            color = colorCycle[i % len(colorCycle)]
+            line = entry.get('line')
+            if line is not None:
+                try:
+                    line.set_color(color)
+                except Exception:
+                    pass
+            entry['color'] = color
+        try:
+            self._buildInteractiveLegend(theme)
+        except Exception:
+            pass
+        self._applyToolbarTheme()
+        if self.canvas is not None:
+            try:
+                self.canvas.draw_idle()
+            except Exception:
+                pass
+
+    def _applyToolbarTheme(self):
+        if self.toolbar is None:
+            return
+        if Config.retroMode:
+            self.toolbar.setStyleSheet(
+                "QToolBar { background: #1a1a1a; border: none; spacing: 2px; }"
+                "QToolButton { background: #1a1a1a; color: #00FF00;"
+                "  border: 1px solid #00aa00; border-radius: 2px; padding: 2px; }"
+                "QToolButton:hover { background: #003300; }"
+                "QToolButton:checked, QToolButton:pressed { background: #004400; }"
+            )
+        else:
+            self.toolbar.setStyleSheet("")
 
     def _colorCycle(self, theme):
         if theme == 'retro':
@@ -1422,6 +1471,7 @@ class GraphPanel(QWidget):
         self.toolbar = ToolbarCls(self.canvas, self)
         self.toolbar.setObjectName('graphToolbar')
         self._applyToolbarTooltips()
+        self._applyToolbarTheme()
 
         self._layout.addWidget(self.toolbar)
         self._layout.addWidget(self.canvas, stretch=1)

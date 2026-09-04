@@ -21,24 +21,61 @@ class _Macro:
 
 
 class CellEditCmd:
-    def __init__(self, row, col, oldText, oldFormula, newText, newFormula):
+    def __init__(
+        self, row, col, oldText, oldFormula, newText, newFormula,
+        oldBg=None, oldFg=None, newBg=None, newFg=None,
+        oldEdit=None, newEdit=None,
+        oldUser=None, newUser=None,
+    ):
         self.row = row
         self.col = col
         self.oldText = oldText
         self.oldFormula = oldFormula
         self.newText = newText
         self.newFormula = newFormula
+        self.oldBg = oldBg
+        self.oldFg = oldFg
+        self.newBg = newBg
+        self.newFg = newFg
+        self.oldEdit = dict(oldEdit) if isinstance(oldEdit, dict) else None
+        self.newEdit = dict(newEdit) if isinstance(newEdit, dict) else None
+        self.oldUser = dict(oldUser) if isinstance(oldUser, dict) else None
+        self.newUser = dict(newUser) if isinstance(newUser, dict) else None
 
-    def _apply(self, mainWindow, text, formula):
-        from core import FormulaUi
-        FormulaUi.applyCellInput(mainWindow, self.row, self.col, formula or text, asFill=True)
-        FormulaUi.recalculateAll(mainWindow)
+    def _apply(self, mainWindow, text, formula, bg, fg, editState, userSnap):
+        from core import FormulaUi, Upload
+        prev = getattr(mainWindow, "uploadTrackingBlocked", False)
+        mainWindow.uploadTrackingBlocked = True
+        try:
+            FormulaUi.applyCellInput(
+                mainWindow, self.row, self.col, formula or text,
+                asFill=True, skipUndo=True,
+            )
+            table = getattr(mainWindow, "mainTable", None)
+            item = table.item(self.row, self.col) if table is not None else None
+            if item is not None:
+                if userSnap is not None:
+                    Upload.setUserDict(item, dict(userSnap))
+                Upload.applyColors(item, bg, fg)
+                if editState is not None:
+                    user = Upload.getUserDict(item)
+                    user[Upload.editKey] = dict(editState)
+                    Upload.setUserDict(item, user)
+            FormulaUi.recalculateAll(mainWindow)
+        finally:
+            mainWindow.uploadTrackingBlocked = prev
 
     def undo(self, mainWindow):
-        self._apply(mainWindow, self.oldText, self.oldFormula)
+        self._apply(
+            mainWindow, self.oldText, self.oldFormula,
+            self.oldBg, self.oldFg, self.oldEdit, self.oldUser,
+        )
 
     def redo(self, mainWindow):
-        self._apply(mainWindow, self.newText, self.newFormula)
+        self._apply(
+            mainWindow, self.newText, self.newFormula,
+            self.newBg, self.newFg, self.newEdit, self.newUser,
+        )
 
 
 class TableUndoStack:
@@ -70,10 +107,22 @@ class TableUndoStack:
             self.undoList.pop(0)
         self.redoList.clear()
 
-    def pushCellEdit(self, row, col, oldText, oldFormula, newText, newFormula):
-        if oldText == newText and (oldFormula or "") == (newFormula or ""):
+    def pushCellEdit(
+        self, row, col, oldText, oldFormula, newText, newFormula,
+        oldBg=None, oldFg=None, newBg=None, newFg=None,
+        oldEdit=None, newEdit=None,
+        oldUser=None, newUser=None,
+    ):
+        sameText = oldText == newText and (oldFormula or "") == (newFormula or "")
+        sameFmt = oldBg == newBg and oldFg == newFg
+        sameUser = oldUser == newUser
+        if sameText and sameFmt and sameUser:
             return
-        self._push(CellEditCmd(row, col, oldText, oldFormula, newText, newFormula))
+        self._push(CellEditCmd(
+            row, col, oldText, oldFormula, newText, newFormula,
+            oldBg, oldFg, newBg, newFg, oldEdit, newEdit,
+            oldUser, newUser,
+        ))
 
     def push(self, cmd):
         self._push(cmd)
@@ -125,5 +174,7 @@ def stackFor(mainWindow) -> TableUndoStack:
     return stack
 
 
-def pushCellEdit(mainWindow, row, col, oldText, oldFormula, newText, newFormula):
-    stackFor(mainWindow).pushCellEdit(row, col, oldText, oldFormula, newText, newFormula)
+def pushCellEdit(mainWindow, row, col, oldText, oldFormula, newText, newFormula, **kwargs):
+    stackFor(mainWindow).pushCellEdit(
+        row, col, oldText, oldFormula, newText, newFormula, **kwargs
+    )
