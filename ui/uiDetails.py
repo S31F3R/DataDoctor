@@ -609,6 +609,8 @@ class uiDetails(QWidget):
         """Internal method to populate for overlay cell data."""
         if table is None:
             table = self.detailsTable # Fallback to main table
+        if not isinstance(data, dict):
+            data = {}
         
         # UserRole already holds display-limited strings (same limiter as delta).
         # Do not re-float — that hid raw vs overlay mismatches.
@@ -727,6 +729,8 @@ class uiDetails(QWidget):
         """Internal method to populate for AQUARIUS response."""
         if table is None:
             table = self.detailsTable
+        if not isinstance(response, dict):
+            response = {}
         
         # Parse timestamp to datetime for comparisons
         try:
@@ -789,6 +793,8 @@ class uiDetails(QWidget):
         """
         if table is None:
             table = self.detailsTable
+        if isinstance(response, str):
+            response = []
 
         # MRID (model) path: values exist in the table; HDB model tables have no R-style meta
         if isinstance(response, dict) and (response.get('kind') or '').lower() == 'mrid':
@@ -893,6 +899,8 @@ class uiDetails(QWidget):
         """
         if table is None:
             table = self.detailsTable
+        if not isinstance(response, dict):
+            response = {}
 
         # Series-level tags (OGC time-series-metadata + monitoring-locations)
         seriesTags = [

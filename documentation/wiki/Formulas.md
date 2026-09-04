@@ -6,7 +6,7 @@ Public Query **queried** cells stay read-only. **Custom** columns (Insert column
 
 **Ctrl+Z** / **Ctrl+Y** undo and redo table edits, including cell colors. SQL Query Builder uses the same shortcuts.
 
-**Tab** completes a function name (`=RO` → `ROUND(`). A tooltip shows the signature while the `(` is open. **Esc** cancels the in-cell editor and leaves the cell unchanged.
+Type `=` then a letter to open an Excel-style list of matching functions (narrows as you type). Arrow keys move in the list; **Tab** or **Enter** inserts `NAME(`. A tooltip shows the signature while the `(` is open. **Enter** finishes the cell (does not insert a newline). **Esc** hides the list, or cancels the editor if the list is closed.
 
 While the editor starts with `=`, clicking another cell inserts its A1 name. That cell gets a colored outline and the matching token in the formula uses the same color.
 

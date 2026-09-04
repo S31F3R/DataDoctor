@@ -779,6 +779,7 @@ class GraphPanel(QWidget):
                 twin.yaxis.label.set_color(c)
                 for spine in twin.spines.values():
                     spine.set_color(c)
+            self._applyChartFonts(ax, twins)
             return 'retro'
 
         if dark:
@@ -800,6 +801,7 @@ class GraphPanel(QWidget):
                 twin.yaxis.label.set_color(textColor)
                 for spine in twin.spines.values():
                     spine.set_color(spineColor)
+            self._applyChartFonts(ax, twins)
             return 'dark'
 
         figBg = '#ffffff'
@@ -820,7 +822,39 @@ class GraphPanel(QWidget):
             twin.yaxis.label.set_color(textColor)
             for spine in twin.spines.values():
                 spine.set_color(spineColor)
+        self._applyChartFonts(ax, twins)
         return 'light'
+
+    def _chartFontProperties(self):
+        """Silkscreen in retro so legend/ticks match the UI (tooltips already do)."""
+        if not Config.retroMode:
+            return None
+        try:
+            from matplotlib import font_manager
+            path = Logic.resourcePath('ui/fonts/Silkscreen-Regular.ttf')
+            if not os.path.isfile(path):
+                return None
+            font_manager.fontManager.addfont(path)
+            return font_manager.FontProperties(fname=path, size=8)
+        except Exception:
+            return None
+
+    def _applyChartFonts(self, ax, twins=None):
+        prop = self._chartFontProperties()
+        if prop is None or ax is None:
+            return
+        try:
+            ax.title.set_fontproperties(prop)
+            ax.xaxis.label.set_fontproperties(prop)
+            ax.yaxis.label.set_fontproperties(prop)
+            for lab in list(ax.get_xticklabels()) + list(ax.get_yticklabels()):
+                lab.set_fontproperties(prop)
+            for twin in twins or []:
+                twin.yaxis.label.set_fontproperties(prop)
+                for lab in twin.get_yticklabels():
+                    lab.set_fontproperties(prop)
+        except Exception:
+            pass
 
     def reapplyTheme(self):
         """Restyle an already-drawn graph after light/dark/retro change."""
@@ -906,7 +940,11 @@ class GraphPanel(QWidget):
             self._legend = None
             return
 
-        legend = self._ax.legend(lines, labels, loc='best', fontsize=8)
+        prop = self._chartFontProperties()
+        if prop is not None:
+            legend = self._ax.legend(lines, labels, loc='best', prop=prop)
+        else:
+            legend = self._ax.legend(lines, labels, loc='best', fontsize=8)
 
         if theme == 'dark':
             try:

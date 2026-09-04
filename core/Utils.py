@@ -13,8 +13,9 @@ from pathlib import Path
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
-    QListWidget, QTreeView, QPushButton, QCheckBox, QRadioButton, QComboBox,
-    QApplication, QHeaderView, QStyleFactory,
+    QListWidget, QListWidgetItem, QTreeView, QPushButton, QCheckBox,
+    QRadioButton, QComboBox, QLabel, QTabBar, QTabWidget, QApplication,
+    QHeaderView, QStyleFactory,
 )
 from PyQt6.QtGui import (
     QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon,
@@ -95,9 +96,10 @@ retroUseDefaultSpacing = True
 
 # Extra retro geometries applied even when retroUseDefaultSpacing is True
 # (info buttons except Data ID, main-table Refresh/Undo/Upload, query width).
-# ~4 Silkscreen characters so USGS-NWIS fits the query list without a slider.
+# Windows: ~2 Silkscreen characters so USGS-NWIS fits. Linux: original width.
 QUERY_WINDOW_BASE = (960, 668)
-QUERY_RETRO_EXTRA_W = 48
+QUERY_RETRO_EXTRA_W_WIN = 24
+QUERY_RETRO_EXTRA_W_LINUX = 0
 retroAlwaysLayouts = {
     'btnRefresh': (38, 8, 32, 32),
     'btnUndo': (74, 8, 32, 32),
@@ -162,7 +164,7 @@ queryLargeButtonControls = frozenset({
     'btnQuery',
 })
 
-# Windows + retro only: one point smaller (Press Start is roomier on Win metrics)
+# Retro: Load/Save/Clear/Delete Quick Look −1pt (Silkscreen clips at button role).
 winRetroSmallerControls = frozenset({
     'btnLoadQuickLook',
     'btnClearQuery',
@@ -639,7 +641,12 @@ def tableDefaultRowHeight(font=None, metrics=None):
         # Press Start metrics.height() is tiny (~11 at 8pt); force real row height
         # Seifer: -2 from prior (was h+18 / min 32)
         return max(h + 16, 30)
-    # Non-retro Noto Sans (also used as retro baseline when retroUseDefaultSpacing)
+    # Silkscreen already has a tall em-box; the Noto +10 pad looks like
+    # extra space above/below the timestamp in retro.
+    if Config.retroMode:
+        if sys.platform == 'win32':
+            return max(h + 2, 20)
+        return max(h + 2, 20)
     if sys.platform == 'win32':
         return max(h + 4, 20)
     return max(h + 10, 22)
@@ -913,7 +920,9 @@ def applyRetroQueryWindow(win):
     """Widen query Data ID / list / add / search ~4 characters in retro."""
     if win is None:
         return
-    extra = QUERY_RETRO_EXTRA_W if Config.retroMode else 0
+    extra = 0
+    if Config.retroMode:
+        extra = QUERY_RETRO_EXTRA_W_WIN if sys.platform == 'win32' else QUERY_RETRO_EXTRA_W_LINUX
     w = QUERY_WINDOW_BASE[0] + extra
     h = QUERY_WINDOW_BASE[1]
     try:
@@ -1182,16 +1191,18 @@ def applyRoleFonts(app=None, root=None):
     tableFont = makeFontForRole('table')
     listFont = makeFontForRole('list')
     codeFont = makeFontForRole('code')
+    uiFont = makeFontForRole('ui')
+    comboFont = uiFont
     retroSmallFont = None
-    if Config.retroMode:
+    # Extra-small named radios were for Press Start density. With default
+    # spacing + Silkscreen they jump size on Options Save — skip them.
+    if Config.retroMode and not retroUseDefaultSpacing:
         retroSmallFont = makeFontForRole(
             'ui',
             pointSize=max(5, int(retroSmallFontPt) + int(retroFontSizeAdjust)),
         )
-    # Windows retro: named Query controls one point smaller
-    winRetroSmaller = (
-        Config.retroMode and sys.platform == 'win32'
-    )
+    # Retro: named Query controls one point smaller (all platforms)
+    winRetroSmaller = bool(Config.retroMode)
     winSmallerButtonFont = None
     winSmallerListFont = None
     if winRetroSmaller:
@@ -1251,8 +1262,37 @@ def applyRoleFonts(app=None, root=None):
             elif isinstance(w, QListWidget):
                 w.setFont(listFont)
                 applyCompactListStyle(w)
+                try:
+                    for i in range(w.count()):
+                        it = w.item(i)
+                        if it is not None:
+                            it.setFont(listFont)
+                except Exception:
+                    pass
             elif isinstance(w, QTreeView):
                 w.setFont(listFont)
+            elif isinstance(w, QTabBar):
+                w.setFont(uiFont)
+            elif isinstance(w, QTabWidget):
+                w.setFont(uiFont)
+                try:
+                    if w.tabBar() is not None:
+                        w.tabBar().setFont(uiFont)
+                except Exception:
+                    pass
+            elif isinstance(w, QComboBox):
+                w.setFont(comboFont)
+                try:
+                    w.view().setFont(comboFont)
+                except Exception:
+                    pass
+            elif isinstance(w, (QLabel, QRadioButton, QCheckBox, QLineEdit)):
+                w.setFont(uiFont)
+            else:
+                try:
+                    w.setFont(uiFont)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -2529,12 +2569,23 @@ def applyLiveAppearance(app=None):
     except Exception:
         pass
     setRetroStyles(app, bool(Config.retroMode), mainTable, queryList)
+    # Stylesheet / Fusion can reset widget fonts — re-apply after chrome.
+    try:
+        propagateUiFont(app)
+    except Exception:
+        pass
     try:
         for w in app.allWidgets():
             if isinstance(w, QListWidget):
                 applyCompactListStyle(w)
     except Exception:
         pass
+    if mainTable is not None and mainTable.columnCount() > 0:
+        try:
+            applyTableRowMetrics(mainTable, mainTable.font())
+            autoSizeTableColumns(mainTable)
+        except Exception as e:
+            Logic.logException("applyLiveAppearance: table resize failed", e)
     if graph is not None and hasattr(graph, "reapplyTheme"):
         try:
             graph.reapplyTheme()

@@ -89,15 +89,16 @@ class ResultTabBar(QTabBar):
         return False
 
     def _pinRect(self, index):
+        nudge = 14 if Config.retroMode else 0
         slot = self.tabButton(index, QTabBar.ButtonPosition.RightSide)
         if slot is not None:
             g = slot.geometry()
             if g.width() > 0 and g.height() > 0:
-                x = g.x() + (g.width() - PIN_ICON_PX) // 2
+                x = g.x() + (g.width() - PIN_ICON_PX) // 2 - nudge
                 y = g.y() + (g.height() - PIN_ICON_PX) // 2
                 return QRect(x, y, PIN_ICON_PX, PIN_ICON_PX)
         r = self.tabRect(index)
-        x = r.right() - PIN_SLOT_PX + (PIN_SLOT_PX - PIN_ICON_PX) // 2
+        x = r.right() - PIN_SLOT_PX + (PIN_SLOT_PX - PIN_ICON_PX) // 2 - nudge
         y = r.y() + (r.height() - PIN_ICON_PX) // 2
         return QRect(x, y, PIN_ICON_PX, PIN_ICON_PX)
 

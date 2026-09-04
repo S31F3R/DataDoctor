@@ -1592,7 +1592,7 @@ class uiMain(QMainWindow):
                     if t == 'overlay':
                         # Use cell data for overlay tab
                         item = self.mainTable.item(row, col)
-                        cellData = item.data(Qt.ItemDataRole.UserRole) if item else {}
+                        cellData = Upload.getUserDict(item) if item is not None else {}
                         responsesList.append(cellData)
                         intervalsList.append(None) # No interval for overlay
                     else:
@@ -1603,7 +1603,9 @@ class uiMain(QMainWindow):
                         dbName = dbs[dbIdx] if dbIdx < len(dbs) else t
                         if isinstance(dbName, list): dbName = dbName[0] if dbName else t
 
-                        # Prefer this tab's own DataID/lookupId so primary/secondary don't swap
+                        # Only this tab's DataID/lookupId — overlay column meta
+                        # lists BOTH ids, so resolveSeriesResponse(col, ...) would
+                        # pick the first seriesResponses hit (often the other DB).
                         dbResponse = None
                         matchedKey = None
 
@@ -1616,10 +1618,20 @@ class uiMain(QMainWindow):
                                 matchedKey = preferKey
                                 break
                         if dbResponse is None:
-                            dbResponse, matchedKey = self.resolveSeriesResponse(
-                                col, seriesLabel, dbName, lid if lid is not None else dataId
-                            )
-                        if dbResponse is None: dbResponse = {}
+                            lowerMap = {
+                                str(k).lower(): (k, v)
+                                for k, v in (self.seriesResponses or {}).items()
+                            }
+                            for prefer in (lid, dataId):
+                                if prefer is None:
+                                    continue
+                                preferKey = str(prefer).replace('\n', ' ').strip()
+                                hit = lowerMap.get(preferKey.lower())
+                                if hit:
+                                    matchedKey, dbResponse = hit
+                                    break
+                        if not isinstance(dbResponse, dict):
+                            dbResponse = {} if dbResponse is None else {"raw": dbResponse}
 
                         # USGS-NWIS: ensure details never receive a non-dict (overlay crash guard)
                         if isinstance(t, str) and t.upper().startswith('USGS') and not isinstance(dbResponse, dict):

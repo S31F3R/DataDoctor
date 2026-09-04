@@ -1050,6 +1050,7 @@ def swapOverlayPrimarySecondary(mainWindow, col):
     if newHeader:
         _setHeaderText(table, col, Utils.formatTableHeaderLabel(newHeader))
     Utils.autoSizeTableColumns(table)
+    Upload.applyEditability(table, mainWindow)
     if Config.debug:
         Logic.logMessage("DEBUG", f"TableOps.swapOverlay col={col} now primary={dataIds[0]}")
 

@@ -11,7 +11,8 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QLineEdit, QRubberBand, QStyledItemDelegate, QTableWidgetItem, QWidget,
-    QAbstractItemDelegate, QToolTip, QApplication, QTextEdit,
+    QAbstractItemDelegate, QToolTip, QApplication, QTextEdit, QListWidget,
+    QListWidgetItem, QAbstractItemView, QFrame,
 )
 
 from core import Config, Logic, Upload
@@ -71,6 +72,38 @@ class FormulaEditor(QTextEdit):
 
     def setAlignment(self, align):
         super().setAlignment(align)
+
+    def keyPressEvent(self, event):
+        # Single-line cell: Enter commits (delegate), never inserts a newline.
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            event.ignore()
+            return
+        super().keyPressEvent(event)
+
+
+class FunctionPopup(QListWidget):
+    """Excel-style function list under the formula editor."""
+
+    def __init__(self, delegate):
+        super().__init__(None)
+        self._delegate = delegate
+        self.setWindowFlags(
+            Qt.WindowType.ToolTip
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.NoDropShadowWindowHint
+        )
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setFrameShape(QFrame.Shape.Box)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setMaximumHeight(180)
+        self.setMinimumWidth(220)
+        self.itemClicked.connect(self._clicked)
+
+    def _clicked(self, item):
+        if item is None:
+            return
+        self._delegate._acceptFunctionPopup(item.text())
 
 
 class CellRefRing(QWidget):
@@ -242,6 +275,8 @@ class FormulaDelegate(QStyledItemDelegate):
         self.mainWindow = mainWindow
         self._editor = None
         self._editIndex = None
+        self._fnPopup = None
+        self._fnPrefixStart = 0
 
     def createEditor(self, parent, option, index):
         editor = FormulaEditor(parent)
@@ -270,6 +305,7 @@ class FormulaDelegate(QStyledItemDelegate):
         if table is not None:
             table._formulaPointing = False
         self._clearRefRings()
+        self._hideFunctionPopup()
         QToolTip.hideText()
         self._editor = None
         self._editIndex = None
@@ -312,16 +348,51 @@ class FormulaDelegate(QStyledItemDelegate):
                 return True
         if obj is self._editor and event.type() == QEvent.Type.KeyPress:
             key = event.key()
+            popup = self._fnPopup
+            popupOpen = popup is not None and popup.isVisible() and popup.count() > 0
             if key == Qt.Key.Key_Escape:
+                if popupOpen:
+                    self._hideFunctionPopup()
+                    return True
                 self._clearRefRings()
                 table = self.mainWindow.mainTable if self.mainWindow is not None else None
                 if table is not None:
                     table.closeEditor(self._editor, QAbstractItemDelegate.EndEditHint.RevertModelCache)
                 return True
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if popupOpen:
+                    cur = popup.currentItem()
+                    if cur is not None:
+                        self._acceptFunctionPopup(cur.text())
+                        return True
+                self._commitEditor()
+                return True
             if key == Qt.Key.Key_Tab:
+                if popupOpen:
+                    cur = popup.currentItem()
+                    if cur is not None:
+                        self._acceptFunctionPopup(cur.text())
+                        return True
                 if self._tabComplete(self._editor):
                     return True
+            if popupOpen and key == Qt.Key.Key_Down:
+                row = min(popup.currentRow() + 1, popup.count() - 1)
+                popup.setCurrentRow(row)
+                return True
+            if popupOpen and key == Qt.Key.Key_Up:
+                row = max(popup.currentRow() - 1, 0)
+                popup.setCurrentRow(row)
+                return True
         return super().eventFilter(obj, event)
+
+    def _commitEditor(self):
+        table = self.mainWindow.mainTable if self.mainWindow is not None else None
+        editor = self._editor
+        if table is None or editor is None:
+            return
+        self._hideFunctionPopup()
+        table.commitData(editor)
+        table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.SubmitModelCache)
 
     def _tabComplete(self, editor) -> bool:
         if editor is None:
@@ -363,8 +434,95 @@ class FormulaDelegate(QStyledItemDelegate):
         self._hintFunction(editor)
         return True
 
+    def _functionPrefix(self, editor):
+        """Identifier being typed after '=' / '(' / ',' ."""
+        if editor is None:
+            return None, 0, 0
+        text = editor.text() or ""
+        if not text.strip().startswith("="):
+            return None, 0, 0
+        pos = editor.cursorPosition()
+        i = pos
+        while i > 1 and text[i - 1].isalpha():
+            i -= 1
+        if i > 0 and text[i - 1] not in "=+, (":
+            return None, 0, 0
+        return text[i:pos], i, pos
+
+    def _matchingFunctions(self, prefix):
+        if prefix is None:
+            return []
+        p = prefix.upper()
+        names = sorted(FUNCTIONS.keys())
+        if not p:
+            return names
+        return [n for n in names if n.startswith(p)]
+
+    def _ensureFunctionPopup(self):
+        if self._fnPopup is None:
+            self._fnPopup = FunctionPopup(self)
+        return self._fnPopup
+
+    def _hideFunctionPopup(self):
+        popup = self._fnPopup
+        if popup is not None:
+            popup.hide()
+            popup.clear()
+
+    def _updateFunctionPopup(self, editor):
+        prefix, start, _pos = self._functionPrefix(editor)
+        if prefix is None:
+            self._hideFunctionPopup()
+            return
+        names = self._matchingFunctions(prefix)
+        if not names:
+            self._hideFunctionPopup()
+            return
+        popup = self._ensureFunctionPopup()
+        popup.blockSignals(True)
+        popup.clear()
+        for n in names:
+            tip = n
+            for sig, helpText in FUNCTION_HELP:
+                if sig.upper().startswith(n + "(") or sig.upper().startswith(n + " "):
+                    tip = f"{sig}  —  {helpText}"
+                    break
+            item = QListWidgetItem(n)
+            item.setToolTip(tip)
+            popup.addItem(item)
+        popup.setCurrentRow(0)
+        popup.blockSignals(False)
+        self._fnPrefixStart = start
+        try:
+            gp = editor.mapToGlobal(QPoint(0, editor.height()))
+            popup.move(gp)
+            popup.resize(max(editor.width(), 240), min(180, 22 * min(len(names), 8) + 8))
+        except Exception:
+            pass
+        popup.show()
+        popup.raise_()
+
+    def _acceptFunctionPopup(self, name):
+        editor = self._editor
+        if editor is None or not name:
+            return
+        text = editor.text() or ""
+        pos = editor.cursorPosition()
+        start = self._fnPrefixStart
+        if start < 0 or start > pos:
+            _p, start, pos = self._functionPrefix(editor)
+        name = str(name).strip()
+        suffix = "(" if name != "PI" else "()"
+        new = text[:start] + name + suffix + text[pos:]
+        editor.setText(new)
+        editor.setCursorPosition(start + len(name) + len(suffix))
+        editor.setFocus(Qt.FocusReason.OtherFocusReason)
+        self._hideFunctionPopup()
+        self._hintFunction(editor)
+
     def _onEditorTextChanged(self, _text=""):
         self._hintFunction(self._editor)
+        self._updateFunctionPopup(self._editor)
         self._syncRefRings()
 
     def _hintFunction(self, editor):
