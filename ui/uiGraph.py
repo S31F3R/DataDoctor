@@ -9,10 +9,10 @@ import re
 from datetime import datetime
 import numpy as np
 from PyQt6.QtCore import Qt, QTimer, QEvent
-from PyQt6.QtGui import QPalette, QCursor
+from PyQt6.QtGui import QPalette, QCursor, QColor, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QApplication, QVBoxLayout, QWidget, QSizePolicy, QLabel, QToolTip,
-    QFileDialog, QMessageBox,
+    QFileDialog, QMessageBox, QToolButton,
 )
 from core import Config, Logic, Utils
 
@@ -886,19 +886,50 @@ class GraphPanel(QWidget):
             except Exception:
                 pass
 
+    def _tintIcon(self, icon, color, px):
+        if icon is None or icon.isNull():
+            return icon
+        pix = icon.pixmap(px, px)
+        if pix.isNull():
+            return icon
+        tinted = QPixmap(pix.size())
+        tinted.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(tinted)
+        painter.drawPixmap(0, 0, pix)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(tinted.rect(), color)
+        painter.end()
+        return QIcon(tinted)
+
     def _applyToolbarTheme(self):
         if self.toolbar is None:
             return
+        buttons = self.toolbar.findChildren(QToolButton)
+        orig = getattr(self, "_toolbarOrigIcons", None)
+        if orig is None:
+            orig = {}
+            for btn in buttons:
+                orig[btn] = btn.icon()
+            self._toolbarOrigIcons = orig
         if Config.retroMode:
+            # Native button chrome (same as dark/light). Only the glyph is green.
             self.toolbar.setStyleSheet(
-                "QToolBar { background: #1a1a1a; border: none; spacing: 2px; }"
-                "QToolButton { background: #1a1a1a; color: #00FF00;"
-                "  border: 1px solid #00aa00; border-radius: 2px; padding: 2px; }"
-                "QToolButton:hover { background: #003300; }"
-                "QToolButton:checked, QToolButton:pressed { background: #004400; }"
+                "QToolBar { background: #1a1a1a; border: none; }"
             )
+            green = QColor("#00FF00")
+            for btn in buttons:
+                src = orig.get(btn)
+                if src is None or src.isNull():
+                    continue
+                sz = btn.iconSize()
+                px = sz.width() if sz.width() > 0 else 24
+                btn.setIcon(self._tintIcon(src, green, px))
         else:
             self.toolbar.setStyleSheet("")
+            for btn in buttons:
+                src = orig.get(btn)
+                if src is not None:
+                    btn.setIcon(src)
 
     def _colorCycle(self, theme):
         if theme == 'retro':
@@ -1509,6 +1540,7 @@ class GraphPanel(QWidget):
         ToolbarCls = _makeGraphToolbarClass() or NavigationToolbar2QT
         self.toolbar = ToolbarCls(self.canvas, self)
         self.toolbar.setObjectName('graphToolbar')
+        self._toolbarOrigIcons = None
         self._applyToolbarTooltips()
         self._applyToolbarTheme()
 

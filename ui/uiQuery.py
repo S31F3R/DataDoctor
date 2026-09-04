@@ -123,6 +123,8 @@ class uiQuery(QMainWindow):
         for btn, iconName, iconSize in buttonIcons:
             if btn:
                 Utils.buttonStyle(btn, iconName, iconSize=iconSize)
+        if self.btnSearch is not None:
+            self.btnSearch.setToolTip("Data ID Search")
 
         # Create events
         self.btnQuery.clicked.connect(self.btnQueryPressed)
