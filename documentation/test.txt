@@ -29,45 +29,44 @@ Current Tests
      a. Overlay query, header Swap Primary/Secondary — values, query list, full header
         (label AND dataID line), delta, and overlay colors all flip. Swap again restores.
         Column width resizes to the new header.
-        RESPONSE: Swap changed only the first header line; deltas went to 0; colors
-        vanished on the second swap. Recalc now uses swapped natives + new primary rule
-        (do not negate then formatDeltaValue(..., None)).
-     b. Differing overlay cell → Update from secondary (single and multi-select).
-        Ctrl+Z restores the old primary (and colors); Ctrl+Y re-applies.
-        RESPONSE: Update worked; Ctrl+Z/Y did not (now one undo cmd + overlay UserRole).
+     b. Differing overlay cell → Update from secondary. Ctrl+Z restores; Ctrl+Y re-applies.
      c. USGS/Aquarius primary: no Update from secondary (or it does nothing).
      d. Raw Data off: USBR 642.272 vs Aquarius 642.2724 at primary DEC(3) is NOT red;
-        delta 0; Overlay Details shows both at primary precision; USBR/Aquarius tabs
-        keep their own rounding.
+        Overlay Details both at primary precision; individual tabs keep own rounding.
+     e. Overlay cells stay editable (type a number, Enter commits).
+     f. Overlay cell Show details: Overlay tab + correct Primary/Secondary DBs
+        (Aquarius vs LCHDB, not two LCHDBs). No DETAILS ERROR about .get.
 
-[ ] Retro spacing + live apply
+[ ] Retro live apply + spacing
    Steps:
-     a. Retro ON (Silkscreen). Default UI spacing except:
-        - Query info buttons except Data ID
-        - Refresh / Undo / Upload on the data table
-        - Query window ~4 characters wider (dataID, search, add query, query list —
-          USGS-NWIS should not need a horizontal slider)
-     b. Neon green tabs (text #323232 not black) + green scrollbars. Font is Silkscreen.
-     c. Retro + Light: query scrollbar TRACK is light; paddle stays green.
-     d. Options → Retro ON/OFF applies immediately (no restart), like Light/Dark.
-     e. Graph already open: Light/Dark/Retro restyles series + retro toolbar green.
-     f. winAbout: no extra blank line between AUTHOR rows at retroFontSizeAdjust=4.
+     a. Options → Retro ON while Data Query has results: tabs, labels, combos, Options
+        sidebar (General/Appearance) and Restore Defaults switch to Silkscreen without
+        closing Options. Save does not snap UTC Offset / radios / Export-Import to a
+        different size. Columns resize to the new header font.
+     b. Retro timestamp column: no extra ~10pt pad above/below the date/time.
+     c. Query window: Linux same width as non-retro. Windows ~2 characters wider
+        (USGS-NWIS). Load/Save/Clear/Delete Quick Look: 1pt smaller, text not clipped.
+     d. Retro + Light: query scrollbar TRACK light, paddle green. Tab text #323232.
+     e. Graph already open: Light/Dark/Retro restyles series; legend/axis use Silkscreen;
+        retro toolbar green.
+     f. SQL result pin icon ~14px left of the tab edge in retro.
+     g. winAbout: no extra blank line at retroFontSizeAdjust=4.
+     RESPONSE: for f, 14 px was a little too far, try 10. g is good, e good, d good, a good, not sure if b didn't work or it's not enough. try 30pt on b. a works mostly but the date/time columns are WAY too big. in default mode, these used to be sized perfectly. if i hit refresh query, it fixes the size that the bug caused
 
 [ ] Formulas + custom columns
    Steps:
-     a. Type =RO then Tab → ROUND(  Tooltip shows ROUND(n, digits).
-     b. = then click D10: D10 outlined, token D10 in the editor matches that color.
-     c. Esc leaves the cell unchanged.
+     a. Type = then R: popup lists functions starting with R (ROUND, …). Arrow keys
+        move; Tab or Enter inserts ROUND(. Narrows as you type more.
+        RESPONSE: Tab complete worked but nothing popped up while typing =RO.
+        Want Excel ghost/list of matching names, arrows, then Tab.
+     b. = then click D10: D10 outlined, token color matches. Esc leaves cell unchanged.
+     c. Enter on a formula/value commits the cell (no extra blank line in the cell).
      d. Formula on a queried cell clears QAQC/overlay paint; Ctrl+Z puts it back.
      e. Public query: insert a column, type a formula, fill down — no magenta data-edit flag.
      f. Header Show details is not blank (query info + max/min/mean).
      g. Rename header → Query or Refresh: prompt BEFORE the query. Don't save →
         Refresh must not keep the unsaved label.
-
-[ ] SQL query/result dotted splitter
-   Steps:
-     a. SQL tab: query/result handle matches the snippet-pane dotted grabber.
-     b. Retro: those dots are green on both splitters.
+        RESPONSE:a, b, c, e works but I need to test on internal stil.
 
 Confirmed
 --------------------------------------------------------------------------------
@@ -83,6 +82,9 @@ Table undo/redo
 Insert / drag / rename columns
 Double-click cell (no edit) colors
 Light/Dark SQL theme
+SQL query/result dotted splitter
+Formula click-to-ref + Esc
+Formula Tab complete (popup list is a retest)
 
 Deferred / known
 --------------------------------------------------------------------------------

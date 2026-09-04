@@ -41,4 +41,9 @@ resets this file to this template.
 - Graph restyles on Light/Dark/Retro; retro toolbar is green
 - SQL query/result splitter uses the same dotted grabber as snippets (green in retro)
 - About retro line-height tightened; applyUpdate no longer prints Updates/ rename; QFFmpeg disconnect warnings on About close are filtered
+- Formula `=` shows a function list (arrows + Tab/Enter insert); Enter commits the cell instead of a newline
+- Live retro applies Silkscreen to tabs, labels, combos, and Options sidebar items; Options Save no longer shrinks UTC Offset / radios
+- Retro query width is Windows-only (~2 characters); Linux stays original. Load/Save/Clear/Delete Quick Look are 1pt smaller
+- Retro timestamp row pad reduced; live retro resizes Data Query columns; SQL pin moves 14px left; graph legend/ticks use Silkscreen
+- Overlay details no longer crash on a string UserRole / wrong-DB fallback; overlay cells stay editable after swap
 
