@@ -24,78 +24,50 @@ Current Tests
      d. 3.0.x / no python-embed: after a Python zip apply, Windows zip should chain
         (or be the asset downloaded in the first place). No second manual applyUpdate.
 
-[x] First-open Graph / Options / About
-   Steps:
-     a. After main window appears, wait ~2s, then Graph — should open without a long freeze.
-     b. Options should open quickly (keyring already warmed).
-     c. About still opens; first click may load UI but should not hang as long as before.
-
-[x] Table undo/redo
-   Steps:
-     a. Internal query, edit a cell, Ctrl+Z restores, Ctrl+Y re-applies.
-     b. SQL editor: Ctrl+Z undoes typing; Ctrl+Y redoes (retest — was missing on Linux).
-     c. Toolbar Reset still re-sorts by timestamp (not undo).
-      RESPONSE: SQL Ctrl+Z worked; Ctrl+Y did not (Linux). Ctrl+Y is now wired.
-
-[x] Insert / drag / rename columns
-   Steps:
-     a. Header → Insert column left/right. Blank column; type a formula; Graph and CSV include it.
-        -WORKS!
-     b. Header → Rename header (common name only; datatype stays).
-     c. Refresh: custom column and its formulas come back. New query: custom columns drop.
-     d. Drag a data header: query list order matches. Overlay pair moves together. 
-        -WORKS!
-     e. Deltas ON, Overlay OFF: primary + secondary + Delta move as a trio.
-        -WORKS with Overlay!
-        -WORKS with Deltas!
-        Dragging one data column onto the other *inside* the trio swaps them and
-        the Delta sign flips. Dragging outside moves all three. Dropping into
-        the middle of the next pair inserts after that pair (not inside it).
-        -WORKS!
-     f. While dragging, a highlight line shows the insert point.
-        -WORKS!
-     g. New query after a rename: prompt to save/update Data Dictionary common name.
-      RESPONSE: Public query — insert/rename/refresh OK; drag was broken then fixed.
-        Follow-up: non-overlay deltas were not locked as a trio (now they are).
-        -WORKS!      
-
 [ ] Overlay swap / update from secondary / primary format
    Steps:
-     a. Overlay query, header Swap Primary/Secondary — values, query list, and delta sign flip.
-        RESPONSE: Swap works but it doesn't change the \n dataID, just the label. Deltas breaks, makes all values 0. Changes colors first swap, swap again gets rid of all colors
-     b. Differing overlay cell → Update from secondary (single and multi-select). Identical cells stay.
-        -WORKS! RESPONSE: This doesn't work with ctrl+z or ctrl+y. I ran the update from secondary then tried to undo it, didn't work
+     a. Overlay query, header Swap Primary/Secondary — values, query list, full header
+        (label AND dataID line), delta, and overlay colors all flip. Swap again restores.
+        Column width resizes to the new header.
+        RESPONSE: Swap changed only the first header line; deltas went to 0; colors
+        vanished on the second swap. Recalc now uses swapped natives + new primary rule
+        (do not negate then formatDeltaValue(..., None)).
+     b. Differing overlay cell → Update from secondary (single and multi-select).
+        Ctrl+Z restores the old primary (and colors); Ctrl+Y re-applies.
+        RESPONSE: Update worked; Ctrl+Z/Y did not (now one undo cmd + overlay UserRole).
      c. USGS/Aquarius primary: no Update from secondary (or it does nothing).
-        -WORKS!
-     d. Raw Data off: secondary displays with the primary’s DEC/SIG rule.
-        RESPONSE: This isn't working. USBR primary shows 642.272, Aquarius secondary shows 642.2724. It's flagged as red text for being -0.0004 different. This needs to not flag as red, show delta based on the rounding from the primary, Overlay Details shows both using same precision, but individual details can show their proper rounding based on their own rules
+     d. Raw Data off: USBR 642.272 vs Aquarius 642.2724 at primary DEC(3) is NOT red;
+        delta 0; Overlay Details shows both at primary precision; USBR/Aquarius tabs
+        keep their own rounding.
 
-[x] Double-click cell (no edit) colors
+[ ] Retro spacing + live apply
    Steps:
-     a. Dark mode, QAQC on. Double-click a default (white text) cell, Enter with no change.
-        Background and text stay normal (not black-on-black).
-     b. Overlay-red cell: red text stays, background not black.
-     c. QAQC-colored cells unchanged.
+     a. Retro ON (Silkscreen). Default UI spacing except:
+        - Query info buttons except Data ID
+        - Refresh / Undo / Upload on the data table
+        - Query window ~4 characters wider (dataID, search, add query, query list —
+          USGS-NWIS should not need a horizontal slider)
+     b. Neon green tabs (text #323232 not black) + green scrollbars. Font is Silkscreen.
+     c. Retro + Light: query scrollbar TRACK is light; paddle stays green.
+     d. Options → Retro ON/OFF applies immediately (no restart), like Light/Dark.
+     e. Graph already open: Light/Dark/Retro restyles series + retro toolbar green.
+     f. winAbout: no extra blank line between AUTHOR rows at retroFontSizeAdjust=4.
 
-[x] Light/Dark SQL theme
+[ ] Formulas + custom columns
    Steps:
-     a. Open SQL, switch Appearance to Light (no restart). SQL text readable (not light grey).
-        Snippet pane / combobox / result scrollbars follow Light (not black tracks).
-     b. Switch back to Dark in the same session — SQL stays readable, no reverse of the bug.
-     c. New worksheet also looks correct.
+     a. Type =RO then Tab → ROUND(  Tooltip shows ROUND(n, digits).
+     b. = then click D10: D10 outlined, token D10 in the editor matches that color.
+     c. Esc leaves the cell unchanged.
+     d. Formula on a queried cell clears QAQC/overlay paint; Ctrl+Z puts it back.
+     e. Public query: insert a column, type a formula, fill down — no magenta data-edit flag.
+     f. Header Show details is not blank (query info + max/min/mean).
+     g. Rename header → Query or Refresh: prompt BEFORE the query. Don't save →
+        Refresh must not keep the unsaved label.
 
-[ ] Retro spacing baseline
+[ ] SQL query/result dotted splitter
    Steps:
-     a. Retro ON (Silkscreen). Query window / main toolbar / table row height should match
-        non-retro spacing (no extra offsets, no extra header blank line).
-     b. Neon green tabs + scrollbars still on. Font is still Silkscreen.
-     c. Inventory of FONT vs SPACING vs CHROME: core/Utils.py (search “RETRO MODE INVENTORY”).
-        Toggle `retroUseDefaultSpacing` there when you want the old extra pad back.
-        RESPONE: Most of retro works with default UI layout. Before I start changing, I'm going to list the only things we need to change when retro mode is enabled:
-            -Info buttons in query (for some reasdon the into button near dataID is fine)
-            -Refresh, refresh query, and upload buttons on data table
-            -NEW query window needs to be wider when retro is selected. That means the dataID input box, the search icon, the add query icon, and the query list need a default size/locaion and a retro version
-               -With the retro text, the window needs to grow 4 chracters. in one of my query items, USGS-NWIS shows USGS- then I have to slide over, so a with/move of thoes controls to show NWIS without a horzonital slider
+     a. SQL tab: query/result handle matches the snippet-pane dotted grabber.
+     b. Retro: those dots are green on both splitters.
 
 Confirmed
 --------------------------------------------------------------------------------
@@ -106,7 +78,13 @@ Windows first-run extract
 Retro Silkscreen
 Header click vs sort vs drag
 Retro mode restart (no crash)
+First-open Graph / Options / About
+Table undo/redo
+Insert / drag / rename columns
+Double-click cell (no edit) colors
+Light/Dark SQL theme
 
 Deferred / known
 --------------------------------------------------------------------------------
 [!] AppImage applyUpdate path not wired the same as launcher packages yet
+[!] Rebuild Data Doctor.exe on Windows to ship launcher VB first-run extract message
