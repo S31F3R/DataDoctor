@@ -749,7 +749,7 @@ class GraphPanel(QWidget):
     def _applyTheme(self, fig, ax, *extraAxes):
         """Style figure/axes for retro, system dark, or system light."""
         retro = bool(Config.retroMode)
-        dark = (not retro) and isSystemDarkMode()
+        dark = isSystemDarkMode()
         # Flatten: allow ax2=None style or a list of twins
         twins = []
         for a in extraAxes:
@@ -763,7 +763,7 @@ class GraphPanel(QWidget):
         # Twin tick colors cycle in retro so multi-axis stays readable
         retroTwinColors = ['#00FFFF', '#FF00FF', '#FFFF00', '#FF8800']
 
-        if retro:
+        if retro and dark:
             fig.patch.set_facecolor('#1a1a1a')
             ax.set_facecolor('#101010')
             ax.tick_params(colors='#00FF00')
@@ -911,8 +911,8 @@ class GraphPanel(QWidget):
             for btn in buttons:
                 orig[btn] = btn.icon()
             self._toolbarOrigIcons = orig
-        if Config.retroMode:
-            # Native button chrome (same as dark/light). Only the glyph is green.
+        if Config.retroMode and isSystemDarkMode():
+            # Dark + retro: neon glyphs. Light + retro keeps black icons / light chrome.
             self.toolbar.setStyleSheet(
                 "QToolBar { background: #1a1a1a; border: none; }"
             )

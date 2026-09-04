@@ -18,7 +18,7 @@ The **Graph** button plots the Data Query table into a Graph tab (or a detached 
 - Hover tooltip shows the **same text as the table cell** (raw digits when Query **Raw Data** is on; rounded otherwise).
 - Axis tick labels stay short — they do not dump 7 decimal places.
 - Tooltip is stable at the top edge of the plot (no frame jump).
-- Series colors follow light / dark / retro. Switching Appearance (or Retro) restyles an already-open graph. Retro tints the zoom/pan **icons** green (button borders stay the normal toolbar chrome).
+- Series colors follow light / dark / retro. Switching Appearance (or Retro) restyles an already-open graph. **Dark + retro:** neon plot, green toolbar glyphs. **Light + retro:** normal light plot (black text/icons) with Silkscreen. Button borders stay the normal toolbar chrome.
 
 ## Overlay series
 
