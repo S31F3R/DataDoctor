@@ -24,31 +24,27 @@ Current Tests
      d. 3.0.x / no python-embed: after a Python zip apply, Windows zip should chain
         (or be the asset downloaded in the first place). No second manual applyUpdate.
 
-[ ] Overlay swap rounding colors
-   Steps:
-     a. Overlay, Raw Data off. Primary DEC(4) vs secondary DEC(3) shows red.
-        Swap Primary/Secondary — both use DEC(3), red should clear (no Refresh).
-        RESPONSE: swap forced both to 3 but stayed red until Refresh.
-     b. USBR cell Show details is populated (not blank). Overlay USBR tab still
-        shows that series, not a wrapped/empty response.
-
 [ ] Retro live apply + spacing
    Steps:
-     a. Retro ON with a Data Query up: timestamp rail is not huge (Refresh should
-        not be required to shrink it). Row pad around the date/time is tight.
-        RESPONSE: date/time columns were WAY too big until Refresh.
-     b. Query radios (Date/Time Query Types + Query Options) are the smaller
-        retro size, not full UI size.
-     c. Windows query list: USGS-NWIS fully visible (~56px extra). Linux unchanged.
-     d. SQL pin ~10px left of the tab edge (14 was too far).
-     e. Graph: legend/ticks one size up; X/Y axis labels two sizes up.
+     a. Retro ON with a Data Query up: data columns resize to headers (no Refresh).
+        Timestamp rail is tight to the date/time (no big gap left/right); you can
+        still drag the rail if you want it wider.
+        RESPONSE: columns did not resize on live retro (headers cut off). Timestamp
+        rail was OK after last pass; still a gap before/after the time — use Qt
+        sizeHint instead of metrics fudge.
+     b. Windows query list: USGS-NWIS fully visible (~96px extra). Linux unchanged.
+        RESPONSE: 56px still cut off NWIS.
+     c. Query radios stay the smaller retro size.
+     RESPONSE: a and c good
 
-[ ] Header rename revert + column widths
+[ ] Data Dictionary / Search header filters (#4)
    Steps:
-     a. Rename a header, then rename it back to the original common name.
-        Query/Refresh must NOT prompt to save dictionary.
-     b. Drag a wide column into a narrow slot: it keeps its width; neighbors
-        keep theirs (slot 3 is not a fixed 60).
+     a. Data Dictionary: Filter icon on siteID and database headers. Click →
+        combobox of values that exist in the dictionary. Pick one → table filters.
+        Icon becomes Filtered. Right-click → Clear filter (icon back to Filter).
+     b. Type-search no longer matches siteID (or database).
+     c. Data ID Search (Query window) has the same two header filters.
+     d. Save the dictionary: filter combobox lists refresh (Search too if it is open).
 
 Confirmed
 --------------------------------------------------------------------------------
@@ -75,6 +71,11 @@ Retro live tabs/labels/combos
 Retro + Light scrollbar track
 Graph restyle on theme
 winAbout line-height
+Overlay swap rounding colors
+Header rename revert
+Column drag keeps widths
+SQL pin 10px
+Graph legend/tick/axis sizes
 
 Deferred / known
 --------------------------------------------------------------------------------

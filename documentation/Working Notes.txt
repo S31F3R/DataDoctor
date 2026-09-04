@@ -52,4 +52,6 @@ resets this file to this template.
 - Graph legend/ticks +1pt, axis labels +2pt in retro
 - Dragged columns keep their widths; renaming a header back to the dictionary name is not a pending save
 - `updateBunkerFromCsv.py` asks y/n to update Common Names and Data Types (#5)
+- Data Dictionary and Data ID Search: Filter/Filtered icons on siteID and database headers (combobox, right-click clear); type-search no longer uses siteID (#4)
+- Live retro resizes data columns again; timestamp rail uses Qt sizeHint (drag still works); Windows query extra width ~96px
 
