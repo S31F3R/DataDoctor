@@ -2123,11 +2123,11 @@ def getUtcOffsetInt(utcOffsetStr):
             logMessage("ERROR", "getUtcOffsetInt: Failed to parse '{}': {}. Returning 0".format(utcOffsetStr, e))
         return 0.0
     
-def filterTable(table, searchText, searchableColumns, columnEquals=None):
-    """Filter QTableWidget rows by search text and optional exact column values.
+def filterTable(table, searchText, searchableColumns, columnEquals=None, columnContains=None):
+    """Filter QTableWidget rows by search text and optional column values.
 
-    columnEquals: {headerName: value} — row must match each pair exactly
-    (case-insensitive). Used by header Filter icons (siteID / database).
+    columnEquals: {headerName: value} exact (database header filter).
+    columnContains: {headerName: value} substring (typed siteID filter).
     """
     if Config.debug:
         logMessage("DEBUG", f"filterTable: Processing table with {table.rowCount()} rows, search '{searchText}', columns {searchableColumns}")
@@ -2135,20 +2135,30 @@ def filterTable(table, searchText, searchableColumns, columnEquals=None):
     # Map column names to indices (case-sensitive match to headers)
     columnMap = {table.horizontalHeaderItem(c).text().strip(): c for c in range(table.columnCount())}
     searchableIndices = [columnMap[col] for col in searchableColumns if col in columnMap]
-    equalsMap = {}
-    for name, val in (columnEquals or {}).items():
-        if not val:
-            continue
+    def _colIdx(name):
         idx = columnMap.get(name)
         if idx is None:
             for k, i in columnMap.items():
                 if k.lower() == str(name).lower():
-                    idx = i
-                    break
+                    return i
+        return idx
+
+    equalsMap = {}
+    for name, val in (columnEquals or {}).items():
+        if not val:
+            continue
+        idx = _colIdx(name)
         if idx is not None:
             equalsMap[idx] = str(val).strip().lower()
+    containsMap = {}
+    for name, val in (columnContains or {}).items():
+        if not val:
+            continue
+        idx = _colIdx(name)
+        if idx is not None:
+            containsMap[idx] = str(val).strip().lower()
 
-    if not searchableIndices and not equalsMap:
+    if not searchableIndices and not equalsMap and not containsMap:
         if Config.debug:
             logMessage("WARN", "filterTable: No matching searchable columns found—showing all rows")
         for r in range(table.rowCount()):
@@ -2156,7 +2166,7 @@ def filterTable(table, searchText, searchableColumns, columnEquals=None):
         return
 
     keywords = [kw.lower() for kw in (searchText or "").strip().split() if kw]
-    if not keywords and not equalsMap:
+    if not keywords and not equalsMap and not containsMap:
         for r in range(table.rowCount()):
             table.setRowHidden(r, False)
         if Config.debug:
@@ -2173,6 +2183,13 @@ def filterTable(table, searchText, searchableColumns, columnEquals=None):
             if cellText != want:
                 matches = False
                 break
+        if matches:
+            for c, want in containsMap.items():
+                item = table.item(r, c)
+                cellText = item.text().strip().lower() if item else ""
+                if want not in cellText:
+                    matches = False
+                    break
         if not matches:
             table.setRowHidden(r, True)
             continue

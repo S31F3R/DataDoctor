@@ -664,12 +664,14 @@ class uiDataDictionary(QMainWindow):
         if Config.debug:
             Logic.logMessage("DEBUG", f"performFilter: Applying filter with text '{text}'")
         equals = {}
+        contains = {}
         filt = getattr(self, "_headerFilters", None)
         if filt is not None:
             equals = filt.activeEquals()
+            contains = filt.activeContains()
         Logic.filterTable(
             self.mainTable, text, ['dataID', 'siteName', 'commonName'],
-            columnEquals=equals,
+            columnEquals=equals, columnContains=contains,
         )
 
         if Config.debug:

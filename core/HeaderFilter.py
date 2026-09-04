@@ -5,9 +5,12 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QObject, QPoint, QEvent
-from PyQt6.QtWidgets import QPushButton, QComboBox, QMenu
+from PyQt6.QtWidgets import QPushButton, QMenu, QLineEdit, QListWidget, QListWidgetItem
+from PyQt6.QtGui import QFontMetrics
 
 from core import Utils
+
+INPUT_COLUMNS = frozenset({"siteid"})
 
 ICON_PX = 16
 ICON_MARGIN = 3
@@ -27,6 +30,7 @@ class HeaderFilterBar(QObject):
         self.values = {n: None for n in self.columnNames}  # None = all
         self._buttons = {}
         self._combo = None
+        self._editName = None
         header = table.horizontalHeader()
         header.setSectionsClickable(True)
         header.sectionResized.connect(self.reposition)
@@ -45,7 +49,7 @@ class HeaderFilterBar(QObject):
             btn.setToolTip(f"Filter {name}")
             btn.setFixedSize(ICON_PX, ICON_PX)
             btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            btn.clicked.connect(lambda checked=False, n=name: self._openCombo(n))
+            btn.clicked.connect(lambda checked=False, n=name: self._openFilter(n))
             btn.customContextMenuRequested.connect(
                 lambda pos, n=name: self._rightClick(n, pos)
             )
@@ -65,14 +69,24 @@ class HeaderFilterBar(QObject):
                 header.resizeSection(col, need)
 
     def activeEquals(self) -> dict:
-        """headerName → exact cell text for active filters."""
-        return {n: v for n, v in self.values.items() if v}
+        """Exact matches (database combobox)."""
+        return {
+            n: v for n, v in self.values.items()
+            if v and n.lower() not in INPUT_COLUMNS
+        }
+
+    def activeContains(self) -> dict:
+        """Substring matches (typed siteID)."""
+        return {
+            n: v for n, v in self.values.items()
+            if v and n.lower() in INPUT_COLUMNS
+        }
 
     def rebuild(self):
-        """After dictionary save: drop stale selections, refresh icons."""
+        """After dictionary save: drop stale combo selections, keep typed text."""
         for name in self.columnNames:
             current = self.values.get(name)
-            if not current:
+            if not current or name.lower() in INPUT_COLUMNS:
                 continue
             col = self._colIndex(name)
             if col < 0 or current not in self._uniqueValues(col):
@@ -82,6 +96,16 @@ class HeaderFilterBar(QObject):
         self._fire()
 
     def eventFilter(self, obj, event):
+        if obj is self._combo and isinstance(obj, QLineEdit):
+            if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
+                obj.setProperty("ddSkipApply", True)
+                self._combo = None
+                obj.hide()
+                obj.deleteLater()
+                return True
+            if event.type() == QEvent.Type.Hide and self._combo is obj:
+                name = self._editName or "siteID"
+                self._applyInput(name, obj)
         if event.type() in (
             QEvent.Type.Resize,
             QEvent.Type.Show,
@@ -148,37 +172,88 @@ class HeaderFilterBar(QObject):
             btn.show()
             btn.raise_()
 
-    def _openCombo(self, name):
+    def _openFilter(self, name):
+        if name.lower() in INPUT_COLUMNS:
+            self._openInput(name)
+        else:
+            self._openList(name)
+
+    def _popupPos(self, name):
+        btn = self._buttons[name]
+        return btn.mapToGlobal(QPoint(0, btn.height()))
+
+    def _openInput(self, name):
+        edit = QLineEdit(self.table.window())
+        edit.setWindowFlags(Qt.WindowType.Popup)
+        edit.setPlaceholderText(f"Filter {name}…")
+        edit.setText(self.values.get(name) or "")
+        edit.setClearButtonEnabled(True)
+        edit.setMinimumWidth(180)
+        edit.move(self._popupPos(name))
+        edit.returnPressed.connect(lambda n=name, e=edit: self._applyInput(n, e))
+        edit.installEventFilter(self)
+        self._editName = name
+        self._combo = edit
+        edit.show()
+        edit.setFocus(Qt.FocusReason.PopupFocusReason)
+        edit.selectAll()
+
+    def _applyInput(self, name, edit):
+        if edit.property("ddApplied"):
+            return
+        if edit.property("ddSkipApply"):
+            return
+        edit.setProperty("ddApplied", True)
+        text = (edit.text() or "").strip()
+        self.values[name] = text or None
+        self._setIcon(name)
+        self._combo = None
+        self._editName = None
+        edit.hide()
+        edit.deleteLater()
+        self._fire()
+
+    def _openList(self, name):
         col = self._colIndex(name)
         if col < 0:
             return
         values = self._uniqueValues(col)
-        combo = QComboBox(self.table.window())
-        combo.setWindowFlags(Qt.WindowType.Popup)
-        combo.setEditable(False)
-        combo.setMaxVisibleItems(16)
-        combo.addItem("(All)", "")
+        lst = QListWidget(self.table.window())
+        lst.setWindowFlags(Qt.WindowType.Popup)
+        lst.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         current = self.values.get(name) or ""
+        allItem = QListWidgetItem("(All)")
+        allItem.setData(Qt.ItemDataRole.UserRole, "")
+        lst.addItem(allItem)
+        pick = allItem
         for v in values:
-            combo.addItem(v, v)
-        idx = combo.findData(current)
-        combo.setCurrentIndex(max(0, idx))
-        combo.activated.connect(lambda i, n=name, c=combo: self._picked(n, c, i))
-        btn = self._buttons[name]
-        gp = btn.mapToGlobal(QPoint(0, btn.height()))
-        combo.setMinimumWidth(max(200, btn.width() + 120))
-        combo.move(gp)
-        combo.show()
-        combo.showPopup()
-        self._combo = combo
+            it = QListWidgetItem(v)
+            it.setData(Qt.ItemDataRole.UserRole, v)
+            lst.addItem(it)
+            if v == current:
+                pick = it
+        lst.setCurrentItem(pick)
+        fm = QFontMetrics(lst.font())
+        w = max(200, fm.horizontalAdvance("(All)") + 24)
+        for v in values[:80]:
+            w = max(w, fm.horizontalAdvance(v) + 24)
+        rows = min(lst.count(), 12)
+        lst.resize(w, max(lst.sizeHintForRow(0) * rows + 4, 80))
+        lst.move(self._popupPos(name))
+        lst.itemClicked.connect(lambda item, n=name, wdg=lst: self._pickedList(n, wdg, item))
+        lst.show()
+        lst.setFocus(Qt.FocusReason.PopupFocusReason)
+        self._combo = lst
 
-    def _picked(self, name, combo, index):
-        data = combo.itemData(index)
-        text = ("" if data is None else str(data)).strip()
+    def _pickedList(self, name, lst, item):
+        text = ""
+        if item is not None:
+            data = item.data(Qt.ItemDataRole.UserRole)
+            text = ("" if data is None else str(data)).strip()
         self.values[name] = text or None
         self._setIcon(name)
-        combo.hide()
-        combo.deleteLater()
+        lst.hide()
+        lst.deleteLater()
         self._combo = None
         self._fire()
 

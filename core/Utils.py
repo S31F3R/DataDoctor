@@ -724,10 +724,11 @@ def applyTableRowMetrics(table, font=None):
 
 def sizeVerticalHeader(table):
     """
-    Timestamp rail width from Qt's own sizeHint (style padding included).
+    Timestamp rail width from the painted ink of a sample label.
 
-    Forcing metrics + fudge left a gap on both sides of Silkscreen labels.
-    Leave maximum unconstrained so the rail can still be dragged.
+    QHeaderView.sizeHint / horizontalAdvance over-report Silkscreen, and
+    center alignment then shows a gap before the date and after the time.
+    tightBoundingRect is the pixels actually drawn.
     """
     if table is None:
         return
@@ -737,17 +738,24 @@ def sizeVerticalHeader(table):
         return
     if vHeader is None or not vHeader.isVisible():
         return
+    font = vHeader.font() if vHeader.font() is not None else table.font()
+    metrics = QFontMetrics(font)
+    sample = "01/01/26 00:00:00"
+    n = table.rowCount()
+    for r in range(min(n, 40)):
+        it = table.verticalHeaderItem(r)
+        if it is not None and it.text() and len(it.text()) > len(sample):
+            sample = it.text()
+    ink = metrics.tightBoundingRect(sample).width()
+    # 2px total — any more shows up as the left/right gap in retro
+    w = max(ink + 2, 8)
+    vHeader.setStyleSheet(
+        "QHeaderView::section { padding-left: 0px; padding-right: 0px; }"
+    )
     vHeader.setMinimumWidth(0)
     vHeader.setMaximumWidth(16777215)
-    try:
-        vHeader.updateGeometry()
-    except Exception:
-        pass
-    hint = vHeader.sizeHint().width()
-    if hint < 8:
-        return
-    vHeader.resize(hint, vHeader.height())
-    vHeader.setMinimumWidth(hint)
+    vHeader.resize(w, vHeader.height())
+    vHeader.setMinimumWidth(w)
 
 
 def autoSizeTableColumns(table, sampleRows=100):

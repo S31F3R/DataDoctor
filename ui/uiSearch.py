@@ -94,12 +94,14 @@ class uiSearch(QMainWindow):
     def applyFilter(self):
         searchText = self.qleSearch.text()
         equals = {}
+        contains = {}
         filt = getattr(self, "_headerFilters", None)
         if filt is not None:
             equals = filt.activeEquals()
+            contains = filt.activeContains()
         Logic.filterTable(
             self.searchTable, searchText, ['dataID', 'commonName', 'datatype'],
-            columnEquals=equals,
+            columnEquals=equals, columnContains=contains,
         )
 
     def _cellText(self, row, columnName):
