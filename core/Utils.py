@@ -724,11 +724,12 @@ def applyTableRowMetrics(table, font=None):
 
 def sizeVerticalHeader(table):
     """
-    Timestamp rail width from the painted ink of a sample label.
+    Timestamp rail width locked to the painted ink of a sample label.
 
-    QHeaderView.sizeHint / horizontalAdvance over-report Silkscreen, and
-    center alignment then shows a gap before the date and after the time.
-    tightBoundingRect is the pixels actually drawn.
+    minWidth cannot shrink the header: QTableWidget lays it out at sizeHint,
+    which is wider than Silkscreen ink, and center-alignment turns that extra
+    into a gap before the date and after the time. Fixed width + zero section
+    padding is what actually matches non-retro tightness.
     """
     if table is None:
         return
@@ -738,6 +739,12 @@ def sizeVerticalHeader(table):
         return
     if vHeader is None or not vHeader.isVisible():
         return
+    try:
+        vHeader.setSortIndicatorShown(False)
+        vHeader.setSectionsClickable(False)
+        vHeader.setHighlightSections(False)
+    except Exception:
+        pass
     font = vHeader.font() if vHeader.font() is not None else table.font()
     metrics = QFontMetrics(font)
     sample = "01/01/26 00:00:00"
@@ -747,15 +754,23 @@ def sizeVerticalHeader(table):
         if it is not None and it.text() and len(it.text()) > len(sample):
             sample = it.text()
     ink = metrics.tightBoundingRect(sample).width()
-    # 2px total — any more shows up as the left/right gap in retro
-    w = max(ink + 2, 8)
+    w = max(ink + 4, 8)
     vHeader.setStyleSheet(
-        "QHeaderView::section { padding-left: 0px; padding-right: 0px; }"
+        "QHeaderView { padding: 0px; }"
+        "QHeaderView::section { padding: 0px; margin: 0px; }"
     )
-    vHeader.setMinimumWidth(0)
-    vHeader.setMaximumWidth(16777215)
-    vHeader.resize(w, vHeader.height())
-    vHeader.setMinimumWidth(w)
+    try:
+        vHeader.setContentsMargins(0, 0, 0, 0)
+    except Exception:
+        pass
+    # Left-align so any leftover style inset is after the time, not before 09/
+    align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    vHeader.setDefaultAlignment(align)
+    for r in range(n):
+        it = table.verticalHeaderItem(r)
+        if it is not None:
+            it.setTextAlignment(align)
+    vHeader.setFixedWidth(w)
 
 
 def autoSizeTableColumns(table, sampleRows=100):

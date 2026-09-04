@@ -874,13 +874,6 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
         timestamps = [row.split(',', 1)[0].strip() for row in data]
         table.setVerticalHeaderLabels(timestamps)
         vHeader.setVisible(True)
-        # Center timestamps in the vertical header column
-        tsAlign = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
-        vHeader.setDefaultAlignment(tsAlign)
-        for r in range(len(timestamps)):
-            tsItem = table.verticalHeaderItem(r)
-            if tsItem is not None:
-                tsItem.setTextAlignment(tsAlign)
         Utils.sizeVerticalHeader(table)
     else:
         table.verticalHeader().setVisible(False)
@@ -1136,7 +1129,7 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
         table.blockSignals(True)
         table.setUpdatesEnabled(False)
 
-        tsAlign = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        tsAlign = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         table.verticalHeader().setDefaultAlignment(tsAlign)
         for rowIdx, row in enumerate(sortedRows):
             tsHeader = QTableWidgetItem(row['ts'])
@@ -1177,6 +1170,7 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
             mainWindow = table.window() if table is not None else None
             if mainWindow is not None and hasattr(mainWindow, 'columnMetadata'):
                 Upload.applyEditability(table, mainWindow)
+            Utils.sizeVerticalHeader(table)
         except Exception as e:
             Logic.logException("updateTableAfterSort: applyEditability failed", e)
     except Exception as e:
