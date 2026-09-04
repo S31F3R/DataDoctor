@@ -230,6 +230,7 @@ class uiDataDictionary(QMainWindow):
             sb.show()
 
         self.applyDictionaryScrollStyle()
+        self._headerFilters = None
         
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDataDictionary initialized with btnDeleteRow")
@@ -420,8 +421,17 @@ class uiDataDictionary(QMainWindow):
         if self.mainTable is not None:
             self.mainTable.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
             self.mainTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
+        self._ensureHeaderFilters()
         Utils.centerWindowToParent(self)
         super().showEvent(event)
+
+    def _ensureHeaderFilters(self):
+        if self.mainTable is None or self._headerFilters is not None:
+            return
+        from core.HeaderFilter import HeaderFilterBar
+        self._headerFilters = HeaderFilterBar(
+            self.mainTable, ("siteID", "database"), onChange=self.performFilter, parent=self
+        )
 
     def showTableContextMenu(self, pos):
         """Right-click → Copy selected cell(s) as TSV."""
@@ -593,6 +603,12 @@ class uiDataDictionary(QMainWindow):
 
             # Size combo columns only — never full resizeColumnToContents on 30k rows
             self.sizeComboColumns()
+            if self._headerFilters is not None:
+                self._headerFilters.rebuild()
+            q = getattr(self.winMain, "winQuery", None) if self.winMain is not None else None
+            search = getattr(q, "uiSearch", None) if q is not None else None
+            if search is not None and hasattr(search, "rebuildHeaderFilters"):
+                search.rebuildHeaderFilters()
 
             if Config.debug:
                 Logic.logMessage(
@@ -647,7 +663,14 @@ class uiDataDictionary(QMainWindow):
 
         if Config.debug:
             Logic.logMessage("DEBUG", f"performFilter: Applying filter with text '{text}'")
-        Logic.filterTable(self.mainTable, text, ['dataID', 'siteID', 'siteName', 'commonName'])
+        equals = {}
+        filt = getattr(self, "_headerFilters", None)
+        if filt is not None:
+            equals = filt.activeEquals()
+        Logic.filterTable(
+            self.mainTable, text, ['dataID', 'siteName', 'commonName'],
+            columnEquals=equals,
+        )
 
         if Config.debug:
             Logic.logMessage("DEBUG", "performFilter: Filtering completed")

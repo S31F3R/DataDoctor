@@ -54,12 +54,38 @@ class uiSearch(QMainWindow):
         self.searchTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.searchTable.customContextMenuRequested.connect(self.showContextMenu)
 
+        self._headerFilters = None
+        self._ensureHeaderFilters()
+
         if Config.debug:
             Logic.logMessage("DEBUG", "uiSearch initialized")
 
     def showEvent(self, event):
+        self._ensureHeaderFilters()
         Utils.centerWindowToParent(self)
         super().showEvent(event)
+
+    def _ensureHeaderFilters(self):
+        if self.searchTable is None or self._headerFilters is not None:
+            return
+        from core.HeaderFilter import HeaderFilterBar
+        self._headerFilters = HeaderFilterBar(
+            self.searchTable, ("siteID", "database"), onChange=self.applyFilter, parent=self
+        )
+
+    def rebuildHeaderFilters(self):
+        """Reload dictionary rows after a save, then refresh filter lists."""
+        table = self.searchTable
+        if table is None:
+            return
+        columns = ['dataID', 'siteID', 'database', 'commonName', 'datatype']
+        parent = self.parent()
+        qt = getattr(parent, 'queryType', None)
+        whereClause = "database != 'AQUARIUS'" if qt == 'public' else None
+        Logic.buildDataDictionary(table, columns=columns, whereClause=whereClause)
+        if self._headerFilters is not None:
+            self._headerFilters.rebuild()
+        self.applyFilter()
 
     def startDebounce(self, text):
         self.debounceTimer.stop()
@@ -67,7 +93,14 @@ class uiSearch(QMainWindow):
 
     def applyFilter(self):
         searchText = self.qleSearch.text()
-        Logic.filterTable(self.searchTable, searchText, ['dataID', 'siteID', 'commonName', 'datatype'])
+        equals = {}
+        filt = getattr(self, "_headerFilters", None)
+        if filt is not None:
+            equals = filt.activeEquals()
+        Logic.filterTable(
+            self.searchTable, searchText, ['dataID', 'commonName', 'datatype'],
+            columnEquals=equals,
+        )
 
     def _cellText(self, row, columnName):
         for c in range(self.searchTable.columnCount()):

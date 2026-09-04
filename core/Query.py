@@ -881,12 +881,7 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             tsItem = table.verticalHeaderItem(r)
             if tsItem is not None:
                 tsItem.setTextAlignment(tsAlign)
-        # Fixed min width from sample only (not ResizeToContents)
-        font = table.font()
-        metrics = QFontMetrics(font)
-        sampleTs = timestamps[0] if timestamps else "01/01/26 00:00:00"
-        # Original fudge (+16). No extra horizontal "padding" on the timestamp rail.
-        vHeader.setMinimumWidth(max(120, metrics.horizontalAdvance(sampleTs) + 16))
+        Utils.sizeVerticalHeader(table)
     else:
         table.verticalHeader().setVisible(False)
 

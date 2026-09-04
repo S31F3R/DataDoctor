@@ -2,7 +2,9 @@
 
 The dictionary (`core/bunker.db`, table `dataDictionary`) is how Data Doctor turns raw IDs into labels, rounding, and QAQC limits.
 
-Open it from the book/database button on the main window. **Ctrl+S** or **Save** writes the table (combo columns are committed first). Search filters as you type.
+Open it from the book/database button on the main window. **Ctrl+S** or **Save** writes the table (combo columns are committed first). Search filters as you type (dataID, site name, common name — not siteID or database).
+
+**siteID** and **database** headers have a filter icon. Click it for a combobox of values that exist in the dictionary. While a filter is on, the icon switches to **Filtered**. Right-click that icon → **Clear filter**. The lists refresh when you Save.
 
 ## Columns (order)
 

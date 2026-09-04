@@ -23,7 +23,7 @@ Double-click a list row to edit it (interval and database can change). Select mo
 
 **Prev Day** / **Prev Week** recompute “now” when you open the window, load a Quick Look, or run Query — they are not frozen timestamps from last week. A Quick Look remembers which of Custom / Prev Day / Prev Week was selected. Custom is the default and stores the picker times; the two rolling modes do not.
 
-**Data ID Search** includes **siteID**. See [Data Dictionary](Data-Dictionary#what-dataid-and-siteid-mean) for what dataID / siteID mean per source.
+**Data ID Search** lists `dataID`, `siteID`, database, commonName, and datatype. Type-search matches dataID / commonName / datatype. Use the **filter icons** on the siteID and database headers to limit those columns (same as the Data Dictionary). See [Data Dictionary](Data-Dictionary#what-dataid-and-siteid-mean) for what dataID / siteID mean per source.
 
 ## Intervals
 

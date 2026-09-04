@@ -2123,36 +2123,59 @@ def getUtcOffsetInt(utcOffsetStr):
             logMessage("ERROR", "getUtcOffsetInt: Failed to parse '{}': {}. Returning 0".format(utcOffsetStr, e))
         return 0.0
     
-def filterTable(table, searchText, searchableColumns):
-    """Modular function to filter QTableWidget rows based on search text in specified columns."""
+def filterTable(table, searchText, searchableColumns, columnEquals=None):
+    """Filter QTableWidget rows by search text and optional exact column values.
+
+    columnEquals: {headerName: value} — row must match each pair exactly
+    (case-insensitive). Used by header Filter icons (siteID / database).
+    """
     if Config.debug:
         logMessage("DEBUG", f"filterTable: Processing table with {table.rowCount()} rows, search '{searchText}', columns {searchableColumns}")
 
     # Map column names to indices (case-sensitive match to headers)
     columnMap = {table.horizontalHeaderItem(c).text().strip(): c for c in range(table.columnCount())}
     searchableIndices = [columnMap[col] for col in searchableColumns if col in columnMap]
+    equalsMap = {}
+    for name, val in (columnEquals or {}).items():
+        if not val:
+            continue
+        idx = columnMap.get(name)
+        if idx is None:
+            for k, i in columnMap.items():
+                if k.lower() == str(name).lower():
+                    idx = i
+                    break
+        if idx is not None:
+            equalsMap[idx] = str(val).strip().lower()
 
-    if not searchableIndices:
+    if not searchableIndices and not equalsMap:
         if Config.debug:
             logMessage("WARN", "filterTable: No matching searchable columns found—showing all rows")
         for r in range(table.rowCount()):
             table.setRowHidden(r, False)
         return
 
-    if not searchText.strip():
-        # Empty search: Show all rows
+    keywords = [kw.lower() for kw in (searchText or "").strip().split() if kw]
+    if not keywords and not equalsMap:
         for r in range(table.rowCount()):
             table.setRowHidden(r, False)
         if Config.debug:
             logMessage("DEBUG", "filterTable: Empty search—showing all rows")
         return
 
-    # Split search into keywords (space-separated, AND logic)
-    keywords = [kw.lower() for kw in searchText.strip().split() if kw]
     visibleCount = 0
 
     for r in range(table.rowCount()):
         matches = True
+        for c, want in equalsMap.items():
+            item = table.item(r, c)
+            cellText = item.text().strip().lower() if item else ""
+            if cellText != want:
+                matches = False
+                break
+        if not matches:
+            table.setRowHidden(r, True)
+            continue
 
         for kw in keywords:
             kwMatched = False

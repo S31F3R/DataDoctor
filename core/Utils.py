@@ -98,7 +98,7 @@ retroUseDefaultSpacing = True
 # (info buttons except Data ID, main-table Refresh/Undo/Upload, query width).
 # Windows: ~2 Silkscreen characters so USGS-NWIS fits. Linux: original width.
 QUERY_WINDOW_BASE = (960, 668)
-QUERY_RETRO_EXTRA_W_WIN = 56
+QUERY_RETRO_EXTRA_W_WIN = 96
 QUERY_RETRO_EXTRA_W_LINUX = 0
 retroAlwaysLayouts = {
     'btnRefresh': (38, 8, 32, 32),
@@ -723,7 +723,12 @@ def applyTableRowMetrics(table, font=None):
 
 
 def sizeVerticalHeader(table):
-    """Timestamp rail width from a sample label (same fudge as buildTable)."""
+    """
+    Timestamp rail width from Qt's own sizeHint (style padding included).
+
+    Forcing metrics + fudge left a gap on both sides of Silkscreen labels.
+    Leave maximum unconstrained so the rail can still be dragged.
+    """
     if table is None:
         return
     try:
@@ -732,19 +737,17 @@ def sizeVerticalHeader(table):
         return
     if vHeader is None or not vHeader.isVisible():
         return
-    font = vHeader.font() if vHeader.font() is not None else table.font()
-    metrics = QFontMetrics(font)
-    sample = "01/01/26 00:00:00"
-    n = table.rowCount()
-    for r in range(min(n, 30)):
-        it = table.verticalHeaderItem(r)
-        if it is not None and it.text() and len(it.text()) > len(sample):
-            sample = it.text()
-    w = max(120, metrics.horizontalAdvance(sample) + 16)
     vHeader.setMinimumWidth(0)
     vHeader.setMaximumWidth(16777215)
-    vHeader.resize(w, vHeader.height())
-    vHeader.setMinimumWidth(w)
+    try:
+        vHeader.updateGeometry()
+    except Exception:
+        pass
+    hint = vHeader.sizeHint().width()
+    if hint < 8:
+        return
+    vHeader.resize(hint, vHeader.height())
+    vHeader.setMinimumWidth(hint)
 
 
 def autoSizeTableColumns(table, sampleRows=100):
@@ -2617,8 +2620,7 @@ def applyLiveAppearance(app=None):
     if mainTable is not None and mainTable.columnCount() > 0:
         try:
             applyTableRowMetrics(mainTable, mainTable.font())
-            # Timestamp rail only — full autoSize on live retro blew the
-            # date/time column; Refresh still does a full autoSize.
+            autoSizeTableColumns(mainTable)
             sizeVerticalHeader(mainTable)
         except Exception as e:
             Logic.logException("applyLiveAppearance: table resize failed", e)
