@@ -8,7 +8,7 @@ One table column holds two series. Where both have a value, you see the **primar
 
 - Overlay cells that differ (after the display limiter) paint <span style="color:#FF0000">red</span>. Values that match at the **primary** rounding (USBR `642.272` vs Aquarius `642.2724` at DEC(3)) are **not** flagged; Delta is `0`.
 - With **Raw Data** off, Overlay Details shows both values at the primary spec. Individual USBR / Aquarius / USGS details tabs keep each series’ own rounding.
-- Header **Swap Primary/Secondary** flips the pair (full header including the dataID line), the query list, and recalculates Delta from the new primary’s rounding. Column width is resized to fit.
+- Header **Swap Primary/Secondary** flips the pair (full header including the dataID line), the query list, and recalculates Delta from the new primary’s rounding. Overlay red clears when the pair now matches at that spec. Column width is resized to fit.
 - Cell **Update from secondary** writes the secondary value into primary for cells that differ (Ctrl+Z / Ctrl+Y undo that). USGS and Aquarius primaries are skipped.
 - Overlay Details shows Primary Value, Secondary Value, and Delta using the **same strings as the limiter** — in raw mode, two DB floats that only differ past display precision show as equal and Delta `0`.
 - Graph overlay legends use each series’ first header line (`commonName-datatype`).

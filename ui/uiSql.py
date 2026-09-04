@@ -89,7 +89,7 @@ class ResultTabBar(QTabBar):
         return False
 
     def _pinRect(self, index):
-        nudge = 14 if Config.retroMode else 0
+        nudge = 10 if Config.retroMode else 0
         slot = self.tabButton(index, QTabBar.ButtonPosition.RightSide)
         if slot is not None:
             g = slot.geometry()

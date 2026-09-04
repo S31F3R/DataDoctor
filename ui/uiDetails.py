@@ -824,6 +824,8 @@ class uiDetails(QWidget):
                 )
             return
 
+        if isinstance(response, dict) and isinstance(response.get("raw"), list):
+            response = response["raw"]
         if not isinstance(response, list):
             Logic.logMessage("WARN", f"Invalid response for USBR: expected list, got {type(response).__name__}")
             return

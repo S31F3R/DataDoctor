@@ -1497,7 +1497,7 @@ class uiMain(QMainWindow):
         except Exception as e:
             Logic.logException("showCellContextMenu failed", e)
 
-    def resolveSeriesResponse(self, col, seriesLabel, db, lookupId):
+    def resolveSeriesResponse(self, col, seriesLabel, db, lookupId, useColumnMetaIds=True):
         """
         Find the stored series response for a column.
 
@@ -1516,7 +1516,8 @@ class uiMain(QMainWindow):
             if key and key not in candidates: candidates.append(key)
         addCandidate(lookupId)
         meta = self.columnMetadata[col] if col < len(self.columnMetadata) else {}
-        addCandidate(meta.get('dataIds'))
+        if useColumnMetaIds:
+            addCandidate(meta.get('dataIds'))
 
         for qi in (meta.get('queryInfos') or []):
             if isinstance(qi, list): qi = qi[0] if qi else ''
@@ -1630,8 +1631,16 @@ class uiMain(QMainWindow):
                                 if hit:
                                     matchedKey, dbResponse = hit
                                     break
-                        if not isinstance(dbResponse, dict):
-                            dbResponse = {} if dbResponse is None else {"raw": dbResponse}
+                        if dbResponse is None:
+                            dbResponse, matchedKey = self.resolveSeriesResponse(
+                                col, "", dbName, lid if lid is not None else dataId,
+                                useColumnMetaIds=False,
+                            )
+                        # USBR meta is a list; Aquarius/USGS are dicts. Never wrap a list.
+                        if dbResponse is None:
+                            dbResponse = {}
+                        elif isinstance(dbResponse, str):
+                            dbResponse = {}
 
                         # USGS-NWIS: ensure details never receive a non-dict (overlay crash guard)
                         if isinstance(t, str) and t.upper().startswith('USGS') and not isinstance(dbResponse, dict):

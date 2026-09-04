@@ -8,8 +8,8 @@ Column map (CSV → dataDictionary):
   SITE_DATATYPE_ID = dataID        (match key; insert only, never rewrite)
   SITE_ID          = siteID        (match key; insert only, never rewrite)
   SITE_NAME        = siteName      (update from CSV)
-  SITE_COMMON_NAME = commonName    (insert only; keep user edits)
-  DATATYPE_NAME    = datatype      (update from CSV)
+  SITE_COMMON_NAME = commonName    (insert always; update existing only if you answer y)
+  DATATYPE_NAME    = datatype      (insert always; update existing only if you answer y)
   USGS_ID          = ignored
   DB_SITE_CODE     = database      (update from CSV, mapped to USBR-* labels)
 
@@ -113,6 +113,23 @@ def empty(val) -> bool:
     return val is None or str(val).strip() == ""
 
 
+def askYesNo(prompt: str, default: bool = False) -> bool:
+    """Terminal y/n. Empty uses default (n unless default True)."""
+    suffix = " [Y/n] " if default else " [y/N] "
+    try:
+        raw = input(prompt + suffix).strip().lower()
+    except EOFError:
+        return default
+    if not raw:
+        return default
+    if raw in ("y", "yes"):
+        return True
+    if raw in ("n", "no"):
+        return False
+    print("Please answer y or n.")
+    return askYesNo(prompt, default)
+
+
 def openDb(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
@@ -166,7 +183,13 @@ def readCsvRows(path: Path) -> list[dict]:
         return rows
 
 
-def mergeCsv(dbPath: Path, csvPaths: list[Path], dryRun: bool) -> int:
+def mergeCsv(
+    dbPath: Path,
+    csvPaths: list[Path],
+    dryRun: bool,
+    updateCommonNames: bool = False,
+    updateDatatypes: bool = False,
+) -> int:
     if not dbPath.is_file():
         die(f"bunker.db not found: {dbPath}")
     allRows = []
@@ -224,16 +247,23 @@ def mergeCsv(dbPath: Path, csvPaths: list[Path], dryRun: bool) -> int:
             if row["siteName"] and str(existing[cSiteName] or "") != row["siteName"]:
                 sets.append(f"{cSiteName} = ?")
                 params.append(row["siteName"])
-            if row["datatype"] and str(existing[cType] or "") != row["datatype"]:
+            if (
+                updateDatatypes
+                and row["datatype"]
+                and str(existing[cType] or "") != row["datatype"]
+            ):
                 sets.append(f"{cType} = ?")
                 params.append(row["datatype"])
             if row["database"] and str(existing[cDb] or "") != row["database"]:
                 sets.append(f"{cDb} = ?")
                 params.append(row["database"])
-            # commonName: only fill when the user/row has none
-            if row["commonName"] and empty(existing[cCommon]):
-                sets.append(f"{cCommon} = ?")
-                params.append(row["commonName"])
+            if row["commonName"]:
+                if empty(existing[cCommon]) or (
+                    updateCommonNames
+                    and str(existing[cCommon] or "") != row["commonName"]
+                ):
+                    sets.append(f"{cCommon} = ?")
+                    params.append(row["commonName"])
 
             if not sets:
                 skipped += 1
@@ -270,7 +300,15 @@ def main() -> int:
     parser.add_argument("--dry-run", dest="dryRun", action="store_true")
     args = parser.parse_args()
     print(f"Database: {args.db}")
-    return mergeCsv(args.db, args.csv, dryRun=args.dryRun)
+    updateCommon = askYesNo("Update Data Dictionary Common Names?")
+    updateTypes = askYesNo("Update Data Dictionary Data Types?")
+    return mergeCsv(
+        args.db,
+        args.csv,
+        dryRun=args.dryRun,
+        updateCommonNames=updateCommon,
+        updateDatatypes=updateTypes,
+    )
 
 
 if __name__ == "__main__":

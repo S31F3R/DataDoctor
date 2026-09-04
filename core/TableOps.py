@@ -124,7 +124,7 @@ def splitCommonName(firstLine, datatype=None) -> str:
     return first
 
 
-def _dictDatatype(mainWindow, dataId, database=None) -> str:
+def _dictField(mainWindow, dataId, database, field) -> str:
     winDd = getattr(mainWindow, "winDataDictionary", None)
     table = getattr(winDd, "mainTable", None) if winDd is not None else None
     if table is None or not dataId:
@@ -134,11 +134,19 @@ def _dictDatatype(mainWindow, dataId, database=None) -> str:
     row = getDataDictionaryItem(table, key)
     if row < 0:
         return ""
-    col = getColByName(table, "datatype")
+    col = getColByName(table, field)
     if col < 0:
         return ""
     item = table.item(row, col)
     return item.text().strip() if item and item.text() else ""
+
+
+def _dictDatatype(mainWindow, dataId, database=None) -> str:
+    return _dictField(mainWindow, dataId, database, "datatype")
+
+
+def _dictCommonName(mainWindow, dataId, database=None) -> str:
+    return _dictField(mainWindow, dataId, database, "commonName")
 
 
 def allColumnBlocks(mainWindow):
@@ -585,6 +593,7 @@ def moveColumnRange(mainWindow, srcStart, count, destStart):
         rules.append(Logic.DEFAULT_ROUNDING_SPEC)
 
     packs = []
+    widths = [table.columnWidth(i) for i in range(n)]
     table.blockSignals(True)
     header = table.horizontalHeader()
     header.blockSignals(True)
@@ -595,6 +604,7 @@ def moveColumnRange(mainWindow, srcStart, count, destStart):
                 [_cloneItem(table.item(r, i)) for r in range(table.rowCount())],
                 dict(metas[i]) if i < len(metas) else {},
                 rules[i] if i < len(rules) else Logic.DEFAULT_ROUNDING_SPEC,
+                widths[i],
             ))
         timestamps = []
         for r in range(table.rowCount()):
@@ -603,10 +613,11 @@ def moveColumnRange(mainWindow, srcStart, count, destStart):
         newMetas = []
         newRules = []
         for dest, src in enumerate(newOrder):
-            h, items, meta, rule = packs[src]
+            h, items, meta, rule, width = packs[src]
             _setHeaderText(table, dest, h)
             for r, item in enumerate(items):
                 table.setItem(r, dest, item)
+            table.setColumnWidth(dest, width)
             newMetas.append(meta)
             newRules.append(rule)
         if timestamps and any(timestamps):
@@ -713,6 +724,22 @@ def renameHeader(mainWindow, col):
         return
     newCommon = (newCommon or "").strip()
     if not newCommon:
+        return
+    dictCommon = _dictCommonName(mainWindow, dataId, db) if dataId else ""
+    if dictCommon and newCommon == dictCommon:
+        # Back to the dictionary name — not a pending rename
+        renames = getattr(mainWindow, "headerRenames", None) or {}
+        renames.pop(str(dataId), None)
+        mainWindow.headerRenames = renames
+        if meta.get("type") == "custom":
+            return
+        if datatype and Utils.includeDataTypeInLabel(db):
+            newFirst = f"{newCommon}-{datatype}"
+        else:
+            newFirst = newCommon
+        newHeader = newFirst if not rest.strip() else f"{newFirst} \n{rest.lstrip()}"
+        _setHeaderText(table, col, Utils.formatTableHeaderLabel(newHeader))
+        Utils.autoSizeTableColumns(table)
         return
     if meta.get("type") == "custom":
         meta["name"] = newCommon

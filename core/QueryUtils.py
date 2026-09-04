@@ -469,13 +469,33 @@ def applyOverlayColorOverrides(table, progressDialog=None):
             except ValueError:
                 d = np.nan
 
+            prevPaint = data.get("overlayPaint")
+            paint = None
             if hasP and hasS:
                 if np.isfinite(d) and d != 0:
-                    TableColors.applyToItem(item, "overlayMismatch")
+                    paint = "mismatch"
             elif not hasP and hasS:
-                TableColors.applyToItem(item, "overlaySecondaryOnly")
+                paint = "secondary"
             elif hasP and not hasS:
+                paint = "primary"
+            if paint == "mismatch":
+                TableColors.applyToItem(item, "overlayMismatch")
+            elif paint == "secondary":
+                TableColors.applyToItem(item, "overlaySecondaryOnly")
+            elif paint == "primary":
                 TableColors.applyToItem(item, "overlayPrimaryOnly")
+            elif prevPaint:
+                # Pair now matches at the current primary spec — drop overlay red
+                # (QAQC on still-matching cells is left alone: prevPaint is None).
+                item.setBackground(QBrush())
+                item.setForeground(Config.systemTextColor)
+            if paint != prevPaint:
+                data = dict(data)
+                if paint:
+                    data["overlayPaint"] = paint
+                else:
+                    data.pop("overlayPaint", None)
+                item.setData(Qt.ItemDataRole.UserRole, data)
 
         if progressDialog is not None and (c % 5 == 0 or c == numCols - 1):
             progressDialog.setLabelText(f"Overlay colors... ({c + 1}/{numCols})")

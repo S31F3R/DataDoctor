@@ -825,7 +825,7 @@ class GraphPanel(QWidget):
         self._applyChartFonts(ax, twins)
         return 'light'
 
-    def _chartFontProperties(self):
+    def _chartFontProperties(self, size=9):
         """Silkscreen in retro so legend/ticks match the UI (tooltips already do)."""
         if not Config.retroMode:
             return None
@@ -835,24 +835,25 @@ class GraphPanel(QWidget):
             if not os.path.isfile(path):
                 return None
             font_manager.fontManager.addfont(path)
-            return font_manager.FontProperties(fname=path, size=8)
+            return font_manager.FontProperties(fname=path, size=size)
         except Exception:
             return None
 
     def _applyChartFonts(self, ax, twins=None):
-        prop = self._chartFontProperties()
-        if prop is None or ax is None:
+        tickProp = self._chartFontProperties(9)
+        axisProp = self._chartFontProperties(10)
+        if tickProp is None or ax is None:
             return
         try:
-            ax.title.set_fontproperties(prop)
-            ax.xaxis.label.set_fontproperties(prop)
-            ax.yaxis.label.set_fontproperties(prop)
+            ax.title.set_fontproperties(tickProp)
+            ax.xaxis.label.set_fontproperties(axisProp)
+            ax.yaxis.label.set_fontproperties(axisProp)
             for lab in list(ax.get_xticklabels()) + list(ax.get_yticklabels()):
-                lab.set_fontproperties(prop)
+                lab.set_fontproperties(tickProp)
             for twin in twins or []:
-                twin.yaxis.label.set_fontproperties(prop)
+                twin.yaxis.label.set_fontproperties(axisProp)
                 for lab in twin.get_yticklabels():
-                    lab.set_fontproperties(prop)
+                    lab.set_fontproperties(tickProp)
         except Exception:
             pass
 
@@ -940,11 +941,11 @@ class GraphPanel(QWidget):
             self._legend = None
             return
 
-        prop = self._chartFontProperties()
+        prop = self._chartFontProperties(9)
         if prop is not None:
             legend = self._ax.legend(lines, labels, loc='best', prop=prop)
         else:
-            legend = self._ax.legend(lines, labels, loc='best', fontsize=8)
+            legend = self._ax.legend(lines, labels, loc='best', fontsize=9)
 
         if theme == 'dark':
             try:

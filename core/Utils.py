@@ -98,7 +98,7 @@ retroUseDefaultSpacing = True
 # (info buttons except Data ID, main-table Refresh/Undo/Upload, query width).
 # Windows: ~2 Silkscreen characters so USGS-NWIS fits. Linux: original width.
 QUERY_WINDOW_BASE = (960, 668)
-QUERY_RETRO_EXTRA_W_WIN = 24
+QUERY_RETRO_EXTRA_W_WIN = 56
 QUERY_RETRO_EXTRA_W_LINUX = 0
 retroAlwaysLayouts = {
     'btnRefresh': (38, 8, 32, 32),
@@ -142,9 +142,8 @@ controlLayouts = {
 # Neon green used for retro scrollbars and tab chrome
 retroNeonGreen = '#00FF00'
 
-# Retro-only: smaller Press Start on these (objectName → leave rest at role sizes)
-retroSmallFontControls = frozenset({
-    'cbUTCOffset',
+# Query-window radios/checkboxes: one step under UI even with default spacing.
+queryRetroSmallControls = frozenset({
     'rbCustomDateTime',
     'rbPrevDayToCurrent',
     'rbPrevWeekToCurrent',
@@ -152,6 +151,10 @@ retroSmallFontControls = frozenset({
     'chkbOverlay',
     'chkbRawData',
     'chkbQAQC',
+})
+# Options-only extras (UTC / BOP/EOP) — only when old Press Start spacing is on.
+retroSmallFontControls = queryRetroSmallControls | frozenset({
+    'cbUTCOffset',
     'lblTimeStampMethod',
     'rbBOP',
     'rbEOP',
@@ -644,9 +647,8 @@ def tableDefaultRowHeight(font=None, metrics=None):
     # Silkscreen already has a tall em-box; the Noto +10 pad looks like
     # extra space above/below the timestamp in retro.
     if Config.retroMode:
-        if sys.platform == 'win32':
-            return max(h + 2, 20)
-        return max(h + 2, 20)
+        # No extra Noto-style pad — Silkscreen em-box is already tall.
+        return max(h - 2, 18)
     if sys.platform == 'win32':
         return max(h + 4, 20)
     return max(h + 10, 22)
@@ -720,6 +722,31 @@ def applyTableRowMetrics(table, font=None):
             Logic.logMessage("DEBUG", f"applyTableRowMetrics failed: {e}")
 
 
+def sizeVerticalHeader(table):
+    """Timestamp rail width from a sample label (same fudge as buildTable)."""
+    if table is None:
+        return
+    try:
+        vHeader = table.verticalHeader()
+    except Exception:
+        return
+    if vHeader is None or not vHeader.isVisible():
+        return
+    font = vHeader.font() if vHeader.font() is not None else table.font()
+    metrics = QFontMetrics(font)
+    sample = "01/01/26 00:00:00"
+    n = table.rowCount()
+    for r in range(min(n, 30)):
+        it = table.verticalHeaderItem(r)
+        if it is not None and it.text() and len(it.text()) > len(sample):
+            sample = it.text()
+    w = max(120, metrics.horizontalAdvance(sample) + 16)
+    vHeader.setMinimumWidth(0)
+    vHeader.setMaximumWidth(16777215)
+    vHeader.resize(w, vHeader.height())
+    vHeader.setMinimumWidth(w)
+
+
 def autoSizeTableColumns(table, sampleRows=100):
     """
     Size columns from final header labels + a sample of displayed cell text.
@@ -772,6 +799,8 @@ def autoSizeTableColumns(table, sampleRows=100):
         # Extra pad so multi-line header text is not clipped at edges
         finalWidth += 2
         table.setColumnWidth(c, finalWidth)
+
+    sizeVerticalHeader(table)
 
     if Config.debug:
         Logic.logMessage(
@@ -1194,13 +1223,15 @@ def applyRoleFonts(app=None, root=None):
     uiFont = makeFontForRole('ui')
     comboFont = uiFont
     retroSmallFont = None
-    # Extra-small named radios were for Press Start density. With default
-    # spacing + Silkscreen they jump size on Options Save — skip them.
-    if Config.retroMode and not retroUseDefaultSpacing:
-        retroSmallFont = makeFontForRole(
+    querySmallFont = None
+    if Config.retroMode:
+        querySmallFont = makeFontForRole(
             'ui',
             pointSize=max(5, int(retroSmallFontPt) + int(retroFontSizeAdjust)),
         )
+        # Options UTC/BOP extras only with the old Press Start spacing.
+        if not retroUseDefaultSpacing:
+            retroSmallFont = querySmallFont
     # Retro: named Query controls one point smaller (all platforms)
     winRetroSmaller = bool(Config.retroMode)
     winSmallerButtonFont = None
@@ -1227,6 +1258,9 @@ def applyRoleFonts(app=None, root=None):
         try:
             name = w.objectName() or ''
             # Retro notes: specific controls at 6pt Press Start (Noto/default untouched)
+            if Config.retroMode and querySmallFont is not None and name in queryRetroSmallControls:
+                w.setFont(querySmallFont)
+                continue
             if Config.retroMode and retroSmallFont is not None and name in retroSmallFontControls:
                 w.setFont(retroSmallFont)
                 continue
@@ -2583,7 +2617,9 @@ def applyLiveAppearance(app=None):
     if mainTable is not None and mainTable.columnCount() > 0:
         try:
             applyTableRowMetrics(mainTable, mainTable.font())
-            autoSizeTableColumns(mainTable)
+            # Timestamp rail only — full autoSize on live retro blew the
+            # date/time column; Refresh still does a full autoSize.
+            sizeVerticalHeader(mainTable)
         except Exception as e:
             Logic.logException("applyLiveAppearance: table resize failed", e)
     if graph is not None and hasattr(graph, "reapplyTheme"):
