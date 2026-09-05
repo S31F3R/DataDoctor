@@ -24,28 +24,23 @@ Current Tests
      c. No popup (not “no published release” and not “Revert to published”).
      d. Recheck Beta → Save: update check may offer the newest rc/beta as usual.
 
-[ ] GitHub OAuth report (device flow)
+[ ] Aquarius dictionary export (published series)
    Steps:
-     a. GitHub OAuth App Ov23libpuvlYvAG9zjIa must have Device Flow enabled.
-     b. About → Report issue. If no stored token: dialog shows a user code, Open GitHub
-        / Copy code, then wait. Authorize public_repo. Token lands in the OS keyring
-        (DataDoctor / githubToken), not user.config.
-     c. Fill title + what happened (log tail checked by default) → Submit creates a
-        real GitHub issue as you. Success dialog has Open issue.
-     d. Crash dialog → Report on GitHub uses the stored token (no second login) and
-        files a crash issue with traceback + log tail. No browser issue-form paste.
-     e. Copy log / Open log folder still work without signing in.
-     f. Optional: revoke the app on GitHub, Report again → 401 → device flow again.
-
-[ ] First-install timezone offset
-   Steps:
-     a. No user.config (rename/move the config folder, or a fresh account).
-     b. Launch Data Doctor → Options → General → UTC offset is the computer’s
-        current offset (DST included), not hardcoded UTC+00:00. Windows / Linux / Mac.
-     c. Existing user.config keeps the saved offset; do not overwrite on upgrade.
+     a. Options → Aquarius server/user/password already work for a normal query.
+     b. From project root: python scripts/aquariusDictionary.py <LocationIdentifier>
+        (VPN). Prints “ident (name) — N published series” and CSV with dictionary
+        headers: dataID=series UniqueId, siteID=location Identifier, database=AQUARIUS,
+        siteName=commonName=location name.
+     c. datatype and valuePrecision filled only when Parameter exactly matches a
+        valuePrecision.json Identifier (e.g. Discharge, Stage). Others blank.
+     d. Unpublished series at that location are not in the CSV.
+     e. Optional: --out file.csv and/or --apply (inserts new bunker.db rows, skips
+        existing dataID + AQUARIUS). Normal Aquarius query still works after.
 
 Confirmed
 --------------------------------------------------------------------------------
+GitHub OAuth report (one-time Authorize)
+First-install timezone offset
 Windows update Restart + launcher hop
 Uncheck Beta on rc/beta — offer published
 Apply-update Common Names / Data Types prompts

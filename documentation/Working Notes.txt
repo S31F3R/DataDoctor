@@ -10,3 +10,6 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- GitHub report: first time auto-opens the browser to Authorize (one-time). Later reports skip login. Code is backup only; VS Code/git credentials are not reused.
+- scripts/aquariusDictionary.py: location Identifier (or location UniqueId) → published time-series as Data Dictionary CSV (dataID=series UID, siteID=location Identifier, database=AQUARIUS); optional --apply into bunker.db
+
