@@ -204,45 +204,11 @@ class uiOptions(QDialog):
         self._savedSnapshot = None
 
         # Populate UTC offset combobox
-        self.cbUTCOffset.addItem("UTC-12:00 | Baker Island")
-        self.cbUTCOffset.addItem("UTC-11:00 | American Samoa")
-        self.cbUTCOffset.addItem("UTC-10:00 | Hawaii")
-        self.cbUTCOffset.addItem("UTC-09:30 | Marquesas Islands")
-        self.cbUTCOffset.addItem("UTC-09:00 | Alaska")
-        self.cbUTCOffset.addItem("UTC-08:00 | Pacific Time (US & Canada)")
-        self.cbUTCOffset.addItem("UTC-07:00 | Mountain Time (US & Canada)/Arizona")
-        self.cbUTCOffset.addItem("UTC-06:00 | Central Time (US & Canada)")
-        self.cbUTCOffset.addItem("UTC-05:00 | Eastern Time (US & Canada)")
-        self.cbUTCOffset.addItem("UTC-04:00 | Atlantic Time (Canada)")
-        self.cbUTCOffset.addItem("UTC-03:30 | Newfoundland")
-        self.cbUTCOffset.addItem("UTC-03:00 | Brasilia")
-        self.cbUTCOffset.addItem("UTC-02:00 | Mid-Atlantic")
-        self.cbUTCOffset.addItem("UTC-01:00 | Cape Verde Is.")
-        self.cbUTCOffset.addItem("UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London")
-        self.cbUTCOffset.addItem("UTC+01:00 | Central European Time : Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna")
-        self.cbUTCOffset.addItem("UTC+02:00 | Eastern European Time : Athens, Bucharest, Istanbul")
-        self.cbUTCOffset.addItem("UTC+03:00 | Moscow, St. Petersburg, Volgograd")
-        self.cbUTCOffset.addItem("UTC+03:30 | Tehran")
-        self.cbUTCOffset.addItem("UTC+04:00 | Abu Dhabi, Muscat")
-        self.cbUTCOffset.addItem("UTC+04:30 | Kabul")
-        self.cbUTCOffset.addItem("UTC+05:00 | Islamabad, Karachi, Tashkent")
-        self.cbUTCOffset.addItem("UTC+05:30 | Chennai, Kolkata, Mumbai, New Delhi")
-        self.cbUTCOffset.addItem("UTC+05:45 | Kathmandu")
-        self.cbUTCOffset.addItem("UTC+06:00 | Astana, Dhaka")
-        self.cbUTCOffset.addItem("UTC+06:30 | Yangon (Rangoon)")
-        self.cbUTCOffset.addItem("UTC+07:00 | Bangkok, Hanoi, Jakarta")
-        self.cbUTCOffset.addItem("UTC+08:00 | Beijing, Chongqing, Hong Kong, Urumqi")
-        self.cbUTCOffset.addItem("UTC+08:45 | Eucla")
-        self.cbUTCOffset.addItem("UTC+09:00 | Osaka, Sapporo, Tokyo")
-        self.cbUTCOffset.addItem("UTC+09:30 | Adelaide, Darwin")
-        self.cbUTCOffset.addItem("UTC+10:00 | Brisbane, Canberra, Melbourne, Sydney")
-        self.cbUTCOffset.addItem("UTC+10:30 | Lord Howe Island")
-        self.cbUTCOffset.addItem("UTC+11:00 | Solomon Is., New Caledonia")
-        self.cbUTCOffset.addItem("UTC+12:00 | Auckland, Wellington")
-        self.cbUTCOffset.addItem("UTC+12:45 | Chatham Islands")
-        self.cbUTCOffset.addItem("UTC+13:00 | Samoa")
-        self.cbUTCOffset.addItem("UTC+14:00 | Kiritimati")
-        self.cbUTCOffset.setCurrentIndex(14)
+        for item in Utils.utcOffsetChoices:
+            self.cbUTCOffset.addItem(item[1])
+        localLabel = Utils.defaultUtcOffsetLabel()
+        localIndex = self.cbUTCOffset.findText(localLabel)
+        self.cbUTCOffset.setCurrentIndex(localIndex if localIndex != -1 else 0)
 
         self.setupOptionsTabOrder()
         for tabs in (
@@ -713,7 +679,7 @@ class uiOptions(QDialog):
             except Exception as e:
                 Logic.logMessage("ERROR", "Failed to load user.config: {}".format(e))
 
-        utcOffset = config.get('utcOffset', "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London")
+        utcOffset = config.get('utcOffset') or Utils.defaultUtcOffsetLabel()
         index = self.cbUTCOffset.findText(utcOffset)
 
         if index != -1:
@@ -722,10 +688,12 @@ class uiOptions(QDialog):
             if Config.debug:
                 Logic.logMessage("DEBUG", "Set cbUTCOffset to: {}".format(utcOffset))
         else:
-            self.cbUTCOffset.setCurrentIndex(14)
+            fallback = Utils.defaultUtcOffsetLabel()
+            fallbackIndex = self.cbUTCOffset.findText(fallback)
+            self.cbUTCOffset.setCurrentIndex(fallbackIndex if fallbackIndex != -1 else 0)
 
             if Config.debug:
-                Logic.logMessage("DEBUG", "utcOffset '{}' not found, set to default UTC+00:00".format(utcOffset))
+                Logic.logMessage("DEBUG", "utcOffset '{}' not found, set to {}".format(utcOffset, fallback))
         self.chkbRetroMode.setChecked(bool(config.get('retroMode', True)))
 
         if Config.debug:

@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import time
 import weakref
+from datetime import datetime
 from pathlib import Path
 from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
 from PyQt6.QtWidgets import (
@@ -93,9 +94,9 @@ defaultFontFiles = (
 
 # Extra retro geometries (info buttons except Data ID, main-table Refresh/Undo/Upload).
 # Query width: Windows ~2 Silkscreen characters so USGS-NWIS fits. Linux: original.
-QUERY_WINDOW_BASE = (960, 668)
-QUERY_RETRO_EXTRA_W_WIN = 96
-QUERY_RETRO_EXTRA_W_LINUX = 0
+queryWindowBase = (960, 668)
+queryRetroExtraWWin = 96
+queryRetroExtraWLinux = 0
 retroAlwaysLayouts = {
     'btnRefresh': (54, 8, 32, 32),
     'btnUndo': (90, 8, 32, 32),
@@ -168,7 +169,7 @@ platformLayoutYNudge = {
 compactListObjectNames = frozenset({'listSnippets', 'listQueryList'})
 
 
-def _findWindowsLauncherExe(script, cwd):
+def findWindowsLauncherExe(script, cwd):
     """
     Prefer the VB.NET 'Data Doctor.exe' when present next to the install layout
     (zip root / launcher folder / parent of pythonFiles).
@@ -249,7 +250,7 @@ def restartApplication():
                 exe = program
                 childArgs = [exe, script] + extra
             else:
-                launcher = _findWindowsLauncherExe(script, cwd)
+                launcher = findWindowsLauncherExe(script, cwd)
                 if launcher:
                     childCwd = os.path.dirname(launcher) or cwd
                     childArgs = [launcher]
@@ -360,12 +361,11 @@ def restartApplication():
                 Logic.logMessage("INFO", f"restartApplication: subprocess.Popen {args}")
 
         # Quit after a short delay so the restart spawn is fully underway
-        from core import Logic as _Logic
-        _Logic.appIsQuitting = True
+        Logic.appIsQuitting = True
         app = QApplication.instance()
 
         def quitApp():
-            _Logic.appIsQuitting = True
+            Logic.appIsQuitting = True
             try:
                 if app is not None:
                     app.closeAllWindows()
@@ -906,9 +906,9 @@ def applyRetroQueryWindow(win):
         return
     extra = 0
     if Config.retroMode:
-        extra = QUERY_RETRO_EXTRA_W_WIN if sys.platform == 'win32' else QUERY_RETRO_EXTRA_W_LINUX
-    w = QUERY_WINDOW_BASE[0] + extra
-    h = QUERY_WINDOW_BASE[1]
+        extra = queryRetroExtraWWin if sys.platform == 'win32' else queryRetroExtraWLinux
+    w = queryWindowBase[0] + extra
+    h = queryWindowBase[1]
     try:
         win.setMaximumSize(w, h)
         win.setFixedSize(w, h)
@@ -1004,7 +1004,7 @@ def retroSpacingStylesheet():
     """
 
 
-_QSS_URL_RE = re.compile(r'url\(\s*[\'"]?([^)\'"]+)[\'"]?\s*\)')
+qssUrlRe = re.compile(r'url\(\s*[\'"]?([^)\'"]+)[\'"]?\s*\)')
 
 
 def resolveStylesheetUrls(qss):
@@ -1039,7 +1039,7 @@ def resolveStylesheetUrls(qss):
             Logic.logMessage("DEBUG", f"QSS url missing: {raw} -> {path}")
         return f'url("{posix}")'
 
-    return _QSS_URL_RE.sub(repl, qss)
+    return qssUrlRe.sub(repl, qss)
 
 
 def readBaseStylesheet():
@@ -1111,7 +1111,7 @@ def logResolvedUiFont(app=None, where='apply'):
             actual or '(none)',
             pt,
             exact,
-            _styleKey(app) if app is not None else '',
+            styleKey(app) if app is not None else '',
             getattr(Config, 'defaultFontLoaded', False),
             getattr(Config, 'retroFontLoaded', False),
             bool(getattr(Config, 'retroMode', False)),
@@ -1431,7 +1431,7 @@ def loadDatabase(comboBox, queryType=None):
         if Config.debug:
             Logic.logMessage("ERROR", "cbDatabase is None, cannot populate")
 
-def _iconButtonCursorOver(widget):
+def iconButtonCursorOver(widget):
     """True if the cursor is inside widget. Do not use underMouse() — it sticks after modals."""
     if widget is None:
         return False
@@ -1443,25 +1443,25 @@ def _iconButtonCursorOver(widget):
         return False
 
 
-_styledIconButtons = []
-_appIconHoverFilter = None
+styledIconButtons = []
+appIconHoverFilter = None
 
 
-def _pruneStyledIconButtons():
-    _styledIconButtons[:] = [ref for ref in _styledIconButtons if ref() is not None]
+def pruneStyledIconButtons():
+    styledIconButtons[:] = [ref for ref in styledIconButtons if ref() is not None]
 
 
-def _registerStyledIconButton(button):
-    _pruneStyledIconButtons()
-    _styledIconButtons.append(weakref.ref(button))
-    _ensureAppIconHoverFilter()
+def registerStyledIconButton(button):
+    pruneStyledIconButtons()
+    styledIconButtons.append(weakref.ref(button))
+    ensureAppIconHoverFilter()
 
 
-def _syncOneIconButton(button):
+def syncOneIconButton(button):
     if button is None:
         return
     try:
-        over = _iconButtonCursorOver(button)
+        over = iconButtonCursorOver(button)
         if button.isDown():
             icon = getattr(button, '_ddPressedIcon', None)
         elif over:
@@ -1477,13 +1477,13 @@ def _syncOneIconButton(button):
         pass
 
 
-def _syncAllIconButtonHovers():
-    _pruneStyledIconButtons()
-    for ref in _styledIconButtons:
-        _syncOneIconButton(ref())
+def syncAllIconButtonHovers():
+    pruneStyledIconButtons()
+    for ref in styledIconButtons:
+        syncOneIconButton(ref())
 
 
-class _AppIconHoverFilter(QObject):
+class AppIconHoverFilter(QObject):
     """
     Mouse Leave is often swallowed after a modal or a slot exception, so the
     hover icon sticks until the cursor re-enters that button. Any mouse move
@@ -1500,19 +1500,19 @@ class _AppIconHoverFilter(QObject):
             QEvent.Type.ApplicationDeactivate,
             QEvent.Type.ApplicationActivate,
         ):
-            _syncAllIconButtonHovers()
+            syncAllIconButtonHovers()
         return False
 
 
-def _ensureAppIconHoverFilter():
-    global _appIconHoverFilter
-    if _appIconHoverFilter is not None:
+def ensureAppIconHoverFilter():
+    global appIconHoverFilter
+    if appIconHoverFilter is not None:
         return
     app = QApplication.instance()
     if app is None:
         return
-    _appIconHoverFilter = _AppIconHoverFilter(app)
-    app.installEventFilter(_appIconHoverFilter)
+    appIconHoverFilter = AppIconHoverFilter(app)
+    app.installEventFilter(appIconHoverFilter)
 
 
 def buttonStyle(button, iconName=None, iconSize=None):
@@ -1554,7 +1554,7 @@ def buttonStyle(button, iconName=None, iconSize=None):
         button.setFlat(True)
         button.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         button.setMouseTracking(True)
-        _registerStyledIconButton(button)
+        registerStyledIconButton(button)
 
         # Define local event filter for state swaps
         class ButtonEventFilter(QObject):
@@ -1567,7 +1567,7 @@ def buttonStyle(button, iconName=None, iconSize=None):
                 ):
                     # Fake Enter after a modal: only hover if the cursor is
                     # actually over the button.
-                    _syncOneIconButton(obj)
+                    syncOneIconButton(obj)
                 elif et in (
                     QEvent.Type.Leave,
                     QEvent.Type.HoverLeave,
@@ -1579,7 +1579,7 @@ def buttonStyle(button, iconName=None, iconSize=None):
                     obj.setIcon(pressedIcon)
                 elif et == QEvent.Type.MouseButtonRelease:
                     def syncIcon():
-                        _syncOneIconButton(obj)
+                        syncOneIconButton(obj)
                     syncIcon()
                     QTimer.singleShot(0, syncIcon)
                     QTimer.singleShot(50, syncIcon)
@@ -1595,24 +1595,24 @@ def buttonStyle(button, iconName=None, iconSize=None):
         button.installEventFilter(filt)
         # After clicked slots (modal or exception dialog), wait until no
         # modal is up, then force a cursor-based restore.
-        def _syncAfterClick(*_args, _btn=button):
+        def syncAfterClick(*unused, btn=button):
             def tick(retries=40):
                 app = QApplication.instance()
                 if app is not None and app.activeModalWidget() is not None:
                     if retries > 0:
                         QTimer.singleShot(50, lambda: tick(retries - 1))
                     return
-                resetStyledButtonHover(_btn)
+                resetStyledButtonHover(btn)
             QTimer.singleShot(0, lambda: tick())
-            QTimer.singleShot(200, lambda: resetStyledButtonHover(_btn))
+            QTimer.singleShot(200, lambda: resetStyledButtonHover(btn))
         oldClick = getattr(button, '_ddHoverClickHook', None)
         if oldClick is not None:
             try:
                 button.clicked.disconnect(oldClick)
             except TypeError:
                 pass
-        button._ddHoverClickHook = _syncAfterClick
-        button.clicked.connect(_syncAfterClick)
+        button._ddHoverClickHook = syncAfterClick
+        button.clicked.connect(syncAfterClick)
 
         # Apply flat stylesheet
         button.setStyleSheet("""
@@ -1743,11 +1743,11 @@ def thickScrollBarStyle(retro=None, minHandle=48, track=20):
     if retro:
         handle, handleHover = "#00FF00", "#66FF66"
         app = QApplication.instance()
-        light = app is not None and not _paletteIsDark(app.palette())
+        light = app is not None and not paletteIsDark(app.palette())
         trackBg = "#e0e0e0" if light else "#333333"
     else:
         app = QApplication.instance()
-        dark = _paletteIsDark(app.palette()) if app is not None else True
+        dark = paletteIsDark(app.palette()) if app is not None else True
         if dark:
             handle, handleHover, trackBg = "#6a6a6a", "#8a8a8a", "#2a2a2a"
         else:
@@ -1790,7 +1790,7 @@ def thickScrollBarStyle(retro=None, minHandle=48, track=20):
 
 def setRetroStyles(app, enable, mainTable=None, webQueryList=None, internalQueryList=None):
     """Apply or remove retro mode styles (e.g., scroll bars) dynamically."""
-    light = app is not None and not _paletteIsDark(app.palette())
+    light = app is not None and not paletteIsDark(app.palette())
     trackBg = "#e0e0e0" if light else "#333333"
     # Neon green paddle; track follows light/dark (was always black).
     retroStyles = f"""
@@ -1845,6 +1845,77 @@ def resolvePeriodOffset(config):
         return method == 'EOP'
     return bool(config.get('periodOffset', True))
 
+# Options → UTC offset combo. Hours include DST when matching the OS clock.
+utcOffsetChoices = (
+    (-12.0, "UTC-12:00 | Baker Island"),
+    (-11.0, "UTC-11:00 | American Samoa"),
+    (-10.0, "UTC-10:00 | Hawaii"),
+    (-9.5, "UTC-09:30 | Marquesas Islands"),
+    (-9.0, "UTC-09:00 | Alaska"),
+    (-8.0, "UTC-08:00 | Pacific Time (US & Canada)"),
+    (-7.0, "UTC-07:00 | Mountain Time (US & Canada)/Arizona"),
+    (-6.0, "UTC-06:00 | Central Time (US & Canada)"),
+    (-5.0, "UTC-05:00 | Eastern Time (US & Canada)"),
+    (-4.0, "UTC-04:00 | Atlantic Time (Canada)"),
+    (-3.5, "UTC-03:30 | Newfoundland"),
+    (-3.0, "UTC-03:00 | Brasilia"),
+    (-2.0, "UTC-02:00 | Mid-Atlantic"),
+    (-1.0, "UTC-01:00 | Cape Verde Is."),
+    (0.0, "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London"),
+    (1.0, "UTC+01:00 | Central European Time : Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna"),
+    (2.0, "UTC+02:00 | Eastern European Time : Athens, Bucharest, Istanbul"),
+    (3.0, "UTC+03:00 | Moscow, St. Petersburg, Volgograd"),
+    (3.5, "UTC+03:30 | Tehran"),
+    (4.0, "UTC+04:00 | Abu Dhabi, Muscat"),
+    (4.5, "UTC+04:30 | Kabul"),
+    (5.0, "UTC+05:00 | Islamabad, Karachi, Tashkent"),
+    (5.5, "UTC+05:30 | Chennai, Kolkata, Mumbai, New Delhi"),
+    (5.75, "UTC+05:45 | Kathmandu"),
+    (6.0, "UTC+06:00 | Astana, Dhaka"),
+    (6.5, "UTC+06:30 | Yangon (Rangoon)"),
+    (7.0, "UTC+07:00 | Bangkok, Hanoi, Jakarta"),
+    (8.0, "UTC+08:00 | Beijing, Chongqing, Hong Kong, Urumqi"),
+    (8.75, "UTC+08:45 | Eucla"),
+    (9.0, "UTC+09:00 | Osaka, Sapporo, Tokyo"),
+    (9.5, "UTC+09:30 | Adelaide, Darwin"),
+    (10.0, "UTC+10:00 | Brisbane, Canberra, Melbourne, Sydney"),
+    (10.5, "UTC+10:30 | Lord Howe Island"),
+    (11.0, "UTC+11:00 | Solomon Is., New Caledonia"),
+    (12.0, "UTC+12:00 | Auckland, Wellington"),
+    (12.75, "UTC+12:45 | Chatham Islands"),
+    (13.0, "UTC+13:00 | Samoa"),
+    (14.0, "UTC+14:00 | Kiritimati"),
+)
+
+
+def localUtcOffsetHours():
+    """Current OS timezone offset in hours (Windows / Linux / macOS, includes DST)."""
+    try:
+        delta = datetime.now().astimezone().utcoffset()
+        if delta is None:
+            return 0.0
+        return round(delta.total_seconds() / 3600.0, 2)
+    except Exception as e:
+        Logic.logMessage("WARN", f"localUtcOffsetHours failed: {e}")
+        return 0.0
+
+
+def utcOffsetLabelForHours(hours):
+    """Pick the combo label whose hours match, or the closest listed offset."""
+    try:
+        hours = round(float(hours), 2)
+    except (TypeError, ValueError):
+        hours = 0.0
+    byHours = {h: label for h, label in utcOffsetChoices}
+    if hours in byHours:
+        return byHours[hours]
+    return min(utcOffsetChoices, key=lambda item: abs(item[0] - hours))[1]
+
+
+def defaultUtcOffsetLabel():
+    """First-install default: the computer's current UTC offset."""
+    return utcOffsetLabelForHours(localUtcOffsetHours())
+
 def loadConfig():
     convertConfigToJson()
     configPath = getConfigPath()
@@ -1852,7 +1923,7 @@ def loadConfig():
         'lastExportPath': '',
         'lastGraphSavePath': '',
         'debugMode': False,
-        'utcOffset': 'UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London',
+        'utcOffset': defaultUtcOffsetLabel(),
         'periodOffset': True,
         'hourTimestampMethod': 'EOP',
         'retroMode': False,
@@ -1880,47 +1951,7 @@ def loadConfig():
             if isinstance(utcOffset, (int, float)):
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Migrating integer utcOffset {utcOffset} to full string")
-                offsetMap = {
-                    -12: "UTC-12:00 | Baker Island",
-                    -11: "UTC-11:00 | American Samoa",
-                    -10: "UTC-10:00 | Hawaii",
-                    -9.5: "UTC-09:30 | Marquesas Islands",
-                    -9: "UTC-09:00 | Alaska",
-                    -8: "UTC-08:00 | Pacific Time (US & Canada)",
-                    -7: "UTC-07:00 | Mountain Time (US & Canada)/Arizona",
-                    -6: "UTC-06:00 | Central Time (US & Canada)",
-                    -5: "UTC-05:00 | Eastern Time (US & Canada)",
-                    -4: "UTC-04:00 | Atlantic Time (Canada)",
-                    -3.5: "UTC-03:30 | Newfoundland",
-                    -3: "UTC-03:00 | Brasilia",
-                    -2: "UTC-02:00 | Mid-Atlantic",
-                    -1: "UTC-01:00 | Cape Verde Is.",
-                    0: "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
-                    1: "UTC+01:00 | Central European Time : Amsterdam, Berlin, Bern, Rome, Stockholm, Vienna",
-                    2: "UTC+02:00 | Eastern European Time : Athens, Bucharest, Istanbul",
-                    3: "UTC+03:00 | Moscow, St. Petersburg, Volgograd",
-                    3.5: "UTC+03:30 | Tehran",
-                    4: "UTC+04:00 | Abu Dhabi, Muscat",
-                    4.5: "UTC+04:30 | Kabul",
-                    5: "UTC+05:00 | Islamabad, Karachi, Tashkent",
-                    5.5: "UTC+05:30 | Chennai, Kolkata, Mumbai, New Delhi",
-                    5.75: "UTC+05:45 | Kathmandu",
-                    6: "UTC+06:00 | Astana, Dhaka",
-                    6.5: "UTC+06:30 | Yangon (Rangoon)",
-                    7: "UTC+07:00 | Bangkok, Hanoi, Jakarta",
-                    8: "UTC+08:00 | Beijing, Chongqing, Hong Kong, Urumqi",
-                    8.75: "UTC+08:45 | Eucla",
-                    9: "UTC+09:00 | Osaka, Sapporo, Tokyo",
-                    9.5: "UTC+09:30 | Adelaide, Darwin",
-                    10: "UTC+10:00 | Brisbane, Canberra, Melbourne, Sydney",
-                    10.5: "UTC+10:30 | Lord Howe Island",
-                    11: "UTC+11:00 | Solomon Is., New Caledonia",
-                    12: "UTC+12:00 | Auckland, Wellington",
-                    12.75: "UTC+12:45 | Chatham Islands",
-                    13: "UTC+13:00 | Samoa",
-                    14: "UTC+14:00 | Kiritimati"
-                }
-                utcOffset = offsetMap.get(utcOffset, defaults['utcOffset'])
+                utcOffset = utcOffsetLabelForHours(utcOffset)
                 config['utcOffset'] = utcOffset
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Migrated utcOffset to: {utcOffset}")
@@ -1946,10 +1977,10 @@ def loadConfig():
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Loaded full config: {config}")
 
-            return _applyTableColorOverrides(config)
+            return applyTableColorOverrides(config)
         except Exception as e:
             Logic.logException("Failed to load user.config; using defaults", e)
-            return _applyTableColorOverrides(defaults)
+            return applyTableColorOverrides(defaults)
     else:
         try:
             with open(configPath, 'w', encoding='utf-8') as configFile:
@@ -1958,10 +1989,10 @@ def loadConfig():
                 Logic.logMessage("DEBUG", f"Created default user.config with defaults: {defaults}")
         except Exception as e:
             Logic.logException("Failed to create default user.config", e)
-        return _applyTableColorOverrides(defaults)
+        return applyTableColorOverrides(defaults)
 
 
-def _applyTableColorOverrides(settings):
+def applyTableColorOverrides(settings):
     try:
         from core import TableColors
         TableColors.setOverrides((settings or {}).get("tableColors"))
@@ -2047,7 +2078,7 @@ def convertConfigToJson():
         if Config.debug:
             Logic.logMessage("DEBUG", "Found config.ini, converting to user.config")
         settings = {
-            'utcOffset': "UTC+00:00 | Greenwich Mean Time : Dublin, Edinburgh, Lisbon, London",
+            'utcOffset': defaultUtcOffsetLabel(),
             'retroFont': True,
             'qaqc': False,
             'rawData': False,
@@ -2107,16 +2138,16 @@ def convertConfigToJson():
     elif Config.debug:
         Logic.logMessage("DEBUG", "No config.ini found or user.config exists, skipping conversion")
 
-_savedStyleName = None  # native style key before a Light/Dark Fusion override
+savedStyleName = None  # native style key before a Light/Dark Fusion override
 
 
-def _paletteIsDark(pal):
+def paletteIsDark(pal):
     bg = pal.color(QPalette.ColorRole.Window)
     lum = 0.2126 * bg.redF() + 0.7152 * bg.greenF() + 0.0722 * bg.blueF()
     return lum < 0.45
 
 
-def _forcedSchemePalette(dark):
+def forcedSchemePalette(dark):
     """Fusion-like palette so Light/Dark do not depend on the OS theme."""
     pal = QPalette()
     if dark:
@@ -2154,14 +2185,14 @@ def _forcedSchemePalette(dark):
     return pal
 
 
-def _styleKey(app):
+def styleKey(app):
     st = app.style()
     if st is None:
         return ''
     return (st.objectName() or '').strip()
 
 
-def _setAppStyle(app, key):
+def setAppStyle(app, key):
     if not key:
         return
     style = QStyleFactory.create(key)
@@ -2169,7 +2200,7 @@ def _setAppStyle(app, key):
         app.setStyle(style)
 
 
-def _applyHintScheme(app, scheme):
+def applyHintScheme(app, scheme):
     hints = app.styleHints()
     if hints is None or not hasattr(hints, 'setColorScheme'):
         return
@@ -2180,7 +2211,7 @@ def _applyHintScheme(app, scheme):
             Logic.logMessage("DEBUG", f"setColorScheme failed: {e}")
 
 
-def _pushPalette(app, pal):
+def pushPalette(app, pal):
     """Make this palette what every widget (and Config.systemTextColor) sees."""
     app.setPalette(pal)
     Config.systemTextColor = pal.color(QPalette.ColorRole.Text)
@@ -2196,7 +2227,7 @@ def _pushPalette(app, pal):
             pass
 
 
-def _windowsAppsUseDark():
+def windowsAppsUseDark():
     """True if Windows apps are in dark mode; None if unknown / not Windows."""
     if sys.platform != 'win32':
         return None
@@ -2256,13 +2287,13 @@ def applyBasePaneBackground(widget):
         except Exception:
             pass
         widget.update()
-        _restyleTextDocument(widget)
+        restyleTextDocument(widget)
     except Exception as e:
         if Config.debug:
             Logic.logMessage("DEBUG", f"applyBasePaneBackground failed: {e}")
 
 
-def _restyleTextDocument(widget):
+def restyleTextDocument(widget):
     """QPlainTextEdit keeps the char color from construction; palette changes
     do not rewrite existing text. Force the current Text role onto the document."""
     if widget is None or not isinstance(widget, (QPlainTextEdit, QTextEdit)):
@@ -2286,7 +2317,7 @@ def _restyleTextDocument(widget):
         pass
 
 
-def _restyleMarkedPanes(app):
+def restyleMarkedPanes(app):
     try:
         widgets = list(app.allWidgets())
     except Exception:
@@ -2296,7 +2327,7 @@ def _restyleMarkedPanes(app):
             if w.property("sqlPane"):
                 applyBasePaneBackground(w)
             elif isinstance(w, (QPlainTextEdit, QTextEdit, QComboBox, QTableWidget, QListWidget)):
-                _restyleTextDocument(w)
+                restyleTextDocument(w)
                 try:
                     st = w.style()
                     if st is not None:
@@ -2318,7 +2349,7 @@ def resetStyledButtonHover(button):
         try:
             button.setDown(False)
             button.setAttribute(Qt.WidgetAttribute.WA_UnderMouse, False)
-            _syncOneIconButton(button)
+            syncOneIconButton(button)
             st = button.style()
             if st is not None:
                 st.unpolish(button)
@@ -2333,36 +2364,36 @@ def resetStyledButtonHover(button):
     QTimer.singleShot(150, apply)
 
 
-def _restoreNativePalette(app):
-    _applyHintScheme(app, Qt.ColorScheme.Unknown)
-    current = _styleKey(app)
-    if _savedStyleName and current.lower() != _savedStyleName.lower():
-        _setAppStyle(app, _savedStyleName)
+def restoreNativePalette(app):
+    applyHintScheme(app, Qt.ColorScheme.Unknown)
+    current = styleKey(app)
+    if savedStyleName and current.lower() != savedStyleName.lower():
+        setAppStyle(app, savedStyleName)
     # Empty QPalette() is a baked light palette, not "follow OS".
-    _pushPalette(app, app.style().standardPalette())
+    pushPalette(app, app.style().standardPalette())
 
 
-def _applyForcedTheme(app, wantDark):
+def applyForcedTheme(app, wantDark):
     scheme = Qt.ColorScheme.Dark if wantDark else Qt.ColorScheme.Light
-    _applyHintScheme(app, scheme)
+    applyHintScheme(app, scheme)
     # Windows 11 native style paints checkbox/radio indicators from the OS
     # theme and ignores a pushed palette (dark boxes on a light System UI).
     # Fusion honors Light/Dark palettes for those indicators on every machine.
     if sys.platform == 'win32':
-        current = _styleKey(app)
+        current = styleKey(app)
         if current.lower() != 'fusion':
-            _setAppStyle(app, 'Fusion')
-            _applyHintScheme(app, scheme)
+            setAppStyle(app, 'Fusion')
+            applyHintScheme(app, scheme)
     pal = app.style().standardPalette()
-    if _paletteIsDark(pal) != wantDark:
-        current = _styleKey(app)
+    if paletteIsDark(pal) != wantDark:
+        current = styleKey(app)
         if current.lower() != 'fusion':
-            _setAppStyle(app, 'Fusion')
-            _applyHintScheme(app, scheme)
+            setAppStyle(app, 'Fusion')
+            applyHintScheme(app, scheme)
             pal = app.style().standardPalette()
-        if _paletteIsDark(pal) != wantDark:
-            pal = _forcedSchemePalette(wantDark)
-    _pushPalette(app, pal)
+        if paletteIsDark(pal) != wantDark:
+            pal = forcedSchemePalette(wantDark)
+    pushPalette(app, pal)
 
 
 def applyColorTheme(theme=None):
@@ -2377,7 +2408,7 @@ def applyColorTheme(theme=None):
     follows AppsUseLightTheme with the same Light/Dark palettes — the native
     Windows style does not pick up OS dark mode.
     """
-    global _savedStyleName
+    global savedStyleName
     name = theme if theme is not None else getattr(Config, 'colorTheme', 'system')
     name = str(name or 'system').strip().lower()
     if name not in ('system', 'light', 'dark'):
@@ -2386,19 +2417,19 @@ def applyColorTheme(theme=None):
     app = QApplication.instance()
     if app is None:
         return
-    if not _savedStyleName:
-        _savedStyleName = _styleKey(app)
+    if not savedStyleName:
+        savedStyleName = styleKey(app)
 
     if name == 'system':
-        osDark = _windowsAppsUseDark()
+        osDark = windowsAppsUseDark()
         if osDark is None:
-            _restoreNativePalette(app)
+            restoreNativePalette(app)
         else:
-            _applyForcedTheme(app, wantDark=osDark)
+            applyForcedTheme(app, wantDark=osDark)
     else:
-        _applyForcedTheme(app, wantDark=(name == 'dark'))
+        applyForcedTheme(app, wantDark=(name == 'dark'))
 
-    _restyleMarkedPanes(app)
+    restyleMarkedPanes(app)
     try:
         from ui.uiSql import SqlWorkbench
         appWin = None
@@ -2433,8 +2464,8 @@ def applyColorTheme(theme=None):
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
-            f"applyColorTheme {name} style={_styleKey(app)!r} "
-            f"darkPalette={_paletteIsDark(app.palette())} "
+            f"applyColorTheme {name} style={styleKey(app)!r} "
+            f"darkPalette={paletteIsDark(app.palette())} "
             f"text={Config.systemTextColor.name() if hasattr(Config.systemTextColor, 'name') else Config.systemTextColor}",
         )
 

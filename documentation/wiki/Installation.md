@@ -98,4 +98,4 @@ The Python update zip does not include Instant Client (it is OS-specific).
 
 - [Updates and Releases](Updates-and-Releases)
 - [App Data](App-Data)
-- **Options**: USGS key, HDB login, and/or Aquarius server as needed
+- **Options**: USGS key, HDB login, and/or Aquarius server as needed. First launch sets **UTC offset** from the computer’s current timezone (Windows / Linux / macOS).

@@ -6,9 +6,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        If the in-app crash dialog is still open, **Report on GitHub** pre-fills a
-        markdown issue with the traceback. This form is for filing after the fact.
-        You need a GitHub account.
+        If the in-app crash dialog is still open, **Report on GitHub** signs you in
+        (device code) and files the traceback as your GitHub user. This form is for
+        filing after the fact from the website.
   - type: input
     id: version
     attributes:

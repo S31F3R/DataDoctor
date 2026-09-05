@@ -69,7 +69,7 @@ Open **Options** (left categories, General tab on each) and set the sources that
 
 | Category | What to set |
 |----------|-------------|
-| General | Debug, **Beta updates**, profile export/import |
+| General | Debug, **Beta updates**, UTC offset (first install uses the computer’s current timezone), profile export/import |
 | Appearance | Retro mode, color theme (System / Light / Dark) |
 | Oracle | TNS names path, user / password; Databases access list |
 | USGS | API key (optional, stored in the OS keyring) |

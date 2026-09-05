@@ -20,6 +20,10 @@ VERSION = "3.2.0-rc.1.1"
 # GitHub repo for release checks (owner/name)
 GITHUB_REPO = "S31F3R/DataDoctor"
 
+# Public OAuth App client ID for in-app issue filing (device flow). Not a secret.
+GITHUB_OAUTH_CLIENT_ID = "Ov23libpuvlYvAG9zjIa"
+GITHUB_OAUTH_SCOPE = "public_repo"
+
 # Rank inside a pre-release label (higher = newer). Unknown labels sort below beta.
 _PRE_RANK = {
     "alpha": 0,

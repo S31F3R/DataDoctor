@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QGraphicsOpacityEffect,
 )
 from PyQt6.QtCore import Qt, QUrl, QSize, QObject, QEvent, QTimer, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QPixmap, QFont, QIcon, QImage, QColor, QPainter
+from PyQt6.QtGui import QPixmap, QFont, QIcon, QImage, QColor, QPainter, QDesktopServices
 from PyQt6 import uic
 
 from core import Logic, Utils, Version
@@ -191,14 +191,16 @@ class uiAbout(QDialog):
         self._aboutInfo = [
             ('Version', Version.displayVersion()),
             ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
-            ('Report issue', f'https://github.com/{Version.GITHUB_REPO}/issues/new/choose'),
+            ('Report issue', 'datadoctor://report'),
             ('Author', 'S31F3R'),
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
         ]
         if self.textInfo is not None:
             self.textInfo.setFont(retroFontObj)
-            self.textInfo.setOpenExternalLinks(True)
+            self.textInfo.setOpenExternalLinks(False)
+            self.textInfo.setOpenLinks(False)
+            self.textInfo.anchorClicked.connect(self.onAboutLink)
             self.textInfo.setStyleSheet("background-color: transparent; border: none;")
             self.textInfo.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             self.textInfo.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -272,6 +274,15 @@ class uiAbout(QDialog):
         self.buttonSecret.setIconSize(QSize(16, 16))
         self.buttonSecret.clicked.connect(self.buttonSecretPressed)
 
+    def onAboutLink(self, url):
+        href = url.toString() if url is not None else ""
+        if href.startswith("datadoctor://report"):
+            from core import Report
+            Report.showManualReportDialog(self)
+            return
+        if href.startswith("http://") or href.startswith("https://"):
+            QDesktopServices.openUrl(url)
+
     def _aboutInfoHtml(self, pt):
         fam = getattr(self, "_retroFam", "monospace")
         pad = max(24, int(round(50 * (pt / float(max(1, self._retroPt))))))
@@ -280,14 +291,15 @@ class uiAbout(QDialog):
             f'font-size: {pt}pt; padding-left: {pad}px; line-height: 1.25;">'
         )
         for label, content in getattr(self, "_aboutInfo", []):
-            if str(content).startswith("http://") or str(content).startswith("https://"):
-                shown = str(content)
-                if "issues" in shown:
-                    shown = "GitHub issue form"
+            href = str(content)
+            if href.startswith("http://") or href.startswith("https://") or href.startswith("datadoctor://"):
+                shown = href
+                if href.startswith("datadoctor://report"):
+                    shown = "file as your GitHub user"
                 elif len(shown) > 42:
                     shown = shown.split("://", 1)[-1][:42] + "…"
                 html += (
-                    f'{label}: <a href="{content}" style="color: white;">{shown}</a><br>'
+                    f'{label}: <a href="{href}" style="color: white;">{shown}</a><br>'
                 )
             else:
                 html += f'{label}: {content}<br>'

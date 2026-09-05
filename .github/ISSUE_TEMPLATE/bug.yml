@@ -6,8 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        You need a GitHub account. Please attach or paste a tail of `app.log` if you have one
-        (About → Report issue, or the crash dialog **Copy log** / **Open log folder**).
+        Prefer **About → Report issue** in the app (GitHub device-code sign-in files
+        the issue as you, with an optional log tail). This form is for filing from the website.
   - type: input
     id: version
     attributes:

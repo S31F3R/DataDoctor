@@ -25,6 +25,9 @@ Passwords and API keys are **not** in `user.config`. They go to the OS keyring, 
 - `usgsApiKey`
 - `oracleUser` / `oraclePassword`
 - `aqServer` / `aqUser` / `aqPassword`
+- `githubToken` (and `githubRefreshToken` if GitHub issued one) — About → Report issue / crash **Report on GitHub**
+
+On first launch with no `user.config`, **UTC offset** is set to the computer’s current timezone offset (including DST) on Windows, Linux, and macOS. Later Options saves keep whatever you picked.
 
 ## Install / dictionary files
 
