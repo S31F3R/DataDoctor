@@ -87,60 +87,19 @@ def _httpsServer(server: str) -> str:
     return s
 
 
-def apiRead(dataIDs, startDate, endDate, interval):
-    if Config.debug:
-        Logic.logMessage("DEBUG", "Aquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}".format(dataIDs, interval, startDate, endDate))
-
-    # Parse start
-    startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
-    startYear = startDateTime.year
-    startMonth = f'{startDateTime.month:02d}'
-    startDay = f'{startDateTime.day:02d}'
-    startHour = f'{startDateTime.hour:02d}'
-    startMinute = f'{startDateTime.minute:02d}'
-
-    # Parse end
-    endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
-    endYear = endDateTime.year
-    endMonth = f'{endDateTime.month:02d}'
-    endDay = f'{endDateTime.day:02d}'
-    endHour = f'{endDateTime.hour:02d}'
-    endMinute = f'{endDateTime.minute:02d}'
-
-    # Build start and end date in ISO format (keep exact)
-    startDate = f'{startYear}-{startMonth}-{startDay} {startHour}:{startMinute}'
-    endDate = f'{endYear}-{endMonth}-{endDay} {endHour}:{endMinute}'
-
-    # Apply utc offset for Aquarius query (keep exact)
-    offsetHours = Logic.getUtcOffsetInt(Config.utcOffset)
-    startDateTime = startDateTime - timedelta(hours=offsetHours)
-    endDateTime = endDateTime - timedelta(hours=offsetHours) + timedelta(minutes=1)
-
-    # Re-pad after offset
-    startMonth = f'{startDateTime.month:02d}'
-    startDay = f'{startDateTime.day:02d}'
-    startHour = f'{startDateTime.hour:02d}'
-    startMinute = f'{startDateTime.minute:02d}'
-    endMonth = f'{endDateTime.month:02d}'
-    endDay = f'{endDateTime.day:02d}'
-    endHour = f'{endDateTime.hour:02d}'
-    endMinute = f'{endDateTime.minute:02d}'
-
-    # Build offset ISO
-    startDate = f'{startDateTime.year}-{startMonth}-{startDay} {startHour}:{startMinute}'
-    endDate = f'{endDateTime.year}-{endMonth}-{endDay} {endHour}:{endMinute}'
-
-    # Fetch creds right before auth, use, then clear
+def authenticate():
+    """
+    Log in with keyring credentials and the same TLS policy as queries.
+    Returns {server, headers, sslContext, verifyMode} or None.
+    """
     server = _httpsServer(keyring.get_password("DataDoctor", "aqServer") or '')
     user = keyring.get_password("DataDoctor", "aqUser") or ''
     password = keyring.get_password("DataDoctor", "aqPassword") or ''
 
     if not server or not user or not password:
         Logic.logMessage("ERROR", "Missing Aquarius credentials.")
-        return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
+        return None
 
-    # TLS: OS certificate store (Windows CA store, not certifi), plus optional
-    # certs/aquarius.pem. Last resort: unverified HTTPS (internal/VPN only).
     authData = {'Username': user, 'EncryptedPassword': password}
     certPath = Logic.ensureAquariusPem()
     sslContext = None
@@ -187,10 +146,10 @@ def apiRead(dataIDs, startDate, endDate, interval):
                 except Exception:
                     pass
             Logic.logMessage("ERROR", f"Authentication failed: {e}")
-            return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
+            return None
     else:
         Logic.logMessage("ERROR", "Aquarius TLS failed (OS store, certs/, and unverified).")
-        return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
+        return None
     token = authResponse.text.strip('"')
     headers = {'X-Authentication-Token': token}
     if authSession is not None:
@@ -198,10 +157,183 @@ def apiRead(dataIDs, startDate, endDate, interval):
             authSession.close()
         except Exception:
             pass
+    return {
+        'server': server,
+        'headers': headers,
+        'sslContext': sslContext,
+        'verifyMode': verifyMode,
+    }
 
-    # Clear creds immediately after use
-    user = None
-    password = None
+
+def publishGet(auth, route, params=None, timeout=60):
+    """GET /AQUARIUS/Publish/v2{route}. Raises on HTTP errors."""
+    if not route.startswith('/'):
+        route = '/' + route
+    http = _httpsSession(ssl_context=auth['sslContext'], verify=auth['verifyMode'])
+    try:
+        response = http.get(
+            f"{auth['server']}/AQUARIUS/Publish/v2{route}",
+            headers=auth['headers'],
+            params=params or {},
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+    finally:
+        try:
+            http.close()
+        except Exception:
+            pass
+
+
+def isLocationUniqueId(text):
+    s = (text or '').strip().replace('-', '')
+    return len(s) == 32 and all(c in '0123456789abcdefABCDEF' for c in s)
+
+
+def isPublishedSeries(series):
+    value = (series or {}).get('Publish')
+    if value is True or value == 1:
+        return True
+    if isinstance(value, str) and value.strip().lower() in ('true', 'yes', '1'):
+        return True
+    return False
+
+
+def locationIdentifierOf(location):
+    if not isinstance(location, dict):
+        return ''
+    return str(
+        location.get('Identifier')
+        or location.get('LocationIdentifier')
+        or ''
+    ).strip()
+
+
+def locationNameOf(location):
+    if not isinstance(location, dict):
+        return ''
+    return str(
+        location.get('LocationName')
+        or location.get('Name')
+        or locationIdentifierOf(location)
+    ).strip()
+
+
+def resolveLocation(auth, location):
+    """
+    Resolve a location identifier or 32-char UniqueId to GetLocationData.
+    """
+    loc = (location or '').strip()
+    if not loc:
+        return None
+    try:
+        data = publishGet(auth, '/GetLocationData', {'LocationIdentifier': loc})
+        if isinstance(data, dict) and (locationIdentifierOf(data) or data.get('UniqueId')):
+            return data
+    except requests.exceptions.RequestException as e:
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"GetLocationData({loc!r}) failed: {e}")
+    if not isLocationUniqueId(loc):
+        return None
+    needle = loc.replace('-', '').lower()
+    try:
+        listing = publishGet(auth, '/GetLocationDescriptionList', timeout=120)
+    except requests.exceptions.RequestException as e:
+        Logic.logMessage("ERROR", f"GetLocationDescriptionList failed: {e}")
+        return None
+    for desc in listing.get('LocationDescriptions') or []:
+        uid = str(desc.get('UniqueId') or '').replace('-', '').lower()
+        if uid != needle:
+            continue
+        ident = locationIdentifierOf(desc)
+        if not ident:
+            return desc
+        try:
+            return publishGet(auth, '/GetLocationData', {'LocationIdentifier': ident})
+        except requests.exceptions.RequestException:
+            return desc
+    return None
+
+
+def publishedSeriesAtLocation(auth, locationIdentifier):
+    """Time-series at a location with Publish checked (API filter + client check)."""
+    ident = (locationIdentifier or '').strip()
+    if not ident:
+        return []
+    data = publishGet(
+        auth,
+        '/GetTimeSeriesDescriptionList',
+        {'LocationIdentifier': ident, 'Publish': True},
+    )
+    series = data.get('TimeSeriesDescriptions') or []
+    return [s for s in series if isinstance(s, dict) and isPublishedSeries(s)]
+
+
+def matchValuePrecision(parameter):
+    """Exact Identifier match in valuePrecision.json (case-insensitive). Else ''."""
+    ident = (parameter or '').strip()
+    if not ident:
+        return ''
+    _ordered, byId = Logic.loadAquariusRoundingSpecs()
+    if ident in byId:
+        return ident
+    for key in byId:
+        if key.lower() == ident.lower():
+            return key
+    return ''
+
+
+def apiRead(dataIDs, startDate, endDate, interval):
+    if Config.debug:
+        Logic.logMessage("DEBUG", "Aquarius.apiRead called with dataIDs: {}, interval: {}, start: {}, end: {}".format(dataIDs, interval, startDate, endDate))
+
+    # Parse start
+    startDateTime = datetime.strptime(startDate, '%Y-%m-%d %H:%M')
+    startYear = startDateTime.year
+    startMonth = f'{startDateTime.month:02d}'
+    startDay = f'{startDateTime.day:02d}'
+    startHour = f'{startDateTime.hour:02d}'
+    startMinute = f'{startDateTime.minute:02d}'
+
+    # Parse end
+    endDateTime = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
+    endYear = endDateTime.year
+    endMonth = f'{endDateTime.month:02d}'
+    endDay = f'{endDateTime.day:02d}'
+    endHour = f'{endDateTime.hour:02d}'
+    endMinute = f'{endDateTime.minute:02d}'
+
+    # Build start and end date in ISO format (keep exact)
+    startDate = f'{startYear}-{startMonth}-{startDay} {startHour}:{startMinute}'
+    endDate = f'{endYear}-{endMonth}-{endDay} {endHour}:{endMinute}'
+
+    # Apply utc offset for Aquarius query (keep exact)
+    offsetHours = Logic.getUtcOffsetInt(Config.utcOffset)
+    startDateTime = startDateTime - timedelta(hours=offsetHours)
+    endDateTime = endDateTime - timedelta(hours=offsetHours) + timedelta(minutes=1)
+
+    # Re-pad after offset
+    startMonth = f'{startDateTime.month:02d}'
+    startDay = f'{startDateTime.day:02d}'
+    startHour = f'{startDateTime.hour:02d}'
+    startMinute = f'{startDateTime.minute:02d}'
+    endMonth = f'{endDateTime.month:02d}'
+    endDay = f'{endDateTime.day:02d}'
+    endHour = f'{endDateTime.hour:02d}'
+    endMinute = f'{endDateTime.minute:02d}'
+
+    # Build offset ISO
+    startDate = f'{startDateTime.year}-{startMonth}-{startDay} {startHour}:{startMinute}'
+    endDate = f'{endDateTime.year}-{endMonth}-{endDay} {endHour}:{endMinute}'
+
+    auth = authenticate()
+    if not auth:
+        return {uid: {'data': [], 'label': uid, 'rawResponse': {}} for uid in dataIDs}
+    server = auth['server']
+    headers = auth['headers']
+    sslContext = auth['sslContext']
+    verifyMode = auth['verifyMode']
 
     # Calculate total points
     totalDuration = endDateTime - startDateTime

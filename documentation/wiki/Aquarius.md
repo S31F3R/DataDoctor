@@ -45,6 +45,28 @@ Series not in the dictionary keep the API location / label.
 
 `valuePrecision` is an Aquarius **parameter identifier**. `core/valuePrecision.json` maps those identifiers to `DEC(n)` / `SIG(n)`. Override per row with `precisionOverride`. See [Data Dictionary](Data-Dictionary).
 
+## Dictionary export (published series)
+
+From the project root, with Options → Aquarius already set (same keyring login as queries):
+
+```bash
+python scripts/aquariusDictionary.py TFLC
+python scripts/aquariusDictionary.py TFLC --out tflc.csv
+python scripts/aquariusDictionary.py TFLC --apply
+```
+
+Pass a location **Identifier** (or the 32-character location UniqueId). The script lists time-series at that location with **Publish** checked and writes Data Dictionary columns:
+
+| Column | Source |
+|--------|--------|
+| `dataID` | Time-series UniqueId |
+| `siteID` | Location Identifier |
+| `database` | `AQUARIUS` |
+| `siteName` / `commonName` | Location name |
+| `datatype` / `valuePrecision` | Aquarius `Parameter` only when it exactly matches a `valuePrecision.json` Identifier; otherwise blank |
+
+`--apply` inserts new rows into `core/bunker.db` and skips existing `dataID` + `AQUARIUS`. There is no `stationID` column; the location identifier is `siteID`.
+
 ## Writes
 
 Aquarius **upload is stubbed**. You can edit the table; write-back is not live yet.
