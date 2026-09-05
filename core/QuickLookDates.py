@@ -171,6 +171,14 @@ def _add(options: list, seen: set, optionId: str, label: str, rule: dict | None)
     options.append({"id": optionId, "label": label, "rule": rule})
 
 
+def isMidnight(dt: datetime) -> bool:
+    return dt is not None and dt.hour == 0 and dt.minute == 0
+
+
+def calendarDays(a: datetime, b: datetime) -> int:
+    return (b.date() - a.date()).days
+
+
 def _spanLabel(days, minutes) -> str:
     if days is not None and days != 0:
         n = abs(days)
@@ -180,8 +188,15 @@ def _spanLabel(days, minutes) -> str:
             return f"{abs(minutes) // 1440} day(s)"
         if abs(minutes) >= 60 and abs(minutes) % 60 == 0:
             return f"{abs(minutes) // 60} hour(s)"
-        return f"{abs(minutes)} minute(s)"
     return "the same duration"
+
+
+def _roundSpan(days, minutes) -> bool:
+    if days is not None:
+        return True
+    if minutes is None:
+        return False
+    return abs(minutes) % 60 == 0
 
 
 def propose(start: datetime, end: datetime, now: datetime, intervalMin: int) -> list:
@@ -202,13 +217,49 @@ def propose(start: datetime, end: datetime, now: datetime, intervalMin: int) -> 
     onQuarter = start.minute in (0, 15, 30, 45)
     spanText = _spanLabel(days, minutes)
     clock = f"{start.hour:02d}:{start.minute:02d}"
+    endMidnight = isMidnight(end)
+    daysFromNow = calendarDays(now, end)
+    daysFromStart = calendarDays(start, end)
 
     def endSpec():
         if days is not None:
             return {"ref": "start", "offsetDays": days}
-        return {"ref": "start", "offsetMinutes": minutes}
+        if _roundSpan(days, minutes):
+            return {"ref": "start", "offsetMinutes": minutes}
+        return {
+            "ref": "todayClock",
+            "hour": end.hour,
+            "minute": end.minute,
+            "offsetDays": daysFromNow,
+        }
 
-    if startNear and end >= now:
+    if startNear and endMidnight and daysFromNow >= 0:
+        if daysFromNow == 0:
+            midnightLabel = "From current time through midnight tonight (00:00)"
+        elif daysFromNow == 1:
+            midnightLabel = "From current time through midnight 1 day from today (00:00)"
+        else:
+            midnightLabel = (
+                f"From current time through midnight {daysFromNow} day(s) "
+                f"from today (00:00)"
+            )
+        _add(
+            options,
+            seen,
+            "nowToMidnight",
+            midnightLabel,
+            {
+                "kind": "relative",
+                "start": {"ref": "now"},
+                "end": {
+                    "ref": "todayClock",
+                    "hour": 0,
+                    "minute": 0,
+                    "offsetDays": daysFromNow,
+                },
+            },
+        )
+    if startNear and end >= now and _roundSpan(days, minutes) and not endMidnight:
         _add(
             options,
             seen,
@@ -216,7 +267,30 @@ def propose(start: datetime, end: datetime, now: datetime, intervalMin: int) -> 
             f"From current time through {spanText} later (same clock)",
             {"kind": "relative", "start": {"ref": "now"}, "end": endSpec()},
         )
-    if (startToday or startNear) and not (startNear and start.hour == now.hour and start.minute == now.minute):
+    if startNear and end >= now and not _roundSpan(days, minutes) and not endMidnight:
+        _add(
+            options,
+            seen,
+            "nowToEndClock",
+            f"From current time through {end.hour:02d}:{end.minute:02d}, "
+            f"{daysFromNow} day(s) from today",
+            {
+                "kind": "relative",
+                "start": {"ref": "now"},
+                "end": {
+                    "ref": "todayClock",
+                    "hour": end.hour,
+                    "minute": end.minute,
+                    "offsetDays": daysFromNow,
+                },
+            },
+        )
+    if (
+        (startToday or startNear)
+        and not (startNear and start.hour == now.hour and start.minute == now.minute)
+        and _roundSpan(days, minutes)
+        and not endMidnight
+    ):
         _add(
             options,
             seen,
@@ -230,6 +304,27 @@ def propose(start: datetime, end: datetime, now: datetime, intervalMin: int) -> 
                     "minute": start.minute,
                 },
                 "end": endSpec(),
+            },
+        )
+    if (startToday or startNear) and endMidnight and daysFromStart >= 0:
+        _add(
+            options,
+            seen,
+            "todayClockToMidnight",
+            f"Today at {clock} through midnight {daysFromStart} day(s) from the start (00:00)",
+            {
+                "kind": "relative",
+                "start": {
+                    "ref": "todayClock",
+                    "hour": start.hour,
+                    "minute": start.minute,
+                },
+                "end": {
+                    "ref": "todayClock",
+                    "hour": 0,
+                    "minute": 0,
+                    "offsetDays": daysFromNow,
+                },
             },
         )
     if oneMin:

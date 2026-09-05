@@ -31,6 +31,7 @@ Date range:
 
 - **Custom** (default) — on **Save Quick Look** you must pick how those dates should behave on load (issue #3). Choices are inferred from the start/end you set and the query interval, for example:
   - From **current time** through N days later (start was within one interval of now; for 1-minute series, within 15 minutes)
+  - From **current time through midnight** N calendar days from today (end was 00:00)
   - **Today at HH:MM** through N days later at that clock (you were not querying “now”)
   - Last N days **through current time**
   - Weekly on the same weekday, or first/second/…/last weekday of the month (daily-style ranges)
