@@ -2,6 +2,7 @@ TEST FILE — tests to run
 ============================================================
 Grok writes the steps. Mark [x] when it passes, or note a fail.
 Workflow / publish how-to: documentation/status.grok (gitignored).
+“see updates” = collapse [x], tend RESPONSE, do To Do CURRENT TASKS/BUGS.
 Current Tests: untested / failed / retest. Passed [x] items collapse to Confirmed.
 Confirmed: tests passed since the last published X.Y.Z. A published
 publishRelease.py folds any titles missed in the change list, then clears this.
@@ -24,27 +25,12 @@ Current Tests
      d. 3.0.x / no python-embed: after a Python zip apply, Windows zip should chain
         (or be the asset downloaded in the first place). No second manual applyUpdate.
 
-[ ] Retro live apply + spacing
+[ ] Retro graph in light mode
    Steps:
-     a. Retro ON with a Data Query up: data columns resize to headers (no Refresh).
-        Timestamp rail is tight to the date/time (no big gap left/right); you can
-        still drag the rail if you want it wider.
-        RESPONSE: columns did not resize on live retro (headers cut off). Timestamp
-        rail was OK after last pass; still a gap before/after the time — use Qt
-        sizeHint instead of metrics fudge.
-     b. Windows query list: USGS-NWIS fully visible (~96px extra). Linux unchanged.
-        RESPONSE: 56px still cut off NWIS.
-     c. Query radios stay the smaller retro size.
-     RESPONSE: a and c good
-
-[ ] Data Dictionary / Search header filters (#4)
-   Steps:
-     a. Data Dictionary: Filter icon on siteID and database headers. Click →
-        combobox of values that exist in the dictionary. Pick one → table filters.
-        Icon becomes Filtered. Right-click → Clear filter (icon back to Filter).
-     b. Type-search no longer matches siteID (or database).
-     c. Data ID Search (Query window) has the same two header filters.
-     d. Save the dictionary: filter combobox lists refresh (Search too if it is open).
+     a. Retro ON + Appearance Light: graph is a normal light plot (white bg, black
+        ticks/labels/icons). Font is still Silkscreen. No neon green on a dark plot.
+     b. Retro ON + Appearance Dark: neon plot + green toolbar icons (the cool look).
+        RESPONSE: tooltip (a) passed. Retro+Light still used the dark neon graph.
 
 Confirmed
 --------------------------------------------------------------------------------
@@ -76,6 +62,10 @@ Header rename revert
 Column drag keeps widths
 SQL pin 10px
 Graph legend/tick/axis sizes
+Retro live column resize / query width / radios
+Retro timestamp rail
+Data Dictionary / Search header filters
+Query search tooltip “Data ID Search”
 
 Deferred / known
 --------------------------------------------------------------------------------

@@ -54,4 +54,11 @@ resets this file to this template.
 - `updateBunkerFromCsv.py` asks y/n to update Common Names and Data Types (#5)
 - Data Dictionary and Data ID Search: Filter/Filtered icons on siteID and database headers (combobox, right-click clear); type-search no longer uses siteID (#4)
 - Live retro resizes data columns again; timestamp rail uses Qt sizeHint (drag still works); Windows query extra width ~96px
+- siteID header filter is a typed box (substring); database list opens on the first click
+- Retro timestamp rail width uses tightBoundingRect (no left/right gap around the date/time)
+- Timestamp rail is fixed to ink width (sizeHint was still widening it; center-align made the gap)
+- Timestamp rail uses the same horizontalAdvance+22 sizing as data columns (tightBoundingRect clipped the trailing 00)
+- Query search icon tooltip: “Data ID Search”
+- Retro graph toolbar: icons tinted neon green; button borders stay normal chrome (no green box)
+- Retro + Light keeps a light graph (black text/icons, Silkscreen); neon green plot is Dark + retro only
 

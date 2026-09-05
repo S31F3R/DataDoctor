@@ -1,9 +1,6 @@
-####### CURRENT TASKS #######\
--The filters work great but maybe it was a bad idea to have siteID as a combo box. Lets make it a user input instead, so they need to type in what they want to filter by
+####### CURRENT TASKS #######
 
 ####### CURRENT BUGS #######
--Combo box in the filter has be clicked twice before it expands the list of items
--Still having spacing issue in the date/time column on the query table. Look in documentation for BAD.png and GOOD.png. After you review, remove those 2 .png files. BAD is the spacing that happens with retro, GOOD is the spacing without retro. See the "padding" before the date and after the time? That's what I'm trying to get rid of but nothing we've done is fixing that
 
 ####### 3.3.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
