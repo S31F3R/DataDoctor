@@ -1,0 +1,19 @@
+{
+    "queries": [
+        "2119|HOUR|USBR-LCHDB",
+        "2021|HOUR|USBR-LCHDB",
+        "09429100-f02e05bac5ca472dbce494a3f54ef451|INSTANT:15|USGS-NWIS",
+        "20179|HOUR|USBR-LCHDB",
+        "20189|HOUR|USBR-LCHDB",
+        "2020|HOUR|USBR-LCHDB",
+        "20184|HOUR|USBR-LCHDB",
+        "2013|HOUR|USBR-LCHDB",
+        "21877|HOUR|USBR-YAOHDB",
+        "2731|HOUR|USBR-YAOHDB"
+    ],
+    "displayDelta": false,
+    "overlayPairs": false,
+    "rawData": false,
+    "qaqc": true,
+    "dateMode": "prevWeek"
+}

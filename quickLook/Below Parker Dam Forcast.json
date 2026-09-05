@@ -1,0 +1,32 @@
+{
+    "queries": [
+        "2119-108283|HOUR|USBR-YAOHDB",
+        "2021-108283|HOUR|USBR-YAOHDB",
+        "20179-108283|HOUR|USBR-YAOHDB",
+        "20189-108283|HOUR|USBR-YAOHDB",
+        "2020-108283|HOUR|USBR-YAOHDB",
+        "20184-108283|HOUR|USBR-YAOHDB",
+        "2013-108283|HOUR|USBR-YAOHDB",
+        "21877-108283|HOUR|USBR-YAOHDB",
+        "2731-108283|HOUR|USBR-YAOHDB"
+    ],
+    "displayDelta": false,
+    "overlayPairs": false,
+    "rawData": false,
+    "qaqc": false,
+    "dateMode": "custom",
+    "startDate": "2026-09-05 10:24",
+    "endDate": "2026-09-14 00:00",
+    "dateRule": {
+        "end": {
+            "hour": 0,
+            "minute": 0,
+            "offsetDays": 9,
+            "ref": "todayClock"
+        },
+        "kind": "relative",
+        "start": {
+            "ref": "now"
+        }
+    }
+}
