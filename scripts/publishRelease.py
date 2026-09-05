@@ -358,7 +358,11 @@ _STOP_WORDS = {
 
 
 def confirmedTestTitles() -> list[str]:
-    """One-line titles from test.txt Confirmed (`[x] Title`)."""
+    """One-line titles from test.txt Confirmed.
+
+    After a pass, Grok collapses [x] Current Tests to a title-only line
+    (no [x], no steps). Older files may still have `[x] Title`.
+    """
     if not TEST_FILE.is_file():
         return []
     titles: list[str] = []
@@ -371,13 +375,14 @@ def confirmedTestTitles() -> list[str]:
             continue
         if not inConfirmed:
             continue
-        if s and set(s) <= {"-", "="}:
+        if not s or set(s) <= {"-", "="}:
+            continue
+        if s.startswith("[!]"):
             continue
         hit = re.match(r"^\[x\]\s+(.+)$", s, re.I)
-        if hit:
-            title = hit.group(1).strip()
-            if title:
-                titles.append(title)
+        title = hit.group(1).strip() if hit else s
+        if title:
+            titles.append(title)
     return titles
 
 
