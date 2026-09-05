@@ -686,7 +686,7 @@ class uiQuery(QMainWindow):
         intervalMin = self._queryIntervalMinutes()
         choices = QuickLookDates.propose(start or now, end or now, now, intervalMin)
         dlg = QDialog(self)
-        dlg.setWindowTitle("Quick Look date range")
+        dlg.setWindowTitle("Quick Look Date Range")
         dlg.setModal(True)
         dlg.setMinimumWidth(520)
         layout = QVBoxLayout(dlg)
@@ -702,6 +702,10 @@ class uiQuery(QMainWindow):
             item = QListWidgetItem(choice["label"])
             item.setData(Qt.ItemDataRole.UserRole, choice)
             listing.addItem(item)
+        rowH = listing.sizeHintForRow(0)
+        if rowH < 18:
+            rowH = listing.fontMetrics().height() + 10
+        listing.setMinimumHeight(rowH * 5 + 2 * listing.frameWidth() + 4)
         layout.addWidget(listing)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
