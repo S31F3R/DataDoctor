@@ -62,87 +62,69 @@ defaultFontFiles = (
 )
 
 # ---------------------------------------------------------------------------
-# Retro mode inventory — what is FONT vs SPACING vs CHROME, and where to edit.
+# Retro mode inventory — FONT vs LAYOUT vs CHROME, and where to edit.
 #
-# retroUseDefaultSpacing (below): True = Noto geometry/padding/row heights even
-# in retro, so Silkscreen can be judged on its own. Set False to restore the
-# old Press Start spacing after you pick which offsets to keep.
+# Retro uses Noto spacing (row heights, tab/list padding, header labels).
+# Silkscreen + neon chrome stay. Extra x,y for a few overlay buttons lives in
+# retroAlwaysLayouts (applied on top of controlLayouts when retro is on).
 #
 # FONT (always on in retro):
 #   defaultFontSizeAdjust / retroFontSizeAdjust  this file — global pt knobs
 #   ensureRetroFontLoaded()     this file — Silkscreen TTF in ui/fonts/
 #   fontRoleSizes               this file — (Noto pt, retro pt) per role
-#   retroSmallFontControls      this file — named radios/checkboxes (ui − 2pt)
+#   queryRetroSmallControls     this file — named radios/checkboxes (ui − 2pt)
 #   retroSmallFontPt            this file
 #   winRetroSmallerControls     this file — Windows Query buttons −1pt
 #   applyRoleFonts()            this file
 #   ui/uiAbout.py               Press Start 2P for arcade games only
 #
-# SPACING (gated by retroUseDefaultSpacing):
-#   controlLayouts['retro']     this file — Main/Query button x,y vs default
+# LAYOUT:
+#   controlLayouts              this file — Noto x,y (restored when retro off)
+#   retroAlwaysLayouts          this file — Refresh/Undo/Upload + info buttons
 #   applyModeControlLayouts()   this file
-#   tableDefaultRowHeight()     this file — extra row pad
-#   tableHeaderBarHeight()      this file — extra header band
-#   formatTableHeaderLabel()    this file — blank line in two-line headers
-#   retroSpacingStylesheet()    this file — tab/list/checkbox padding
-#   applyCompactListStyle()     this file — retro skips Windows compact lists
+#   tableDefaultRowHeight()     this file — Silkscreen em-box, no extra pad
+#   applyRetroQueryWindow()     this file — Windows query extra width
 #
 # CHROME (always on in retro):
 #   setRetroStyles()            this file — neon scrollbar handles
 #   retroSpacingStylesheet()    this file — green tabs + retro close icons
 #   retroNeonGreen              this file
 # ---------------------------------------------------------------------------
-retroUseDefaultSpacing = True
 
-# Extra retro geometries applied even when retroUseDefaultSpacing is True
-# (info buttons except Data ID, main-table Refresh/Undo/Upload, query width).
-# Windows: ~2 Silkscreen characters so USGS-NWIS fits. Linux: original width.
+# Extra retro geometries (info buttons except Data ID, main-table Refresh/Undo/Upload).
+# Query width: Windows ~2 Silkscreen characters so USGS-NWIS fits. Linux: original.
 QUERY_WINDOW_BASE = (960, 668)
 QUERY_RETRO_EXTRA_W_WIN = 96
 QUERY_RETRO_EXTRA_W_LINUX = 0
 retroAlwaysLayouts = {
-    'btnRefresh': (38, 8, 32, 32),
-    'btnUndo': (74, 8, 32, 32),
-    'btnUpload': (110, 8, 32, 32),
+    'btnRefresh': (54, 8, 32, 32),
+    'btnUndo': (90, 8, 32, 32),
+    'btnUpload': (126, 8, 32, 32),
     'btnIntervalInfo': (164, 76, 31, 20),
-    'btnQueryOptionsInfo': (164, 401, 31, 20),
+    'btnQueryOptionsInfo': (170, 401, 31, 20),
 }
 
-# Absolute geometries that differ by font mode: (x, y, width, height)
-# Default = Noto (Seifer-tuned 2026-07-24). Retro = pre-Noto baseline until tuned.
+# Absolute Noto geometries. Retro overlays retroAlwaysLayouts on top.
 # Only controls listed here are moved; everything else stays at .ui geometry.
+# Every control retro moves must also appear here so retro OFF restores Noto.
 controlLayouts = {
-    # Every control retro moves must also appear here so retro OFF restores Noto positions.
-    'default': {
-        # winMain — Data Query tab overlay icons (match winMain.ui; Windows y via platformLayoutYNudge)
-        # .ui bases: Refresh (4,6), Undo (40,6), Upload (76,6) — 32×32, 4px gaps
-        'btnRefresh': (4, 6, 32, 32),
-        'btnUndo': (40, 6, 32, 32),
-        'btnUpload': (76, 6, 32, 32),
-        # winQuery
-        'btnDataIdInfo': (376, 5, 31, 20),
-        'btnIntervalInfo': (100, 76, 31, 20),
-        'btnQueryOptionsInfo': (110, 401, 31, 20),
-        'chkbOverlay': (150, 424, 131, 22),         # .ui
-        'chkbQAQC': (150, 448, 131, 22),
-    },
-    'retro': {
-        # Press Start — same row as default, +34 x / +2 y (historical Refresh offset)
-        'btnRefresh': (38, 8, 32, 32),
-        'btnUndo': (74, 8, 32, 32),
-        'btnUpload': (110, 8, 32, 32),
-        'btnDataIdInfo': (406, 5, 31, 20),
-        'btnIntervalInfo': (164, 76, 31, 20),
-        'btnQueryOptionsInfo': (164, 401, 31, 20),
-        'chkbOverlay': (162, 424, 131, 22),
-        'chkbQAQC': (162, 448, 131, 22),
-    },
+    # winMain — Data Query tab overlay icons (match winMain.ui; Windows y via platformLayoutYNudge)
+    # .ui bases: Refresh (4,6), Undo (40,6), Upload (76,6) — 32×32, 4px gaps
+    'btnRefresh': (4, 6, 32, 32),
+    'btnUndo': (40, 6, 32, 32),
+    'btnUpload': (76, 6, 32, 32),
+    # winQuery
+    'btnDataIdInfo': (376, 5, 31, 20),
+    'btnIntervalInfo': (100, 76, 31, 20),
+    'btnQueryOptionsInfo': (110, 401, 31, 20),
+    'chkbOverlay': (150, 424, 131, 22),         # .ui
+    'chkbQAQC': (150, 448, 131, 22),
 }
 
 # Neon green used for retro scrollbars and tab chrome
 retroNeonGreen = '#00FF00'
 
-# Query-window radios/checkboxes: one step under UI even with default spacing.
+# Query-window radios/checkboxes: one step under UI.
 queryRetroSmallControls = frozenset({
     'rbCustomDateTime',
     'rbPrevDayToCurrent',
@@ -151,13 +133,6 @@ queryRetroSmallControls = frozenset({
     'chkbOverlay',
     'chkbRawData',
     'chkbQAQC',
-})
-# Options-only extras (UTC / BOP/EOP) — only when old Press Start spacing is on.
-retroSmallFontControls = queryRetroSmallControls | frozenset({
-    'cbUTCOffset',
-    'lblTimeStampMethod',
-    'rbBOP',
-    'rbEOP',
 })
 retroSmallFontPt = 4  # one step under general ui 8pt; also gets retroFontSizeAdjust
 
@@ -632,20 +607,13 @@ def tableDefaultRowHeight(font=None, metrics=None):
 
     Non-retro (Noto) on Linux: height+10 looks perfect (existing design).
     Non-retro on Windows: native styles add extra cell margin, so use less pad.
-    Retro (Press Start): taller rows — QSS left/right padding only made columns
-    wider; height must come from defaultSectionSize.
+    Retro (Silkscreen): no extra pad — the em-box is already tall.
     """
     if metrics is None:
         if font is None:
             font = makeFontForRole('table')
         metrics = QFontMetrics(font)
     h = metrics.height()
-    if Config.retroMode and not retroUseDefaultSpacing:
-        # Press Start metrics.height() is tiny (~11 at 8pt); force real row height
-        # Seifer: -2 from prior (was h+18 / min 32)
-        return max(h + 16, 30)
-    # Silkscreen already has a tall em-box; the Noto +10 pad looks like
-    # extra space above/below the timestamp in retro.
     if Config.retroMode:
         # No extra Noto-style pad — Silkscreen em-box is already tall.
         return max(h - 2, 18)
@@ -655,43 +623,15 @@ def tableDefaultRowHeight(font=None, metrics=None):
 
 
 def tableHeaderBarHeight(font=None, metrics=None):
-    """
-    Horizontal header band height (taller in retro for multi-line labels).
-    Retro two-part headers use a blank line BETWEEN parts (part1 / blank / part2).
-    """
-    if metrics is None:
-        if font is None:
-            font = makeFontForRole('table')
-        metrics = QFontMetrics(font)
-    h = metrics.height()
-    if Config.retroMode and not retroUseDefaultSpacing:
-        # part1 + blank spacer + part2
-        return max(h * 3 + 6, 42)
-    return 0  # leave native
+    """Native horizontal header band (no extra retro spacer)."""
+    return 0
 
 
 def formatTableHeaderLabel(text):
-    """
-    Retro: two-part headers get a blank line BETWEEN the parts (extra space before
-    the 2nd line), not after the whole label. Idempotent. Default/Noto: unchanged.
-
-    e.g. "Site Name\\nHOUR" → "Site Name\\n\\nHOUR"
-    """
+    """Header text as stored. Kept as a hook for Query / TableOps callers."""
     if text is None:
         return ''
-    s = str(text)
-    if not Config.retroMode or retroUseDefaultSpacing:
-        return s
-    s = s.strip('\n')
-    if '\n' not in s:
-        return s
-    # First line vs everything after first break (second part may itself have spaces)
-    first, rest = s.split('\n', 1)
-    first = first.rstrip()
-    rest = rest.lstrip('\n').strip()  # drop any prior spacer newlines; keep part-2 text
-    if not rest:
-        return first
-    return f"{first}\n\n{rest}"
+    return str(text)
 
 
 def applyTableRowMetrics(table, font=None):
@@ -712,11 +652,7 @@ def applyTableRowMetrics(table, font=None):
         # Interactive so "selected" chrome does not resize sections.
         hHeader.setHighlightSections(True)
         vHeader.setHighlightSections(False)
-        if Config.retroMode and not retroUseDefaultSpacing:
-            hHeader.setMinimumHeight(tableHeaderBarHeight(font, metrics))
-        else:
-            # Restore native header band when leaving retro (toggle / restart)
-            hHeader.setMinimumHeight(0)
+        hHeader.setMinimumHeight(tableHeaderBarHeight(font, metrics))
     except Exception as e:
         if Config.debug:
             Logic.logMessage("DEBUG", f"applyTableRowMetrics failed: {e}")
@@ -842,8 +778,6 @@ def nonRetroPlatformStylesheet():
     Table item padding only here — listSnippets/listQueryList use applyCompactListStyle.
     Never QTabBar/QPushButton chrome.
     """
-    if Config.retroMode and not retroUseDefaultSpacing:
-        return ""
     if sys.platform == 'win32':
         # Optional table tightening (harmless; row height is the main table control)
         return """
@@ -877,12 +811,6 @@ def applyCompactListStyle(listWidget):
                 "background-color: palette(base);\n"
                 "color: palette(text);\n"
             )
-        if Config.retroMode and not retroUseDefaultSpacing:
-            # Clear compact-list override so app-level retro padding applies.
-            # Keep sql-pane-base so the snippet list stays Base in dark mode.
-            listWidget.setStyleSheet(panePrefix)
-            listWidget.setSpacing(0)
-            return
         if sys.platform == 'win32':
             listWidget.setSpacing(0)
             listWidget.setStyleSheet(
@@ -910,12 +838,12 @@ def applyCompactListStyle(listWidget):
 
 def applyModeControlLayouts(app=None, root=None):
     """
-    Move mode-specific absolute controls (default Noto vs retro Press Start).
+    Move mode-specific absolute controls (Noto, plus retroAlwaysLayouts in retro).
     Call after UI load / on mode apply. Unknown names are skipped.
     Windows default mode can apply platformLayoutYNudge (e.g. Refresh/Undo +3 y).
     """
-    mode = 'retro' if (Config.retroMode and not retroUseDefaultSpacing) else 'default'
-    coords = dict(controlLayouts.get(mode) or {})
+    mode = 'retro' if Config.retroMode else 'default'
+    coords = dict(controlLayouts)
     if Config.retroMode:
         coords.update(retroAlwaysLayouts)
     if not coords:
@@ -1012,17 +940,9 @@ def applyRetroQueryWindow(win):
 
 def retroSpacingStylesheet():
     """
-    Retro only — targeted VERTICAL room for Press Start (not width).
+    Retro only — neon tab chrome and close icons.
 
-    Global padding was removed: left/right QSS on table cells/headers made the
-    table look wider without making rows taller. Row height is set in
-    tableDefaultRowHeight / applyTableRowMetrics instead.
-
-    Keep only:
-      • QTabBar::tab — taller tab labels (vertical pad)
-      • QHeaderView::section — vertical pad only (no extra left/right)
-      • List items — vertical pad (query/SQL lists)
-      • Light checkbox/radio spacing for Press Start density
+    Row height is set in tableDefaultRowHeight / applyTableRowMetrics, not QSS.
     """
     if not Config.retroMode:
         return ""
@@ -1030,27 +950,8 @@ def retroSpacingStylesheet():
     # (readBaseStylesheet / setRetroStyles rebuild without this block).
     # Hover for close is a 2nd image (same pattern as default dark/light pair).
     green = retroNeonGreen
-    # Padding is spacing (gated). Colors / close icons are chrome (always on).
-    if retroUseDefaultSpacing:
-        pad = "padding: 4px 6px;"
-        listPad = ""
-        checkPad = ""
-    else:
-        pad = "padding-top: 6px; padding-bottom: 6px; padding-left: 8px; padding-right: 8px;"
-        listPad = """
-    QListWidget::item, QListView::item {
-        padding-top: 5px;
-        padding-bottom: 5px;
-        padding-left: 3px;
-        padding-right: 3px;
-        min-height: 1.2em;
-    }
-    QCheckBox, QRadioButton {
-        spacing: 10px;
-        min-height: 1.3em;
-    }
-"""
-        checkPad = ""
+    # Tab pad is Noto-sized; colors / close icons are chrome.
+    pad = "padding: 4px 6px;"
     return f"""
     /* Retro tabs: neon green + #323232 text (not 0,0,0). */
     QTabBar::tab {{
@@ -1100,7 +1001,6 @@ def retroSpacingStylesheet():
         image: url(ui/icons/Tab-close-retro-pressed.png);
         background: transparent;
     }}
-    {listPad}
     """
 
 
@@ -1235,7 +1135,7 @@ def applyRoleFonts(app=None, root=None):
     """
     Set role-specific sizes: buttons stay smaller in retro; log/code larger, etc.
     Call after new windows open if they create tables/editors themselves.
-    Retro-only small fonts for named radios/checkboxes/UTC combo (retroSmallFontControls).
+    Retro-only small fonts for named Query radios/checkboxes (queryRetroSmallControls).
     """
     buttonFont = makeFontForRole('button')
     # Add Query / Query Data: one point larger than standard button role
@@ -1249,16 +1149,12 @@ def applyRoleFonts(app=None, root=None):
     codeFont = makeFontForRole('code')
     uiFont = makeFontForRole('ui')
     comboFont = uiFont
-    retroSmallFont = None
     querySmallFont = None
     if Config.retroMode:
         querySmallFont = makeFontForRole(
             'ui',
             pointSize=max(5, int(retroSmallFontPt) + int(retroFontSizeAdjust)),
         )
-        # Options UTC/BOP extras only with the old Press Start spacing.
-        if not retroUseDefaultSpacing:
-            retroSmallFont = querySmallFont
     # Retro: named Query controls one point smaller (all platforms)
     winRetroSmaller = bool(Config.retroMode)
     winSmallerButtonFont = None
@@ -1287,9 +1183,6 @@ def applyRoleFonts(app=None, root=None):
             # Retro notes: specific controls at 6pt Press Start (Noto/default untouched)
             if Config.retroMode and querySmallFont is not None and name in queryRetroSmallControls:
                 w.setFont(querySmallFont)
-                continue
-            if Config.retroMode and retroSmallFont is not None and name in retroSmallFontControls:
-                w.setFont(retroSmallFont)
                 continue
             # Windows + retro: Load/Clear/Save/Delete Quick Look + dataID list −1pt
             if winRetroSmaller and name in winRetroSmallerControls:
