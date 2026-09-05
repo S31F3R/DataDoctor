@@ -27,15 +27,15 @@ Current Tests
 [ ] Aquarius dictionary export (published series)
    Steps:
      a. Options → Aquarius server/user/password already work for a normal query.
-     b. From project root: python scripts/aquariusDictionary.py <LocationIdentifier>
-        (VPN). Prints “ident (name) — N published series” and CSV with dictionary
-        headers: dataID=series UniqueId, siteID=location Identifier, database=AQUARIUS,
-        siteName=commonName=location name.
+     b. python scripts/aquariusDictionary.py <LocationIdentifier> (VPN).
+        dataID=series UniqueId, siteID=location Identifier, database=AQUARIUS,
+        siteName=location name, commonName=time-series Label (not the location name).
      c. datatype and valuePrecision filled only when Parameter exactly matches a
-        valuePrecision.json Identifier (e.g. Discharge, Stage). Others blank.
-     d. Unpublished series at that location are not in the CSV.
+        valuePrecision.json Identifier. Others blank. Unpublished series omitted.
+     d. python scripts/aquariusDictionary.py ALL (or --all) covers every location;
+        same columns; can take a while.
      e. Optional: --out file.csv and/or --apply (inserts new bunker.db rows, skips
-        existing dataID + AQUARIUS). Normal Aquarius query still works after.
+        existing dataID + AQUARIUS).
 
 Confirmed
 --------------------------------------------------------------------------------
