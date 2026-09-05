@@ -19,6 +19,9 @@ That file is the GitHub Release body. Version.py is committed when it changes.
 A published X.Y.Z also folds documentation/test.txt Confirmed titles into
 ## Changes when they were missed in Working Notes / rc-beta notes, then
 clears Confirmed (those tests are the bug/beta cycle, not a forever list).
+Every channel also scans git log since the last published tag for (#N)
+issue refs; closed GitHub issues that are not already in ## Changes get a
+Fixes [#N](url): title bullet.
 
 Order the updater uses: published > rc > beta (same X.Y.Z).
   3.0.0 > 3.0.0-rc.2.1 > 3.0.0-rc.2 > 3.0.0-beta.4
@@ -557,6 +560,110 @@ def confirmedMissedBullets(existing: list[str], version: str) -> list[str]:
     return extras
 
 
+ISSUE_REF_RE = re.compile(
+    r"\(#(?P<a>\d+)\)"
+    r"|(?:^|[\s,;:])(?:fixes|closes|fixed|closed|fix|close)\s+#(?P<b>\d+)\b",
+    re.I,
+)
+
+
+def lastPublishedTag() -> str | None:
+    """Newest git tag that is a full vX.Y.Z (no rc/beta)."""
+    r = subprocess.run(
+        ["git", "tag", "-l", "v*", "--sort=-v:refname"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        return None
+    for tag in (r.stdout or "").splitlines():
+        tag = tag.strip()
+        if not tag.startswith("v"):
+            continue
+        parsed = Version.parseVersion(tag[1:])
+        if parsed is not None and parsed[3] is None:
+            return tag
+    return None
+
+
+def issueNumbersFromCommits() -> list[int]:
+    """Issue numbers referenced in commits since the last published tag."""
+    since = lastPublishedTag()
+    cmd = ["git", "log", "--format=%s%n%b"]
+    if since:
+        cmd.append(f"{since}..HEAD")
+    else:
+        cmd.append("-300")
+    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    found: list[int] = []
+    seen: set[int] = set()
+    for m in ISSUE_REF_RE.finditer(r.stdout or ""):
+        n = int(m.group("a") or m.group("b") or 0)
+        if n and n not in seen:
+            seen.add(n)
+            found.append(n)
+    return found
+
+
+def fetchGithubIssue(n: int, token: str | None):
+    """GET /issues/N. Public repo works without a token."""
+    url = f"https://api.github.com/repos/{REPO}/issues/{n}"
+    headers = {
+        "User-Agent": f"DataDoctor-publish/{Version.displayVersion()}",
+        "Accept": "application/vnd.github+json",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        log(f"WARN: could not fetch issue #{n}: {e}")
+        return None
+
+
+def closedIssueMissedBullets(existing: list[str]) -> list[str]:
+    """
+    Closed GitHub issues referenced in this cycle's commits that are not
+    already mentioned as #N in ## Changes.
+    """
+    nums = issueNumbersFromCommits()
+    if not nums:
+        return []
+    blob = "\n".join(existing).lower()
+    token = githubToken()
+    extras: list[str] = []
+    for n in nums:
+        if f"#{n}" in blob:
+            continue
+        data = fetchGithubIssue(n, token)
+        if not isinstance(data, dict) or data.get("pull_request"):
+            continue
+        if (data.get("state") or "").lower() != "closed":
+            log(f"Issue #{n} still open — not adding a Fixes bullet")
+            continue
+        title = (data.get("title") or f"issue {n}").strip()
+        url = data.get("html_url") or f"https://github.com/{REPO}/issues/{n}"
+        extras.append(f"- Fixes [#{n}]({url}): {title}")
+        log(f"Release notes: adding closed issue #{n} ({title})")
+    return extras
+
+
+def foldClosedIssuesIntoNotes(body: str, dest: Path) -> str:
+    extras = closedIssueMissedBullets(extractChangesBullets(body))
+    if not extras:
+        return body
+    body = appendChangesBullets(body, extras)
+    dest.write_text(body, encoding="utf-8")
+    log(
+        f"Added {len(extras)} closed GitHub issue(s) to "
+        f"{dest.relative_to(ROOT)}"
+    )
+    return body
+
+
 def appendChangesBullets(md: str, extras: list[str]) -> str:
     """Insert extra `- ` lines at the end of ## Changes (before the next ##)."""
     if not extras:
@@ -607,7 +714,9 @@ def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | 
     Notes bullets. For channel=published, also compile vX.Y.Z-rc.* /
     vX.Y.Z-beta.* for that triple (merged, de-duped) and fold in
     documentation/test.txt Confirmed titles that were missed in the notes
-    (and not already shipped in an older published X.Y.Z).
+    (and not already shipped in an older published X.Y.Z). Every channel
+    then adds Fixes [#N] bullets for closed GitHub issues referenced in
+    commits since the last published tag that are not already in ## Changes.
     """
     dest = notesPathFor(version)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -627,7 +736,7 @@ def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | 
 
     if existingBullets and channel != "published":
         log(f"Release notes: {dest.relative_to(ROOT)}")
-        return existing
+        return foldClosedIssuesIntoNotes(existing, dest)
 
     if existingBullets:
         body = existing
@@ -709,7 +818,7 @@ def collectNotes(version: str, channel: str, files: list[Path], notesArg: str | 
             log(f"Confirmed tests: all {nConfirmed} already covered in notes")
         else:
             log("Confirmed tests: none listed")
-    return body
+    return foldClosedIssuesIntoNotes(body, dest)
 
 
 def gitCommitVersion(version: str, extraPaths: list[Path] | None = None) -> None:
