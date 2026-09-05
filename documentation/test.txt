@@ -30,6 +30,10 @@ Current Tests
      b. python scripts/aquariusDictionary.py <LocationIdentifier> (VPN).
         dataID=series UniqueId, siteID=location Identifier, database=AQUARIUS,
         siteName=location name, commonName=time-series Label (not the location name).
+        If the location Identifier is USGS-08362500 (or similar): siteID=08362500
+        and siteName=USGS monitoring-location name from the Water Data API.
+        If the time-series Label is like TFLC-Stage and TFLC is an Aquarius
+        location: siteID=TFLC and siteName=that location’s name.
      c. datatype and valuePrecision filled only when Parameter exactly matches a
         valuePrecision.json Identifier. Others blank. Unpublished series omitted.
      d. python scripts/aquariusDictionary.py ALL (or --all) covers every location;
