@@ -26,51 +26,9 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
-Quick Look current time through midnight
-Quick Look Date Range dialog chrome
-Quick Look custom date rule (#3)
-Aquarius dictionary export (published series)
-GitHub OAuth report (one-time Authorize)
-First-install timezone offset
-Windows update Restart + launcher hop
-Uncheck Beta on rc/beta — offer published
-Apply-update Common Names / Data Types prompts
-Retro Refresh/Undo/Upload positions
-Windows silent launch (VM + laptop)
-Query list scroll / no double query
-Graph missing-data gaps
-Windows first-run extract
-Retro Silkscreen
-Header click vs sort vs drag
-Retro mode restart (no crash)
-First-open Graph / Options / About
-Table undo/redo
-Insert / drag / rename columns
-Double-click cell (no edit) colors
-Light/Dark SQL theme
-SQL query/result dotted splitter
-Formula click-to-ref + Esc
-Formula Tab complete / function list
-Formula Enter commits
-Public custom columns + header details
-Rename prompt before query
-Overlay swap / update from secondary / details DBs
-Retro live tabs/labels/combos
-Retro + Light scrollbar track
-Graph restyle on theme
-winAbout line-height
-Overlay swap rounding colors
-Header rename revert
-Column drag keeps widths
-SQL pin 10px
-Graph legend/tick/axis sizes
-Retro live column resize / query width / radios
-Retro timestamp rail
-Data Dictionary / Search header filters
-Query search tooltip “Data ID Search”
-Retro graph in light mode
 
 Deferred / known
 --------------------------------------------------------------------------------
 [!] AppImage applyUpdate path not wired the same as launcher packages yet
 [!] Rebuild Data Doctor.exe on Windows to ship launcher VB first-run extract message
+

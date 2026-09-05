@@ -10,9 +10,3 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
-- Custom Quick Look dates: Save asks how to interpret the range (current time, today at clock, last N days, weekly weekday, omit, exact). Load/Query apply the chosen rule (#3)
-- Quick Look Date Range dialog: title case; list tall enough for 5 options
-- Quick Look Date Range: end at 00:00 offers current time through midnight N days from today, not a raw minute count
-- Default (non-retro) Data Query toolbar button positions adjusted
-- publishRelease.py reads collapsed Confirmed titles (plain lines, not only `[x] Title`) so a published 3.2.0 can fold/clear the test log
-
