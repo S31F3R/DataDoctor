@@ -12,7 +12,9 @@ Dictionary mapping (no stationID column exists — Location Identifier is siteID
                     (if Identifier is USGS-########, the site number only)
   database        = AQUARIUS
   siteName        = location Name
-                    (USGS monitoring_location_name when Identifier is USGS-########)
+                    (USGS monitoring_location_name when Identifier is USGS-########;
+                    if Label's first '-' token is an Aquarius location Identifier,
+                    that location's name)
   commonName      = time-series Label
   datatype        = valuePrecision Identifier only on an exact Parameter match
   valuePrecision  = same Identifier on that match; else blank
@@ -68,6 +70,45 @@ def usgsSiteFromTexts(texts) -> str:
     return ""
 
 
+def firstHyphenToken(text: str) -> str:
+    s = str(text or "").strip()
+    if "-" not in s:
+        return ""
+    return s.split("-", 1)[0].strip()
+
+
+def locationFromLookup(ident: str, lookup: dict):
+    if not ident or not lookup:
+        return None
+    hit = lookup.get(ident)
+    if hit is not None:
+        return hit
+    lower = ident.lower()
+    for key, value in lookup.items():
+        if str(key).lower() == lower:
+            return value
+    return None
+
+
+def applyLabelLocation(row: dict, series: dict, lookup: dict, usgsCache: dict) -> dict:
+    """If Label's first '-' token is an Aquarius location, use that siteID / siteName."""
+    from core import Aquarius
+
+    token = firstHyphenToken(Aquarius.seriesLabelOf(series))
+    if not token:
+        return row
+    loc = locationFromLookup(token, lookup)
+    if not loc:
+        return row
+    ident = Aquarius.locationIdentifierOf(loc) or token
+    name = Aquarius.locationNameOf(loc)
+    if ident:
+        row["siteID"] = ident
+    if name:
+        row["siteName"] = name
+    return applyUsgsLocation(row, (ident, name), usgsCache)
+
+
 def applyUsgsLocation(row: dict, texts, cache: dict) -> dict:
     """If any identifier is USGS-########, siteID is the number; siteName from USGS API."""
     from core import USGS
@@ -85,7 +126,12 @@ def applyUsgsLocation(row: dict, texts, cache: dict) -> dict:
     return row
 
 
-def dictionaryRow(series: dict, location: dict, usgsCache: dict | None = None) -> dict:
+def dictionaryRow(
+    series: dict,
+    location: dict,
+    usgsCache: dict | None = None,
+    locationLookup: dict | None = None,
+) -> dict:
     from core import Aquarius
 
     locId = Aquarius.locationIdentifierOf(location) or str(
@@ -110,7 +156,7 @@ def dictionaryRow(series: dict, location: dict, usgsCache: dict | None = None) -
     }
     if usgsCache is None:
         usgsCache = {}
-    return applyUsgsLocation(
+    applyUsgsLocation(
         row,
         (
             locId,
@@ -120,6 +166,7 @@ def dictionaryRow(series: dict, location: dict, usgsCache: dict | None = None) -
         ),
         usgsCache,
     )
+    return applyLabelLocation(row, series, locationLookup or {}, usgsCache)
 
 
 def rowsForLocation(auth, locationArg: str) -> list[dict]:
@@ -133,11 +180,12 @@ def rowsForLocation(auth, locationArg: str) -> list[dict]:
     if not ident:
         die(f"Location {locationArg!r} has no Identifier")
     series = Aquarius.publishedSeriesAtLocation(auth, ident)
+    lookup = Aquarius.locationLookup(auth)
     rows = []
     skipped = 0
     usgsCache = {}
     for item in series:
-        row = dictionaryRow(item, location, usgsCache)
+        row = dictionaryRow(item, location, usgsCache, lookup)
         if not row["dataID"]:
             skipped += 1
             continue
@@ -164,7 +212,7 @@ def rowsForAllLocations(auth) -> list[dict]:
             "Identifier": locId,
             "LocationName": locId,
         }
-        row = dictionaryRow(item, location, usgsCache)
+        row = dictionaryRow(item, location, usgsCache, lookup)
         if not row["dataID"]:
             skipped += 1
             continue

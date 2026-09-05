@@ -61,9 +61,9 @@ Pass a location **Identifier** (or the 32-character location UniqueId), or **ALL
 | Column | Source |
 |--------|--------|
 | `dataID` | Time-series UniqueId |
-| `siteID` | Location Identifier. If that identifier is `USGS-` plus a site number (e.g. `USGS-08362500`), `siteID` is the number (`08362500`) |
+| `siteID` | Location Identifier. If that identifier is `USGS-` plus a site number (e.g. `USGS-08362500`), `siteID` is the number (`08362500`). If the time-series Label’s first `-` token matches an Aquarius location Identifier, that Identifier is used instead |
 | `database` | `AQUARIUS` |
-| `siteName` | Location name. For `USGS-########` identifiers, the USGS monitoring-location name from the Water Data API |
+| `siteName` | Location name. For `USGS-########` identifiers, the USGS monitoring-location name from the Water Data API. If the Label’s first `-` token matches an Aquarius location, that location’s name is used |
 | `commonName` | Time-series Label |
 | `datatype` / `valuePrecision` | Aquarius `Parameter` only when it exactly matches a `valuePrecision.json` Identifier; otherwise blank |
 
