@@ -9,8 +9,10 @@ location UniqueId), or ALL, in; published series out.
 Dictionary mapping (no stationID column exists — Location Identifier is siteID):
   dataID          = time-series UniqueId
   siteID          = location Identifier
+                    (if Identifier is USGS-########, the site number only)
   database        = AQUARIUS
   siteName        = location Name
+                    (USGS monitoring_location_name when Identifier is USGS-########)
   commonName      = time-series Label
   datatype        = valuePrecision Identifier only on an exact Parameter match
   valuePrecision  = same Identifier on that match; else blank
@@ -56,7 +58,34 @@ def die(msg: str, code: int = 1) -> None:
     raise SystemExit(code)
 
 
-def dictionaryRow(series: dict, location: dict) -> dict:
+def usgsSiteFromTexts(texts) -> str:
+    from core import USGS
+
+    for text in texts:
+        site = USGS.parseUsgsSiteNumber(text)
+        if site:
+            return site
+    return ""
+
+
+def applyUsgsLocation(row: dict, texts, cache: dict) -> dict:
+    """If any identifier is USGS-########, siteID is the number; siteName from USGS API."""
+    from core import USGS
+
+    siteNum = usgsSiteFromTexts(texts)
+    if not siteNum:
+        return row
+    row["siteID"] = siteNum
+    if siteNum not in cache:
+        props = USGS.fetchMonitoringLocation(siteNum, USGS.apiHeaders(), {})
+        cache[siteNum] = str((props or {}).get("monitoring_location_name") or "").strip()
+    name = cache.get(siteNum) or ""
+    if name:
+        row["siteName"] = name
+    return row
+
+
+def dictionaryRow(series: dict, location: dict, usgsCache: dict | None = None) -> dict:
     from core import Aquarius
 
     locId = Aquarius.locationIdentifierOf(location) or str(
@@ -64,7 +93,7 @@ def dictionaryRow(series: dict, location: dict) -> dict:
     ).strip()
     locName = Aquarius.locationNameOf(location) or locId
     matched = Aquarius.matchValuePrecision(series.get("Parameter") or "")
-    return {
+    row = {
         "dataID": str(series.get("UniqueId") or "").strip(),
         "siteID": locId,
         "database": "AQUARIUS",
@@ -79,6 +108,18 @@ def dictionaryRow(series: dict, location: dict) -> dict:
         "cutoffMax": "",
         "rateOfChange": "",
     }
+    if usgsCache is None:
+        usgsCache = {}
+    return applyUsgsLocation(
+        row,
+        (
+            locId,
+            locName,
+            str(series.get("LocationIdentifier") or ""),
+            str(series.get("Identifier") or ""),
+        ),
+        usgsCache,
+    )
 
 
 def rowsForLocation(auth, locationArg: str) -> list[dict]:
@@ -94,8 +135,9 @@ def rowsForLocation(auth, locationArg: str) -> list[dict]:
     series = Aquarius.publishedSeriesAtLocation(auth, ident)
     rows = []
     skipped = 0
+    usgsCache = {}
     for item in series:
-        row = dictionaryRow(item, location)
+        row = dictionaryRow(item, location, usgsCache)
         if not row["dataID"]:
             skipped += 1
             continue
@@ -115,13 +157,14 @@ def rowsForAllLocations(auth) -> list[dict]:
     series = Aquarius.publishedSeriesAll(auth)
     rows = []
     skipped = 0
+    usgsCache = {}
     for item in series:
         locId = str(item.get("LocationIdentifier") or "").strip()
         location = lookup.get(locId) or {
             "Identifier": locId,
             "LocationName": locId,
         }
-        row = dictionaryRow(item, location)
+        row = dictionaryRow(item, location, usgsCache)
         if not row["dataID"]:
             skipped += 1
             continue

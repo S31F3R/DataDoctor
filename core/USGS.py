@@ -37,11 +37,30 @@ requestTimeout = 60
 dailyTsidBatch = 25
 
 tsidRe = re.compile(r"^[0-9a-fA-F]{32}$")
+usgsSiteRe = re.compile(r"(?i)(?:^|[^A-Za-z0-9])USGS[-_\s]*(\d{8,15})(?:[^0-9]|$)")
+usgsSiteExactRe = re.compile(r"(?i)^USGS[-_\s]*(\d+)$")
 
 
 def isTimeSeriesId(method):
     """True if method is a modern 32-char hex time_series_id (Aquarius-style UID)."""
     return bool(method and tsidRe.match(method))
+
+
+def parseUsgsSiteNumber(text):
+    """
+    If text has USGS plus a site number (e.g. USGS-08362500), return 08362500.
+    Empty string if none.
+    """
+    s = str(text or "").strip()
+    if not s:
+        return ""
+    m = usgsSiteExactRe.match(s)
+    if m:
+        return m.group(1)
+    m = usgsSiteRe.search(" " + s + " ")
+    if m:
+        return m.group(1)
+    return ""
 
 
 def isNumericMethodId(method):
