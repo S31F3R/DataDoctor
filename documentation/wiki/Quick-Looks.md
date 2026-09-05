@@ -29,10 +29,17 @@ If an older file is missing overlay/delta/raw/QAQC metadata, those checkboxes st
 
 Date range:
 
-- **Custom** (default) — the start/end pickers are stored and restored
+- **Custom** (default) — on **Save Quick Look** you must pick how those dates should behave on load (issue #3). Choices are inferred from the start/end you set and the query interval, for example:
+  - From **current time** through N days later (start was within one interval of now; for 1-minute series, within 15 minutes)
+  - **Today at HH:MM** through N days later at that clock (you were not querying “now”)
+  - Last N days **through current time**
+  - Weekly on the same weekday, or first/second/…/last weekday of the month (daily-style ranges)
+  - **Don't restore dates** when the Quick Look is loaded
+  - **Keep these exact dates**
+  - **None of these** — save is cancelled; a suggestion is shown to snap the end to an even interval
 - **Prev Day to current** / **Prev Week to current** — only the mode is stored; load and Query refresh from *now* (same rolling window as the radio buttons)
 
-**Prev Day / Prev Week** still mean “rolling to now” — they refresh when you load and when you Query.
+Relative custom rules (and Prev Day / Prev Week) refresh when you **load** and when you **Query**.
 
 ## Export / Import
 

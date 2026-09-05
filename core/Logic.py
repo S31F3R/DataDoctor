@@ -1024,6 +1024,7 @@ def saveQuickLook(
     dateMode='custom',
     startDate=None,
     endDate=None,
+    dateRule=None,
 ):
     """
     Save query list + optional UI metadata to quickLook JSON.
@@ -1037,6 +1038,7 @@ def saveQuickLook(
         "qaqc": true/false,
         "dateMode": "custom" | "prevDay" | "prevWeek",
         "startDate" / "endDate": only when dateMode is custom
+        "dateRule": optional relative-custom rule (#3)
       }
 
     Prev Day / Prev Week do not store timestamps — load refreshes from now.
@@ -1059,10 +1061,15 @@ def saveQuickLook(
         'dateMode': mode,
     }
     if mode == 'custom':
-        if startDate:
-            payload['startDate'] = startDate
-        if endDate:
-            payload['endDate'] = endDate
+        if isinstance(dateRule, dict) and dateRule.get('kind') == 'omit':
+            payload['dateRule'] = {'kind': 'omit'}
+        else:
+            if startDate:
+                payload['startDate'] = startDate
+            if endDate:
+                payload['endDate'] = endDate
+            if isinstance(dateRule, dict) and dateRule:
+                payload['dateRule'] = dateRule
     quicklookPath = os.path.join(Utils.getQuickLookDir(), f'{name}.json')
     os.makedirs(os.path.dirname(quicklookPath), exist_ok=True)
 
@@ -1108,7 +1115,7 @@ def _parseQuickLookPayload(data):
     Normalize loaded JSON/txt content into (queryStrings, metaDict).
 
     metaDict keys: displayDelta, overlayPairs, rawData, qaqc (bools),
-    dateMode ('custom'|'prevDay'|'prevWeek'), startDate, endDate.
+    dateMode ('custom'|'prevDay'|'prevWeek'), startDate, endDate, dateRule.
     Missing keys default to False / custom so legacy files uncheck the boxes.
     """
     meta = {
@@ -1119,6 +1126,7 @@ def _parseQuickLookPayload(data):
         'dateMode': 'custom',
         'startDate': None,
         'endDate': None,
+        'dateRule': None,
     }
     if isinstance(data, dict):
         queries = data.get('queries')
@@ -1147,6 +1155,9 @@ def _parseQuickLookPayload(data):
             meta['dateMode'] = 'prevWeek'
         meta['startDate'] = data.get('startDate') or data.get('start')
         meta['endDate'] = data.get('endDate') or data.get('end')
+        rule = data.get('dateRule') or data.get('customDateRule')
+        if isinstance(rule, dict):
+            meta['dateRule'] = rule
         return queries, meta
     if isinstance(data, list):
         # Legacy plain array — no metadata stored → checkboxes off
@@ -1169,14 +1180,15 @@ def loadQuickLook(
     Load quick look into listQueryList. Always restore query-option checkboxes
     when those widgets are passed: saved True/False, or False when the file
     has no metadata (legacy array JSON). Date radios: prevDay/prevWeek refresh
-    from now; custom restores stored timestamps.
+    from now; custom restores stored timestamps or a dateRule (#3).
+    Returns the loaded meta dict, or None.
     """
     quickLookName = cbQuickLook.currentText()
 
     if not quickLookName:
         if Config.debug:
             logMessage("DEBUG", "loadQuickLook: No quick look selected")
-        return
+        return None
     listQueryList.clear()
     userJsonPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.json')
     userTxtPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.txt') # Fallback for legacy
@@ -1197,7 +1209,7 @@ def loadQuickLook(
     
     if not quickLookPath:        
         logMessage("WARN", "Quick look '{}' not found.".format(quickLookName))
-        return
+        return None
     
     try:
         if quickLookPath.endswith('.json'):
@@ -1276,10 +1288,20 @@ def loadQuickLook(
             else:
                 dteStartDate.setEnabled(True)
                 dteEndDate.setEnabled(True)
-                for key, widget in (('startDate', dteStartDate), ('endDate', dteEndDate)):
-                    parsed = _parseQuickLookDate(meta.get(key))
-                    if parsed is not None:
-                        widget.setDateTime(parsed)
+                applied = False
+                rule = meta.get('dateRule')
+                if isinstance(rule, dict) and rule.get('kind') not in (None, 'fixed', 'omit'):
+                    from core import QuickLookDates
+                    result = QuickLookDates.applyRule(rule, now)
+                    if isinstance(result, tuple) and len(result) == 2:
+                        dteStartDate.setDateTime(result[0])
+                        dteEndDate.setDateTime(result[1])
+                        applied = True
+                if not applied and not (isinstance(rule, dict) and rule.get('kind') == 'omit'):
+                    for key, widget in (('startDate', dteStartDate), ('endDate', dteEndDate)):
+                        parsed = _parseQuickLookDate(meta.get(key))
+                        if parsed is not None:
+                            widget.setDateTime(parsed)
         
         if Config.debug:
             logMessage(
@@ -1314,8 +1336,10 @@ def loadQuickLook(
             os.remove(userTxtPath)
             if Config.debug:
                 logMessage("DEBUG", f"loadQuickLook: Converted legacy {userTxtPath} to .json and deleted .txt")
+        return meta
     except Exception as e:        
         logMessage("ERROR", "loadQuickLook: Failed to load Quick Look from {}: {}".format(quickLookPath, e))
+        return None
 
 def quickLookExists(quickLookName) -> bool:
     """True if a user or example Quick Look JSON already uses this name."""

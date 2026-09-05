@@ -3,11 +3,13 @@
 import json
 import os
 from PyQt6.QtWidgets import (QMainWindow, QLineEdit, QComboBox, QDateTimeEdit, QListWidget, QPushButton, QRadioButton,
-                            QButtonGroup, QCheckBox, QMessageBox, QInputDialog, QMenu, QAbstractItemView)
+                            QButtonGroup, QCheckBox, QMessageBox, QInputDialog, QMenu, QAbstractItemView,
+                            QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QListWidgetItem)
+from datetime import datetime
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6 import uic
-from core import Logic, Query, Utils, Config, Upload
+from core import Logic, Query, Utils, Config, Upload, QuickLookDates
 from ui.uiSearch import uiSearch
 
 # Full interval list for non-USGS databases (matches prior cbInterval population)
@@ -136,7 +138,8 @@ class uiQuery(QMainWindow):
         self.btnClearQuery.clicked.connect(self.btnClearQueryPressed)
         self.btnDataIdInfo.clicked.connect(self.btnDataIdInfoPressed)
         self.btnIntervalInfo.clicked.connect(self.btnIntervalInfoPressed)
-        self.radioGroup.buttonClicked.connect(lambda btn: Logic.setQueryDateRange(self, btn, self.dteStartDate, self.dteEndDate))
+        self.radioGroup.buttonClicked.connect(self.onDateRadioClicked)
+        self.quickLookDateRule = None
         self.btnUpMax.clicked.connect(self.btnUpMaxPressed)
         self.btnUp15.clicked.connect(self.btnUp15Pressed)
         self.btnUp5.clicked.connect(self.btnUp5Pressed)
@@ -449,11 +452,20 @@ class uiQuery(QMainWindow):
             qaqcChecked = bool(self.chkbQAQC.isChecked()) if self.chkbQAQC is not None else False
             dateMode = self._queryDateMode()
             startStr = endStr = None
+            dateRule = None
             if dateMode == 'custom':
                 if self.dteStartDate is not None:
                     startStr = self.dteStartDate.dateTime().toString('yyyy-MM-dd HH:mm')
                 if self.dteEndDate is not None:
                     endStr = self.dteEndDate.dateTime().toString('yyyy-MM-dd HH:mm')
+                dateRule = self.pickCustomDateRule(startStr, endStr)
+                if dateRule is False:
+                    return
+                if isinstance(dateRule, dict) and dateRule.get('kind') == 'omit':
+                    startStr = endStr = None
+                self.quickLookDateRule = dateRule
+            else:
+                self.quickLookDateRule = None
             Logic.saveQuickLook(
                 name,
                 self.listQueryList,
@@ -464,6 +476,7 @@ class uiQuery(QMainWindow):
                 dateMode=dateMode,
                 startDate=startStr,
                 endDate=endStr,
+                dateRule=dateRule,
             )
             Utils.loadQuickLooks(self.cbQuickLook)
             if self.cbQuickLook is not None:
@@ -480,7 +493,7 @@ class uiQuery(QMainWindow):
                 )
 
     def btnLoadQuickLookPressed(self):
-        Logic.loadQuickLook(
+        meta = Logic.loadQuickLook(
             self.cbQuickLook,
             self.listQueryList,
             chkbDelta=self.chkbDelta,
@@ -495,7 +508,8 @@ class uiQuery(QMainWindow):
             dteStartDate=self.dteStartDate,
             dteEndDate=self.dteEndDate,
         )
-        # Prev Day / Prev Week: snap to now (custom timestamps already restored)
+        self.quickLookDateRule = (meta or {}).get('dateRule') if isinstance(meta, dict) else None
+        # Prev Day / Prev Week / relative custom: snap to now
         self.refreshRelativeQueryTimes()
         configPath = Utils.getConfigPath()
         config = {}
@@ -643,10 +657,84 @@ class uiQuery(QMainWindow):
                 "btnClearQueryPressed: Cleared query list and unchecked query options",
             )
 
+    def onDateRadioClicked(self, btn):
+        Logic.setQueryDateRange(self, btn, self.dteStartDate, self.dteEndDate)
+        if btn is not self.rbCustomDateTime:
+            self.quickLookDateRule = None
+
+    def _queryListTexts(self):
+        if self.listQueryList is None:
+            return []
+        return [
+            self.listQueryList.item(i).text()
+            for i in range(self.listQueryList.count())
+            if self.listQueryList.item(i) is not None
+        ]
+
+    def _queryIntervalMinutes(self):
+        fallback = self.cbInterval.currentText() if self.cbInterval is not None else "HOUR"
+        return QuickLookDates.finestIntervalMinutes(self._queryListTexts(), fallback)
+
+    def pickCustomDateRule(self, startStr, endStr):
+        """
+        Modal: user must pick how custom dates should reload.
+        Returns a dateRule dict, or False if save should abort.
+        """
+        start = QuickLookDates.parseStamp(startStr)
+        end = QuickLookDates.parseStamp(endStr)
+        now = datetime.now()
+        intervalMin = self._queryIntervalMinutes()
+        choices = QuickLookDates.propose(start or now, end or now, now, intervalMin)
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Quick Look date range")
+        dlg.setModal(True)
+        dlg.setMinimumWidth(520)
+        layout = QVBoxLayout(dlg)
+        intro = QLabel(
+            "Custom dates can mean a rolling window. Pick how this Quick Look "
+            "should set start and end when you load it (and when you Query)."
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+        listing = QListWidget(dlg)
+        listing.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        for choice in choices:
+            item = QListWidgetItem(choice["label"])
+            item.setData(Qt.ItemDataRole.UserRole, choice)
+            listing.addItem(item)
+        layout.addWidget(listing)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        okBtn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        okBtn.setText("Use this")
+        okBtn.setEnabled(False)
+        listing.itemSelectionChanged.connect(
+            lambda: okBtn.setEnabled(len(listing.selectedItems()) == 1)
+        )
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        layout.addWidget(buttons)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return False
+        selected = listing.currentItem()
+        if selected is None:
+            return False
+        choice = selected.data(Qt.ItemDataRole.UserRole) or {}
+        if choice.get("id") == "cancelAdjust":
+            hint = QuickLookDates.evenIntervalSuggestion(end or now, intervalMin)
+            QMessageBox.information(
+                self,
+                "Adjust the dates",
+                "None of the rolling options matched what you want.\n\n" + hint,
+            )
+            return False
+        return choice.get("rule")
+
     def refreshRelativeQueryTimes(self):
         """
-        Re-apply Previous day / Previous week ranges so end = now at Query click.
-        Custom DateTime is left unchanged.
+        Re-apply Previous day / Previous week / relative custom rules so
+        end = now at Query click. Fixed custom dates are left unchanged.
         """
         try:
             if self.rbPrevDayToCurrent is not None and self.rbPrevDayToCurrent.isChecked():
@@ -661,6 +749,20 @@ class uiQuery(QMainWindow):
                 )
                 if Config.debug:
                     Logic.logMessage("DEBUG", "refreshRelativeQueryTimes: refreshed Prev Week → Current")
+            elif self._queryDateMode() == "custom":
+                rule = getattr(self, "quickLookDateRule", None)
+                if isinstance(rule, dict) and rule.get("kind") not in (None, "fixed", "omit"):
+                    result = QuickLookDates.applyRule(rule, datetime.now())
+                    if isinstance(result, tuple) and len(result) == 2:
+                        if self.dteStartDate is not None:
+                            self.dteStartDate.setDateTime(result[0])
+                        if self.dteEndDate is not None:
+                            self.dteEndDate.setDateTime(result[1])
+                        if Config.debug:
+                            Logic.logMessage(
+                                "DEBUG",
+                                "refreshRelativeQueryTimes: applied custom dateRule",
+                            )
         except Exception as e:
             Logic.logException("refreshRelativeQueryTimes failed", e)
 
