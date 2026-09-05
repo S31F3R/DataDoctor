@@ -295,7 +295,7 @@ class uiAbout(QDialog):
             if href.startswith("http://") or href.startswith("https://") or href.startswith("datadoctor://"):
                 shown = href
                 if href.startswith("datadoctor://report"):
-                    shown = "file as your GitHub user"
+                    shown = "one-time GitHub authorize, then file"
                 elif len(shown) > 42:
                     shown = shown.split("://", 1)[-1][:42] + "…"
                 html += (

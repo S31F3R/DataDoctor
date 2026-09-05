@@ -288,6 +288,25 @@ def ensureGithubToken(parent=None) -> str:
     return runDeviceFlow(parent)
 
 
+def verificationUrl(device: dict) -> str:
+    """Browser URL for device consent. Prefer the complete URI so the code is pre-filled."""
+    complete = str(device.get("verification_uri_complete") or "").strip()
+    if complete:
+        return complete
+    base = str(device.get("verification_uri") or "https://github.com/login/device").strip()
+    code = str(device.get("user_code") or "").strip()
+    if not code:
+        return base or "https://github.com/login/device"
+    parts = urllib.parse.urlsplit(base)
+    query = urllib.parse.parse_qs(parts.query, keep_blank_values=True)
+    if "user_code" not in query:
+        query["user_code"] = [code]
+    newQuery = urllib.parse.urlencode(query, doseq=True)
+    return urllib.parse.urlunsplit((
+        parts.scheme, parts.netloc, parts.path, newQuery, parts.fragment,
+    ))
+
+
 def runDeviceFlow(parent=None) -> str:
     from PyQt6.QtWidgets import QApplication, QMessageBox
 
@@ -313,7 +332,7 @@ def runDeviceFlow(parent=None) -> str:
 
 
 class DeviceLoginDialog:
-    """Modal: show user_code, open GitHub, poll until authorized or cancelled."""
+    """One-time GitHub consent: open the browser, wait until Authorize, then never again."""
 
     def __init__(self, device: dict, parent=None):
         from PyQt6.QtCore import Qt, QTimer
@@ -326,37 +345,38 @@ class DeviceLoginDialog:
         self.intervalMs = max(5, int(device.get("interval") or 5)) * 1000
         self.deadline = device.get("expires_in") or 900
         self.elapsed = 0
+        code = str(device.get("user_code") or "")
         self.dlg = QDialog(parent)
-        self.dlg.setWindowTitle("Sign in to GitHub")
+        self.dlg.setWindowTitle("Authorize Data Doctor")
         self.dlg.setModal(True)
-        self.dlg.setMinimumWidth(420)
+        self.dlg.setMinimumWidth(460)
         layout = QVBoxLayout(self.dlg)
         intro = QLabel(
-            "Data Doctor files GitHub issues as you.\n"
-            "Enter this code on GitHub, then return here."
+            "GitHub will open so you can click <b>Authorize</b>.<br>"
+            "That is a one-time step. After it succeeds, Report just files "
+            "the issue — no code, no extra login.<br><br>"
+            "VS Code / git login cannot be reused; Data Doctor needs its own "
+            "permission to file issues as you."
         )
         intro.setWordWrap(True)
+        intro.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(intro)
-        code = QLabel(str(device.get("user_code") or ""))
-        code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        code.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        font = code.font()
-        font.setPointSize(max(14, font.pointSize() + 6))
-        font.setBold(True)
-        code.setFont(font)
-        layout.addWidget(code)
-        self.status = QLabel("Waiting for GitHub authorization…")
+        backup = QLabel(
+            f"If GitHub asks for a code, it is already copied: <b>{code}</b>"
+        )
+        backup.setWordWrap(True)
+        backup.setTextFormat(Qt.TextFormat.RichText)
+        backup.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(backup)
+        self.status = QLabel("Waiting for Authorize in the browser…")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
         row = QHBoxLayout()
-        openBtn = QPushButton("Open GitHub")
-        copyBtn = QPushButton("Copy code")
+        openBtn = QPushButton("Open GitHub again")
         cancelBtn = QPushButton("Cancel")
         openBtn.clicked.connect(self.openGithub)
-        copyBtn.clicked.connect(self.copyCode)
         cancelBtn.clicked.connect(self.dlg.reject)
         row.addWidget(openBtn)
-        row.addWidget(copyBtn)
         row.addStretch(1)
         row.addWidget(cancelBtn)
         layout.addLayout(row)
@@ -364,28 +384,25 @@ class DeviceLoginDialog:
         self.pollTimer.timeout.connect(self.pollOnce)
         self.dlg.rejected.connect(self.pollTimer.stop)
         self.dlg.accepted.connect(self.pollTimer.stop)
-        copyToClipboard(str(device.get("user_code") or ""))
+        copyToClipboard(code)
         self.pollTimer.start(self.intervalMs)
+        QTimer.singleShot(0, self.openGithub)
 
     def exec(self) -> bool:
         from PyQt6.QtWidgets import QDialog
         return self.dlg.exec() == QDialog.DialogCode.Accepted
 
     def openGithub(self) -> None:
-        url = (
-            self.device.get("verification_uri_complete")
-            or self.device.get("verification_uri")
-            or "https://github.com/login/device"
-        )
+        url = verificationUrl(self.device)
         try:
             webbrowser.open(url)
         except Exception as e:
             Logic.logMessage("WARN", f"Report.openGithub: {e}")
-        self.copyCode()
-
-    def copyCode(self) -> None:
-        copyToClipboard(str(self.device.get("user_code") or ""))
-        self.status.setText("Code copied. Waiting for GitHub authorization…")
+            self.status.setText(
+                f"Could not open a browser. Open {url} and click Authorize."
+            )
+            return
+        self.status.setText("Waiting for Authorize in the browser…")
 
     def pollOnce(self) -> None:
         self.elapsed += self.intervalMs / 1000.0
@@ -515,7 +532,8 @@ def showCrashDialog(excType, excValue, excTb) -> None:
             "The application will continue if possible."
         )
         box.setInformativeText(
-            "See app.log, or report it on GitHub (signs you in as your GitHub user)."
+            "See app.log, or report it on GitHub. First time only: authorize "
+            "once in the browser; after that it just files the issue."
         )
         reportBtn = box.addButton("Report on GitHub", QMessageBox.ButtonRole.ActionRole)
         copyBtn = box.addButton("Copy log", QMessageBox.ButtonRole.ActionRole)
@@ -544,6 +562,9 @@ def showManualReportDialog(parent=None) -> None:
         QLineEdit, QPlainTextEdit, QPushButton, QVBoxLayout,
     )
 
+    if not ensureGithubToken(parent):
+        return
+
     dlg = QDialog(parent)
     dlg.setWindowTitle("Report an issue")
     dlg.setModal(True)
@@ -551,8 +572,7 @@ def showManualReportDialog(parent=None) -> None:
     dlg.resize(560, 420)
     layout = QVBoxLayout(dlg)
     layout.addWidget(QLabel(
-        "This files a GitHub issue as you. Data Doctor does not store GitHub passwords;\n"
-        "the first time, a one-time code is shown for github.com/login/device."
+        "Submit files a GitHub issue as your account."
     ))
     layout.addWidget(QLabel("Title"))
     titleEdit = QLineEdit(dlg)
