@@ -4,12 +4,15 @@ Merge a packaged bunker.db into the user's bunker.db without wiping user edits.
 
 Rules (per To Do List):
   - Match rows on dataID + siteID
-  - Update from packaged: datatype, siteName, database (when packaged differs)
+  - Always update from packaged: siteName, database (when packaged differs)
+  - Prompt y/n (console): commonName, datatype  (existing rows only; new
+    rows always take the packaged values)
   - Fill blanks only (never override user values): valuePrecision,
     precisionOverride, expectedMin, expectedMax, cuttoffMin, cutoffMax,
     rateOfChange
   - Insert rows that exist only in the packaged DB
   - Never delete user-only rows
+  - No TTY / EOF → leave commonName and datatype on existing rows alone
 
 Typical Windows layout after packageWindows.py:
   <install>/Project Files/temp/bunker.db   ← packaged merge source
@@ -40,7 +43,11 @@ from pathlib import Path
 
 
 # Always update these from packaged when packaged has a non-empty different value
-UPDATE_FIELDS = ("datatype", "dataType", "siteName", "database")
+ALWAYS_UPDATE_FIELDS = ("siteName", "database")
+# Existing rows: only if the user answers y (or --update-common-names / --update-datatypes)
+OPTIONAL_UPDATE_FIELDS = ("commonName", "datatype", "dataType")
+# Back-compat alias for callers/docs that still mention UPDATE_FIELDS
+UPDATE_FIELDS = ALWAYS_UPDATE_FIELDS + OPTIONAL_UPDATE_FIELDS
 # Fill user blanks only — never replace a value the user already set
 FILL_BLANK_FIELDS = (
     "valuePrecision",
@@ -67,6 +74,26 @@ def col(lowerMap, *candidates):
         if name.lower() in lowerMap:
             return lowerMap[name.lower()]
     return None
+
+
+def askYesNo(prompt: str, default: bool = False) -> bool:
+    """Terminal y/n. Empty / EOF / no TTY uses default (n unless default True)."""
+    suffix = " [Y/n] " if default else " [y/N] "
+    if not sys.stdin.isatty():
+        print(f"{prompt} (no console — default {'Y' if default else 'N'})")
+        return default
+    try:
+        raw = input(prompt + suffix).strip().lower()
+    except EOFError:
+        return default
+    if not raw:
+        return default
+    if raw in ("y", "yes"):
+        return True
+    if raw in ("n", "no"):
+        return False
+    print("Please answer y or n.")
+    return askYesNo(prompt, default)
 
 
 def openDb(path: Path) -> sqlite3.Connection:
@@ -144,7 +171,13 @@ def cleanupTempFolder(packagedPath: Path):
         print(f"WARN: temp cleanup failed: {e}", file=sys.stderr)
 
 
-def merge(packagedPath: Path, userPath: Path, dryRun: bool = False) -> int:
+def merge(
+    packagedPath: Path,
+    userPath: Path,
+    dryRun: bool = False,
+    updateCommonNames: bool = False,
+    updateDatatypes: bool = False,
+) -> int:
     if not packagedPath.is_file():
         print(f"ERROR: packaged bunker not found: {packagedPath}", file=sys.stderr)
         return 1
@@ -187,7 +220,7 @@ def merge(packagedPath: Path, userPath: Path, dryRun: bool = False) -> int:
 
         mergeFieldNames = []
         seenLower = set()
-        for f in list(UPDATE_FIELDS) + list(FILL_BLANK_FIELDS):
+        for f in list(ALWAYS_UPDATE_FIELDS) + list(OPTIONAL_UPDATE_FIELDS) + list(FILL_BLANK_FIELDS):
             if f.lower() in seenLower:
                 continue
             seenLower.add(f.lower())
@@ -195,6 +228,12 @@ def merge(packagedPath: Path, userPath: Path, dryRun: bool = False) -> int:
         pkgFields = {f: col(pkgMap, f) for f in mergeFieldNames}
         usrFields = {f: col(usrMap, f) for f in mergeFieldNames}
         fillBlankLower = {f.lower() for f in FILL_BLANK_FIELDS}
+        optionalAllowed = set()
+        if updateCommonNames:
+            optionalAllowed.add("commonname")
+        if updateDatatypes:
+            optionalAllowed.add("datatype")
+        optionalFieldLower = {f.lower() for f in OPTIONAL_UPDATE_FIELDS}
 
         pkgRows = pkg.execute("SELECT * FROM dataDictionary").fetchall()
         updated = 0
@@ -232,6 +271,8 @@ def merge(packagedPath: Path, userPath: Path, dryRun: bool = False) -> int:
                     if fillBlank:
                         if oldVal is not None and str(oldVal).strip() != "":
                             continue
+                    if field.lower() in optionalFieldLower and field.lower() not in optionalAllowed:
+                        continue
                     sets.append(f"{uCol} = ?")
                     params.append(newVal)
                 if sets:
@@ -286,6 +327,31 @@ def main():
         action="store_true",
         help="Report only; no writes",
     )
+    parser.add_argument(
+        "--update-common-names",
+        dest="updateCommonNames",
+        action="store_true",
+        help="Overwrite existing commonName from packaged (skip prompt)",
+    )
+    parser.add_argument(
+        "--no-update-common-names",
+        dest="updateCommonNames",
+        action="store_false",
+        help="Leave existing commonName alone (skip prompt)",
+    )
+    parser.add_argument(
+        "--update-datatypes",
+        dest="updateDatatypes",
+        action="store_true",
+        help="Overwrite existing datatype from packaged (skip prompt)",
+    )
+    parser.add_argument(
+        "--no-update-datatypes",
+        dest="updateDatatypes",
+        action="store_false",
+        help="Leave existing datatype alone (skip prompt)",
+    )
+    parser.set_defaults(updateCommonNames=None, updateDatatypes=None)
     args = parser.parse_args()
 
     packaged, user = findDefaultPaths()
@@ -304,7 +370,23 @@ def main():
 
     print(f"Packaged: {packaged}")
     print(f"User:     {user}")
-    code = merge(packaged, user, dryRun=args.dryRun)
+    updateCommon = args.updateCommonNames
+    updateTypes = args.updateDatatypes
+    if updateCommon is None:
+        updateCommon = askYesNo("Update Data Dictionary Common Names?")
+    if updateTypes is None:
+        updateTypes = askYesNo("Update Data Dictionary Data Types?")
+    print(
+        f"commonName updates: {'yes' if updateCommon else 'no'}; "
+        f"datatype updates: {'yes' if updateTypes else 'no'}"
+    )
+    code = merge(
+        packaged,
+        user,
+        dryRun=args.dryRun,
+        updateCommonNames=updateCommon,
+        updateDatatypes=updateTypes,
+    )
     if code == 0 and not args.dryRun:
         cleanupTempFolder(Path(packaged))
     return code

@@ -13,6 +13,7 @@ Contents = what you need to run the app with a local Python:
   certs/           (optional Aquarius certs — folder always present)
   oracle/          (optional network admin / Instant Client; client/ skipped by default)
   scripts/applyUpdate.py
+  scripts/updateBunker.py  (dictionary merge; applyUpdate copies this in)
 
 3.0.x Windows applyUpdate copies core/* but not scripts/. core/applyUpdate.py
 is that bootstrap: DataDoctor.py moves it to pythonFiles/scripts/ (or Project Files/) so the
@@ -148,12 +149,20 @@ def main() -> int:
     # 3.0.x applyUpdate copies core/* and skips scripts/. Put a copy in core/
     # so the first 3.1 hop can install a Windows-zip-capable updater.
     applySrc = root / "scripts" / "applyUpdate.py"
+    scriptsDir = stage / "scripts"
+    scriptsDir.mkdir(parents=True, exist_ok=True)
     if applySrc.is_file():
-        scriptsDir = stage / "scripts"
-        scriptsDir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(applySrc, scriptsDir / "applyUpdate.py")
         shutil.copy2(applySrc, stage / "core" / "applyUpdate.py")
         print("Packaged scripts/applyUpdate.py + core/applyUpdate.py (3.0.x hop)")
+    bunkerSrc = root / "launcher" / "Project Files" / "scripts" / "updateBunker.py"
+    if not bunkerSrc.is_file():
+        bunkerSrc = root / "scripts" / "updateBunker.py"
+    if bunkerSrc.is_file():
+        shutil.copy2(bunkerSrc, scriptsDir / "updateBunker.py")
+        print("Packaged scripts/updateBunker.py")
+    else:
+        print("WARN: updateBunker.py not found", file=sys.stderr)
 
     req = root / "requirements.txt"
     if req.is_file():
@@ -186,6 +195,7 @@ LAYOUT
   certs/         Optional Aquarius certs (aquarius.pem / .cer)
   oracle/        Optional Oracle network admin / Instant Client
   scripts/applyUpdate.py
+  scripts/updateBunker.py  (dictionary merge; applyUpdate copies this in)
 
 MANUAL INSTALL
 --------------

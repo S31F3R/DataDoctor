@@ -646,15 +646,13 @@ def spawnApplyAndExit(mainWindow=None) -> bool:
         Logic.logMessage("WARN", "spawnApplyAndExit: no apply script / install root")
         return False
     try:
+        # Visible console so bunker merge can ask y/n (commonName / datatype).
+        # DETACHED + DEVNULL made those prompts EOF-default to n with no window.
         kwargs = {
             "cwd": str(root),
-            "close_fds": True,
-            "stdin": subprocess.DEVNULL,
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
         }
         if sys.platform == "win32":
-            kwargs["creationflags"] = 0x00000008 | 0x00000200  # DETACHED | NEW_GROUP
+            kwargs["creationflags"] = 0x00000010 | 0x00000200  # NEW_CONSOLE | NEW_GROUP
             subprocess.Popen(["cmd.exe", "/c", str(script)], **kwargs)
         else:
             kwargs["start_new_session"] = True
@@ -925,11 +923,19 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
 
 def runRevertToPublishedUi(parent=None) -> None:
     """
-    After the user turns Beta updates off: offer the latest published
-    (non alpha/beta/rc) release even if it is older than the current RC.
+    After the user turns Beta updates off: if this build is an rc/beta,
+    offer the latest published (non alpha/beta/rc) release so they can leave
+    the pre-release channel. Already on a published build: stay silent.
     """
     from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
     from PyQt6.QtWidgets import QApplication, QMessageBox
+
+    if not Version.isPrereleaseVersion(Version.VERSION):
+        Logic.logMessage(
+            "INFO",
+            f"Revert-to-published: already on published {Version.displayVersion()}, skip",
+        )
+        return
 
     class _Signals(QObject):
         done = pyqtSignal(object)
@@ -948,6 +954,7 @@ def runRevertToPublishedUi(parent=None) -> None:
             self.signals.done.emit(info)
 
     def onDone(info):
+        local = Version.displayVersion()
         if info is None:
             QMessageBox.information(
                 parent,
@@ -956,8 +963,13 @@ def runRevertToPublishedUi(parent=None) -> None:
                 "Stay on this build, or publish a stable tag to revert to.",
             )
             return
-        local = Version.displayVersion()
         ver = info.get("version") or "?"
+        if Version.compareVersions(ver, Version.VERSION) == 0:
+            Logic.logMessage(
+                "INFO",
+                f"Revert-to-published: already on published {ver}",
+            )
+            return
         box = QMessageBox(parent)
         box.setWindowTitle("Revert to published")
         box.setText(

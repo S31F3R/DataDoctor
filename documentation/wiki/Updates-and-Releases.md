@@ -11,7 +11,7 @@ Data Doctor checks [GitHub Releases](https://github.com/S31F3R/DataDoctor/releas
 
 Newest-first among those: **published > rc > beta** of the same `X.Y.Z`. Example: `3.0.0` is newer than `3.0.0-rc.2.1`, which is newer than `3.0.0-rc.1`, which is newer than `3.0.0-beta.4`. A `3.0.0` install will not be offered `3.0.0-rc.1` (that RC is older than 3.0.0).
 
-Toggle **Options → General → Beta updates**. The choice is saved as `updateChannel` in `user.config`. Saving with the box **checked** runs an update check (including pre-releases). Saving with it **unchecked** offers the latest published (non-RC / non-beta) release so you can leave the beta channel.
+Toggle **Options → General → Beta updates**. The choice is saved as `updateChannel` in `user.config`. Saving with the box **checked** runs an update check (including pre-releases). Saving with it **unchecked** offers the latest published (non-RC / non-beta) release **only if this install is currently an rc/beta**. Already on the latest published build: no dialog.
 
 ## Release assets
 
@@ -34,7 +34,7 @@ Tags use `vMAJOR.MINOR.PATCH`. Release candidates and betas use `vX.Y.Z-rc.N` or
 2. Put `DataDoctor-Python-*.zip` in the install’s `updates\` folder (next to `Data Doctor.exe`) if you chose Later.
 3. Restart **Data Doctor.exe**, or run `applyUpdate.cmd`. The exe starts the cmd and exits so launcher files can be replaced; the cmd starts the exe when it finishes.
 
-**Restart** on the update dialog closes Data Doctor and runs `applyUpdate.cmd` for you. Closing the dialog without Restart leaves the zip in `updates\` for later.
+**Restart** on the update dialog closes Data Doctor and opens `applyUpdate.cmd` in a console so you can answer the dictionary merge prompts. Closing the dialog without Restart leaves the zip in `updates\` for later.
 
 That refreshes `pythonFiles` code (`app.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary, pip-installs into `python-embed`, and deletes the zip. `pythonFiles\certs\` is left alone so Aquarius certificates survive updates.
 
@@ -50,7 +50,7 @@ In-app update on this hop downloads **`DataDoctor-Windows-*.zip`**, not the Pyth
 
 Do **not** use only the Python zip for this hop — old `applyUpdate` cannot install the launcher or the embed. If you already applied a 3.1 Python zip (new code, still on `.venv`), the app will prompt for the Windows zip on the next start.
 
-Dictionary merge updates `datatype` / `siteName` / `database` from the packaged copy. `valuePrecision`, `precisionOverride`, `expectedMin`, `expectedMax`, `cuttoffMin`, `cutoffMax`, and `rateOfChange` fill blanks only and never overwrite a value you already set.
+Dictionary merge always updates `siteName` / `database` from the packaged copy. It asks **y/n** (in the applyUpdate console) whether to overwrite existing **Common Names** and **Data Types** (`commonName` / `datatype`). New dictionary rows always take the packaged values. `valuePrecision`, `precisionOverride`, `expectedMin`, `expectedMax`, `cuttoffMin`, `cutoffMax`, and `rateOfChange` fill blanks only and never overwrite a value you already set. No console (or answering **n**) leaves existing common names and data types alone.
 
 Dictionary-only merge:
 
