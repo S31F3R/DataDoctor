@@ -51,18 +51,20 @@ From the project root, with Options → Aquarius already set (same keyring login
 
 ```bash
 python scripts/aquariusDictionary.py TFLC
+python scripts/aquariusDictionary.py ALL
 python scripts/aquariusDictionary.py TFLC --out tflc.csv
-python scripts/aquariusDictionary.py TFLC --apply
+python scripts/aquariusDictionary.py ALL --apply
 ```
 
-Pass a location **Identifier** (or the 32-character location UniqueId). The script lists time-series at that location with **Publish** checked and writes Data Dictionary columns:
+Pass a location **Identifier** (or the 32-character location UniqueId), or **ALL** / `--all` for every location. The script lists time-series with **Publish** checked and writes Data Dictionary columns:
 
 | Column | Source |
 |--------|--------|
 | `dataID` | Time-series UniqueId |
 | `siteID` | Location Identifier |
 | `database` | `AQUARIUS` |
-| `siteName` / `commonName` | Location name |
+| `siteName` | Location name |
+| `commonName` | Time-series Label |
 | `datatype` / `valuePrecision` | Aquarius `Parameter` only when it exactly matches a `valuePrecision.json` Identifier; otherwise blank |
 
 `--apply` inserts new rows into `core/bunker.db` and skips existing `dataID` + `AQUARIUS`. There is no `stationID` column; the location identifier is `siteID`.

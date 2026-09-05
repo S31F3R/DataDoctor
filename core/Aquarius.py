@@ -220,6 +220,68 @@ def locationNameOf(location):
     ).strip()
 
 
+def seriesLabelOf(series):
+    """Time-series Label (dictionary commonName). Falls back to Identifier's Label part."""
+    if not isinstance(series, dict):
+        return ''
+    label = str(series.get('Label') or '').strip()
+    if label:
+        return label
+    ident = str(series.get('Identifier') or '').strip()
+    if '@' in ident:
+        left = ident.rsplit('@', 1)[0]
+        if '.' in left:
+            return left.split('.', 1)[1].strip()
+    return ''
+
+
+def locationDescriptionList(auth):
+    data = publishGet(auth, '/GetLocationDescriptionList', timeout=120)
+    return [d for d in (data.get('LocationDescriptions') or []) if isinstance(d, dict)]
+
+
+def locationLookup(auth):
+    """Identifier → stub dict with Identifier / LocationName."""
+    out = {}
+    for desc in locationDescriptionList(auth):
+        ident = locationIdentifierOf(desc)
+        if ident:
+            out[ident] = desc
+    return out
+
+
+def publishedSeriesAll(auth):
+    """
+    All published time-series. Prefer one Publish=true list; if that call
+    fails, walk every location (slower).
+    """
+    try:
+        data = publishGet(
+            auth,
+            '/GetTimeSeriesDescriptionList',
+            {'Publish': True},
+            timeout=180,
+        )
+        series = data.get('TimeSeriesDescriptions') or []
+        return [s for s in series if isinstance(s, dict) and isPublishedSeries(s)]
+    except requests.exceptions.RequestException as e:
+        Logic.logMessage(
+            "WARN",
+            f"GetTimeSeriesDescriptionList without location failed ({e}); "
+            "walking locations",
+        )
+    rows = []
+    for desc in locationDescriptionList(auth):
+        ident = locationIdentifierOf(desc)
+        if not ident:
+            continue
+        try:
+            rows.extend(publishedSeriesAtLocation(auth, ident))
+        except requests.exceptions.RequestException as e:
+            Logic.logMessage("WARN", f"published series at {ident!r} failed: {e}")
+    return rows
+
+
 def resolveLocation(auth, location):
     """
     Resolve a location identifier or 32-char UniqueId to GetLocationData.

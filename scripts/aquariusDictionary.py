@@ -3,22 +3,23 @@
 Export published Aquarius time-series at a location into Data Dictionary CSV.
 
 Uses Data Doctor Options → Aquarius credentials (keyring) and the same TLS
-login as queries. Not USBR/HDB-specific: one location identifier (or 32-char
-location UniqueId) in, published series out.
+login as queries. Not USBR/HDB-specific: location identifier (or 32-char
+location UniqueId), or ALL, in; published series out.
 
 Dictionary mapping (no stationID column exists — Location Identifier is siteID):
   dataID          = time-series UniqueId
   siteID          = location Identifier
   database        = AQUARIUS
   siteName        = location Name
-  commonName      = siteName
+  commonName      = time-series Label
   datatype        = valuePrecision Identifier only on an exact Parameter match
   valuePrecision  = same Identifier on that match; else blank
 
 Usage (project root, same env / keyring as Data Doctor):
   python scripts/aquariusDictionary.py TFLC
+  python scripts/aquariusDictionary.py ALL
   python scripts/aquariusDictionary.py TFLC --out tflc.csv
-  python scripts/aquariusDictionary.py TFLC --apply
+  python scripts/aquariusDictionary.py ALL --apply
 """
 
 from __future__ import annotations
@@ -68,7 +69,7 @@ def dictionaryRow(series: dict, location: dict) -> dict:
         "siteID": locId,
         "database": "AQUARIUS",
         "siteName": locName,
-        "commonName": locName,
+        "commonName": Aquarius.seriesLabelOf(series),
         "datatype": matched,
         "valuePrecision": matched,
         "precisionOverride": "",
@@ -101,6 +102,32 @@ def rowsForLocation(auth, locationArg: str) -> list[dict]:
         rows.append(row)
     print(
         f"{locationArg}: {ident} ({name}) — {len(rows)} published series"
+        + (f", {skipped} without UniqueId" if skipped else "")
+    )
+    return rows
+
+
+def rowsForAllLocations(auth) -> list[dict]:
+    from core import Aquarius
+
+    print("ALL: listing locations and published series…")
+    lookup = Aquarius.locationLookup(auth)
+    series = Aquarius.publishedSeriesAll(auth)
+    rows = []
+    skipped = 0
+    for item in series:
+        locId = str(item.get("LocationIdentifier") or "").strip()
+        location = lookup.get(locId) or {
+            "Identifier": locId,
+            "LocationName": locId,
+        }
+        row = dictionaryRow(item, location)
+        if not row["dataID"]:
+            skipped += 1
+            continue
+        rows.append(row)
+    print(
+        f"ALL: {len(lookup)} location(s), {len(rows)} published series"
         + (f", {skipped} without UniqueId" if skipped else "")
     )
     return rows
@@ -178,8 +205,13 @@ def main() -> int:
     )
     parser.add_argument(
         "location",
-        nargs="+",
-        help="Aquarius location Identifier (e.g. TFLC) or 32-char location UniqueId",
+        nargs="*",
+        help="Aquarius location Identifier (e.g. TFLC), 32-char location UniqueId, or ALL",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="every location (same as passing ALL)",
     )
     parser.add_argument(
         "--out",
@@ -214,15 +246,23 @@ def main() -> int:
         auth = Aquarius.authenticate()
         if not auth:
             die("Aquarius login failed (Options → Aquarius server / user / password)")
+        wantAll = args.all or any(str(loc).strip().upper() == "ALL" for loc in args.location)
+        if not wantAll and not args.location:
+            die("pass a location Identifier or ALL")
         rows = []
         seen = set()
-        for loc in args.location:
-            for row in rowsForLocation(auth, loc):
-                key = (row["dataID"], row["database"])
-                if key in seen:
-                    continue
-                seen.add(key)
-                rows.append(row)
+        if wantAll:
+            chunk = rowsForAllLocations(auth)
+        else:
+            chunk = []
+            for loc in args.location:
+                chunk.extend(rowsForLocation(auth, loc))
+        for row in chunk:
+            key = (row["dataID"], row["database"])
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append(row)
         if not rows:
             print("No published series")
         if args.out is not None or not args.apply:
