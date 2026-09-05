@@ -10,3 +10,7 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- GitHub reporting uses the OAuth App (device flow, public client id). About → Report issue and crash Report on GitHub file the issue as the signed-in user; token is stored in the OS keyring (`githubToken`), not user.config
+- First-install UTC offset defaults to the computer’s current timezone (Windows / Linux / macOS, including DST)
+- Utils.py: QUERY_* constants and private helpers renamed to camelCase
+

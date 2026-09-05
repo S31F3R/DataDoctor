@@ -7,4 +7,3 @@
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
     -Add a plot that graphs delta pair and 4overlays delta as a seperate line
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)
--Get OAuth App for GitHub stuffs

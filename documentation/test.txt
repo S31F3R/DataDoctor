@@ -17,23 +17,39 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[ ] Windows update Restart + launcher hop
+[ ] Uncheck Beta on published — no dialog
    Steps:
-     a. Accept an in-app download. Dialog should say “Hit Restart to update…” with Restart / Later.
-     b. Restart closes Data Doctor and runs applyUpdate.cmd (app comes back).
-     c. Later leaves the zip in updates\; next Data Doctor.exe apply still works.
-     d. 3.0.x / no python-embed: after a Python zip apply, Windows zip should chain
-        (or be the asset downloaded in the first place). No second manual applyUpdate.
+     a. Install is a published X.Y.Z (not -rc / -beta), Beta updates currently checked.
+     b. Options → uncheck Beta updates → Save.
+     c. No popup (not “no published release” and not “Revert to published”).
+     d. Recheck Beta → Save: update check may offer the newest rc/beta as usual.
 
-[ ] Retro graph in light mode
+[ ] GitHub OAuth report (device flow)
    Steps:
-     a. Retro ON + Appearance Light: graph is a normal light plot (white bg, black
-        ticks/labels/icons). Font is still Silkscreen. No neon green on a dark plot.
-     b. Retro ON + Appearance Dark: neon plot + green toolbar icons (the cool look).
-        RESPONSE: tooltip (a) passed. Retro+Light still used the dark neon graph.
+     a. GitHub OAuth App Ov23libpuvlYvAG9zjIa must have Device Flow enabled.
+     b. About → Report issue. If no stored token: dialog shows a user code, Open GitHub
+        / Copy code, then wait. Authorize public_repo. Token lands in the OS keyring
+        (DataDoctor / githubToken), not user.config.
+     c. Fill title + what happened (log tail checked by default) → Submit creates a
+        real GitHub issue as you. Success dialog has Open issue.
+     d. Crash dialog → Report on GitHub uses the stored token (no second login) and
+        files a crash issue with traceback + log tail. No browser issue-form paste.
+     e. Copy log / Open log folder still work without signing in.
+     f. Optional: revoke the app on GitHub, Report again → 401 → device flow again.
+
+[ ] First-install timezone offset
+   Steps:
+     a. No user.config (rename/move the config folder, or a fresh account).
+     b. Launch Data Doctor → Options → General → UTC offset is the computer’s
+        current offset (DST included), not hardcoded UTC+00:00. Windows / Linux / Mac.
+     c. Existing user.config keeps the saved offset; do not overwrite on upgrade.
 
 Confirmed
 --------------------------------------------------------------------------------
+Windows update Restart + launcher hop
+Uncheck Beta on rc/beta — offer published
+Apply-update Common Names / Data Types prompts
+Retro Refresh/Undo/Upload positions
 Windows silent launch (VM + laptop)
 Query list scroll / no double query
 Graph missing-data gaps
@@ -66,6 +82,7 @@ Retro live column resize / query width / radios
 Retro timestamp rail
 Data Dictionary / Search header filters
 Query search tooltip “Data ID Search”
+Retro graph in light mode
 
 Deferred / known
 --------------------------------------------------------------------------------
