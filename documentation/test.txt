@@ -24,25 +24,24 @@ Current Tests
      c. No popup (not “no published release” and not “Revert to published”).
      d. Recheck Beta → Save: update check may offer the newest rc/beta as usual.
 
-[ ] Aquarius dictionary export (published series)
+[ ] Quick Look current time through midnight
    Steps:
-     a. Options → Aquarius server/user/password already work for a normal query.
-     b. python scripts/aquariusDictionary.py <LocationIdentifier> (VPN).
-        dataID=series UniqueId, siteID=location Identifier, database=AQUARIUS,
-        siteName=location name, commonName=time-series Label (not the location name).
-        If the location Identifier is USGS-08362500 (or similar): siteID=08362500
-        and siteName=USGS monitoring-location name from the Water Data API.
-        If the time-series Label is like TFLC-Stage and TFLC is an Aquarius
-        location: siteID=TFLC and siteName=that location’s name.
-     c. datatype and valuePrecision filled only when Parameter exactly matches a
-        valuePrecision.json Identifier. Others blank. Unpublished series omitted.
-     d. python scripts/aquariusDictionary.py ALL (or --all) covers every location;
-        same columns; can take a while.
-     e. Optional: --out file.csv and/or --apply (inserts new bunker.db rows, skips
-        existing dataID + AQUARIUS).
+     a. Custom dates. Start ≈ now, end = a future date at 00:00 (e.g. 09/14/2026 00:00).
+     b. Save Quick Look → list includes “From current time through midnight N day(s)
+        from today (00:00)”. It must not be only “12341 minutes” (or similar).
+     c. Pick that option, Load later: start is now, end is that midnight N days out.
+
+[ ] Quick Look Date Range dialog chrome
+   Steps:
+     a. Custom dates → Save Quick Look → name → the picker title bar says
+        “Quick Look Date Range” (title case).
+     b. The option list is tall enough to show 5 rows without scrolling
+        (or with only a little leftover).
 
 Confirmed
 --------------------------------------------------------------------------------
+Quick Look custom date rule (#3)
+Aquarius dictionary export (published series)
 GitHub OAuth report (one-time Authorize)
 First-install timezone offset
 Windows update Restart + launcher hop
