@@ -111,9 +111,9 @@ retroAlwaysLayouts = {
 controlLayouts = {
     # winMain — Data Query tab overlay icons (match winMain.ui; Windows y via platformLayoutYNudge)
     # .ui bases: Refresh (4,6), Undo (40,6), Upload (76,6) — 32×32, 4px gaps
-    'btnRefresh': (4, 6, 32, 32),
-    'btnUndo': (40, 6, 32, 32),
-    'btnUpload': (76, 6, 32, 32),
+    'btnRefresh': (14, 6, 32, 32),
+    'btnUndo': (50, 6, 32, 32),
+    'btnUpload': (86, 6, 32, 32),
     # winQuery
     'btnDataIdInfo': (376, 5, 31, 20),
     'btnIntervalInfo': (100, 76, 31, 20),
