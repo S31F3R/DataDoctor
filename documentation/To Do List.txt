@@ -1,4 +1,6 @@
 ####### CURRENT TASKS #######
+-Packaged quick looks are built by me and sent with the program. But they are used more for examples. Lets update the packge scripts. If the user has a config wtih quickLooks, just remove the packaged quickLook folder. If the user doesn't have any quickLooks, move the packaged ones to their profile then remove the packaged quickLook folder. The goal is to not have the packaged quick look folder anymore and no restricions on removing packaged quick looks either
+    -On users who already have this program, just see if they have quickLooks, if they do, remove all that are in the packaged folder location
 
 ####### CURRENT BUGS #######
 
