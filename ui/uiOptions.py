@@ -1045,10 +1045,12 @@ class uiOptions(QDialog):
         ckQuery = QCheckBox("Query Quick Looks")
         ckSql = QCheckBox("SQL Quick Looks")
         ckCfg = QCheckBox("Config")
+        ckDict = QCheckBox("Data Dictionary")
         ckQuery.setChecked(True)
         ckSql.setChecked(True)
         ckCfg.setChecked(True)
-        for c in (ckQuery, ckSql, ckCfg):
+        ckDict.setChecked(True)
+        for c in (ckQuery, ckSql, ckCfg, ckDict):
             lay.addWidget(c)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -1065,6 +1067,8 @@ class uiOptions(QDialog):
             parts.append("sqlQuickLooks")
         if ckCfg.isChecked():
             parts.append("config")
+        if ckDict.isChecked():
+            parts.append("dataDictionary")
         if not parts:
             QMessageBox.warning(self, "Export", "Check at least one item to export.")
             return
@@ -1106,6 +1110,10 @@ class uiOptions(QDialog):
                     cfg = Utils.getConfigPath()
                     if os.path.isfile(cfg):
                         zf.write(cfg, "config/user.config")
+                if "dataDictionary" in parts:
+                    bunker = Logic.resourcePath("core/bunker.db")
+                    if os.path.isfile(bunker):
+                        zf.write(bunker, "dataDictionary/bunker.db")
         except Exception as e:
             Logic.logException("export profile failed", e)
             QMessageBox.warning(self, "Export", f"Could not export:\n{e}")
@@ -1160,7 +1168,7 @@ class uiOptions(QDialog):
                 if os.path.isfile(os.path.join(inner, PROFILE_MANIFEST)):
                     return inner
                 return inner
-        for name in ("queryQuickLooks", "sqlQuickLooks", "config"):
+        for name in ("queryQuickLooks", "sqlQuickLooks", "config", "dataDictionary"):
             if os.path.isdir(os.path.join(folder, name)):
                 return folder
         if os.path.isfile(os.path.join(folder, "user.config")):
@@ -1354,6 +1362,11 @@ class uiOptions(QDialog):
                 os.path.join(root, "user.config")
             ):
                 parts.append("config")
+            dictDir = os.path.join(root, "dataDictionary")
+            if os.path.isfile(os.path.join(dictDir, "bunker.db")) or os.path.isfile(
+                os.path.join(root, "bunker.db")
+            ):
+                parts.append("dataDictionary")
         if not parts:
             raise ValueError("This zip has nothing to import.")
         imported = []
@@ -1394,6 +1407,15 @@ class uiOptions(QDialog):
                     raise ValueError("Config in the zip is not valid.")
                 shutil.copy2(src, Utils.getConfigPath())
                 imported.append("Config")
+        if "dataDictionary" in parts:
+            src = os.path.join(root, "dataDictionary", "bunker.db")
+            if not os.path.isfile(src):
+                src = os.path.join(root, "bunker.db")
+            if os.path.isfile(src):
+                dest = Logic.resourcePath("core/bunker.db")
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                shutil.copy2(src, dest)
+                imported.append("Data Dictionary")
         if sqlCatJob is not None:
             self._applyImportedSqlCategories(sqlCatJob[0], sqlCatJob[1])
         if not imported:
@@ -1451,6 +1473,13 @@ class uiOptions(QDialog):
                 win.loadSnippets()
         except Exception as e:
             Logic.logException("import profile: refresh SQL snippets failed", e)
+        try:
+            dd = getattr(win, "winDataDictionary", None)
+            table = getattr(dd, "mainTable", None) if dd is not None else None
+            if table is not None:
+                Utils.loadDataDictionary(table)
+        except Exception as e:
+            Logic.logException("import profile: refresh Data Dictionary failed", e)
 
     def onUpdatePasswordPressed(self):
         """Change the Oracle password on checked Access List databases only."""

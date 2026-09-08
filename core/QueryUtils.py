@@ -8,6 +8,9 @@ from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem
 from core import Logic, Config, Utils, TableColors
 
+# Unrounded API/table text, kept when buildTable applies a RoundingSpec.
+NATIVE_VALUE_ROLE = int(Qt.ItemDataRole.UserRole) + 32
+
 
 def modifyTable(
     table,
@@ -99,7 +102,14 @@ def modifyTable(
         colVals = []
         for r in range(numRows):
             item = table.item(r, c)
-            colVals.append(item.text().strip() if item and item.text() else '')
+            text = ''
+            if item is not None:
+                native = item.data(NATIVE_VALUE_ROLE)
+                if native is not None and str(native).strip() != '':
+                    text = str(native).strip()
+                elif item.text():
+                    text = item.text().strip()
+            colVals.append(text)
             if r > 0 and r % 2000 == 0:
                 yieldProgress(f"Overlay/delta: reading... col {c + 1}/{numCols}", 97)
         grid.append(colVals)
@@ -332,6 +342,11 @@ def modifyTable(
             role = roles[r] if r < len(roles) else None
             if role is not None:
                 item.setData(Qt.ItemDataRole.UserRole, role)
+                native = role.get('primaryNative') or role.get('secondaryNative')
+                if native:
+                    item.setData(NATIVE_VALUE_ROLE, native)
+            elif text:
+                item.setData(NATIVE_VALUE_ROLE, text)
             if isDelta and text:
                 try:
                     val = float(text)

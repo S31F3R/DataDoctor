@@ -2241,6 +2241,14 @@ if __name__ == '__main__':
         except Exception as e:
             Logic.logException("Startup: loadDataDictionary failed", e)
         try:
+            Logic.convertLegacyQuickLooks()
+        except Exception as e:
+            Logic.logException("Startup: convertLegacyQuickLooks failed", e)
+        try:
+            Logic.adoptPackagedQuickLooks()
+        except Exception as e:
+            Logic.logException("Startup: adoptPackagedQuickLooks failed", e)
+        try:
             Utils.loadQuickLooks(winQuery.cbQuickLook)
         except Exception as e:
             Logic.logException("Startup: loadQuickLooks failed", e)
@@ -2319,12 +2327,6 @@ if __name__ == '__main__':
         # GitHub release check (silent if no releases / offline / already current)
         Update.scheduleStartupUpdateCheck(winMain, delayMs=3000)
 
-        # Convert legacy quickLooks
-        try:
-            Logic.convertLegacyQuickLooks()
-        except Exception as e:
-            Logic.logException("Startup: convertLegacyQuickLooks failed", e)
-        
         # Start application
         sys.exit(app.exec())
     except Exception as e:

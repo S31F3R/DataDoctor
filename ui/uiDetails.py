@@ -761,6 +761,8 @@ class uiDetails(QWidget):
         numeric = value.get('Numeric', 'N/A')
         display = Logic.valuePrecision(numeric) if not Config.rawData and numeric != 'N/A' else str(numeric)
         self.addRow("Value", display, point.get('Timestamp', 'N/A'), table=table)
+        if numeric != 'N/A':
+            self.addRow("Raw Value", str(numeric), table=table)
         
         # 3-9: Arrays with time-range filtering
         self.addArrayRows("Approval", response.get('Approvals', []), timestamp, 

@@ -673,7 +673,7 @@ def sizeVerticalHeader(table):
         vHeader = table.verticalHeader()
     except Exception:
         return
-    if vHeader is None or not vHeader.isVisible():
+    if vHeader is None:
         return
     try:
         vHeader.setSortIndicatorShown(False)
@@ -2567,7 +2567,13 @@ def applyLiveAppearance(app=None):
         pass
     if mainTable is not None and mainTable.columnCount() > 0:
         try:
-            applyTableRowMetrics(mainTable, mainTable.font())
+            tableFont = makeFontForRole('table')
+            mainTable.setFont(tableFont)
+            if mainTable.verticalHeader() is not None:
+                mainTable.verticalHeader().setFont(tableFont)
+            if mainTable.horizontalHeader() is not None:
+                mainTable.horizontalHeader().setFont(tableFont)
+            applyTableRowMetrics(mainTable, tableFont)
             autoSizeTableColumns(mainTable)
             sizeVerticalHeader(mainTable)
         except Exception as e:

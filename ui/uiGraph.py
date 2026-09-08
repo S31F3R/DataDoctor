@@ -826,14 +826,15 @@ class GraphPanel(QWidget):
         return 'light'
 
     def _chartFontProperties(self, size=9):
-        """Silkscreen in retro so legend/ticks match the UI (tooltips already do)."""
-        if not Config.retroMode:
-            return None
+        """Silkscreen in retro; Noto Sans otherwise so leaving retro resets the chart."""
         try:
             from matplotlib import font_manager
-            path = Logic.resourcePath('ui/fonts/Silkscreen-Regular.ttf')
+            if Config.retroMode:
+                path = Logic.resourcePath('ui/fonts/Silkscreen-Regular.ttf')
+            else:
+                path = Logic.resourcePath('ui/fonts/NotoSans-Regular.ttf')
             if not os.path.isfile(path):
-                return None
+                return font_manager.FontProperties(family='sans-serif', size=size)
             font_manager.fontManager.addfont(path)
             return font_manager.FontProperties(fname=path, size=size)
         except Exception:
@@ -842,7 +843,9 @@ class GraphPanel(QWidget):
     def _applyChartFonts(self, ax, twins=None):
         tickProp = self._chartFontProperties(9)
         axisProp = self._chartFontProperties(10)
-        if tickProp is None or ax is None:
+        if ax is None:
+            return
+        if tickProp is None:
             return
         try:
             ax.title.set_fontproperties(tickProp)
@@ -976,7 +979,7 @@ class GraphPanel(QWidget):
         if prop is not None:
             legend = self._ax.legend(lines, labels, loc='best', prop=prop)
         else:
-            legend = self._ax.legend(lines, labels, loc='best', fontsize=9)
+            legend = self._ax.legend(lines, labels, loc='best', family='sans-serif', fontsize=9)
 
         if theme == 'dark':
             try:

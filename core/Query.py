@@ -933,6 +933,8 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
                 display = cellText
             item = QTableWidgetItem(display)
             item.setTextAlignment(align)
+            if cellText:
+                item.setData(QueryUtils.NATIVE_VALUE_ROLE, cellText)
             table.setItem(rowIdx, colIdx, item)
 
         if rowIdx % yieldEvery == 0 or rowIdx == numRows - 1:

@@ -191,7 +191,7 @@ class uiAbout(QDialog):
         self._aboutInfo = [
             ('Version', Version.displayVersion()),
             ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
-            ('Report issue', 'datadoctor://report'),
+            ('Report Form', 'datadoctor://report'),
             ('Author', 'S31F3R'),
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
@@ -295,7 +295,7 @@ class uiAbout(QDialog):
             if href.startswith("http://") or href.startswith("https://") or href.startswith("datadoctor://"):
                 shown = href
                 if href.startswith("datadoctor://report"):
-                    shown = "one-time GitHub authorize, then file"
+                    shown = "Report Form"
                 elif len(shown) > 42:
                     shown = shown.split("://", 1)[-1][:42] + "…"
                 html += (

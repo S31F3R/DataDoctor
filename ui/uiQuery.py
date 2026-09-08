@@ -552,7 +552,7 @@ class uiQuery(QMainWindow):
             if Logic.Config.debug:
                 Logic.logMessage("DEBUG", f"btnDeleteQuickLookPressed: Removed '{quickLookName}' from combo box and cleared selection")
         else:
-            QMessageBox.warning(self, "Cannot Delete", "Example Quick Looks cannot be deleted.")
+            QMessageBox.warning(self, "Cannot Delete", "That Quick Look could not be deleted.")
             if Logic.Config.debug:
                 Logic.logMessage("DEBUG", f"btnDeleteQuickLookPressed: Attempted to delete example Quick Look '{quickLookName}'—skipped")
 

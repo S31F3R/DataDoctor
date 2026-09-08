@@ -16,7 +16,7 @@ Application name is **Data Doctor** (no organization folder). Config is **per us
 | `logs/app.log` | Current log (Log Viewer tab). The Windows launcher and `applyUpdate` also append here (`launcher:` / `applyUpdate:` / `startup:` lines) so a silent launch failure is visible without a window |
 | `logs/app.log.1` … `.5` | Rotated backups (~1 MB each, newest `.1`) |
 | `logs/fault.log` | Native interpreter faults (enabled before Qt loads; not held open on `app.log`) |
-| `quickLook/query/` | Saved query lists (Quick Looks) |
+| `quickLook/query/` | Saved query lists (Quick Looks), including former packaged examples after first launch |
 | `quickLook/sql/` | SQL Query Builder snippets (category assignment in `user.config`) |
 | `certs/` | Optional user-level Aquarius cert folder (created only if needed) |
 

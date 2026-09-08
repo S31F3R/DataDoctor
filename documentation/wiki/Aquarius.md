@@ -39,7 +39,7 @@ commonName-datatype
 AQUARIUS
 ```
 
-Series not in the dictionary keep the API location / label.
+Series not in the dictionary keep the API location / label. Cell **Show details** lists **Value** (rounded) and **Raw Value** (Aquarius `Numeric`). Overlay rounding uses that raw number so a DEC(2) series can still match a DEC(3) primary.
 
 ## Rounding
 

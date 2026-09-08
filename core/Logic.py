@@ -932,20 +932,6 @@ def loadAllQuickLooks(cbQuickLook):
                     if Config.debug:
                         logMessage("DEBUG", f"loadAllQuickLooks: Found user Quick Look: {file}")
     
-    # Append example Quick Looks (no duplicates – only if not in user)
-    exampleDir = Utils.getExampleQuickLookDir()
-
-    for ext in ['.json', '.txt']: # Scan .json first
-        for file in os.listdir(exampleDir):
-            if file.endswith(ext):
-                name = os.path.splitext(file)[0] # Get name without extension
-
-                if name not in quickLookNames:
-                    quickLookNames.add(name)
-
-                    if Config.debug:
-                        logMessage("DEBUG", f"loadAllQuickLooks: Added example Quick Look: {file}")
-    
     # Add sorted names to combo box for consistent order
     sortedNames = sorted(quickLookNames)
 
@@ -953,6 +939,87 @@ def loadAllQuickLooks(cbQuickLook):
         cbQuickLook.addItem(name)
         if Config.debug:
             logMessage("DEBUG", f"loadAllQuickLooks: Added {name} to cbQuickLook")
+
+def _userHasQueryQuickLooks():
+    userDir = Utils.getQuickLookDir()
+    if not os.path.isdir(userDir):
+        return False
+    try:
+        for name in os.listdir(userDir):
+            if name.endswith('.json') or name.endswith('.txt'):
+                return True
+    except OSError:
+        return False
+    return False
+
+
+def _packagedQuickLookFiles(exampleDir):
+    out = []
+    if not exampleDir or not os.path.isdir(exampleDir):
+        return out
+    try:
+        for name in os.listdir(exampleDir):
+            if name.endswith('.json') or name.endswith('.txt'):
+                out.append(os.path.join(exampleDir, name))
+    except OSError:
+        pass
+    return out
+
+
+def _mayRemovePackagedQuickLookDir(exampleDir):
+    """Never delete the source-tree quickLook/ used to build packages."""
+    exampleDir = os.path.abspath(exampleDir or '')
+    if not exampleDir or not os.path.isdir(exampleDir):
+        return False
+    userDir = os.path.abspath(Utils.getQuickLookDir())
+    if exampleDir == userDir or exampleDir.startswith(userDir + os.sep):
+        return False
+    root = os.path.abspath(Config.appRoot or '')
+    if root:
+        srcQl = os.path.join(root, 'quickLook')
+        if exampleDir == srcQl and os.path.isfile(os.path.join(root, 'DataDoctor.py')):
+            return False
+    return True
+
+
+def adoptPackagedQuickLooks():
+    """
+    First-run: copy packaged examples into the user profile if it has none.
+    Always drop the packaged quickLook folder on installs (not the git tree).
+    Existing users who already have profile Quick Looks just lose the packaged copies.
+    """
+    exampleDir = Utils.getExampleQuickLookDir()
+    if not exampleDir or not os.path.isdir(exampleDir):
+        return
+    packaged = _packagedQuickLookFiles(exampleDir)
+    if not packaged:
+        if _mayRemovePackagedQuickLookDir(exampleDir):
+            try:
+                shutil.rmtree(exampleDir)
+            except OSError:
+                pass
+        return
+    userDir = Utils.getQuickLookDir()
+    if not _userHasQueryQuickLooks():
+        os.makedirs(userDir, exist_ok=True)
+        for src in packaged:
+            dest = os.path.join(userDir, os.path.basename(src))
+            if os.path.exists(dest):
+                continue
+            try:
+                shutil.copy2(src, dest)
+                if Config.debug:
+                    logMessage("DEBUG", f"adoptPackagedQuickLooks: copied {src} → {dest}")
+            except OSError as e:
+                logMessage("WARN", f"adoptPackagedQuickLooks: copy failed {src}: {e}")
+    if _mayRemovePackagedQuickLookDir(exampleDir):
+        try:
+            shutil.rmtree(exampleDir)
+            if Config.debug:
+                logMessage("DEBUG", f"adoptPackagedQuickLooks: removed {exampleDir}")
+        except OSError as e:
+            logMessage("WARN", f"adoptPackagedQuickLooks: could not remove {exampleDir}: {e}")
+
 
 def convertLegacyQuickLooks():
     quickLookDir = Utils.getQuickLookDir()
@@ -1192,8 +1259,6 @@ def loadQuickLook(
     listQueryList.clear()
     userJsonPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.json')
     userTxtPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.txt') # Fallback for legacy
-    exampleJsonPath = resourcePath(f'quickLook/{quickLookName}.json')
-    exampleTxtPath = resourcePath(f'quickLook/{quickLookName}.txt') # Fallback for example legacy
     
     # Determine the path to load from, preferring JSON
     quickLookPath = None
@@ -1202,10 +1267,6 @@ def loadQuickLook(
         quickLookPath = userJsonPath
     elif os.path.exists(userTxtPath):
         quickLookPath = userTxtPath
-    elif os.path.exists(exampleJsonPath):
-        quickLookPath = exampleJsonPath
-    elif os.path.exists(exampleTxtPath):
-        quickLookPath = exampleTxtPath
     
     if not quickLookPath:        
         logMessage("WARN", "Quick look '{}' not found.".format(quickLookName))
@@ -1342,15 +1403,12 @@ def loadQuickLook(
         return None
 
 def quickLookExists(quickLookName) -> bool:
-    """True if a user or example Quick Look JSON already uses this name."""
+    """True if a user Quick Look JSON already uses this name."""
     name = (quickLookName or "").strip()
     if not name:
         return False
     userPath = os.path.join(Utils.getQuickLookDir(), f"{name}.json")
-    if os.path.isfile(userPath):
-        return True
-    examplePath = resourcePath(f"quickLook/{name}.json")
-    return os.path.isfile(examplePath)
+    return os.path.isfile(userPath)
 
 
 def deleteQuickLook(quickLookName):
@@ -1370,9 +1428,8 @@ def deleteQuickLook(quickLookName):
             if Config.debug:
                 logMessage("DEBUG", f"deleteQuickLook: Failed to delete Quick Look at {userQuickLookPath}: {e}")
             return False
-    else:
-        logMessage("WARN", f"deleteQuickLook: Cannot delete example Quick Look '{quickLookName}'")
-        return False
+    logMessage("WARN", f"deleteQuickLook: Quick Look '{quickLookName}' not found")
+    return False
 
 def exportTableToCSV(table, fileLocation, fileName):
     if table.rowCount() == 0:

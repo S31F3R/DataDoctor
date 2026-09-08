@@ -360,11 +360,7 @@ class FormulaDelegate(QStyledItemDelegate):
                     table.closeEditor(self._editor, QAbstractItemDelegate.EndEditHint.RevertModelCache)
                 return True
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-                if popupOpen:
-                    cur = popup.currentItem()
-                    if cur is not None:
-                        self._acceptFunctionPopup(cur.text())
-                        return True
+                self._hideFunctionPopup()
                 self._commitEditor()
                 return True
             if key == Qt.Key.Key_Tab:
