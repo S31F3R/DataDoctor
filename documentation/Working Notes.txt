@@ -10,11 +10,3 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
-- Packaged Quick Looks copy into the user profile on first launch (if none exist), then the install quickLook folder is removed; examples can be deleted
-- About Report Form link (short label)
-- Aquarius details show Raw Value; overlay rounding uses unrounded native cell values
-- Profile export/import includes Data Dictionary (replaces bunker.db on import)
-- Formula Enter commits typed text; Tab or click still picks autocomplete
-- Graph fonts reset to Noto when leaving retro
-- Live retro/appearance resizes the timestamp rail even if the Graph tab is showing
-
