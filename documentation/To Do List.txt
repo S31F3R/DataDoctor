@@ -1,4 +1,6 @@
 ####### CURRENT TASKS #######
+-During the update process, the merging of the bunker.db takes a long time. Could we possibly split this into seperate threads then combine the results at the end? I was thinking split the process into 6 different threads, do the merge logic, then combine all 6 results at the end
+    -There is also no status message saying it's currently merging. All it says is backup then the file name, which makes it look like the backup is taking that long
 
 ####### CURRENT BUGS #######
 
