@@ -24,7 +24,7 @@ Current Tests
      c. No popup (not “no published release” and not “Revert to published”).
      d. Recheck Beta → Save: update check may offer the newest rc/beta as usual.
 
-[ ] Packaged Quick Looks adopt then remove
+[x] Packaged Quick Looks adopt then remove
    Steps:
      a. Fresh config (no quickLook/query files): launch. Examples appear in the
         Query combo. Install pythonFiles/quickLook (or equivalent) is gone;
@@ -33,7 +33,7 @@ Current Tests
      b. Profile already has Quick Looks: launch. Packaged folder is removed;
         existing user looks stay. Combo does not list a second packaged copy.
 
-[ ] About Report issue → Form
+[x] About Report issue → Form
    Steps:
      a. About shows Report issue: Form (label stays Report issue; link text is Form).
      b. Click Form still opens the in-app report dialog.
