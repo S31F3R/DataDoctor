@@ -1,16 +1,6 @@
 ####### CURRENT TASKS #######
--Packaged quick looks are built by me and sent with the program. But they are used more for examples. Lets update the packge scripts. If the user has a config wtih quickLooks, just remove the packaged quickLook folder. If the user doesn't have any quickLooks, move the packaged ones to their profile then remove the packaged quickLook folder. The goal is to not have the packaged quick look folder anymore and no restricions on removing packaged quick looks either
-    -On users who already have this program, just see if they have quickLooks, if they do, remove all that are in the packaged folder location
--In winAbout, the report issue is too wordy. Make it say "Report Form" or something similar
--Aquarius metadata needs to show the raw aquarius value, just like it does for HDB. Currently it only shows the rounded value
-    -This will fix an issue we have with rounding between primary/secondary with overlay. Currently if HDB has 3 decimals and Aquarius has 2, when it trys to round Aquraius to 3 to match HDB, it just adds a 0. If the raw data was there, it would round it properly
--Make the Data Dictionary as part of the options when exporting profile
-    -This would also need to import Data Dictionary when importing file. Assume import means import everything, so don't prompt for what to update, 
 
 ####### CURRENT BUGS #######
--When typing a formula in, lets say =A1+B12, soon as I press enter it gets replaced with ABS(. THe reason for this is the auto complete sugesstion thing. Enter needs to accept that they type, where as Tab or left moust click selects auto complete
--Graph header font isn't changing back to normal mode when coming from retro mode
--If I have a graph open and I'm on that tab, then go into options to change into retro mode, the graph changes but the data query table doesn't resize the date/time column
 
 ####### 3.3.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
