@@ -33,16 +33,10 @@ Current Tests
      b. Profile already has Quick Looks: launch. Packaged folder is removed;
         existing user looks stay. Combo does not list a second packaged copy.
 
-[ ] About Report Form
+[ ] About Report issue → Form
    Steps:
-     a. About → Report Form (not the long GitHub authorize sentence).
-     b. Click still opens the in-app report dialog.
-
-[ ] Aquarius raw value + overlay rounding
-   Steps:
-     a. Query Aquarius. Details → Value is rounded; Raw Value is the API Numeric.
-     b. Overlay Aquarius (DEC(2) series) with HDB (DEC(3) primary). Overlay uses
-        the raw Aquarius number, not a padded 642.270 from a 2-decimal cell.
+     a. About shows Report issue: Form (label stays Report issue; link text is Form).
+     b. Click Form still opens the in-app report dialog.
 
 [ ] Profile Data Dictionary
    Steps:
@@ -51,27 +45,12 @@ Current Tests
      b. Import a zip that includes it: live bunker.db is replaced (no
         commonName/datatype prompts). Data Dictionary window shows the imported rows.
 
-[ ] Formula Enter vs Tab autocomplete
-   Steps:
-     a. Type =A1+B12 with the function list open (ABS on top). Enter commits
-        =A1+B12, not ABS(.
-     b. Tab or click a list row still inserts that function.
-
-[ ] Graph font after leaving retro
-   Steps:
-     a. Retro on, open Graph. Legend/ticks are Silkscreen.
-     b. Options → uncheck Retro → Save. Graph legend/ticks/axis use Noto (not
-        leftover Silkscreen).
-
-[ ] Retro live timestamp rail while Graph tab is showing
-   Steps:
-     a. Query data, switch to Graph tab.
-     b. Options → toggle Retro → Save (stay on Graph).
-     c. Switch back to Data Query: date/time rail width matches the new font
-        (not the previous mode’s width).
-
 Confirmed
 --------------------------------------------------------------------------------
+Aquarius raw value + overlay rounding
+Formula Enter vs Tab autocomplete
+Graph font after leaving retro
+Retro live timestamp rail while Graph tab is showing
 
 Deferred / known
 --------------------------------------------------------------------------------
