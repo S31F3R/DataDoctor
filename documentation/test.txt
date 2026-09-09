@@ -47,12 +47,9 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
-Aquarius raw value + overlay rounding
-Formula Enter vs Tab autocomplete
-Graph font after leaving retro
-Retro live timestamp rail while Graph tab is showing
 
 Deferred / known
 --------------------------------------------------------------------------------
 [!] AppImage applyUpdate path not wired the same as launcher packages yet
 [!] Rebuild Data Doctor.exe on Windows to ship launcher VB first-run extract message
+
