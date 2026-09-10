@@ -17,19 +17,24 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[x] Uncheck Beta on published — no dialog
+[ ] Check Beta on published — no dialog
    Steps:
-     a. Install is a published X.Y.Z (not -rc / -beta), Beta updates currently checked.
-     b. Options → uncheck Beta updates → Save.
-     c. No popup (not “no published release” and not “Revert to published”).
-     d. Recheck Beta → Save: update check may offer the newest rc/beta as usual.
+     a. Install is a published X.Y.Z (not -rc / -beta), Beta updates currently unchecked.
+     b. Options → check Beta updates → Save.
+     c. No popup if there is no newer rc/beta (not “You're on the latest version”).
+     d. If a newer rc/beta exists, the usual Update available dialog is OK.
 
-[x] Profile Data Dictionary
+[ ] New-setup Add Data Type defaults
+   RESPONSE: Aquarius was checked, it's supposed to be unchecked
    Steps:
-     a. Options → Export: Data Dictionary is checked with the other items.
-        Zip contains dataDictionary/bunker.db.
-     b. Import a zip that includes it: live bunker.db is replaced (no
-        commonName/datatype prompts). Data Dictionary window shows the imported rows.
+     a. Quit Data Doctor. Delete only the live user.config:
+        Linux: ~/.config/Data Doctor/user.config
+        Windows: %LOCALAPPDATA%\Data Doctor\user.config
+        macOS: ~/Library/Application Support/Data Doctor/user.config
+        (Not ~/.config/user.config or ~/.config/USBR/Data Doctor/ — leftovers.)
+     b. Launch. Options → Add Data Type to Labels: USBR and USGS checked,
+        Aquarius unchecked (Aquarius tab).
+     c. Existing saved config is left as the user last saved it.
 
 [ ] Bunker merge threads + Merging status
    Steps:
@@ -37,20 +42,6 @@ Current Tests
         Backup: path, console shows Merging... before Merge complete.
      b. Merge still updates siteName/database, prompts commonName/datatype,
         fills blanks only, inserts packaged-only rows.
-
-[x] New-setup Add Data Type defaults
-   Steps:
-     a. Delete user.config (AppData / XDG / macOS Application Support), launch.
-        Options → Add Data Type to Labels: USBR and USGS checked, Aquarius
-        unchecked (Aquarius tab).
-     b. Existing saved config is left as the user last saved it.
-     RESPONSE: Aquarius was checked, it's supposed to be unchecked
-
-[x] Data Dictionary auto-size on open
-   Steps:
-     a. Open Data Dictionary. dataID, siteID, siteName, commonName, datatype
-        (and the rest) are wide enough for the values — no clipped text.
-     b. database / valuePrecision still fit the combobox dropdown.
 
 [ ] First-install bunker: no merge prompts
    Steps:
@@ -67,6 +58,12 @@ Current Tests
         current”).
      b. When GitHub works and you are current: still no popup.
 
+[ ] Windows packageWindows.py removes winStage
+   Steps:
+     a. On Windows, from project root: python scripts/packageWindows.py
+     b. dist/DataDoctor-Windows-YYYYMMDD.zip (or --out path) exists.
+     c. dist/winStage* is gone after “Done: …”.
+
 Confirmed
 --------------------------------------------------------------------------------
 Packaged Quick Looks adopt then remove
@@ -78,9 +75,11 @@ SQL result column filters
 Filter click-out cancels
 Header Remove column
 Multi-column header drag
+Uncheck Beta on published — no dialog
+Profile Data Dictionary
+Data Dictionary auto-size on open
 
 Deferred / known
 --------------------------------------------------------------------------------
 [!] AppImage applyUpdate path not wired the same as launcher packages yet
 [!] Rebuild Data Doctor.exe on Windows to ship launcher VB first-run extract message
-

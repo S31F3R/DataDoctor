@@ -37,4 +37,9 @@ resets this file to this template.
 - Data Dictionary auto-sizes columns on open
 - First install (no live bunker.db, or identical to packaged) skips
   Common Names / Data Types merge prompts
+- Checking Beta updates stays silent when no newer rc/beta is available
+- packageWindows.py removes dist/winStage after the zip is written,
+  including on Windows when python-embed files are read-only
+- user.config is always under the Data Doctor config dir (same as logs /
+  Quick Looks), so a deleted config gets new-setup Add Data Type defaults
 

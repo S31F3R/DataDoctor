@@ -1,9 +1,6 @@
 ####### CURRENT TASKS #######
--Checking beta updates doesn't need to give a pop up saying no updates avaialable. It should only give a pop up when there is a beta update, just like we did for unchecking
 
 ####### CURRENT BUGS #######
--On a windows machine, I packaged windows using python scripts/packageWindows.py. It made the zip but never removed the winStage folder. The folder should be removed after the zip is created
-    -I haven't noticed this as as issue when running the publish script. I always publish from Linux so this is either a Windows problem or a I'd assume packgeWindows.py problem
 
 ####### 3.3.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
