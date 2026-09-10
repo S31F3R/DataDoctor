@@ -17,14 +17,14 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[ ] Uncheck Beta on published — no dialog
+[x] Uncheck Beta on published — no dialog
    Steps:
      a. Install is a published X.Y.Z (not -rc / -beta), Beta updates currently checked.
      b. Options → uncheck Beta updates → Save.
      c. No popup (not “no published release” and not “Revert to published”).
      d. Recheck Beta → Save: update check may offer the newest rc/beta as usual.
 
-[ ] Profile Data Dictionary
+[x] Profile Data Dictionary
    Steps:
      a. Options → Export: Data Dictionary is checked with the other items.
         Zip contains dataDictionary/bunker.db.

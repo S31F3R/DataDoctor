@@ -1,4 +1,5 @@
 ####### CURRENT TASKS #######
+-Checking beta updates doesn't need to give a pop up saying no updates avaialable. It should only give a pop up when there is a beta update, just like we did for unchecking
 
 ####### CURRENT BUGS #######
 
