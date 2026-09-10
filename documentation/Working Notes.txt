@@ -28,4 +28,10 @@ resets this file to this template.
   inserts at the drop marker (overlay/delta groups still locked)
 - If GitHub cannot be reached for an update check, show Unable to check
   GitHub for updates
+- Clicking outside a header filter (Data Dictionary, Search, SQL) cancels
+  without applying; Escape does the same
+- Filter icons reserve header width so they do not cover column text
+- Header Remove on a highlighted set drops every selected column (overlay
+  and delta groups still expand)
+- After a column drag, the highlight stays on the moved columns
 
