@@ -2051,11 +2051,8 @@ def ensurePrivateFile(path):
 
 
 def getConfigPath():
-    configDir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation)
-
-    if not os.path.exists(configDir):
-        ensurePrivateDir(configDir)
-    path = os.path.join(configDir, "user.config")
+    """Always the Data Doctor config dir (same as logs / Quick Looks)."""
+    path = os.path.join(getConfigDir(), "user.config")
     if os.path.isfile(path):
         ensurePrivateFile(path)
     return path
@@ -2098,7 +2095,7 @@ def getExampleQuickLookDir():
     return Logic.resourcePath("quickLook")
 
 def convertConfigToJson():
-    oldConfigPath = os.path.join(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation), "config.ini")
+    oldConfigPath = os.path.join(getConfigDir(), "config.ini")
     newConfigPath = getConfigPath()
 
     if os.path.exists(oldConfigPath) and not os.path.exists(newConfigPath):

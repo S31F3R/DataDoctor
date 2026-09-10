@@ -667,17 +667,13 @@ class uiOptions(QDialog):
                 Logic.logMessage("DEBUG", "Oracle password masked via button")
 
     def loadSettings(self):
-        configPath = Utils.getConfigPath()
-        config = {}
-
-        if os.path.exists(configPath):
-            try:
-                with open(configPath, 'r', encoding='utf-8') as configFile:
-                    config = json.load(configFile)
-                if Config.debug:
-                    Logic.logMessage("DEBUG", "Loaded config from user.config: {}".format(config))
-            except Exception as e:
-                Logic.logMessage("ERROR", "Failed to load user.config: {}".format(e))
+        try:
+            config = Utils.loadConfig()
+            if Config.debug:
+                Logic.logMessage("DEBUG", "Loaded config from user.config: {}".format(config))
+        except Exception as e:
+            Logic.logMessage("ERROR", "Failed to load user.config: {}".format(e))
+            config = {}
 
         utcOffset = config.get('utcOffset') or Utils.defaultUtcOffsetLabel()
         index = self.cbUTCOffset.findText(utcOffset)
@@ -1006,8 +1002,9 @@ class uiOptions(QDialog):
         self._captureFormSnapshot()
         self._syncCancelCloseText()
 
-        # Beta checkbox: check GitHub after save so a first-time beta user
-        # is offered the RC, and unchecking reverts to the last published tag.
+        # Beta checkbox: checking runs an update check that prompts only when
+        # a newer rc/beta exists (same silent-if-current rule as startup).
+        # Unchecking offers revert-to-published only when this build is rc/beta.
         if previousChannel != updateChannel:
             parent = self.winMain if self.winMain is not None else None
             from core import Update
@@ -1015,7 +1012,7 @@ class uiOptions(QDialog):
             if updateChannel == 'beta':
                 QTimer.singleShot(
                     0,
-                    lambda: Update.runUpdateCheckUi(parent, silentIfNone=False),
+                    lambda: Update.runUpdateCheckUi(parent, silentIfNone=True),
                 )
             else:
                 QTimer.singleShot(

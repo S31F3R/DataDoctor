@@ -11,7 +11,7 @@ Data Doctor checks [GitHub Releases](https://github.com/S31F3R/DataDoctor/releas
 
 Newest-first among those: **published > rc > beta** of the same `X.Y.Z`. Example: `3.0.0` is newer than `3.0.0-rc.2.1`, which is newer than `3.0.0-rc.1`, which is newer than `3.0.0-beta.4`. A `3.0.0` install will not be offered `3.0.0-rc.1` (that RC is older than 3.0.0).
 
-Toggle **Options → General → Beta updates**. The choice is saved as `updateChannel` in `user.config`. Saving with the box **checked** runs an update check (including pre-releases). Saving with it **unchecked** offers the latest published (non-RC / non-beta) release **only if this install is currently an rc/beta**. Already on the latest published build: no dialog.
+Toggle **Options → General → Beta updates**. The choice is saved as `updateChannel` in `user.config`. Saving with the box **checked** runs an update check (including pre-releases) and prompts **only when a newer rc/beta (or newer published) exists**. Already current: no dialog. Saving with it **unchecked** offers the latest published (non-RC / non-beta) release **only if this install is currently an rc/beta**. Already on a published build: no dialog.
 
 ## Release assets
 

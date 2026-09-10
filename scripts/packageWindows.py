@@ -38,12 +38,49 @@ import argparse
 import os
 import platform
 import shutil
+import stat
 import sys
+import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
 
 from oracleBundle import installOracleClient
+
+
+def _chmodWritable(p: str) -> None:
+    try:
+        os.chmod(p, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    except OSError:
+        pass
+
+
+def removeTree(path: Path) -> bool:
+    """
+    Delete a folder. Windows shutil.rmtree fails on read-only files extracted
+    from the python-embed zip; ignore_errors=True left dist/winStage* behind.
+    """
+    path = Path(path)
+    if not path.exists():
+        return True
+
+    for attempt in range(3):
+        _chmodWritable(str(path))
+        for root, dirs, files in os.walk(path):
+            _chmodWritable(root)
+            for name in dirs:
+                _chmodWritable(os.path.join(root, name))
+            for name in files:
+                _chmodWritable(os.path.join(root, name))
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            return True
+        time.sleep(0.25 * (attempt + 1))
+    print(
+        f"WARN: leftover {path} (close Explorer / antivirus and delete it)",
+        file=sys.stderr,
+    )
+    return False
 
 
 def projectRoot() -> Path:
@@ -295,9 +332,13 @@ def main():
     outZip = Path(args.out) if args.out else (root / "dist" / f"DataDoctor-Windows-{stamp}.zip")
     outZip.parent.mkdir(parents=True, exist_ok=True)
 
-    stage = root / "dist" / f"winStage{stamp}"
-    if stage.exists():
-        shutil.rmtree(stage)
+    distDir = root / "dist"
+    distDir.mkdir(parents=True, exist_ok=True)
+    for old in distDir.glob("winStage*"):
+        if old.is_dir():
+            removeTree(old)
+    stage = distDir / f"winStage{stamp}"
+    removeTree(stage)
     stage.mkdir(parents=True)
 
     # 1) Everything under launcher → zip root
@@ -523,8 +564,9 @@ def main():
                 arc = full.relative_to(stage).as_posix()
                 zipFile.write(full, arcname=arc)
 
-    # Cleanup stage
-    shutil.rmtree(stage, ignore_errors=True)
+    # Cleanup stage (Windows: chmod writable — embed zip files are often read-only)
+    if not removeTree(stage):
+        print(f"WARN: zip is ready but {stage.name} was not removed", file=sys.stderr)
     sizeMb = outZip.stat().st_size / (1024 * 1024)
     print(f"Done: {outZip} ({sizeMb:.1f} MB)")
     return 0
