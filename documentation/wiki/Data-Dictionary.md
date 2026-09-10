@@ -4,7 +4,7 @@ The dictionary (`core/bunker.db`, table `dataDictionary`) is how Data Doctor tur
 
 Open it from the book/database button on the main window. **Ctrl+S** or **Save** writes the table (combo columns are committed first). Search filters as you type (dataID, site name, common name — not siteID or database).
 
-**siteID** and **database** headers have a filter icon. **siteID** opens a text box (type a site, substring match). **database** opens a list of databases in the table (first click). While a filter is on, the icon switches to **Filtered**. Right-click that icon → **Clear filter**. Database lists refresh when you Save.
+**siteID** and **database** headers have a filter icon. **siteID** opens a text box (type a site, substring match). **database** opens a list of databases in the table (first click). Enter (text) or a list pick applies; click outside or Escape cancels and leaves the previous filter. While a filter is on, the icon switches to **Filtered**. Right-click that icon → **Clear filter**. Header width leaves room for the icon. Database lists refresh when you Save.
 
 ## Columns (order)
 

@@ -1258,7 +1258,7 @@ class uiMain(QMainWindow):
                     action.triggered.connect(
                         lambda checked=False, qt=qType, m=meta: self.showHeaderDetails(qt, m)
                     )
-            from core import TableOps
+            from core import TableOps, Upload
             insertLeft = menu.addAction("Insert column left")
             insertLeft.triggered.connect(
                 lambda checked=False, c=col: TableOps.insertBlankColumn(self, c, "left")
@@ -1267,9 +1267,13 @@ class uiMain(QMainWindow):
             insertRight.triggered.connect(
                 lambda checked=False, c=col: TableOps.insertBlankColumn(self, c, "right")
             )
+            sel = Upload.selectedColumnsFromTable(self.mainTable)
+            extra = list(sel) if col in sel else [col]
             removeAction = menu.addAction("Remove")
             removeAction.triggered.connect(
-                lambda checked=False, c=col: TableOps.removeColumnsAt(self, c)
+                lambda checked=False, c=col, e=extra: TableOps.removeColumnsAt(
+                    self, c, extraCols=e
+                )
             )
             renameAction = menu.addAction("Rename header")
             renameAction.triggered.connect(

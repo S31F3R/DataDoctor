@@ -346,6 +346,10 @@ def dropColumns(mainWindow, srcCol, destInsertAt, extraCols=None):
         ):
             _swapTwoColumns(mainWindow, srcCol, destCol)
             _recalcDeltaForGroup(mainWindow, group)
+            Upload.selectTableColumns(table, group)
+            mainWindow._headerSelectCols = list(group)
+            if group:
+                mainWindow._headerSelectAnchor = group[0]
             return True
         return False
 
@@ -607,7 +611,10 @@ def moveColumnRange(mainWindow, srcStart, count, destStart):
     newOrder = rest[:insertAt] + block + rest[insertAt:]
     if newOrder == order:
         return False
-    return _applyColumnOrder(mainWindow, newOrder, log=f"src={srcStart} count={count} dest={destStart}")
+    return _applyColumnOrder(
+        mainWindow, newOrder, log=f"src={srcStart} count={count} dest={destStart}",
+        selectSrc=block,
+    )
 
 
 def moveColumnSet(mainWindow, cols, destStart):
@@ -636,28 +643,30 @@ def moveColumnSet(mainWindow, cols, destStart):
     if newOrder == list(range(n)):
         return False
     return _applyColumnOrder(
-        mainWindow, newOrder, log=f"set={moving} dest={destStart}"
+        mainWindow, newOrder, log=f"set={moving} dest={destStart}",
+        selectSrc=moving,
     )
 
 
-def removeColumnsAt(mainWindow, col):
+def removeColumnsAt(mainWindow, col, extraCols=None):
     """
-    Remove the move-block that contains col: overlay pair (+delta if present),
-    non-overlay delta trio, or a single custom/normal column.
-    Query list follows remaining series.
+    Remove the move-block that contains col (and any extra highlighted
+    columns): overlay pair (+delta if present), non-overlay delta trio, or
+    a single custom/normal column. Query list follows remaining series.
     """
     table = _table(mainWindow)
     if table is None or col < 0:
         return False
-    group = columnGroup(mainWindow, col)
-    if not group:
+    drop = movingColumns(mainWindow, col, extraCols)
+    if not drop:
         return False
-    start, count = group[0], len(group)
     n = table.columnCount()
-    if start < 0 or start + count > n or count <= 0:
+    dropSet = {c for c in drop if 0 <= c < n}
+    if not dropSet:
         return False
-    _shiftFormulas(table, start, -count)
-    keep = list(range(start)) + list(range(start + count, n))
+    for start, count in reversed(_contiguousRuns(sorted(dropSet))):
+        _shiftFormulas(table, start, -count)
+    keep = [i for i in range(n) if i not in dropSet]
     if not keep:
         table.blockSignals(True)
         try:
@@ -669,13 +678,33 @@ def removeColumnsAt(mainWindow, col):
         _rebuildQueryItemsFromTable(mainWindow)
         _rememberCustomColumns(mainWindow)
         _syncQueryList(mainWindow)
+        Upload.selectTableColumns(table, [])
+        mainWindow._headerSelectCols = []
         return True
-    _applyColumnOrder(mainWindow, keep, log=f"remove start={start} count={count}")
+    _applyColumnOrder(mainWindow, keep, log=f"remove {sorted(dropSet)}")
     Upload.applyEditability(table, mainWindow)
+    Upload.selectTableColumns(table, [])
+    mainWindow._headerSelectCols = []
     return True
 
 
-def _applyColumnOrder(mainWindow, newOrder, log=""):
+def _contiguousRuns(cols):
+    """(start, count) runs of consecutive indices, left to right."""
+    if not cols:
+        return []
+    runs = []
+    start = prev = cols[0]
+    for c in cols[1:]:
+        if c == prev + 1:
+            prev = c
+            continue
+        runs.append((start, prev - start + 1))
+        start = prev = c
+    runs.append((start, prev - start + 1))
+    return runs
+
+
+def _applyColumnOrder(mainWindow, newOrder, log="", selectSrc=None):
     table = _table(mainWindow)
     if table is None or not newOrder:
         return False
@@ -731,6 +760,13 @@ def _applyColumnOrder(mainWindow, newOrder, log=""):
     _rebuildQueryItemsFromTable(mainWindow)
     _rememberCustomColumns(mainWindow)
     _syncQueryList(mainWindow)
+    if selectSrc:
+        srcSet = set(selectSrc)
+        dest = [i for i, src in enumerate(newOrder) if src in srcSet]
+        Upload.selectTableColumns(table, dest)
+        mainWindow._headerSelectCols = dest
+        if dest:
+            mainWindow._headerSelectAnchor = dest[0]
     if Config.debug:
         Logic.logMessage(
             "DEBUG",

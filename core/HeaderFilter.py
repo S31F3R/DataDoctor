@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QObject, QPoint, QEvent
-from PyQt6.QtWidgets import QPushButton, QMenu, QLineEdit, QListWidget, QListWidgetItem
+from PyQt6.QtWidgets import (
+    QApplication, QPushButton, QMenu, QLineEdit, QListWidget, QListWidgetItem,
+)
 from PyQt6.QtGui import QFontMetrics
 
 from core import Utils
@@ -104,22 +106,31 @@ class HeaderFilterBar(QObject):
 
     def reset(self):
         """SQL extract: drop filters and rebuild buttons for the current headers."""
-        self._combo = None
-        self._editName = None
+        self._cancelPopup()
         self._rebuildButtons()
         self._fire()
 
     def _padColumns(self):
+        """Grow the section so header/cell text is not under the filter icon."""
         if self.table is None:
             return
         header = self.table.horizontalHeader()
-        need = ICON_PX + ICON_MARGIN * 2 + 48
+        extra = ICON_PX + ICON_MARGIN * 2 + 6
+        fm = QFontMetrics(header.font())
         for key in self._keys:
             col = self._colIndex(key)
             if col < 0:
                 continue
-            if header.sectionSize(col) < need:
-                header.resizeSection(col, need)
+            label = self._labelFor(key)
+            lines = [ln.strip() for ln in str(label).split("\n") if ln.strip()]
+            textW = max((fm.horizontalAdvance(ln) for ln in lines), default=0)
+            try:
+                hint = max(header.sectionSizeHint(col), self.table.sizeHintForColumn(col))
+            except Exception:
+                hint = header.sectionSize(col)
+            want = max(hint, textW) + extra
+            if header.sectionSize(col) < want:
+                header.resizeSection(col, want)
 
     def _isInput(self, key) -> bool:
         if self.dynamic:
@@ -161,18 +172,30 @@ class HeaderFilterBar(QObject):
         self._fire()
 
     def eventFilter(self, obj, event):
-        if obj is self._combo and isinstance(obj, QLineEdit):
+        combo = self._combo
+        if combo is not None and event.type() == QEvent.Type.MouseButtonPress:
+            gp = None
+            if hasattr(event, "globalPosition"):
+                try:
+                    gp = event.globalPosition().toPoint()
+                except Exception:
+                    gp = None
+            if gp is None and hasattr(event, "globalPos"):
+                try:
+                    gp = event.globalPos()
+                except Exception:
+                    gp = None
+            if gp is not None and not self._popupContainsGlobal(gp):
+                self._cancelPopup()
+                return False
+        if obj is combo:
             if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
-                obj.setProperty("ddSkipApply", True)
-                self._combo = None
-                obj.hide()
-                obj.deleteLater()
+                self._cancelPopup()
                 return True
-            if event.type() == QEvent.Type.Hide and self._combo is obj:
-                name = self._editName
-                if name is None:
-                    name = "siteID"
-                self._applyInput(name, obj)
+            if event.type() == QEvent.Type.Hide:
+                # Qt Popup click-away. Do not apply typed text.
+                self._cancelPopup()
+                return False
         if event.type() in (
             QEvent.Type.Resize,
             QEvent.Type.Show,
@@ -180,6 +203,42 @@ class HeaderFilterBar(QObject):
         ):
             self.reposition()
         return super().eventFilter(obj, event)
+
+    def _popupContainsGlobal(self, gp):
+        w = self._combo
+        if w is None or gp is None:
+            return False
+        try:
+            local = w.mapFromGlobal(gp)
+            if w.rect().contains(local):
+                return True
+            return w.childAt(local) is not None
+        except RuntimeError:
+            return False
+
+    def _watchApp(self, on):
+        app = QApplication.instance()
+        if app is None:
+            return
+        if on:
+            app.installEventFilter(self)
+        else:
+            app.removeEventFilter(self)
+
+    def _cancelPopup(self):
+        """Close the open filter without changing the current value."""
+        w = self._combo
+        self._combo = None
+        self._editName = None
+        self._watchApp(False)
+        if w is None:
+            return
+        try:
+            w.setProperty("ddSkipApply", True)
+            w.hide()
+            w.deleteLater()
+        except RuntimeError:
+            pass
 
     def _colIndex(self, name) -> int:
         table = self.table
@@ -243,6 +302,7 @@ class HeaderFilterBar(QObject):
             btn.raise_()
 
     def _openFilter(self, name):
+        self._cancelPopup()
         if self._isInput(name):
             self._openInput(name)
         else:
@@ -264,6 +324,7 @@ class HeaderFilterBar(QObject):
         edit.installEventFilter(self)
         self._editName = name
         self._combo = edit
+        self._watchApp(True)
         edit.show()
         edit.setFocus(Qt.FocusReason.PopupFocusReason)
         edit.selectAll()
@@ -279,6 +340,7 @@ class HeaderFilterBar(QObject):
         self._setIcon(name)
         self._combo = None
         self._editName = None
+        self._watchApp(False)
         edit.hide()
         edit.deleteLater()
         self._fire()
@@ -311,9 +373,11 @@ class HeaderFilterBar(QObject):
         lst.resize(w, max(lst.sizeHintForRow(0) * rows + 4, 80))
         lst.move(self._popupPos(name))
         lst.itemClicked.connect(lambda item, n=name, wdg=lst: self._pickedList(n, wdg, item))
+        lst.installEventFilter(self)
+        self._combo = lst
+        self._watchApp(True)
         lst.show()
         lst.setFocus(Qt.FocusReason.PopupFocusReason)
-        self._combo = lst
 
     def _pickedList(self, name, lst, item):
         text = ""
@@ -322,9 +386,11 @@ class HeaderFilterBar(QObject):
             text = ("" if data is None else str(data)).strip()
         self.values[name] = text or None
         self._setIcon(name)
+        lst.setProperty("ddApplied", True)
+        self._combo = None
+        self._watchApp(False)
         lst.hide()
         lst.deleteLater()
-        self._combo = None
         self._fire()
 
     def _rightClick(self, name, pos):
