@@ -4,7 +4,8 @@
 # Stable channel → latest non-prerelease on GitHub.
 # Beta channel   → latest release including GitHub "pre-release" and/or -rc./-beta. tags.
 #
-# Works before any release is published: check fails quietly (no dialog spam).
+# No newer release / no GitHub tags yet: check is silent.
+# GitHub unreachable (blocked, timeout, HTTP error): show a dialog.
 
 from __future__ import annotations
 
@@ -34,6 +35,13 @@ _GITHUB_HOSTS = frozenset({
     "release-assets.githubusercontent.com",
     "github-releases.githubusercontent.com",
 })
+
+
+GITHUB_UNREACHABLE_MSG = "Unable to check GitHub for updates."
+
+
+class GitHubUnreachable(Exception):
+    """GitHub Releases could not be reached (blocked, timeout, HTTP error)."""
 
 
 def _httpsHostAllowed(url: str, extraHosts=()) -> bool:
@@ -397,7 +405,8 @@ def fetchLatestRelease(
     """
     Return a dict:
       version, tag, name, prerelease, html_url, asset_name, asset_url, body
-    or None if nothing suitable / network error / no releases yet.
+    or None if nothing suitable / no releases yet.
+    Raises GitHubUnreachable when GitHub cannot be reached.
 
     requireNewer: default True (startup check). False is used when reverting
     from beta/RC to the latest published tag, which may be an older triple.
@@ -409,11 +418,14 @@ def fetchLatestRelease(
     try:
         releases = _httpJson(_API + "?per_page=20")
     except urllib.error.HTTPError as e:
-        Logic.logMessage("INFO", f"Update check: GitHub HTTP {e.code} (no releases yet is OK)")
-        return None
+        if e.code == 404:
+            Logic.logMessage("INFO", f"Update check: GitHub HTTP {e.code} (no releases yet is OK)")
+            return None
+        Logic.logMessage("WARN", f"Update check: GitHub HTTP {e.code}: {e}")
+        raise GitHubUnreachable(GITHUB_UNREACHABLE_MSG) from e
     except Exception as e:
-        Logic.logMessage("INFO", f"Update check skipped: {e}")
-        return None
+        Logic.logMessage("WARN", f"Update check skipped: {e}")
+        raise GitHubUnreachable(GITHUB_UNREACHABLE_MSG) from e
 
     if not isinstance(releases, list) or not releases:
         Logic.logMessage("INFO", "Update check: no GitHub releases published yet")
@@ -878,12 +890,18 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
                     allowCurrent=True,
                     assetKind="windows",
                 )
+            except GitHubUnreachable as e:
+                Logic.logMessage("WARN", f"Windows launcher refresh check: {e}")
+                info = {"_unreachable": True, "message": str(e) or GITHUB_UNREACHABLE_MSG}
             except Exception as e:
                 Logic.logMessage("INFO", f"Windows launcher refresh check: {e}")
-                info = None
+                info = {"_unreachable": True, "message": GITHUB_UNREACHABLE_MSG}
             self.signals.done.emit(info)
 
     def onDone(info):
+        if isinstance(info, dict) and info.get("_unreachable"):
+            _showGithubUnreachable(parent, info.get("message"))
+            return
         if info is None or not info.get("asset_url"):
             QMessageBox.information(
                 parent,
@@ -948,13 +966,19 @@ def runRevertToPublishedUi(parent=None) -> None:
         def run(self):
             try:
                 info = fetchLatestRelease(channel="stable", requireNewer=False)
+            except GitHubUnreachable as e:
+                Logic.logMessage("WARN", f"Revert-to-published check: {e}")
+                info = {"_unreachable": True, "message": str(e) or GITHUB_UNREACHABLE_MSG}
             except Exception as e:
                 Logic.logMessage("INFO", f"Revert-to-published check: {e}")
-                info = None
+                info = {"_unreachable": True, "message": GITHUB_UNREACHABLE_MSG}
             self.signals.done.emit(info)
 
     def onDone(info):
         local = Version.displayVersion()
+        if isinstance(info, dict) and info.get("_unreachable"):
+            _showGithubUnreachable(parent, info.get("message"))
+            return
         if info is None:
             QMessageBox.information(
                 parent,
@@ -1013,12 +1037,18 @@ def runUpdateCheckUi(parent=None, silentIfNone: bool = True) -> None:
         def run(self):
             try:
                 info = fetchLatestRelease()
+            except GitHubUnreachable as e:
+                Logic.logMessage("WARN", f"Update check worker: {e}")
+                info = {"_unreachable": True, "message": str(e) or GITHUB_UNREACHABLE_MSG}
             except Exception as e:
                 Logic.logMessage("INFO", f"Update check worker: {e}")
-                info = None
+                info = {"_unreachable": True, "message": GITHUB_UNREACHABLE_MSG}
             self.signals.done.emit(info)
 
     def onDone(info):
+        if isinstance(info, dict) and info.get("_unreachable"):
+            _showGithubUnreachable(parent, info.get("message"))
+            return
         if info is None:
             if not silentIfNone and parent is not None:
                 QMessageBox.information(
@@ -1038,6 +1068,16 @@ def runUpdateCheckUi(parent=None, silentIfNone: bool = True) -> None:
         holder._updateCheckSignals = signals  # type: ignore[attr-defined]
     signals.done.connect(onDone)
     QThreadPool.globalInstance().start(_Worker(signals))
+
+
+def _showGithubUnreachable(parent, message=None) -> None:
+    from PyQt6.QtWidgets import QMessageBox
+
+    QMessageBox.information(
+        parent,
+        "Updates",
+        (message or GITHUB_UNREACHABLE_MSG).strip() or GITHUB_UNREACHABLE_MSG,
+    )
 
 
 def _promptUpdate(parent, info: dict) -> None:

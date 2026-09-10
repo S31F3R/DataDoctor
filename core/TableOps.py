@@ -16,7 +16,9 @@ from PyQt6.QtWidgets import (
 from core import Config, Logic, Upload, Utils
 from core.Formula import FORMULA_KEY, shiftFormulaColumns
 from core.FormulaUi import _itemFormula, applyCellInput, recalculateAll
-from core.QueryUtils import formatDeltaValue, parseDecimalText, overlayPairDisplays
+from core.QueryUtils import (
+    NATIVE_VALUE_ROLE, formatDeltaValue, parseDecimalText, overlayPairDisplays,
+)
 from core import TableColors, Undo
 
 
@@ -70,6 +72,7 @@ def _cloneItem(item):
     new.setTextAlignment(item.textAlignment())
     new.setFlags(item.flags())
     new.setData(Qt.ItemDataRole.UserRole, item.data(Qt.ItemDataRole.UserRole))
+    new.setData(NATIVE_VALUE_ROLE, item.data(NATIVE_VALUE_ROLE))
     new.setBackground(item.background())
     fg = item.data(Qt.ItemDataRole.ForegroundRole)
     if fg is not None:
@@ -259,12 +262,12 @@ def dropInsertIndex(header, pos, group):
     return n
 
 
-def updateDropMarker(mainWindow, header, pos, srcCol):
+def updateDropMarker(mainWindow, header, pos, srcCol, extraCols=None):
     table = _table(mainWindow)
     marker = dropMarkerFor(table)
     if marker is None or header is None or pos is None:
         return
-    group = columnGroup(mainWindow, srcCol)
+    group = movingColumns(mainWindow, srcCol, extraCols)
     insertAt = dropInsertIndex(header, pos, group)
     insertAt = snapInsertIndex(mainWindow, insertAt, group, srcCol)
     n = header.count()
@@ -299,23 +302,39 @@ def snapInsertIndex(mainWindow, insertAt, movingGroup, srcCol):
     return insertAt
 
 
-def dropColumns(mainWindow, srcCol, destInsertAt):
+def movingColumns(mainWindow, srcCol, extraCols=None):
+    """Columns that travel with this drag (overlay/delta groups expanded)."""
+    cols = set()
+    seeds = extraCols if extraCols else [srcCol]
+    for c in seeds:
+        try:
+            ci = int(c)
+        except (TypeError, ValueError):
+            continue
+        cols.update(columnGroup(mainWindow, ci))
+    return sorted(cols)
+
+
+def dropColumns(mainWindow, srcCol, destInsertAt, extraCols=None):
     """
     Apply a header drop.
 
     Non-overlay delta trio: dragging one data column onto the other (still
     inside the 3) swaps primary/secondary and recalculates the delta sign.
     Dropping outside the trio moves all three, snapped to pair boundaries.
-    Overlay + delta always move as a pair.
+    Overlay + delta always move as a pair. A multi-column highlight moves
+    as one block to the insert marker (groups expanded the same way).
     """
     table = _table(mainWindow)
     hideDropMarker(table)
     if table is None or srcCol < 0:
         return False
     group = columnGroup(mainWindow, srcCol)
-    destInsertAt = snapInsertIndex(mainWindow, destInsertAt, group, srcCol)
+    moving = movingColumns(mainWindow, srcCol, extraCols)
+    destInsertAt = snapInsertIndex(mainWindow, destInsertAt, moving, srcCol)
 
-    if len(group) == 3 and (
+    singleGroup = set(moving) == set(group)
+    if singleGroup and len(group) == 3 and (
         destInsertAt in group or destInsertAt == group[-1] + 1
     ):
         dataCols = [c for c in group if columnType(mainWindow, c) != "delta"]
@@ -330,10 +349,14 @@ def dropColumns(mainWindow, srcCol, destInsertAt):
             return True
         return False
 
-    if destInsertAt in group or destInsertAt == group[0] + len(group):
+    if not moving:
+        return False
+    lo, hi = moving[0], moving[-1]
+    contiguous = moving == list(range(lo, hi + 1))
+    if contiguous and (destInsertAt in moving or destInsertAt == hi + 1):
         return False
 
-    return moveColumnRange(mainWindow, group[0], len(group), destInsertAt)
+    return moveColumnSet(mainWindow, moving, destInsertAt)
 
 
 def _swapTwoColumns(mainWindow, a, b):
@@ -584,7 +607,83 @@ def moveColumnRange(mainWindow, srcStart, count, destStart):
     newOrder = rest[:insertAt] + block + rest[insertAt:]
     if newOrder == order:
         return False
+    return _applyColumnOrder(mainWindow, newOrder, log=f"src={srcStart} count={count} dest={destStart}")
 
+
+def moveColumnSet(mainWindow, cols, destStart):
+    """Move the given columns (any order) as a block so they begin at destStart."""
+    table = _table(mainWindow)
+    if table is None:
+        return False
+    n = table.columnCount()
+    moving = []
+    seen = set()
+    for c in cols or []:
+        try:
+            ci = int(c)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= ci < n and ci not in seen:
+            seen.add(ci)
+            moving.append(ci)
+    if not moving:
+        return False
+    rest = [i for i in range(n) if i not in seen]
+    destStart = max(0, min(int(destStart), n))
+    insertAt = destStart - sum(1 for c in moving if c < destStart)
+    insertAt = max(0, min(insertAt, len(rest)))
+    newOrder = rest[:insertAt] + moving + rest[insertAt:]
+    if newOrder == list(range(n)):
+        return False
+    return _applyColumnOrder(
+        mainWindow, newOrder, log=f"set={moving} dest={destStart}"
+    )
+
+
+def removeColumnsAt(mainWindow, col):
+    """
+    Remove the move-block that contains col: overlay pair (+delta if present),
+    non-overlay delta trio, or a single custom/normal column.
+    Query list follows remaining series.
+    """
+    table = _table(mainWindow)
+    if table is None or col < 0:
+        return False
+    group = columnGroup(mainWindow, col)
+    if not group:
+        return False
+    start, count = group[0], len(group)
+    n = table.columnCount()
+    if start < 0 or start + count > n or count <= 0:
+        return False
+    _shiftFormulas(table, start, -count)
+    keep = list(range(start)) + list(range(start + count, n))
+    if not keep:
+        table.blockSignals(True)
+        try:
+            table.setColumnCount(0)
+            mainWindow.columnMetadata = []
+            table.columnRoundingRules = []
+        finally:
+            table.blockSignals(False)
+        _rebuildQueryItemsFromTable(mainWindow)
+        _rememberCustomColumns(mainWindow)
+        _syncQueryList(mainWindow)
+        return True
+    _applyColumnOrder(mainWindow, keep, log=f"remove start={start} count={count}")
+    Upload.applyEditability(table, mainWindow)
+    return True
+
+
+def _applyColumnOrder(mainWindow, newOrder, log=""):
+    table = _table(mainWindow)
+    if table is None or not newOrder:
+        return False
+    n = table.columnCount()
+    order = list(range(n))
+    if list(newOrder) == order:
+        return False
+    keepN = len(newOrder)
     metas = _metas(mainWindow)
     rules = list(getattr(table, "columnRoundingRules", None) or [])
     while len(metas) < n:
@@ -610,6 +709,8 @@ def moveColumnRange(mainWindow, srcStart, count, destStart):
         for r in range(table.rowCount()):
             tsItem = table.verticalHeaderItem(r)
             timestamps.append(tsItem.text() if tsItem else "")
+        if keepN < n:
+            table.setColumnCount(keepN)
         newMetas = []
         newRules = []
         for dest, src in enumerate(newOrder):
@@ -633,7 +734,7 @@ def moveColumnRange(mainWindow, srcStart, count, destStart):
     if Config.debug:
         Logic.logMessage(
             "DEBUG",
-            f"TableOps.moveColumnRange src={srcStart} count={count} dest={destStart} order={newOrder}",
+            f"TableOps._applyColumnOrder {log} order={list(newOrder)}",
         )
     return True
 
@@ -658,8 +759,7 @@ def _rebuildQueryItemsFromTable(mainWindow):
                 _sdid, mrid = dataId.rsplit("-", 1)
             items.append((dataId, interval, database, mrid, seen))
             seen += 1
-    if items:
-        mainWindow.lastQueryItems = items
+    mainWindow.lastQueryItems = items
 
 
 def _syncQueryList(mainWindow):

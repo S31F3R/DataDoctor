@@ -1934,7 +1934,7 @@ def loadConfig():
         'updateChannel': 'stable',
         'colorTheme': 'system',
         'labelDataTypeUSBR': True,
-        'labelDataTypeAquarius': True,
+        'labelDataTypeAquarius': False,
         'labelDataTypeUSGS': True,
         'hdbOverwriteFlag': False,
     }
@@ -2476,7 +2476,7 @@ def includeDataTypeInLabel(database):
     if db.startswith('USBR'):
         return bool(getattr(Config, 'labelDataTypeUSBR', True))
     if db.startswith('AQUARIUS') or db == 'AQUARIUS':
-        return bool(getattr(Config, 'labelDataTypeAquarius', True))
+        return bool(getattr(Config, 'labelDataTypeAquarius', False))
     if db.startswith('USGS'):
         return bool(getattr(Config, 'labelDataTypeUSGS', True))
     return True
@@ -2599,7 +2599,7 @@ def reloadGlobals():
         theme = 'system'
     Config.colorTheme = theme
     Config.labelDataTypeUSBR = bool(settings.get('labelDataTypeUSBR', True))
-    Config.labelDataTypeAquarius = bool(settings.get('labelDataTypeAquarius', True))
+    Config.labelDataTypeAquarius = bool(settings.get('labelDataTypeAquarius', False))
     Config.labelDataTypeUSGS = bool(settings.get('labelDataTypeUSGS', True))
     Config.hdbOverwriteFlag = 'O' if settings.get('hdbOverwriteFlag') else None
     try:

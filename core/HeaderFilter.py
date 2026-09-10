@@ -1,6 +1,7 @@
 # HeaderFilter.py
-# Filter icon on Data Dictionary / Search headers (siteID, database).
-# Click → combobox of values in the table. Right-click → clear that filter.
+# Filter icon on Data Dictionary / Search headers (siteID, database) and
+# SQL Query Builder result columns (dynamic: combo if ≤10 uniques, else text).
+# Click → filter popup. Right-click → clear that filter.
 
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ from PyQt6.QtGui import QFontMetrics
 from core import Utils
 
 INPUT_COLUMNS = frozenset({"siteid"})
+COMBO_MAX_UNIQUES = 10
 
 ICON_PX = 16
 ICON_MARGIN = 3
@@ -20,17 +22,23 @@ class HeaderFilterBar(QObject):
     """
     Overlay Filter/Filtered buttons on named header sections.
     `onChange` is called whenever a filter value changes (re-run table filter).
+
+    dynamic=True (SQL results): a button on every column. Combobox when that
+    column has ≤10 unique values, otherwise a text box. Reset per extract.
     """
 
-    def __init__(self, table, columnNames, onChange=None, parent=None):
+    def __init__(self, table, columnNames=None, onChange=None, parent=None, dynamic=False):
         super().__init__(parent if parent is not None else table)
         self.table = table
-        self.columnNames = tuple(columnNames)
         self.onChange = onChange
-        self.values = {n: None for n in self.columnNames}  # None = all
+        self.dynamic = bool(dynamic)
+        self.columnNames = tuple(columnNames or ())
+        self.values = {}
         self._buttons = {}
         self._combo = None
         self._editName = None
+        self._keys = []
+        self._inputKeys = set()
         header = table.horizontalHeader()
         header.setSectionsClickable(True)
         header.sectionResized.connect(self.reposition)
@@ -41,52 +49,109 @@ class HeaderFilterBar(QObject):
             hbar.valueChanged.connect(lambda *_: self.reposition())
         header.viewport().installEventFilter(self)
         header.installEventFilter(self)
-        vp = header.viewport()
-        for name in self.columnNames:
+        self._rebuildButtons()
+
+    def _keysForTable(self):
+        if self.dynamic:
+            n = self.table.columnCount() if self.table is not None else 0
+            return list(range(n))
+        return list(self.columnNames)
+
+    def _labelFor(self, key) -> str:
+        if isinstance(key, int):
+            if self.table is None or key < 0 or key >= self.table.columnCount():
+                return str(key)
+            h = self.table.horizontalHeaderItem(key)
+            return h.text().strip() if h is not None and h.text() else f"col{key}"
+        return str(key)
+
+    def _rebuildButtons(self):
+        for btn in self._buttons.values():
+            try:
+                btn.hide()
+                btn.deleteLater()
+            except RuntimeError:
+                pass
+        self._buttons = {}
+        self._keys = self._keysForTable()
+        old = self.values
+        self.values = {k: old.get(k) if not self.dynamic else None for k in self._keys}
+        self._inputKeys = set()
+        if self.dynamic:
+            for key in self._keys:
+                col = self._colIndex(key)
+                if len(self._uniqueValues(col)) > COMBO_MAX_UNIQUES:
+                    self._inputKeys.add(key)
+        if self.table is None:
+            return
+        vp = self.table.horizontalHeader().viewport()
+        for key in self._keys:
+            label = self._labelFor(key)
             btn = QPushButton(vp)
             btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setToolTip(f"Filter {name}")
+            btn.setToolTip(f"Filter {label}")
             btn.setFixedSize(ICON_PX, ICON_PX)
             btn.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            btn.clicked.connect(lambda checked=False, n=name: self._openFilter(n))
+            btn.clicked.connect(lambda checked=False, k=key: self._openFilter(k))
             btn.customContextMenuRequested.connect(
-                lambda pos, n=name: self._rightClick(n, pos)
+                lambda pos, k=key: self._rightClick(k, pos)
             )
-            self._buttons[name] = btn
-            self._setIcon(name)
+            self._buttons[key] = btn
+            self._setIcon(key)
         self._padColumns()
         self.reposition()
 
+    def reset(self):
+        """SQL extract: drop filters and rebuild buttons for the current headers."""
+        self._combo = None
+        self._editName = None
+        self._rebuildButtons()
+        self._fire()
+
     def _padColumns(self):
+        if self.table is None:
+            return
         header = self.table.horizontalHeader()
         need = ICON_PX + ICON_MARGIN * 2 + 48
-        for name in self.columnNames:
-            col = self._colIndex(name)
+        for key in self._keys:
+            col = self._colIndex(key)
             if col < 0:
                 continue
             if header.sectionSize(col) < need:
                 header.resizeSection(col, need)
 
+    def _isInput(self, key) -> bool:
+        if self.dynamic:
+            return key in self._inputKeys
+        name = key if isinstance(key, str) else self._labelFor(key)
+        return (name or "").lower() in INPUT_COLUMNS
+
     def activeEquals(self) -> dict:
         """Exact matches (database combobox)."""
-        return {
-            n: v for n, v in self.values.items()
-            if v and n.lower() not in INPUT_COLUMNS
-        }
+        out = {}
+        for n, v in self.values.items():
+            if not v or self._isInput(n):
+                continue
+            if isinstance(n, str):
+                out[n] = v
+        return out
 
     def activeContains(self) -> dict:
         """Substring matches (typed siteID)."""
-        return {
-            n: v for n, v in self.values.items()
-            if v and n.lower() in INPUT_COLUMNS
-        }
+        out = {}
+        for n, v in self.values.items():
+            if not v or not self._isInput(n):
+                continue
+            if isinstance(n, str):
+                out[n] = v
+        return out
 
     def rebuild(self):
         """After dictionary save: drop stale combo selections, keep typed text."""
-        for name in self.columnNames:
+        for name in list(self._keys):
             current = self.values.get(name)
-            if not current or name.lower() in INPUT_COLUMNS:
+            if not current or self._isInput(name):
                 continue
             col = self._colIndex(name)
             if col < 0 or current not in self._uniqueValues(col):
@@ -104,7 +169,9 @@ class HeaderFilterBar(QObject):
                 obj.deleteLater()
                 return True
             if event.type() == QEvent.Type.Hide and self._combo is obj:
-                name = self._editName or "siteID"
+                name = self._editName
+                if name is None:
+                    name = "siteID"
                 self._applyInput(name, obj)
         if event.type() in (
             QEvent.Type.Resize,
@@ -118,6 +185,8 @@ class HeaderFilterBar(QObject):
         table = self.table
         if table is None:
             return -1
+        if isinstance(name, int):
+            return name if 0 <= name < table.columnCount() else -1
         target = (name or "").strip().lower()
         for c in range(table.columnCount()):
             h = table.horizontalHeaderItem(c)
@@ -147,8 +216,9 @@ class HeaderFilterBar(QObject):
             return
         active = bool(self.values.get(name))
         Utils.buttonStyle(btn, "Filtered" if active else "Filter", ICON_PX)
+        label = self._labelFor(name)
         btn.setToolTip(
-            f"Filter {name}: {self.values[name]}" if active else f"Filter {name}"
+            f"Filter {label}: {self.values[name]}" if active else f"Filter {label}"
         )
 
     def reposition(self):
@@ -173,7 +243,7 @@ class HeaderFilterBar(QObject):
             btn.raise_()
 
     def _openFilter(self, name):
-        if name.lower() in INPUT_COLUMNS:
+        if self._isInput(name):
             self._openInput(name)
         else:
             self._openList(name)
@@ -185,7 +255,7 @@ class HeaderFilterBar(QObject):
     def _openInput(self, name):
         edit = QLineEdit(self.table.window())
         edit.setWindowFlags(Qt.WindowType.Popup)
-        edit.setPlaceholderText(f"Filter {name}…")
+        edit.setPlaceholderText(f"Filter {self._labelFor(name)}…")
         edit.setText(self.values.get(name) or "")
         edit.setClearButtonEnabled(True)
         edit.setMinimumWidth(180)
@@ -268,6 +338,31 @@ class HeaderFilterBar(QObject):
             self._setIcon(name)
             self._fire()
 
+    def _applyRowFilter(self):
+        table = self.table
+        if table is None or not self.dynamic:
+            return
+        for r in range(table.rowCount()):
+            hide = False
+            for key, val in self.values.items():
+                if not val:
+                    continue
+                col = self._colIndex(key)
+                if col < 0:
+                    continue
+                item = table.item(r, col)
+                text = item.text().strip() if item is not None and item.text() else ""
+                if self._isInput(key):
+                    if val.lower() not in text.lower():
+                        hide = True
+                        break
+                elif text != val:
+                    hide = True
+                    break
+            table.setRowHidden(r, hide)
+
     def _fire(self):
+        if self.dynamic:
+            self._applyRowFilter()
         if self.onChange is not None:
             self.onChange()

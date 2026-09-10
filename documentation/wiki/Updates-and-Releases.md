@@ -1,6 +1,6 @@
 # Updates and Releases
 
-Data Doctor checks [GitHub Releases](https://github.com/S31F3R/DataDoctor/releases) at startup. If nothing is published yet, the check is silent (no popup). The About window shows the installed version.
+Data Doctor checks [GitHub Releases](https://github.com/S31F3R/DataDoctor/releases) at startup. If nothing is published yet, or you are already current, the check is silent (no popup). If GitHub cannot be reached (blocked, timeout, HTTP error), a dialog says **Unable to check GitHub for updates.** The About window shows the installed version. **About → Feature request: Form** opens a GitHub feature-request form.
 
 ## Channels
 
@@ -50,7 +50,7 @@ In-app update on this hop downloads **`DataDoctor-Windows-*.zip`**, not the Pyth
 
 Do **not** use only the Python zip for this hop — old `applyUpdate` cannot install the launcher or the embed. If you already applied a 3.1 Python zip (new code, still on `.venv`), the app will prompt for the Windows zip on the next start.
 
-Dictionary merge always updates `siteName` / `database` from the packaged copy. It asks **y/n** (in the applyUpdate console) whether to overwrite existing **Common Names** and **Data Types** (`commonName` / `datatype`). New dictionary rows always take the packaged values. `valuePrecision`, `precisionOverride`, `expectedMin`, `expectedMax`, `cuttoffMin`, `cutoffMax`, and `rateOfChange` fill blanks only and never overwrite a value you already set. No console (or answering **n**) leaves existing common names and data types alone.
+Dictionary merge always updates `siteName` / `database` from the packaged copy. After the backup path prints, the console shows **Merging...** while the work runs (six threads plan the row updates, then they are written together). It asks **y/n** (in the applyUpdate console) whether to overwrite existing **Common Names** and **Data Types** (`commonName` / `datatype`). New dictionary rows always take the packaged values. `valuePrecision`, `precisionOverride`, `expectedMin`, `expectedMax`, `cuttoffMin`, `cutoffMax`, and `rateOfChange` fill blanks only and never overwrite a value you already set. No console (or answering **n**) leaves existing common names and data types alone.
 
 Dictionary-only merge:
 

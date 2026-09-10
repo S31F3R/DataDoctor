@@ -27,6 +27,8 @@ See [Table colors](Table-Colors) for overlay-only fills, pending upload (magenta
 
 You can run Overlay, Delta, or both.
 
+Header **Remove** drops the overlay pair (and Delta when that box is checked) from the table and the query list. With Delta on and Overlay off, removing any of the three columns drops all three.
+
 [Formulas](Formulas) on an overlay column edit the **primary** value only. Delta columns stay locked.
 
 ## Upload

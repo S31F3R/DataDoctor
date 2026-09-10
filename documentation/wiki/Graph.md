@@ -9,7 +9,7 @@ The **Graph** button plots the Data Query table into a Graph tab (or a detached 
 - **Middle-mouse** pans. Arrow keys also pan. The view stays clamped to the data range.
 - Legend click toggles a series (`☑` / `☐`) and rescales. That does **not** reset X zoom.
 - Missing timestamps leave a **gap** in the line (no straight connector across the hole).
-- Multiple Y axes when series live on different value bands. Hide an axis from the legend the same way.
+- Multiple Y axes when series live on different value bands. Hide an axis from the legend the same way. There is no “Value” / “Timestamp” axis title — Y tick numbers use that series’ line color; the time axis stays the light / dark / system / retro UI colors.
 - Y scale fits data in the **current X view** (an off-screen outlier should not squash the visible range). Zoomed Y stays in **absolute** values (no offset “delta scale”).
 - Markers (dots) are always on and stay dense when you zoom into 1-minute data.
 

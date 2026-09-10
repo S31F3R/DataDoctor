@@ -38,8 +38,10 @@ import os
 import shutil
 import sqlite3
 import sys
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+
+MERGE_THREADS = 6
 
 
 # Always update these from packaged when packaged has a non-empty different value
@@ -202,7 +204,9 @@ def merge(
                 print(f"WARN: could not remove {old}: {e}", file=sys.stderr)
         backup = userPath.with_suffix(userPath.suffix + ".bak")
         shutil.copy2(userPath, backup)
-        print(f"Backup: {backup}")
+        print(f"Backup: {backup}", flush=True)
+
+    print("Merging...", flush=True)
 
     pkg = openDb(packagedPath)
     usr = openDb(userPath)
@@ -235,86 +239,157 @@ def merge(
             optionalAllowed.add("datatype")
         optionalFieldLower = {f.lower() for f in OPTIONAL_UPDATE_FIELDS}
 
-        pkgRows = pkg.execute("SELECT * FROM dataDictionary").fetchall()
-        updated = 0
-        inserted = 0
+        pkgRows = [dict(row) for row in pkg.execute("SELECT * FROM dataDictionary").fetchall()]
+        userByKey = {}
+        for row in usr.execute("SELECT * FROM dataDictionary").fetchall():
+            d = dict(row)
+            userByKey[_rowKey(d.get(usrDataId), d.get(usrSiteId))] = d
+
+        workers = min(MERGE_THREADS, max(1, len(pkgRows)))
+        chunks = _splitRows(pkgRows, workers)
+        updates = []
+        inserts = []
         skipped = 0
-
-        for row in pkgRows:
-            dataId = row[pkgDataId]
-            siteId = row[pkgSiteId]
-            if dataId is None and siteId is None:
-                skipped += 1
-                continue
-
-            existing = usr.execute(
-                f"SELECT * FROM dataDictionary WHERE {usrDataId} = ? AND {usrSiteId} = ?",
-                (dataId, siteId),
-            ).fetchone()
-
-            if existing is not None:
-                # Update labels from packaged; QAQC/precision fields fill blanks only
-                sets = []
-                params = []
-                for field in mergeFieldNames:
-                    pCol = pkgFields.get(field)
-                    uCol = usrFields.get(field)
-                    if not pCol or not uCol:
-                        continue
-                    newVal = row[pCol]
-                    oldVal = existing[uCol]
-                    if newVal is None or str(newVal).strip() == "":
-                        continue
-                    if oldVal is not None and str(oldVal) == str(newVal):
-                        continue
-                    fillBlank = field.lower() in fillBlankLower
-                    if fillBlank:
-                        if oldVal is not None and str(oldVal).strip() != "":
-                            continue
-                    if field.lower() in optionalFieldLower and field.lower() not in optionalAllowed:
-                        continue
-                    sets.append(f"{uCol} = ?")
-                    params.append(newVal)
-                if sets:
-                    params.extend([dataId, siteId])
-                    sql = (
-                        f"UPDATE dataDictionary SET {', '.join(sets)} "
-                        f"WHERE {usrDataId} = ? AND {usrSiteId} = ?"
-                    )
-                    if not dryRun:
-                        usr.execute(sql, params)
-                    updated += 1
-                else:
-                    skipped += 1
-            else:
-                # Insert full packaged row into columns that exist on user side
-                insertCols = []
-                insertVals = []
-                for c in pkgCols:
-                    if c.lower() in usrMap:
-                        insertCols.append(usrMap[c.lower()])
-                        insertVals.append(row[c])
-                if not insertCols:
-                    skipped += 1
-                    continue
-                placeholders = ", ".join("?" * len(insertCols))
-                colList = ", ".join(insertCols)
-                sql = f"INSERT INTO dataDictionary ({colList}) VALUES ({placeholders})"
-                if not dryRun:
-                    usr.execute(sql, insertVals)
-                inserted += 1
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [
+                pool.submit(
+                    _planChunk,
+                    chunk,
+                    userByKey,
+                    pkgCols,
+                    pkgDataId,
+                    pkgSiteId,
+                    usrDataId,
+                    usrSiteId,
+                    usrMap,
+                    mergeFieldNames,
+                    pkgFields,
+                    usrFields,
+                    fillBlankLower,
+                    optionalFieldLower,
+                    optionalAllowed,
+                )
+                for chunk in chunks
+            ]
+            for fut in as_completed(futures):
+                chunkUpdates, chunkInserts, chunkSkipped = fut.result()
+                updates.extend(chunkUpdates)
+                inserts.extend(chunkInserts)
+                skipped += chunkSkipped
 
         if not dryRun:
+            for sql, params in updates:
+                usr.execute(sql, params)
+            for sql, params in inserts:
+                usr.execute(sql, params)
             usr.commit()
 
         print(
             f"{'DRY-RUN ' if dryRun else ''}Merge complete: "
-            f"{updated} updated, {inserted} inserted, {skipped} unchanged/skipped"
+            f"{len(updates)} updated, {len(inserts)} inserted, {skipped} unchanged/skipped",
+            flush=True,
         )
         return 0
     finally:
         pkg.close()
         usr.close()
+
+
+def _rowKey(dataId, siteId):
+    return (
+        None if dataId is None else str(dataId),
+        None if siteId is None else str(siteId),
+    )
+
+
+def _splitRows(rows, n):
+    if not rows:
+        return []
+    n = max(1, min(n, len(rows)))
+    length = len(rows)
+    base, extra = divmod(length, n)
+    out = []
+    start = 0
+    for i in range(n):
+        size = base + (1 if i < extra else 0)
+        if size <= 0:
+            continue
+        out.append(rows[start:start + size])
+        start += size
+    return out
+
+
+def _planChunk(
+    rows,
+    userByKey,
+    pkgCols,
+    pkgDataId,
+    pkgSiteId,
+    usrDataId,
+    usrSiteId,
+    usrMap,
+    mergeFieldNames,
+    pkgFields,
+    usrFields,
+    fillBlankLower,
+    optionalFieldLower,
+    optionalAllowed,
+):
+    updates = []
+    inserts = []
+    skipped = 0
+    for row in rows:
+        dataId = row.get(pkgDataId)
+        siteId = row.get(pkgSiteId)
+        if dataId is None and siteId is None:
+            skipped += 1
+            continue
+        existing = userByKey.get(_rowKey(dataId, siteId))
+        if existing is not None:
+            sets = []
+            params = []
+            for field in mergeFieldNames:
+                pCol = pkgFields.get(field)
+                uCol = usrFields.get(field)
+                if not pCol or not uCol:
+                    continue
+                newVal = row.get(pCol)
+                oldVal = existing.get(uCol)
+                if newVal is None or str(newVal).strip() == "":
+                    continue
+                if oldVal is not None and str(oldVal) == str(newVal):
+                    continue
+                if field.lower() in fillBlankLower:
+                    if oldVal is not None and str(oldVal).strip() != "":
+                        continue
+                if field.lower() in optionalFieldLower and field.lower() not in optionalAllowed:
+                    continue
+                sets.append(f"{uCol} = ?")
+                params.append(newVal)
+            if sets:
+                params.extend([dataId, siteId])
+                sql = (
+                    f"UPDATE dataDictionary SET {', '.join(sets)} "
+                    f"WHERE {usrDataId} = ? AND {usrSiteId} = ?"
+                )
+                updates.append((sql, params))
+            else:
+                skipped += 1
+        else:
+            insertCols = []
+            insertVals = []
+            for c in pkgCols:
+                if c.lower() in usrMap:
+                    insertCols.append(usrMap[c.lower()])
+                    insertVals.append(row.get(c))
+            if not insertCols:
+                skipped += 1
+                continue
+            placeholders = ", ".join("?" * len(insertCols))
+            colList = ", ".join(insertCols)
+            sql = f"INSERT INTO dataDictionary ({colList}) VALUES ({placeholders})"
+            inserts.append((sql, insertVals))
+    return updates, inserts, skipped
 
 
 def main():

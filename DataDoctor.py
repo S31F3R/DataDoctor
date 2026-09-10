@@ -1267,6 +1267,10 @@ class uiMain(QMainWindow):
             insertRight.triggered.connect(
                 lambda checked=False, c=col: TableOps.insertBlankColumn(self, c, "right")
             )
+            removeAction = menu.addAction("Remove")
+            removeAction.triggered.connect(
+                lambda checked=False, c=col: TableOps.removeColumnsAt(self, c)
+            )
             renameAction = menu.addAction("Rename header")
             renameAction.triggered.connect(
                 lambda checked=False, c=col: TableOps.renameHeader(self, c)

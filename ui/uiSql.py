@@ -396,7 +396,7 @@ class SnippetCategoryDialog(QDialog):
     """Add/remove categories; click a category to see its snippets; drag a snippet onto a category to move it."""
 
     def __init__(self, workbench):
-        super().__init__(workbench.win)
+        super().__init__(workbench._hostWindow())
         self.wb = workbench
         self.setWindowTitle("Snippet Categories")
         self.resize(560, 380)
@@ -636,6 +636,18 @@ class SqlWorkbench:
         self._snippetSizes = [1281, 256]
         self.setupUi()
 
+    def _hostWindow(self):
+        """Window that currently hosts the SQL tab (main or detached)."""
+        tab = getattr(self.win, "tabSQL", None)
+        if tab is not None:
+            try:
+                w = tab.window()
+                if w is not None:
+                    return w
+            except RuntimeError:
+                pass
+        return self.win
+
     def setupUi(self):
         win = self.win
         sqlTab = win.tabSQL
@@ -858,6 +870,18 @@ class SqlWorkbench:
         table.setProperty("sqlPinned", bool(pinned))
         return table
 
+    def _syncSqlFilters(self, table):
+        """Rebuild per-column result filters after an extract (this tab only)."""
+        if table is None or not isinstance(table, QTableWidget):
+            return
+        from core.HeaderFilter import HeaderFilterBar
+        bar = getattr(table, "_sqlHeaderFilters", None)
+        if bar is None:
+            bar = HeaderFilterBar(table, dynamic=True, parent=table)
+            table._sqlHeaderFilters = bar
+        else:
+            bar.reset()
+
     def _wire(self):
         self.btnRun.clicked.connect(self.runQuery)
         self.btnStop.clicked.connect(self.stopQuery)
@@ -982,6 +1006,7 @@ class SqlWorkbench:
                     table.clear()
                     table.setRowCount(0)
                     table.setColumnCount(0)
+                    self._syncSqlFilters(table)
                 tabs.tabBar().setTabData(0, {"pinned": False})
                 tabs.setTabText(0, "Result")
                 tabs.tabBar().update()
@@ -1000,7 +1025,7 @@ class SqlWorkbench:
         idx = bar.tabAt(pos)
         if idx < 0:
             return
-        menu = QMenu(self.win)
+        menu = QMenu(self._hostWindow())
         actRename = menu.addAction("Rename")
         actNew = menu.addAction("New query tab")
         chosen = menu.exec(bar.mapToGlobal(pos))
@@ -1015,7 +1040,7 @@ class SqlWorkbench:
         if idx < 0:
             return
         pinned = bool((bar.tabData(idx) or {}).get("pinned"))
-        menu = QMenu(self.win)
+        menu = QMenu(self._hostWindow())
         actRename = menu.addAction("Rename")
         actPin = menu.addAction("Unpin" if pinned else "Pin")
         actClose = menu.addAction("Close")
@@ -1030,7 +1055,7 @@ class SqlWorkbench:
     def _renameTab(self, tabs, index):
         current = tabs.tabText(index)
         name, ok = QInputDialog.getText(
-            self.win, "Rename tab", "Name:", text=current
+            self._hostWindow(), "Rename tab", "Name:", text=current
         )
         if ok and name.strip():
             tabs.setTabText(index, name.strip())
@@ -1087,6 +1112,7 @@ class SqlWorkbench:
                 table.clear()
                 table.setRowCount(0)
                 table.setColumnCount(0)
+                self._syncSqlFilters(table)
             tabs.setTabText(0, "Result")
             tabs.tabBar().setTabData(0, {"pinned": False})
             tabs.tabBar().update()
@@ -1098,14 +1124,14 @@ class SqlWorkbench:
 
     def runQuery(self):
         if self.running:
-            QMessageBox.information(self.win, "Run Query", "A SQL query is already running.")
+            QMessageBox.information(self._hostWindow(), "Run Query", "A SQL query is already running.")
             return
         editor = self.currentEditor()
         if editor is None:
             return
         sqlText = editor.toPlainText().strip()
         if not sqlText:
-            QMessageBox.warning(self.win, "Run Query", "No SQL query to run.")
+            QMessageBox.warning(self._hostWindow(), "Run Query", "No SQL query to run.")
             return
         db = self.currentDatabase()
         dsn = db.split("-")[1].lower() if "-" in db else db.lower()
@@ -1163,7 +1189,8 @@ class SqlWorkbench:
             table.clear()
             table.setRowCount(0)
             table.setColumnCount(0)
-            QMessageBox.information(self.win, "Query Result", "No results returned.")
+            self._syncSqlFilters(table)
+            QMessageBox.information(self._hostWindow(), "Query Result", "No results returned.")
             return
         try:
             columns = list(results[0].keys())
@@ -1175,9 +1202,10 @@ class SqlWorkbench:
                 for col, key in enumerate(columns):
                     table.setItem(row, col, QTableWidgetItem(str(res.get(key, ""))))
             table.resizeColumnsToContents()
+            self._syncSqlFilters(table)
         except Exception as e:
             Logic.logException("SqlWorkbench: failed to populate result", e)
-            QMessageBox.warning(self.win, "Query Error", f"Failed to display results: {e}")
+            QMessageBox.warning(self._hostWindow(), "Query Error", f"Failed to display results: {e}")
 
     def _onFailed(self, message, isAuthError):
         self._clearRunning()
@@ -1188,9 +1216,9 @@ class SqlWorkbench:
                 if ("EXPIRED" in upper or "ORA-28001" in upper)
                 else "Oracle Login Failed"
             )
-            QMessageBox.warning(self.win, title, message)
+            QMessageBox.warning(self._hostWindow(), title, message)
         else:
-            QMessageBox.warning(self.win, "Query Error", f"Failed to execute query: {message}")
+            QMessageBox.warning(self._hostWindow(), "Query Error", f"Failed to execute query: {message}")
 
     def _rememberHistory(self, sqlText, database):
         config = Utils.loadConfig()
@@ -1214,7 +1242,7 @@ class SqlWorkbench:
     def showHistory(self):
         config = Utils.loadConfig()
         hist = list(config.get("sqlHistory") or [])
-        dlg = QDialog(self.win)
+        dlg = QDialog(self._hostWindow())
         dlg.setWindowTitle("SQL History")
         dlg.resize(640, 420)
         lay = QVBoxLayout(dlg)
@@ -1383,16 +1411,16 @@ class SqlWorkbench:
             return
         sqlText = editor.toPlainText().strip()
         if not sqlText:
-            QMessageBox.warning(self.win, "Save Snippet", "No SQL query to save.")
+            QMessageBox.warning(self._hostWindow(), "Save Snippet", "No SQL query to save.")
             return
-        name, ok = QInputDialog.getText(self.win, "Save Snippet", "Snippet name:")
+        name, ok = QInputDialog.getText(self._hostWindow(), "Save Snippet", "Snippet name:")
         if not (ok and name.strip()):
             return
         try:
             name = Utils.sqlSnippetStem(name)
             filePath = Utils.sqlSnippetPath(name)
         except ValueError:
-            QMessageBox.warning(self.win, "Save Snippet", "Snippet name cannot contain path characters.")
+            QMessageBox.warning(self._hostWindow(), "Save Snippet", "Snippet name cannot contain path characters.")
             return
         with open(filePath, "w", encoding="utf-8") as f:
             f.write(sqlText)
@@ -1432,7 +1460,7 @@ class SqlWorkbench:
             return
         selected = self.listSnippets.currentItem()
         if selected is None:
-            QMessageBox.warning(self.win, "Delete Snippet", "No snippet selected.")
+            QMessageBox.warning(self._hostWindow(), "Delete Snippet", "No snippet selected.")
             return
         self.deleteSnippetByName(selected.text(), confirm=True)
 
@@ -1442,7 +1470,7 @@ class SqlWorkbench:
             return False
         if confirm:
             reply = QMessageBox.question(
-                self.win, "Delete Snippet", f"Delete '{name}'?",
+                self._hostWindow(), "Delete Snippet", f"Delete '{name}'?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply != QMessageBox.StandardButton.Yes:

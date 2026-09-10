@@ -756,7 +756,7 @@ class uiOptions(QDialog):
         self._fillTableColorTable()
         self.chkbOverwriteFlag.setChecked(bool(config.get('hdbOverwriteFlag')))
         self.chkbLabelDataTypeUSBR.setChecked(bool(config.get('labelDataTypeUSBR', True)))
-        self.chkbLabelDataTypeAquarius.setChecked(bool(config.get('labelDataTypeAquarius', True)))
+        self.chkbLabelDataTypeAquarius.setChecked(bool(config.get('labelDataTypeAquarius', False)))
         self.chkbLabelDataTypeUSGS.setChecked(bool(config.get('labelDataTypeUSGS', True)))
         self._fillHdbAccessList(config.get('hdbAccessUnchecked'))
         try:

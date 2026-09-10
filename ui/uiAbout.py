@@ -192,6 +192,10 @@ class uiAbout(QDialog):
             ('Version', Version.displayVersion()),
             ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
             ('Report issue', 'datadoctor://report'),
+            (
+                'Feature request',
+                f'https://github.com/{Version.GITHUB_REPO}/issues/new?template=feature.yml',
+            ),
             ('Author', 'S31F3R'),
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
@@ -295,6 +299,8 @@ class uiAbout(QDialog):
             if href.startswith("http://") or href.startswith("https://") or href.startswith("datadoctor://"):
                 shown = href
                 if href.startswith("datadoctor://report"):
+                    shown = "Form"
+                elif "template=feature.yml" in href:
                     shown = "Form"
                 elif len(shown) > 42:
                     shown = shown.split("://", 1)[-1][:42] + "…"

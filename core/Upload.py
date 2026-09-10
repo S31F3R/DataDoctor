@@ -1045,12 +1045,14 @@ class _HeaderSelectFilter(QObject):
         self._atePress = False
         self._dragging = False
         self._pressCol = -1
+        self._pressCols = []
         self._pressPos = None
 
     def _resetDrag(self, header):
         self._atePress = False
         self._dragging = False
         self._pressCol = -1
+        self._pressCols = []
         self._pressPos = None
         if header is not None:
             try:
@@ -1118,7 +1120,8 @@ class _HeaderSelectFilter(QObject):
                 try:
                     from core import TableOps
                     TableOps.updateDropMarker(
-                        self.mainWindow, header, pos, self._pressCol
+                        self.mainWindow, header, pos, self._pressCol,
+                        extraCols=self._pressCols,
                     )
                 except Exception:
                     pass
@@ -1129,12 +1132,16 @@ class _HeaderSelectFilter(QObject):
                 return False
             if self._dragging:
                 src = self._pressCol
+                extra = list(self._pressCols or [])
                 try:
                     from core import TableOps
                     insertAt = TableOps.dropInsertIndex(header, pos, None)
                     self._resetDrag(header)
                     if src >= 0 and insertAt >= 0:
-                        TableOps.dropColumns(self.mainWindow, src, insertAt)
+                        TableOps.dropColumns(
+                            self.mainWindow, src, insertAt,
+                            extraCols=extra,
+                        )
                 except Exception as e:
                     self._resetDrag(header)
                     Logic.logException("header column drag failed", e)
@@ -1174,10 +1181,33 @@ class _HeaderSelectFilter(QObject):
             header.setSortIndicatorShown(False)
         except Exception:
             pass
-        selectEntireColumn(self.mainWindow, col, None, defer=False)
+        try:
+            from PyQt6.QtWidgets import QApplication
+            mods = QApplication.keyboardModifiers()
+        except Exception:
+            mods = Qt.KeyboardModifier.NoModifier
+        ctrl = bool(
+            mods & (
+                Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.MetaModifier
+            )
+        )
+        shift = bool(mods & Qt.KeyboardModifier.ShiftModifier)
+        existing = selectedColumnsFromTable(table)
+        keepGroup = (
+            not ctrl
+            and not shift
+            and col in existing
+            and len(existing) > 1
+            and _columnFullySelected(table, col)
+        )
+        if not keepGroup:
+            selectEntireColumn(self.mainWindow, col, None, defer=False)
         self._atePress = True
         self._dragging = False
         self._pressCol = col
+        self._pressCols = (
+            list(existing) if keepGroup else selectedColumnsFromTable(table)
+        )
         self._pressPos = pos
         return True
 

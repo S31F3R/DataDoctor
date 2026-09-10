@@ -22,7 +22,7 @@ lastQaqcChecked = False
 systemTextColor = ""
 colorTheme = "system"  # system | light | dark (Options → Appearance)
 labelDataTypeUSBR = True
-labelDataTypeAquarius = True
+labelDataTypeAquarius = False
 labelDataTypeUSGS = True
 
 # Oracle / HDB credential policy (Options → Oracle password change)

@@ -701,7 +701,8 @@ def shiftFormulaColumns(formula: str, insertAt: int, delta: int = 1) -> str:
     """
     Shift every cell-ref column >= insertAt by delta (insert/delete columns).
     Absolute $ columns move too — the grid itself shifted, same as Excel.
-    Refs that land on a deleted column (delta < 0 and col == insertAt) → #REF!.
+    Refs that land on a deleted column range (delta < 0, col in
+    insertAt .. insertAt+|delta|) → #REF!.
     """
     if not looksLikeFormula(formula) or not delta:
         return formula
@@ -712,8 +713,16 @@ def shiftFormulaColumns(formula: str, insertAt: int, delta: int = 1) -> str:
         if parsed is None:
             return token
         col, row, absCol, absRow = parsed
-        if delta < 0 and col == insertAt:
-            return ERR_REF
+        if delta < 0:
+            removed = -delta
+            if insertAt <= col < insertAt + removed:
+                return ERR_REF
+            if col >= insertAt + removed:
+                newCol = col + delta
+                if newCol < 0:
+                    return ERR_REF
+                return formatCellRef(newCol, row, absCol, absRow)
+            return token
         if col >= insertAt:
             newCol = col + delta
             if newCol < 0:

@@ -766,19 +766,17 @@ class GraphPanel(QWidget):
         if retro and dark:
             fig.patch.set_facecolor('#1a1a1a')
             ax.set_facecolor('#101010')
-            ax.tick_params(colors='#00FF00')
+            ax.tick_params(axis='x', colors='#00FF00')
             ax.xaxis.label.set_color('#00FF00')
-            ax.yaxis.label.set_color('#00FF00')
-            for spine in ax.spines.values():
-                spine.set_color('#00FF00')
+            for spineName, spine in ax.spines.items():
+                if spineName != 'left':
+                    spine.set_color('#00FF00')
             ax.title.set_color('#00FF00')
             for i, twin in enumerate(twins):
-                c = retroTwinColors[i % len(retroTwinColors)]
                 twin.set_facecolor('#101010')
-                twin.tick_params(colors=c)
-                twin.yaxis.label.set_color(c)
-                for spine in twin.spines.values():
-                    spine.set_color(c)
+                for spineName, spine in twin.spines.items():
+                    if spineName != 'right':
+                        spine.set_color(retroTwinColors[i % len(retroTwinColors)])
             self._applyChartFonts(ax, twins)
             return 'retro'
 
@@ -789,18 +787,17 @@ class GraphPanel(QWidget):
             spineColor = '#888888'
             fig.patch.set_facecolor(figBg)
             ax.set_facecolor(axBg)
-            ax.tick_params(colors=textColor)
+            ax.tick_params(axis='x', colors=textColor)
             ax.xaxis.label.set_color(textColor)
-            ax.yaxis.label.set_color(textColor)
-            for spine in ax.spines.values():
-                spine.set_color(spineColor)
+            for spineName, spine in ax.spines.items():
+                if spineName != 'left':
+                    spine.set_color(spineColor)
             ax.title.set_color(textColor)
             for twin in twins:
                 twin.set_facecolor(axBg)
-                twin.tick_params(colors=textColor)
-                twin.yaxis.label.set_color(textColor)
-                for spine in twin.spines.values():
-                    spine.set_color(spineColor)
+                for spineName, spine in twin.spines.items():
+                    if spineName != 'right':
+                        spine.set_color(spineColor)
             self._applyChartFonts(ax, twins)
             return 'dark'
 
@@ -810,20 +807,54 @@ class GraphPanel(QWidget):
         spineColor = '#888888'
         fig.patch.set_facecolor(figBg)
         ax.set_facecolor(axBg)
-        ax.tick_params(colors=textColor)
+        ax.tick_params(axis='x', colors=textColor)
         ax.xaxis.label.set_color(textColor)
-        ax.yaxis.label.set_color(textColor)
-        for spine in ax.spines.values():
-            spine.set_color(spineColor)
+        for spineName, spine in ax.spines.items():
+            if spineName != 'left':
+                spine.set_color(spineColor)
         ax.title.set_color(textColor)
         for twin in twins:
             twin.set_facecolor(axBg)
-            twin.tick_params(colors=textColor)
-            twin.yaxis.label.set_color(textColor)
-            for spine in twin.spines.values():
-                spine.set_color(spineColor)
+            for spineName, spine in twin.spines.items():
+                if spineName != 'right':
+                    spine.set_color(spineColor)
         self._applyChartFonts(ax, twins)
         return 'light'
+
+    def _colorYAxesFromLines(self):
+        """Y tick numbers (and that axis spine) match the first line on the axis."""
+        axes = self._yAxes or ([self._ax] if self._ax is not None else [])
+        for i, ax in enumerate(axes):
+            if ax is None:
+                continue
+            color = None
+            fallback = None
+            for entry in self._lineData or []:
+                if entry.get('axisIndex', 0) != i:
+                    continue
+                c = entry.get('color')
+                if not c:
+                    continue
+                if fallback is None:
+                    fallback = c
+                line = entry.get('line')
+                if line is not None and line.get_visible():
+                    color = c
+                    break
+            color = color or fallback
+            if not color:
+                continue
+            try:
+                ax.tick_params(axis='y', colors=color)
+                ax.yaxis.label.set_color(color)
+                ax.set_ylabel('')
+                spine = 'left' if i == 0 else 'right'
+                if spine in ax.spines:
+                    ax.spines[spine].set_color(color)
+                for lab in ax.get_yticklabels():
+                    lab.set_color(color)
+            except Exception:
+                pass
 
     def _chartFontProperties(self, size=9):
         """Silkscreen in retro; Noto Sans otherwise so leaving retro resets the chart."""
@@ -878,6 +909,7 @@ class GraphPanel(QWidget):
                 except Exception:
                     pass
             entry['color'] = color
+        self._colorYAxesFromLines()
         try:
             self._buildInteractiveLegend(theme)
         except Exception:
@@ -1130,18 +1162,10 @@ class GraphPanel(QWidget):
             except Exception:
                 pass
             try:
-                # Blank ylabel when hidden so it does not float alone
-                if not hasVisible:
-                    ax.set_ylabel('')
-                elif not (ax.get_ylabel() or '').strip():
-                    if i == 0:
-                        ax.set_ylabel('Value')
-                    elif i == 1:
-                        ax.set_ylabel('Value (right)')
-                    else:
-                        ax.set_ylabel(f'Value ({i + 1})')
+                ax.set_ylabel('')
             except Exception:
                 pass
+        self._colorYAxesFromLines()
 
     def _cancelToolbarInteraction(self):
         """
@@ -1621,14 +1645,7 @@ class GraphPanel(QWidget):
                     'visible': True,
                     'axisIndex': axisIndex,
                 })
-            ylabelColor = colorCycle[min(axisIndex, len(colorCycle) - 1)]
-            if axisIndex == 0:
-                yLabel = 'Value'
-            elif axisIndex == 1:
-                yLabel = 'Value (right)'
-            else:
-                yLabel = f'Value ({axisIndex + 1})'
-            axTarget.set_ylabel(yLabel, color=ylabelColor)
+            axTarget.set_ylabel('')
 
         # Primary axis
         plotGroup(ax, axisGroups[0] if axisGroups else [], axisIndex=0)
@@ -1661,9 +1678,10 @@ class GraphPanel(QWidget):
             for tickLabel in ax.get_xticklabels():
                 tickLabel.set_rotation(30)
                 tickLabel.set_horizontalalignment('right')
-            ax.set_xlabel('Timestamp')
-        else:
-            ax.set_xlabel('Row')
+        ax.set_xlabel('')
+        extra = list(self._yAxes[1:]) if self._yAxes else []
+        self._applyChartFonts(ax, extra)
+        self._colorYAxesFromLines()
 
         # Keep absolute Y values when zoomed (no 0.4–0.8 offset of 1040.x elev)
         for yax in self._yAxes:
