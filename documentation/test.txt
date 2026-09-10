@@ -38,50 +38,27 @@ Current Tests
      b. Merge still updates siteName/database, prompts commonName/datatype,
         fills blanks only, inserts packaged-only rows.
 
-[ ] SQL result column filters
+[x] New-setup Add Data Type defaults
    Steps:
-     a. Run a SQL query. Each result header has a filter icon. Column with
-        ≤10 unique values: list including (All). More than 10: text box.
-     b. Filter hides non-matching rows. Right-click icon → Clear filter.
-     c. New extract on that tab (or another result tab) resets filters.
-        Pinned tab keeps its own filters; a new extract on another tab
-        does not reuse them.
-     d. Header text is fully visible — the filter icon sits to the right
-        without covering the label (narrow columns grow).
-        RESPONSE: Filters work but the column sizing doesn't take into account the filters, so at times the filter overlaps the text
-
-[ ] Filter click-out cancels
-   Steps:
-     a. Data Dictionary / Search / SQL: open a text or list filter, type or
-        highlight something, click outside (do not press Enter / pick).
-        Popup closes; the previous filter (or none) is unchanged.
-     b. Escape also closes without applying. Enter / a list pick still applies.
-
-[ ] New-setup Add Data Type defaults
-   Steps:
-     a. Fresh user.config (or first-run defaults): Options → Add Data Type
-        to Labels is checked for USBR and USGS, unchecked for Aquarius.
+     a. Delete user.config (AppData / XDG / macOS Application Support), launch.
+        Options → Add Data Type to Labels: USBR and USGS checked, Aquarius
+        unchecked (Aquarius tab).
      b. Existing saved config is left as the user last saved it.
+     RESPONSE: Aquarius was checked, it's supposed to be unchecked
 
-[x] Header Remove column
+[x] Data Dictionary auto-size on open
    Steps:
-     a. Overlay on: header Remove on the overlay column drops the pair from
-        the table and the query list. With Delta on, overlay + delta go.
-     b. Overlay off, Delta on: Remove on any of the three columns drops all 3.
-     c. Insert column: Remove drops only that custom column. Query series stay.
-     d. Highlight 2+ columns, right-click Remove on one of them: all
-        highlighted columns go (overlay/delta groups still expand with them).
-     RESPONSE: Works when I only try to remove one. If I hightlight 2, it only removes the one I right click on. Overlay and delta logic works correctly
+     a. Open Data Dictionary. dataID, siteID, siteName, commonName, datatype
+        (and the rest) are wide enough for the values — no clipped text.
+     b. database / valuePrecision still fit the combobox dropdown.
 
-[ ] Multi-column header drag
+[ ] First-install bunker: no merge prompts
    Steps:
-     a. Shift- or Ctrl-select three columns, then drag one of them: all three
-        stay selected and insert at the drop marker (overlay/delta groups
-        still travel together).
-     b. Overlay + delta still move as a pair when dragging one of them.
-     c. After the drop, the highlight is on the columns in their new
-        place (not left behind at the old slots).
-     RESPONSE: Not sure how long this bug has been in there but when the columns move, they move correctly but the hightlight area stays the location they WERE in, not the new location. On the column move logic, keep the highlight with the column, not the location of where it started
+     a. Install with no live pythonFiles/core/bunker.db (or a copy that
+        matches the packaged file). applyUpdate / updateBunker does not ask
+        “Update Data Dictionary Common Names?” or Data Types.
+     b. When a different live bunker.db already exists, the y/n prompts still
+        appear.
 
 [ ] GitHub update check blocked
    Steps:
@@ -97,6 +74,10 @@ About Report issue → Form
 About Feature request Form
 Graph no axis titles; Y ticks match line
 SQL dialogs parent to SQL window
+SQL result column filters
+Filter click-out cancels
+Header Remove column
+Multi-column header drag
 
 Deferred / known
 --------------------------------------------------------------------------------

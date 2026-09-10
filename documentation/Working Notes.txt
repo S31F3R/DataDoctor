@@ -34,4 +34,7 @@ resets this file to this template.
 - Header Remove on a highlighted set drops every selected column (overlay
   and delta groups still expand)
 - After a column drag, the highlight stays on the moved columns
+- Data Dictionary auto-sizes columns on open
+- First install (no live bunker.db, or identical to packaged) skips
+  Common Names / Data Types merge prompts
 
