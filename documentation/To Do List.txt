@@ -1,28 +1,6 @@
 ####### CURRENT TASKS #######
--During the update process, the merging of the bunker.db takes a long time. Could we possibly split this into seperate threads then combine the results at the end? I was thinking split the process into 6 different threads, do the merge logic, then combine all 6 results at the end
-    -There is also no status message saying it's currently merging. All it says is backup then the file name, which makes it look like the backup is taking that long
--Need to add filters to the SQL Query Builder results per column. Use the same filter types we're using on Data Dictionary, but make them all text based unless there is only 10 or less possibilities to filter, meaning 10 or less unique results in that column. If there is 10 or less, make the filter a combobox with thoes results. This needs to be dynamic and reset per query per tab, extract
-    -Add same right click to clear filter
--Is there a way to create a "feature request" on github? If so, lets add another line item into winAbout, under REPORT ISSUE: make a FEATURE REQUEST: FORM, have the FORM be the github link to it
--In a new setup, the default config should have "Add Data Type to Labels" checked on USBR and USGS, not AQUARIUS
--Need the ability to right click a header and "Remove" the column. This to use similar logic as moving a column, so reviewing the code carfully is needed. Here is a rough list:
-    -Removing an overlay mean removes the pair from view and in the query list
-        -If delta is checked, remove overlay + delta
-    -Removing 1 of the 3 columns for non overlay but delta checked, remove all 3
-    -Removing a user created "insert" column just removes that column
--Lets remove the axis titles on the graph. Value or Timestamp is redundant
-    -To identify which value axis is which, make the numbers of the axis the same color as the line
-    -Timestamp axis color stays default UI colors based on light/dark/system/retro mode
 
 ####### CURRENT BUGS #######
--Right click to rename a SQL query result brings the rename box to the main part of the program. If the window is detached and on another monitor, it is on the wrong monitor. rename message boxes need to pop up in the center of the SQL query window, not the main 
-    -Same issue with SQL history window and Snippet categories. They don't consider the detached SQL Query Builder tab as the "parent" to center on. They are centering over the data query table, which is attached to main app
--Unable to move multiple columns at the same time by highlighting them. If I highlight 3, the column I click to move is the only one selected then it moves
-    -Need this to work like other logic for moving multiple columns at the same time. If I highlight 3, they need to get inserted into the "marker" that pops up as I drag, just like the overlay + delta method
--v3.2.1 is out (verify based on this timestamp in the error) but it's not seeing the update. I think the server this app is on is blocking the update but if so, we're not catching it. Pretty sure every non server setup found the update and updated to 3.2.1 this morning. If this is being blocked, lets make sure to catch this and change the message. I'm assuming the github check fails so something like "Unable to check GitHub for updates" or something based on the error. Here is the log:
-    2026-09-09 13:18:59,940 [DEBUG] btnOptionsPressed: Opened options dialog
-    2026-09-09 13:18:59,933 [DEBUG] maskSensitiveFields: AQ/USGS/Oracle secrets masked
-    2026-09-09 13:18:55,295 [INFO] Revert-to-published: already on published 3.2.0, skip
 
 ####### 3.3.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look

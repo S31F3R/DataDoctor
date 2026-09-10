@@ -24,20 +24,6 @@ Current Tests
      c. No popup (not “no published release” and not “Revert to published”).
      d. Recheck Beta → Save: update check may offer the newest rc/beta as usual.
 
-[x] Packaged Quick Looks adopt then remove
-   Steps:
-     a. Fresh config (no quickLook/query files): launch. Examples appear in the
-        Query combo. Install pythonFiles/quickLook (or equivalent) is gone;
-        files live under the user config quickLook/query/. Delete one — it
-        actually deletes (no “example cannot be deleted”).
-     b. Profile already has Quick Looks: launch. Packaged folder is removed;
-        existing user looks stay. Combo does not list a second packaged copy.
-
-[x] About Report issue → Form
-   Steps:
-     a. About shows Report issue: Form (label stays Report issue; link text is Form).
-     b. Click Form still opens the in-app report dialog.
-
 [ ] Profile Data Dictionary
    Steps:
      a. Options → Export: Data Dictionary is checked with the other items.
@@ -45,8 +31,73 @@ Current Tests
      b. Import a zip that includes it: live bunker.db is replaced (no
         commonName/datatype prompts). Data Dictionary window shows the imported rows.
 
+[ ] Bunker merge threads + Merging status
+   Steps:
+     a. Run a dictionary merge (applyUpdate or updateBunker.py). After
+        Backup: path, console shows Merging... before Merge complete.
+     b. Merge still updates siteName/database, prompts commonName/datatype,
+        fills blanks only, inserts packaged-only rows.
+
+[ ] SQL result column filters
+   Steps:
+     a. Run a SQL query. Each result header has a filter icon. Column with
+        ≤10 unique values: list including (All). More than 10: text box.
+     b. Filter hides non-matching rows. Right-click icon → Clear filter.
+     c. New extract on that tab (or another result tab) resets filters.
+        Pinned tab keeps its own filters; a new extract on another tab
+        does not reuse them.
+
+[x] About Feature request Form
+   Steps:
+     a. About shows Report issue: Form and Feature request: Form under it.
+     b. Feature request Form opens GitHub new-issue with the feature template.
+
+[ ] New-setup Add Data Type defaults
+   Steps:
+     a. Fresh user.config (or first-run defaults): Options → Add Data Type
+        to Labels is checked for USBR and USGS, unchecked for Aquarius.
+     b. Existing saved config is left as the user last saved it.
+
+[ ] Header Remove column
+   Steps:
+     a. Overlay on: header Remove on the overlay column drops the pair from
+        the table and the query list. With Delta on, overlay + delta go.
+     b. Overlay off, Delta on: Remove on any of the three columns drops all 3.
+     c. Insert column: Remove drops only that custom column. Query series stay.
+     RESPONSE: Works when I only try to remove one. If I hightlight 2, it only removes the one I right click on. Overlay and delta logic works correctly
+
+[x] Graph no axis titles; Y ticks match line
+   Steps:
+     a. Graph a series: no “Value” or “Timestamp” axis title.
+     b. Y-axis numbers (and that spine) match the line color. Time-axis
+        ticks stay the light/dark/system/retro UI colors.
+     c. Two Y axes: each Y scale matches its own line.
+
+[x] SQL dialogs parent to SQL window
+   Steps:
+     a. Detach SQL Query Builder onto another monitor. Right-click a result
+        tab → Rename: the dialog is centered on the SQL window, not Data Query.
+     b. History and Snippet Categories also open on the SQL window.
+
+[ ] Multi-column header drag
+   Steps:
+     a. Shift- or Ctrl-select three columns, then drag one of them: all three
+        stay selected and insert at the drop marker (overlay/delta groups
+        still travel together).
+     b. Overlay + delta still move as a pair when dragging one of them.
+     RESPONSE: Not sure how long this bug has been in there but when the columns move, they move correctly but the hightlight area stays the location they WERE in, not the new location. On the column move logic, keep the highlight with the column, not the location of where it started
+
+[ ] GitHub update check blocked
+   Steps:
+     a. With GitHub unreachable (blocked/timeout): startup or update check
+        shows “Unable to check GitHub for updates.” (not silent, not “already
+        current”).
+     b. When GitHub works and you are current: still no popup.
+
 Confirmed
 --------------------------------------------------------------------------------
+Packaged Quick Looks adopt then remove
+About Report issue → Form
 
 Deferred / known
 --------------------------------------------------------------------------------

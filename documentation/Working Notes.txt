@@ -10,3 +10,22 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Dictionary merge prints Merging... after the backup path and plans row
+  updates on six threads before writing them
+- SQL Query Builder result headers filter like Data Dictionary: list when a
+  column has 10 or fewer unique values, otherwise a text box; right-click
+  clears; filters reset per extract / result tab
+- About Feature request: Form opens a GitHub feature-request issue form
+- New installs default Add Data Type to Labels on for USBR and USGS, off
+  for Aquarius
+- Header right-click Remove drops overlay pairs (and delta when checked),
+  non-overlay delta trios, or a single custom column, and updates the query list
+- Graph no longer titles the axes Value / Timestamp; Y tick numbers match
+  the line color; the time axis keeps UI colors
+- SQL rename, History, and Snippet Categories center on the SQL window when
+  that tab is detached
+- Highlight several Data Query columns and drag one: the whole highlight
+  inserts at the drop marker (overlay/delta groups still locked)
+- If GitHub cannot be reached for an update check, show Unable to check
+  GitHub for updates
+
