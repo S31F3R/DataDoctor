@@ -1003,6 +1003,9 @@
                  <property name="text">
                   <string/>
                  </property>
+                 <property name="checked">
+                  <bool>false</bool>
+                 </property>
                 </widget>
                </item>
                <item>
@@ -1227,6 +1230,9 @@
                  <property name="text">
                   <string/>
                  </property>
+                 <property name="checked">
+                  <bool>true</bool>
+                 </property>
                 </widget>
                </item>
                <item>
@@ -1416,6 +1422,9 @@
                 <widget class="QCheckBox" name="chkbLabelDataTypeUSGS">
                  <property name="text">
                   <string/>
+                 </property>
+                 <property name="checked">
+                  <bool>true</bool>
                  </property>
                 </widget>
                </item>

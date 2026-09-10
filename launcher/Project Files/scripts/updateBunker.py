@@ -34,6 +34,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import shutil
 import sqlite3
@@ -295,6 +296,31 @@ def merge(
         usr.close()
 
 
+def _filesIdentical(a: Path, b: Path) -> bool:
+    try:
+        if a.resolve() == b.resolve():
+            return True
+    except Exception:
+        pass
+    try:
+        if a.stat().st_size != b.stat().st_size:
+            return False
+    except OSError:
+        return False
+    h1 = hashlib.sha256()
+    h2 = hashlib.sha256()
+    try:
+        with open(a, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h1.update(chunk)
+        with open(b, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h2.update(chunk)
+    except OSError:
+        return False
+    return h1.digest() == h2.digest()
+
+
 def _rowKey(dataId, siteId):
     return (
         None if dataId is None else str(dataId),
@@ -434,10 +460,13 @@ def main():
         packaged = args.packaged
     if args.user:
         user = args.user
+    if user is None:
+        here = Path(__file__).resolve().parent
+        user = here.parent / "core" / "bunker.db"
 
-    if not packaged or not user:
+    if not packaged or not Path(packaged).is_file():
         print(
-            "Could not auto-detect paths. Pass --packaged and --user explicitly.\n"
+            "Could not auto-detect packaged bunker.db. Pass --packaged explicitly.\n"
             f"  packaged={packaged}\n  user={user}",
             file=sys.stderr,
         )
@@ -445,6 +474,23 @@ def main():
 
     print(f"Packaged: {packaged}")
     print(f"User:     {user}")
+
+    if not Path(user).is_file():
+        dest = Path(user)
+        if args.dryRun:
+            print(f"No existing bunker.db — would install packaged dictionary → {dest}")
+            return 0
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(packaged, dest)
+        print(f"No existing bunker.db — installed packaged dictionary → {dest}")
+        cleanupTempFolder(Path(packaged))
+        return 0
+    if _filesIdentical(Path(packaged), Path(user)):
+        print("Live bunker.db already matches packaged — skip merge (no prompts)")
+        if not args.dryRun:
+            cleanupTempFolder(Path(packaged))
+        return 0
+
     updateCommon = args.updateCommonNames
     updateTypes = args.updateDatatypes
     if updateCommon is None:

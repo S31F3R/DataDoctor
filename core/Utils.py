@@ -710,12 +710,14 @@ def sizeVerticalHeader(table):
     vHeader.setFixedWidth(w)
 
 
-def autoSizeTableColumns(table, sampleRows=100):
+def autoSizeTableColumns(table, sampleRows=100, scanAll=False):
     """
     Size columns from final header labels + a sample of displayed cell text.
 
     Call only after headers are final and cell text has been formatted
-    (valuePrecision, overlay/delta rewrite). Never scan every row.
+    (valuePrecision, overlay/delta rewrite). scanAll=True measures the
+    longest string per column (Data Dictionary on open) without Qt's
+    resizeColumnToContents on every row.
     """
     if table is None:
         return
@@ -738,6 +740,17 @@ def autoSizeTableColumns(table, sampleRows=100):
     font = table.font()
     metrics = QFontMetrics(font)
     sampleN = min(sampleRows, numRows)
+    longest = None
+    if scanAll and numRows > 0:
+        longest = [''] * numCols
+        for r in range(numRows):
+            for c in range(numCols):
+                it = table.item(r, c)
+                if it is None:
+                    continue
+                text = it.text() or ''
+                if len(text) > len(longest[c]):
+                    longest[c] = text
 
     for c in range(numCols):
         headerItem = table.horizontalHeaderItem(c)
@@ -749,10 +762,14 @@ def autoSizeTableColumns(table, sampleRows=100):
             default=40,
         )
         maxCell = metrics.horizontalAdvance('0.00')
-        for r in range(sampleN):
-            it = table.item(r, c)
-            if it and it.text():
-                maxCell = max(maxCell, metrics.horizontalAdvance(it.text()))
+        if longest is not None:
+            if longest[c]:
+                maxCell = max(maxCell, metrics.horizontalAdvance(longest[c]))
+        else:
+            for r in range(sampleN):
+                it = table.item(r, c)
+                if it and it.text():
+                    maxCell = max(maxCell, metrics.horizontalAdvance(it.text()))
         # Same fudge as original buildTable / modifyTable math
         finalWidth = max(maxCell, headerWidth)
         if headerWidth > maxCell:
@@ -1294,7 +1311,10 @@ def loadDataDictionary(table):
             parent.applyValuePrecisionDelegate()
         if parent is not None and hasattr(parent, 'applyDatabaseDelegate'):
             parent.applyDatabaseDelegate()
-        if parent is not None and hasattr(parent, 'sizeComboColumns'):
+        if parent is not None and hasattr(parent, 'sizeDictionaryColumns'):
+            if parent.isVisible():
+                parent.sizeDictionaryColumns()
+        elif parent is not None and hasattr(parent, 'sizeComboColumns'):
             parent.sizeComboColumns()
     except Exception:
         pass
@@ -1966,6 +1986,14 @@ def loadConfig():
                     Logic.logMessage("DEBUG", "Removing obsolete colorMode")
                 config.pop('colorMode')
 
+            # Fill keys that did not exist when this user.config was created
+            # (new-setup defaults: Aquarius Add Data Type off, USBR/USGS on).
+            filled = False
+            for key, val in defaults.items():
+                if key not in config:
+                    config[key] = val
+                    filled = True
+
             # Do not copy TNS_ADMIN into tnsNamesLocation. Env is read at
             # Instant Client setup; persisting it made Options show a system
             # Oracle path on machines that should use packaged network/admin.
@@ -1973,6 +2001,8 @@ def loadConfig():
             # Write updated config back to file if migrations occurred
             with open(configPath, 'w', encoding='utf-8') as configFile:
                 json.dump(config, configFile, indent=2)
+            if Config.debug and filled:
+                Logic.logMessage("DEBUG", "Filled missing user.config keys from defaults")
 
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Loaded full config: {config}")

@@ -110,6 +110,10 @@ class HeaderFilterBar(QObject):
         self._rebuildButtons()
         self._fire()
 
+    def padColumns(self):
+        """Public: grow sections so header/cell text is not under the filter icon."""
+        self._padColumns()
+
     def _padColumns(self):
         """Grow the section so header/cell text is not under the filter icon."""
         if self.table is None:

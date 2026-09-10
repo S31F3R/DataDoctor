@@ -910,8 +910,8 @@ def buildDataDictionary(table, columns=None, whereClause=None):
     except Exception as e:
         logException("Failed to build DataDictionary from DB", e)
         return
-    for c in range(table.columnCount()):
-        table.resizeColumnToContents(c)
+    # Widths are applied on open (uiDataDictionary.sizeDictionaryColumns).
+    # resizeColumnToContents here runs before the window is shown and clips.
     if Config.debug:
         logMessage("DEBUG", f"Built DataDictionary with {table.rowCount()} rows, {table.columnCount()} columns")
 

@@ -415,15 +415,24 @@ class uiDataDictionary(QMainWindow):
         self.applyDictionaryScrollStyle()
         self.applyValuePrecisionDelegate()
         self.applyDatabaseDelegate()
-        # Combo columns sized to dropdown contents (not just bare cell text)
-        self.sizeComboColumns()
         # Keep cell selection even if .ui defaults to SelectRows
         if self.mainTable is not None:
             self.mainTable.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
             self.mainTable.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         self._ensureHeaderFilters()
+        self.sizeDictionaryColumns()
         Utils.centerWindowToParent(self)
         super().showEvent(event)
+
+    def sizeDictionaryColumns(self):
+        """Auto-size every column from header + cell text after the window is shown."""
+        if self.mainTable is None:
+            return
+        Utils.autoSizeTableColumns(self.mainTable, scanAll=True)
+        self.sizeComboColumns()
+        filt = getattr(self, "_headerFilters", None)
+        if filt is not None:
+            filt.padColumns()
 
     def _ensureHeaderFilters(self):
         if self.mainTable is None or self._headerFilters is not None:
@@ -601,8 +610,7 @@ class uiDataDictionary(QMainWindow):
                 QMessageBox.warning(self, "Save Failed", f"Could not save data dictionary:\n{e}")
                 return
 
-            # Size combo columns only — never full resizeColumnToContents on 30k rows
-            self.sizeComboColumns()
+            self.sizeDictionaryColumns()
             if self._headerFilters is not None:
                 self._headerFilters.rebuild()
             q = getattr(self.winMain, "winQuery", None) if self.winMain is not None else None

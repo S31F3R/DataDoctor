@@ -23,7 +23,8 @@ What this does:
   3) Copy DataDoctor.py as app.pyw on Windows (pythonFiles/),
      plus ui/, core/* (except bunker.db), quickLook/, requirements
   4) Windows zip also replaces Data Doctor.exe and installs python-embed
-  5) If temp/bunker.db or core/bunker.db present → merge via updateBunker.py
+  5) If packaged bunker.db present: copy when live is missing (no prompts);
+     otherwise merge via updateBunker.py
   6) pip install -r requirements.txt into python-embed (Windows) or .venv
   7) Remove the zip and extract tree
 
@@ -890,12 +891,14 @@ def runBunkerMerge(py: str, projectFiles: Path, packagedBunker: Path) -> int:
         alt = projectFiles.parent / "scripts" / "updateBunker.py"
         if alt.is_file():
             script = alt
+    if not live.is_file():
+        live.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(packagedBunker, live)
+        print(f"No existing bunker.db — installed packaged dictionary → {live}")
+        return 0
+
     if not script.is_file():
-        print("WARN: updateBunker.py not found — copying packaged bunker only if live missing")
-        if not live.is_file():
-            live.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(packagedBunker, live)
-            print(f"Installed new bunker.db → {live}")
+        print("WARN: updateBunker.py not found — live bunker.db left unchanged")
         return 0
 
     cmd = [

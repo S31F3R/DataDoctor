@@ -2,7 +2,7 @@
 
 The dictionary (`core/bunker.db`, table `dataDictionary`) is how Data Doctor turns raw IDs into labels, rounding, and QAQC limits.
 
-Open it from the book/database button on the main window. **Ctrl+S** or **Save** writes the table (combo columns are committed first). Search filters as you type (dataID, site name, common name — not siteID or database).
+Open it from the book/database button on the main window. Columns auto-size on open (header + the longest value in each column; database / valuePrecision still leave room for the combobox). **Ctrl+S** or **Save** writes the table (combo columns are committed first). Search filters as you type (dataID, site name, common name — not siteID or database).
 
 **siteID** and **database** headers have a filter icon. **siteID** opens a text box (type a site, substring match). **database** opens a list of databases in the table (first click). Enter (text) or a list pick applies; click outside or Escape cancels and leaves the previous filter. While a filter is on, the icon switches to **Filtered**. Right-click that icon → **Clear filter**. Header width leaves room for the icon. Database lists refresh when you Save.
 
@@ -35,7 +35,7 @@ commonName-datatype
 <second line depends on source>
 ```
 
-No spaces around the dash. If `datatype` is blank, or **Options → USBR / Aquarius / USGS → Add Data Type to Labels** is off for that source, the first line is just `commonName`. A new install defaults that box **on** for USBR and USGS, **off** for Aquarius.
+No spaces around the dash. If `datatype` is blank, or **Options → USBR / Aquarius / USGS → Add Data Type to Labels** is off for that source, the first line is just `commonName`. A new install (and a `user.config` that never had these keys) defaults that box **on** for USBR and USGS, **off** for Aquarius.
 
 | Source | Second line |
 |--------|-------------|
