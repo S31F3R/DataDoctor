@@ -10,6 +10,13 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- INSTANT:30 is a 30-minute interval alongside :1 / :15 / :60
+- Aquarius queries that omit Points (API error / empty body) log a warning
+  and return blanks instead of crashing the worker thread
+- Uncaught exceptions in worker threads show the Unexpected Error dialog
+  (Report on GitHub / Copy log / Open log folder)
+- New-setup user.config is only the documented Data Doctor folder; leftover
+  files elsewhere are ignored so Aquarius Add Data Type stays off
 - Dictionary merge prints Merging... after the backup path and plans row
   updates on six threads before writing them
 - SQL Query Builder result headers filter like Data Dictionary: list when a

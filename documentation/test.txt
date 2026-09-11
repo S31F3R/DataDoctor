@@ -26,15 +26,35 @@ Current Tests
 
 [ ] New-setup Add Data Type defaults
    RESPONSE: Aquarius was checked, it's supposed to be unchecked
+   Retest: live path is only the Data Doctor folder below. Leftovers are
+   ignored (app.log WARN if one exists). Delete the live file, not Preferences
+   vs Application Support mix-ups.
    Steps:
      a. Quit Data Doctor. Delete only the live user.config:
         Linux: ~/.config/Data Doctor/user.config
         Windows: %LOCALAPPDATA%\Data Doctor\user.config
         macOS: ~/Library/Application Support/Data Doctor/user.config
-        (Not ~/.config/user.config or ~/.config/USBR/Data Doctor/ — leftovers.)
+        Leftovers (ignored): ~/.config/user.config, ~/.config/USBR/Data Doctor/,
+        ~/Library/Preferences/Data Doctor/, %APPDATA%\Data Doctor\
      b. Launch. Options → Add Data Type to Labels: USBR and USGS checked,
         Aquarius unchecked (Aquarius tab).
      c. Existing saved config is left as the user last saved it.
+
+[ ] INSTANT:30 interval
+   Steps:
+     a. Query window interval combo includes INSTANT:30 (USGS-NWIS too, after
+        INSTANT:1). Info text mentions 1 / 15 / 30 / 60.
+     b. Add a series as INSTANT:30 and Query. Table timestamps are on :00 and
+        :30 (not every 15 minutes). HOUR / INSTANT:15 / :60 still work.
+
+[ ] Aquarius missing Points does not crash
+   Steps:
+     a. Run an Aquarius query. If the API returns JSON without Points (or
+        VS Code used to break on KeyError 'Points'), the query finishes.
+        That series is blank; the app stays up. app.log has a WARN, not a
+        crash dialog.
+     b. Uncaught errors elsewhere still get Unexpected Error with Report on
+        GitHub / Copy log / Open log folder (worker threads included).
 
 [ ] Bunker merge threads + Merging status
    Steps:

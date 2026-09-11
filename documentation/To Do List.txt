@@ -1,18 +1,6 @@
 ####### CURRENT TASKS #######
 
 ####### CURRENT BUGS #######
--AQ has a bug since last commit. Also, we're supposed to not let the program crash and catch crashes like this to send to GitHub. Need to revisit that code. Here is error:
-    Exception has occurred: KeyError
-    'Points'
-    File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\Aquarius.py", line 473, in queryTask
-        points = readFile['Points']
-                ~~~~~~~~^^^^^^^^^^
-    File "C:\Users\rodneysmith\OneDrive - DOI\Documents\Visual Studio Code Projects\Python\Data Doctor\core\Aquarius.py", line 505, in worker
-        queryTask(uid, subStart, subEnd, threadId, http)
-        ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    KeyError: 'Points'
-
--UPDATE to above bug, this semed like only a temporary issue? Not sure cause I can't get it to happen again
 
 ####### 3.3.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
