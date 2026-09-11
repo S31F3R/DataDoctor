@@ -19,28 +19,9 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
-Packaged Quick Looks adopt then remove
-About Report issue → Form
-About Feature request Form
-Graph no axis titles; Y ticks match line
-SQL dialogs parent to SQL window
-SQL result column filters
-Filter click-out cancels
-Header Remove column
-Multi-column header drag
-Uncheck Beta on published — no dialog
-Profile Data Dictionary
-Data Dictionary auto-size on open
-Check Beta on published — no dialog
-New-setup Add Data Type defaults
-INSTANT:30 interval
-Aquarius missing Points does not crash
-Bunker merge threads + Merging status
-First-install bunker: no merge prompts
-GitHub update check blocked
-Windows packageWindows.py removes winStage
 
 Deferred / known
 --------------------------------------------------------------------------------
 [!] AppImage applyUpdate path not wired the same as launcher packages yet
 [!] Rebuild Data Doctor.exe on Windows to ship launcher VB first-run extract message
+
