@@ -440,57 +440,98 @@ def apiRead(dataIDs, startDate, endDate, interval):
         Logic.logMessage("DEBUG", f"Created {numTasks} tasks for {len(dataIDs)} UIDs across {len(subRanges)} sub-ranges, using {numThreads} threads")
 
     def queryTask(uid, subStart, subEnd, threadId, http):
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Thread {threadId} processing task for UID {uid}, range {subStart} to {subEnd}")
-        subStartDt = datetime.strptime(subStart, '%Y-%m-%d %H:%M')
-        subEndDt = datetime.strptime(subEnd, '%Y-%m-%d %H:%M')
-        subStartYear = subStartDt.year
-        subStartMonth = f'{subStartDt.month:02d}'
-        subStartDay = f'{subStartDt.day:02d}'
-        subStartHour = f'{subStartDt.hour:02d}'
-        subStartMinute = f'{subStartDt.minute:02d}'
-        subEndYear = subEndDt.year
-        subEndMonth = f'{subEndDt.month:02d}'
-        subEndDay = f'{subEndDt.day:02d}'
-        subEndHour = f'{subEndDt.hour:02d}'
-        subEndMinute = f'{subEndDt.minute:02d}'
-        subStartStr = f'{subStartYear}-{subStartMonth}-{subStartDay} {subStartHour}:{subStartMinute}'
-        subEndStr = f'{subEndYear}-{subEndMonth}-{subEndDay} {subEndHour}:{subEndMinute}'
-        response = http.get(
-            f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={subStartStr}&QueryTo={subEndStr}&utcOffset={offsetHours}&GetParts=All&format=json',
-            headers=headers, timeout=60,
-        )
-
+        empty = (uid, {'data': [], 'label': uid, 'rawResponse': {}})
         try:
-            readFile = json.loads(response.content)
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Thread {threadId} processing task for UID {uid}, range {subStart} to {subEnd}")
+            subStartDt = datetime.strptime(subStart, '%Y-%m-%d %H:%M')
+            subEndDt = datetime.strptime(subEnd, '%Y-%m-%d %H:%M')
+            subStartYear = subStartDt.year
+            subStartMonth = f'{subStartDt.month:02d}'
+            subStartDay = f'{subStartDt.day:02d}'
+            subStartHour = f'{subStartDt.hour:02d}'
+            subStartMinute = f'{subStartDt.minute:02d}'
+            subEndYear = subEndDt.year
+            subEndMonth = f'{subEndDt.month:02d}'
+            subEndDay = f'{subEndDt.day:02d}'
+            subEndHour = f'{subEndDt.hour:02d}'
+            subEndMinute = f'{subEndDt.minute:02d}'
+            subStartStr = f'{subStartYear}-{subStartMonth}-{subStartDay} {subStartHour}:{subStartMinute}'
+            subEndStr = f'{subEndYear}-{subEndMonth}-{subEndDay} {subEndHour}:{subEndMinute}'
+            response = http.get(
+                f'{server}/AQUARIUS/Publish/v2/GetTimeSeriesCorrectedData?TimeSeriesUniqueId={uid}&QueryFrom={subStartStr}&QueryTo={subEndStr}&utcOffset={offsetHours}&GetParts=All&format=json',
+                headers=headers, timeout=60,
+            )
+
+            try:
+                readFile = json.loads(response.content)
+            except Exception as e:
+                Logic.logMessage("WARN", f"Aquarius fetch failed for UID '{uid}' in thread {threadId}, range {subStart} to {subEnd}: {e}")
+                resultQueue.put(empty)
+                return
+            if not isinstance(readFile, dict):
+                Logic.logMessage(
+                    "WARN",
+                    f"Aquarius fetch for UID '{uid}' in thread {threadId}, "
+                    f"range {subStart} to {subEnd}: response was not a JSON object",
+                )
+                resultQueue.put(empty)
+                return
+            points = readFile.get('Points')
+            if not isinstance(points, list):
+                msg = (
+                    readFile.get('ResponseMessage')
+                    or readFile.get('Message')
+                    or readFile.get('error')
+                    or f"HTTP {getattr(response, 'status_code', '?')}"
+                )
+                Logic.logMessage(
+                    "WARN",
+                    f"Aquarius fetch for UID '{uid}' in thread {threadId}, "
+                    f"range {subStart} to {subEnd}: no Points ({msg})",
+                )
+                resultQueue.put(empty)
+                return
+            location = readFile.get('LocationIdentifier', uid)
+            label = readFile.get('Label', '')
+            fullLabel = f'{label} \n{location}'
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Thread {threadId} fetched {len(points)} points for UID '{uid}', range {subStart} to {subEnd}")
+            outputData = []
+
+            for point in points:
+                if not isinstance(point, dict):
+                    continue
+                date = point.get('Timestamp')
+                if not date:
+                    continue
+                parseDate = date.split('T')
+                if len(parseDate) < 2:
+                    continue
+                parseDate[1] = parseDate[1].split('.')[0]
+                dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}')
+                formattedTs = Query.formatTimestamp(dateTime, interval)
+                rawValue = point.get('Value')
+                value = rawValue.get('Numeric', None) if isinstance(rawValue, dict) else None
+
+                if value is not None:
+                    outputData.append(f'{formattedTs},{value}')
+            resultQueue.put((uid, {'data': outputData, 'label': fullLabel, 'rawResponse': readFile}))
+
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Thread {threadId} completed task for UID {uid} with {len(outputData)} points")
         except Exception as e:
-            Logic.logMessage("WARN", f"Aquarius fetch failed for UID '{uid}' in thread {threadId}, range {subStart} to {subEnd}: {e}")
-            resultQueue.put((uid, {'data': [], 'label': uid, 'rawResponse': {}}))
-            return
-        location = readFile.get('LocationIdentifier', uid)
-        label = readFile.get('Label', '')
-        fullLabel = f'{label} \n{location}'
-        points = readFile['Points']
+            Logic.logException(
+                f"Aquarius fetch failed for UID '{uid}' in thread {threadId}, "
+                f"range {subStart} to {subEnd}",
+                e,
+            )
+            try:
+                resultQueue.put(empty)
+            except Exception:
+                pass
 
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Thread {threadId} fetched {len(points)} points for UID '{uid}', range {subStart} to {subEnd}")
-        outputData = []
-
-        for point in points:
-            date = point['Timestamp']
-            parseDate = date.split('T')
-            parseDate[1] = parseDate[1].split('.')[0]
-            dateTime = datetime.fromisoformat(f'{parseDate[0]} {parseDate[1]}')
-            formattedTs = Query.formatTimestamp(dateTime, interval)
-            value = point['Value'].get('Numeric', None)
-
-            if value is not None:
-                outputData.append(f'{formattedTs},{value}')
-        resultQueue.put((uid, {'data': outputData, 'label': fullLabel, 'rawResponse': readFile}))
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Thread {threadId} completed task for UID {uid} with {len(outputData)} points")
-            
     # Start threads
     taskQueue = queue.Queue()
     for task in tasks: taskQueue.put(task)
@@ -502,12 +543,27 @@ def apiRead(dataIDs, startDate, endDate, interval):
             while True:
                 try:
                     uid, subStart, subEnd = taskQueue.get_nowait()
-                    queryTask(uid, subStart, subEnd, threadId, http)
-                    taskQueue.task_done()
                 except queue.Empty:
                     if Config.debug:
                         Logic.logMessage("DEBUG", f"Thread {threadId} found no more tasks")
                     break
+                try:
+                    queryTask(uid, subStart, subEnd, threadId, http)
+                except Exception as e:
+                    Logic.logException(
+                        f"Aquarius worker {threadId} failed for UID '{uid}', "
+                        f"range {subStart} to {subEnd}",
+                        e,
+                    )
+                    try:
+                        resultQueue.put((uid, {'data': [], 'label': uid, 'rawResponse': {}}))
+                    except Exception:
+                        pass
+                finally:
+                    try:
+                        taskQueue.task_done()
+                    except Exception:
+                        pass
         finally:
             try:
                 http.close()

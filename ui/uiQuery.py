@@ -17,6 +17,7 @@ ALL_INTERVALS = (
     'HOUR',
     'INSTANT:1',
     'INSTANT:15',
+    'INSTANT:30',
     'INSTANT:60',
     'DAY',
     'MONTH',
@@ -28,6 +29,7 @@ ALL_INTERVALS = (
 USGS_INTERVALS = (
     'INSTANT:15',
     'INSTANT:1',
+    'INSTANT:30',
     'INSTANT:60',
     'DAY',
 )
@@ -904,7 +906,15 @@ class uiQuery(QMainWindow):
 
     def btnIntervalInfoPressed(self):
         try:
-            QMessageBox.information(self, "Interval Info", "Interval determines what timestamps are displayed and what table the data is queried from (USBR).\n\nIn a query list, timestamp interval is determined by first dataID in the list.")
+            QMessageBox.information(
+                self,
+                "Interval Info",
+                "Interval determines what timestamps are displayed and what "
+                "table the data is queried from (USBR).\n\n"
+                "INSTANT:1 / :15 / :30 / :60 are 1-, 15-, 30-, and 60-minute "
+                "grids. In a query list, timestamp interval is determined by "
+                "the first dataID in the list.",
+            )
         finally:
             Utils.resetStyledButtonHover(self.sender() or self.btnIntervalInfo)
         if Config.debug:

@@ -55,6 +55,18 @@ def timestampFormatForInterval(intervalStr):
     return _TS_FMT_HOUR
 
 
+def instantMinutes(intervalStr):
+    """Return n for INSTANT:n (n > 0), or None."""
+    iv = (intervalStr or '').strip().upper()
+    if not iv.startswith('INSTANT:'):
+        return None
+    try:
+        n = int(iv.split(':', 1)[1])
+    except (IndexError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
 def formatTimestamp(dt, intervalStr=None):
     """Format a datetime for display / gap alignment for the given interval."""
     if dt is None:
@@ -316,23 +328,16 @@ def buildTimestamps(startDateStr, endDateStr, intervalStr):
             timestamps.append(formatTimestamp(current, iv))
             current += delta
     elif iv.startswith('INSTANT:'):
-        try:
-            minutes = int(intervalStr.split(':')[1])
-            delta = timedelta(minutes=minutes)
-            current = start.replace(second=0, microsecond=0)
-            if minutes == 15:
-                current = current.replace(minute=(current.minute // 15) * 15)
-            elif minutes == 60:
-                current = current.replace(minute=0)
-            elif minutes != 1:
-                Logic.logMessage("ERROR", "Unsupported INSTANT interval: {}".format(intervalStr))
-                return []
-            while current <= end:
-                timestamps.append(formatTimestamp(current, intervalStr))
-                current += delta
-        except (IndexError, ValueError) as e:
-            Logic.logMessage("ERROR", "Invalid INSTANT interval format: {}".format(e))
+        minutes = instantMinutes(intervalStr)
+        if minutes is None:
+            Logic.logMessage("ERROR", "Invalid INSTANT interval format: {}".format(intervalStr))
             return []
+        delta = timedelta(minutes=minutes)
+        current = start.replace(second=0, microsecond=0)
+        current = current.replace(minute=(current.minute // minutes) * minutes)
+        while current <= end:
+            timestamps.append(formatTimestamp(current, intervalStr))
+            current += delta
     elif iv == 'DAY':
         # mm/dd/yy — drop time
         current = start.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1803,19 +1808,12 @@ def roundDownToInterval(dt, interval):
     if dt is None:
         return dt
     iv = (interval or '').strip().upper()
-    if iv == 'HOUR' or iv == 'INSTANT:60':
+    minutes = instantMinutes(iv)
+    if iv == 'HOUR':
         dt = dt.replace(minute=0, second=0, microsecond=0)
-    elif iv == 'INSTANT:1':
+    elif minutes is not None:
         dt = dt.replace(second=0, microsecond=0)
-    elif iv == 'INSTANT:15':
-        try:
-            n = 15
-            minutesDown = (dt.minute // n) * n
-            dt = dt.replace(minute=minutesDown, second=0, microsecond=0)
-        except ValueError:
-            if Config.debug:
-                Logic.logMessage("WARN", "Error rounding INSTANT:15, no rounding applied")
-            return dt
+        dt = dt.replace(minute=(dt.minute // minutes) * minutes)
     elif iv == 'DAY':
         # Drop time — daily series are date-only
         dt = dt.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1830,9 +1828,6 @@ def roundDownToInterval(dt, interval):
             dt = datetime(dt.year, 10, 1)
         else:
             dt = datetime(dt.year - 1, 10, 1)
-    elif iv.startswith('INSTANT:'):
-        # Unknown instant step: zero seconds only
-        dt = dt.replace(second=0, microsecond=0)
     else:
         if Config.debug:
             Logic.logMessage(

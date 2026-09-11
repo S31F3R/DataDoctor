@@ -751,9 +751,14 @@ class uiOptions(QDialog):
         TableColors.setOverrides(self._tableColorOverrides)
         self._fillTableColorTable()
         self.chkbOverwriteFlag.setChecked(bool(config.get('hdbOverwriteFlag')))
-        self.chkbLabelDataTypeUSBR.setChecked(bool(config.get('labelDataTypeUSBR', True)))
-        self.chkbLabelDataTypeAquarius.setChecked(bool(config.get('labelDataTypeAquarius', False)))
-        self.chkbLabelDataTypeUSGS.setChecked(bool(config.get('labelDataTypeUSGS', True)))
+        if self.chkbLabelDataTypeUSBR is not None:
+            self.chkbLabelDataTypeUSBR.setChecked(bool(config.get('labelDataTypeUSBR', True)))
+        if self.chkbLabelDataTypeAquarius is not None:
+            self.chkbLabelDataTypeAquarius.setChecked(
+                bool(config.get('labelDataTypeAquarius', False))
+            )
+        if self.chkbLabelDataTypeUSGS is not None:
+            self.chkbLabelDataTypeUSGS.setChecked(bool(config.get('labelDataTypeUSGS', True)))
         self._fillHdbAccessList(config.get('hdbAccessUnchecked'))
         try:
             creds = loadKeyringCredentials(force=False)
@@ -929,9 +934,15 @@ class uiOptions(QDialog):
             'lastExportPath': config.get('lastExportPath', ''),
             'colorTheme': colorTheme,
             'hdbOverwriteFlag': bool(self.chkbOverwriteFlag.isChecked()),
-            'labelDataTypeUSBR': bool(self.chkbLabelDataTypeUSBR.isChecked()),
-            'labelDataTypeAquarius': bool(self.chkbLabelDataTypeAquarius.isChecked()),
-            'labelDataTypeUSGS': bool(self.chkbLabelDataTypeUSGS.isChecked()),
+            'labelDataTypeUSBR': bool(
+                self.chkbLabelDataTypeUSBR.isChecked()
+            ) if self.chkbLabelDataTypeUSBR is not None else True,
+            'labelDataTypeAquarius': bool(
+                self.chkbLabelDataTypeAquarius.isChecked()
+            ) if self.chkbLabelDataTypeAquarius is not None else False,
+            'labelDataTypeUSGS': bool(
+                self.chkbLabelDataTypeUSGS.isChecked()
+            ) if self.chkbLabelDataTypeUSGS is not None else True,
             'hdbAccessUnchecked': self._uncheckedHdbAccess(),
             'tableColors': dict(self._tableColorOverrides or {}),
         })

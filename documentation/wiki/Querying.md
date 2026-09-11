@@ -29,7 +29,7 @@ Double-click a list row to edit it (interval and database can change). Select mo
 
 | Interval | Notes |
 |----------|--------|
-| `INSTANT:1` / `:15` / `:60` | Instantaneous / continuous |
+| `INSTANT:1` / `:15` / `:30` / `:60` | Instantaneous / continuous (1-, 15-, 30-, 60-minute grids) |
 | `HOUR` | HDB / Aquarius. **Not** offered for USGS-NWIS |
 | `DAY` | Daily |
 | `MONTH` / `YEAR` / `WATER YEAR` | HDB (and similar). USGS OGC has no monthly/yearly products |

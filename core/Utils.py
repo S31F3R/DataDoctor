@@ -2015,6 +2015,19 @@ def loadConfig():
         try:
             with open(configPath, 'w', encoding='utf-8') as configFile:
                 json.dump(defaults, configFile, indent=2)
+            leftovers = [
+                p for p in _legacyUserConfigPaths(configPath) if os.path.isfile(p)
+            ]
+            Logic.logMessage(
+                "INFO",
+                f"Created default user.config at {configPath} "
+                f"(Add Data Type: USBR/USGS on, Aquarius off)",
+            )
+            if leftovers:
+                Logic.logMessage(
+                    "WARN",
+                    "Ignoring leftover user.config (not used): " + "; ".join(leftovers),
+                )
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Created default user.config with defaults: {defaults}")
         except Exception as e:
@@ -2634,6 +2647,15 @@ def reloadGlobals():
         TableColors.reloadFromConfig(settings)
     except Exception:
         pass
+    if not getattr(reloadGlobals, '_legacyConfigWarned', False):
+        reloadGlobals._legacyConfigWarned = True
+        live = getConfigPath()
+        leftovers = [p for p in _legacyUserConfigPaths(live) if os.path.isfile(p)]
+        if leftovers:
+            Logic.logMessage(
+                "WARN",
+                "Ignoring leftover user.config (not used): " + "; ".join(leftovers),
+            )
 
     if Config.debug:
         Logic.logMessage(
@@ -2664,18 +2686,45 @@ def defaultConfigDir():
     return os.path.join(xdg, "Data Doctor")
 
 
-def getConfigDir():
-    configDir = ""
+def _legacyUserConfigPaths(livePath):
+    """Places user.config has lived besides the documented Data Doctor folder."""
+    paths = []
+    live = os.path.normpath(livePath)
+
+    def add(path):
+        path = os.path.normpath(path)
+        if path != live and path not in paths:
+            paths.append(path)
+
     try:
         loc = QStandardPaths.writableLocation(
             QStandardPaths.StandardLocation.AppConfigLocation
         )
-        if loc and os.path.basename(loc.rstrip("\\/")) == "Data Doctor":
-            configDir = loc
+        if loc:
+            add(os.path.join(loc, "user.config"))
     except Exception:
         pass
-    if not configDir:
-        configDir = defaultConfigDir()
+    home = os.path.expanduser("~")
+    add(os.path.join(home, ".config", "user.config"))
+    add(os.path.join(home, ".config", "USBR", "Data Doctor", "user.config"))
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        add(os.path.join(local, "user.config"))
+        add(os.path.join(local, "USBR", "Data Doctor", "user.config"))
+    roaming = os.environ.get("APPDATA")
+    if roaming:
+        add(os.path.join(roaming, "Data Doctor", "user.config"))
+        add(os.path.join(roaming, "USBR", "Data Doctor", "user.config"))
+    add(os.path.join(home, "Library", "Preferences", "Data Doctor", "user.config"))
+    add(os.path.join(
+        home, "Library", "Application Support", "USBR", "Data Doctor", "user.config"
+    ))
+    return paths
+
+
+def getConfigDir():
+    """Documented per-user folder (logs, Quick Looks, user.config). Not Qt Preferences."""
+    configDir = defaultConfigDir()
     if not os.path.exists(configDir):
         ensurePrivateDir(configDir)
     return configDir

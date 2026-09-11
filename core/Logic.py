@@ -812,6 +812,31 @@ def installExceptionHooks(showDialog=True):
 
     sys.excepthook = exceptionHook
 
+    def queueCrashDialog(excType, excValue, excTb):
+        """Show the GitHub crash dialog on the GUI thread (worker threads included)."""
+        if not showDialog or appIsQuitting:
+            return
+        try:
+            from PyQt6.QtCore import QTimer
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app is None:
+                return
+            def _show():
+                if appIsQuitting:
+                    return
+                try:
+                    from core import Report
+                    Report.showCrashDialog(excType, excValue, excTb)
+                except Exception:
+                    pass
+            try:
+                QTimer.singleShot(0, app, _show)
+            except TypeError:
+                QTimer.singleShot(0, _show)
+        except Exception:
+            pass
+
     if hasattr(threading, 'excepthook'):
         def threadExceptionHook(args):
             if issubclass(args.exc_type, (SystemExit, KeyboardInterrupt)):
@@ -827,6 +852,7 @@ def installExceptionHooks(showDialog=True):
                 )
             except Exception:
                 pass
+            queueCrashDialog(args.exc_type, args.exc_value, args.exc_traceback)
         threading.excepthook = threadExceptionHook
 
     # Failures during __del__ / GC (would otherwise only hit stderr)

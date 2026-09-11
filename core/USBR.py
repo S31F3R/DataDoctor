@@ -372,16 +372,15 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
     # Map interval to table suffix (consistent with apiRead)
     intervalMap = {
         'HOUR': 'HOUR',
-        'INSTANT:1': 'INSTANT',
-        'INSTANT:15': 'INSTANT',
-        'INSTANT:60': 'INSTANT',
         'DAY': 'DAY',
         'MONTH': 'MONTH',
         'YEAR': 'YEAR',
         'WATER YEAR': 'WY'
     }
-
-    tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
+    if isinstance(interval, str) and interval.startswith('INSTANT'):
+        tableSuffix = 'INSTANT'
+    else:
+        tableSuffix = intervalMap.get(interval, 'HOUR') # Default to HOUR if unknown
 
     # Table names
     # Direct: r_base / r_hour. Linked: LCHDBA.r_base@lchdb

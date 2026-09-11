@@ -27,7 +27,7 @@ Passwords and API keys are **not** in `user.config`. They go to the OS keyring, 
 - `aqServer` / `aqUser` / `aqPassword`
 - `githubToken` (and `githubRefreshToken` if GitHub issued one) — About → Report issue / crash **Report on GitHub**. First report opens GitHub so you click **Authorize** once; after that, Report files the issue with no extra login. VS Code / git credentials are not reused. **About → Feature request: Form** is a GitHub form (no in-app login).
 
-On first launch with no `user.config`, **UTC offset** is set to the computer’s current timezone offset (including DST) on Windows, Linux, and macOS. **Add Data Type to Labels** defaults on for USBR and USGS, off for Aquarius. Later Options saves keep whatever you picked. The live file is only under the Data Doctor folder in the table above (not `~/.config/user.config` or an organization subfolder).
+On first launch with no `user.config`, **UTC offset** is set to the computer’s current timezone offset (including DST) on Windows, Linux, and macOS. **Add Data Type to Labels** defaults on for USBR and USGS, off for Aquarius. Later Options saves keep whatever you picked. The live file is only under the Data Doctor folder in the table above (not `~/.config/user.config`, `~/Library/Preferences/Data Doctor/`, `%APPDATA%\Data Doctor\`, or an organization subfolder). Leftovers in those other places are ignored.
 
 ## Install / dictionary files
 

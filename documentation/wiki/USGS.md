@@ -43,7 +43,7 @@ The Query window’s DataID **info** button / picker can resolve `Site-Parameter
 
 ## Intervals
 
-OGC collections used here are **continuous** (HOUR / INSTANT) and **daily** (DAY) only. There is **no monthly or yearly** product on this API — those interval choices are hidden when USGS-NWIS is selected. Default interval is `INSTANT:15`.
+OGC collections used here are **continuous** (HOUR / INSTANT) and **daily** (DAY) only. There is **no monthly or yearly** product on this API — those interval choices are hidden when USGS-NWIS is selected. Instant choices are `INSTANT:1` / `:15` / `:30` / `:60`. Default interval is `INSTANT:15`.
 
 ## Dictionary headers
 
