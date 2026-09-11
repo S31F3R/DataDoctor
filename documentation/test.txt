@@ -17,73 +17,6 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[ ] Check Beta on published — no dialog
-   Steps:
-     a. Install is a published X.Y.Z (not -rc / -beta), Beta updates currently unchecked.
-     b. Options → check Beta updates → Save.
-     c. No popup if there is no newer rc/beta (not “You're on the latest version”).
-     d. If a newer rc/beta exists, the usual Update available dialog is OK.
-
-[ ] New-setup Add Data Type defaults
-   RESPONSE: Aquarius was checked, it's supposed to be unchecked
-   Retest: live path is only the Data Doctor folder below. Leftovers are
-   ignored (app.log WARN if one exists). Delete the live file, not Preferences
-   vs Application Support mix-ups.
-   Steps:
-     a. Quit Data Doctor. Delete only the live user.config:
-        Linux: ~/.config/Data Doctor/user.config
-        Windows: %LOCALAPPDATA%\Data Doctor\user.config
-        macOS: ~/Library/Application Support/Data Doctor/user.config
-        Leftovers (ignored): ~/.config/user.config, ~/.config/USBR/Data Doctor/,
-        ~/Library/Preferences/Data Doctor/, %APPDATA%\Data Doctor\
-     b. Launch. Options → Add Data Type to Labels: USBR and USGS checked,
-        Aquarius unchecked (Aquarius tab).
-     c. Existing saved config is left as the user last saved it.
-
-[ ] INSTANT:30 interval
-   Steps:
-     a. Query window interval combo includes INSTANT:30 (USGS-NWIS too, after
-        INSTANT:1). Info text mentions 1 / 15 / 30 / 60.
-     b. Add a series as INSTANT:30 and Query. Table timestamps are on :00 and
-        :30 (not every 15 minutes). HOUR / INSTANT:15 / :60 still work.
-
-[ ] Aquarius missing Points does not crash
-   Steps:
-     a. Run an Aquarius query. If the API returns JSON without Points (or
-        VS Code used to break on KeyError 'Points'), the query finishes.
-        That series is blank; the app stays up. app.log has a WARN, not a
-        crash dialog.
-     b. Uncaught errors elsewhere still get Unexpected Error with Report on
-        GitHub / Copy log / Open log folder (worker threads included).
-
-[ ] Bunker merge threads + Merging status
-   Steps:
-     a. Run a dictionary merge (applyUpdate or updateBunker.py). After
-        Backup: path, console shows Merging... before Merge complete.
-     b. Merge still updates siteName/database, prompts commonName/datatype,
-        fills blanks only, inserts packaged-only rows.
-
-[ ] First-install bunker: no merge prompts
-   Steps:
-     a. Install with no live pythonFiles/core/bunker.db (or a copy that
-        matches the packaged file). applyUpdate / updateBunker does not ask
-        “Update Data Dictionary Common Names?” or Data Types.
-     b. When a different live bunker.db already exists, the y/n prompts still
-        appear.
-
-[ ] GitHub update check blocked
-   Steps:
-     a. With GitHub unreachable (blocked/timeout): startup or update check
-        shows “Unable to check GitHub for updates.” (not silent, not “already
-        current”).
-     b. When GitHub works and you are current: still no popup.
-
-[ ] Windows packageWindows.py removes winStage
-   Steps:
-     a. On Windows, from project root: python scripts/packageWindows.py
-     b. dist/DataDoctor-Windows-YYYYMMDD.zip (or --out path) exists.
-     c. dist/winStage* is gone after “Done: …”.
-
 Confirmed
 --------------------------------------------------------------------------------
 Packaged Quick Looks adopt then remove
@@ -98,6 +31,14 @@ Multi-column header drag
 Uncheck Beta on published — no dialog
 Profile Data Dictionary
 Data Dictionary auto-size on open
+Check Beta on published — no dialog
+New-setup Add Data Type defaults
+INSTANT:30 interval
+Aquarius missing Points does not crash
+Bunker merge threads + Merging status
+First-install bunker: no merge prompts
+GitHub update check blocked
+Windows packageWindows.py removes winStage
 
 Deferred / known
 --------------------------------------------------------------------------------
