@@ -1,4 +1,7 @@
 ####### CURRENT TASKS #######
+-In winAbout, make the version number a link to the patch notes for that version
+-In test.txt Deferred/Known, lets handle this: AppImage applyUpdate path not wired the same as launcher packages yet
+    -Once done, remove that section
 
 ####### CURRENT BUGS #######
 

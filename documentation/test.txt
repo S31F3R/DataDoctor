@@ -23,5 +23,3 @@ Confirmed
 Deferred / known
 --------------------------------------------------------------------------------
 [!] AppImage applyUpdate path not wired the same as launcher packages yet
-[!] Rebuild Data Doctor.exe on Windows to ship launcher VB first-run extract message
-
