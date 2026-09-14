@@ -2,10 +2,35 @@
 -In winAbout, make the version number a link to the patch notes for that version
 -In test.txt Deferred/Known, lets handle this: AppImage applyUpdate path not wired the same as launcher packages yet
     -Once done, remove that section
+-Make the overlay logic mark the Query List so it's easy to see the overlay pairs. Do this by changing font color for all primarys and all secondarys. Make primary blue and make secondary green. If there is some known standard or logic that says green is supposed to be primary and blue secondary, then do that. This color coding is for the query list view only
+    -Need to make sure colors work on light and dark mode. Instead of hardcoded colors, like the blue and green I suggested, maybe 2 different changes of what the theme is already using? that way it works on any color theme
+-Overlay pairs is currently for the entire query, but I want to make logic so users can now add in some ID that will not be part of the overlay or don't have a pair. Make it so a line item in query list can be right click and removed from Overlay logic
+    -Think of overlay as a flag. When we select Overlay Pairs, that flags all the dataID in the list. From there we want the ability to turn flags off. WIth the previous TASK, we're color flagging these so they are easy to identify. Now we make it so they can be unlagged on a dataID by dataID basis
+    -Need the logic to be smart. If out of 6 dataID, the 2nd one in the list is unflagged, then the first is not unlagged but not included as a pair. Keep it flagged but unhighlighted. 3rd will be the next primary and 4th will be the next secondary
+-All of this new logic needs to be avaiable without checking "Overlay Pairs". From v3.3.0 and on, "Overlay Pairs" is just an easy way to flag all the dataID in the list or flag anything new. Without that checked, a user needs to be able to right click that says "Add Overlay Flag" to each dataID. YEAH! in the TASKS above, make sure this is called Overlay Flag, so we'll need context menus to "Add Overlay Flag" or "Remove Overlay Flag"
+    -Do the same with Delta flags. Same with the Display Deltas
+    -Actually, this logic can be applied to all the Query Options. Treat all check boxes as apply to all new and current dataID in the list. Without the check, add a context menu list. Currently we have instert above, below, and delete. Add Overlay, Raw Data, Display Deltas, QAQC Data as items in the context menu with a check next to it. If a user clicks on one, it checks or unchecks it
+        -Not sure the best way to keep a context menu open and select a bunch of stuff. if there isn't a known easy way, maybe make it so they have to hold ctrl then click? It keeps the context menu open while they select. On the last one if they let go of ctrl then click, it selects then closes?
+        -This will ALL need to be stored in the queries. Might be a little more difficult than making the entire query the same but this gives a lot more flexability to the queries
+-Currently it's setup if column headers are renamed, user gets a prompt to update Data Dictionary. If a column is move, it moves the dataID in the query list. If the user goes back into the query list and hits save, thoe changes get added to their quick look. I want to expand on this in the form of equations. If a user creates a equation, I want to insert that into the query list as an dataID item. If the user hits save quick look, I want that same equation to be ran and with the same header displayed
+    -This will need some careful logic. Ideally the user would have the columns next to the equation column, but they may not. If a column is being used by the equation, the equation line in the query list and the logic to save it needs to break if one of those columns is REMOVE from the query. Key word, removed. If it was updated with a different dataID, keep it, if it was moved, keep it. Moving it just needs the equation logic updated to its new location
+    -Assume the equation needs to be applied to the whole time queried range, using the logic where the equation can be dragged up or down to apply to different rows. Assume this even if they only have the equation in 1 cell
+        -I don't see a way around this asumption yet, but if I do then we can re adjust
+-Need logic to see when a quick look is updated. A lot of the above changes require the user to go back into the quick look and save. What I'm thinking is when a quick look is loaded, we already know what it had in the file, so when the query list changes from an action on the Data Query table, I want to flag that change. So next time the Clear Query List button is hit or Load Quick Look, we prompt the user using the quick look nake "BLAH BLAH has been updated, would you like to save it?" If they hit no, move on, if they hit yes, save it then move On
+    -Really only need to key this change on changing stuff on the Data Query side. Reason for this is someone might use the same quick look but chnage dates randomly. Since this is done on the Query window side, they already know they changed it cause they are in that spot. If they clear the list, it's safe to assume they didn't want to update the quick look with that new time range. It's the out of sight, out of mind changes I want to make sure we flag
+-Wiki will need to be updated. Lots of changes coming from the above list. All of these tasks will be for the 3.3.0 release
+    -README.md is old also. In our workflow, make sure we have spots to update Wiki and README.md
+-Need to make sure when a user says N to common names and datatypes updates, this doesn't impact NEW items in the merge. If the new bunker.db has items the users does not, add the new item with the packaged commonName and datatype
 
 ####### CURRENT BUGS #######
-
-####### 3.3.0 FEATURES #######
+-Need to verify this on the next 3.2.1 update but I wasn't prompted for commonNames or datatypes update
+-Got a WARNING in the log: 2026-09-14 07:30:17,244 [WARNING] Python warning: C:\Program Files\Data Doctor\pythonFiles\ui\uiGraph.py:1702: UserWarning: Glyph 9745 (\N{BALLOT BOX WITH CHECK}) missing from font(s) Noto Sans.
+  self.canvas.draw()
+-If I type =B1+.01, the equation fails, but if I do =B1+0.01, it works. If no number is before the decimal, assume it's a 0. I short hand equations like this all the time and excel accepts .01
+-User reported program crashed after saving Data Dictionary. They said they saved it earlier and have done many times. This last time they didn't get the saved message box, it just crashed. When they reopened they looked in the Data Dictionary and their changes were there
+    -I looked at their .log, nothing useful. THey said the crash they got a pop up from Microsoft saying it was a python crash. Not sure why or what but I'd like to figure out if this was something we could have caught or prevented
+    
+####### 3.4.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
     -Add a plot that graphs delta pair and 4overlays delta as a seperate line
