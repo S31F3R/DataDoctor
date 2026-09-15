@@ -1,17 +1,10 @@
 #!/bin/bash
 # Replace a Data Doctor AppImage after the app has exited.
+# In-app updates write this to /tmp and pass --current from $APPIMAGE
+# (the name the user launched, including a rename).
 #
 # Usage:
-#   applyAppImageUpdate.sh --current /path/DataDoctor.AppImage --new /path/Update/new.AppImage [--wait-pid PID]
-#
-# Typical flow (handled by the app):
-#   1) App downloads new AppImage into Update/ next to the current AppImage
-#   2) App starts this script with --wait-pid $$ and quits
-#   3) This script waits for the PID, backs up the old AppImage, moves the new one into place
-#
-# Manual:
-#   1) Close Data Doctor
-#   2) ./applyAppImageUpdate.sh --current ./DataDoctor.AppImage --new ./Update/DataDoctor-x86_64.AppImage
+#   applyAppImageUpdate.sh --current /path/MyDoctor.AppImage --new /path/new.AppImage [--wait-pid PID]
 
 set -e
 CURRENT=""
@@ -24,7 +17,7 @@ while [ $# -gt 0 ]; do
     --new) NEW="$2"; shift 2 ;;
     --wait-pid) WAIT_PID="$2"; shift 2 ;;
     -h|--help)
-      sed -n '2,16p' "$0"
+      sed -n '2,10p' "$0"
       exit 0
       ;;
     *) shift ;;
@@ -32,7 +25,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$CURRENT" ] || [ -z "$NEW" ]; then
-  echo "Usage: $0 --current /path/DataDoctor.AppImage --new /path/Update/new.AppImage [--wait-pid PID]" >&2
+  echo "Usage: $0 --current /path/AppImage --new /path/new.AppImage [--wait-pid PID]" >&2
   exit 1
 fi
 
@@ -65,26 +58,29 @@ case "$magic" in
 esac
 
 chmod +x "$NEW" 2>/dev/null || true
-
+HERE="$(dirname "$CURRENT")"
+rm -f "${CURRENT}.bak"
 if [ -f "$CURRENT" ]; then
-  BAK="${CURRENT}.bak"
-  rm -f "$BAK"
-  mv "$CURRENT" "$BAK" || true
+  rm -f "$CURRENT"
 fi
-
 mv "$NEW" "$CURRENT"
 chmod +x "$CURRENT" 2>/dev/null || true
 
-UPD_DIR="$(dirname "$CURRENT")/updates"
-rm -f "$UPD_DIR/pending.json" 2>/dev/null || true
-rm -f "$(dirname "$CURRENT")/Update/pending.json" 2>/dev/null || true
+rm -f "$HERE/applyAppImageUpdate.sh" "$HERE/applyAppImageUpdate"
+rm -f "$HERE/updates/pending.json" "$HERE/updates/README.txt"
+rm -f "$HERE/Update/pending.json" "$HERE/Update/README.txt"
+rmdir "$HERE/updates" 2>/dev/null || true
+rmdir "$HERE/Update" 2>/dev/null || true
+NEW_DIR="$(dirname "$NEW")"
+rm -f "$NEW_DIR/pending.json" "$NEW_DIR/README.txt"
 
 echo "AppImage updated: $CURRENT"
-echo "Previous copy (if any): ${CURRENT}.bak"
 
-# Relaunch like applyUpdate.cmd does for launcher packages. Next start merges
-# the packaged bunker.db into the writable config copy.
 if [ -x "$CURRENT" ]; then
   nohup "$CURRENT" >/dev/null 2>&1 &
   echo "Relaunched: $CURRENT"
 fi
+
+case "$0" in
+  /tmp/datadoctor-apply-*) rm -f "$0" ;;
+esac

@@ -65,7 +65,7 @@ Do **not** overwrite `pythonFiles\core\bunker.db` with a zip’s copy if the dic
 1. Download `DataDoctor-x86_64.AppImage` (or `aarch64` / the arch you run).
 2. `chmod +x DataDoctor-x86_64.AppImage && ./DataDoctor-x86_64.AppImage`
 
-The live data dictionary is `~/.config/Data Doctor/bunker.db` (the AppImage itself is read-only). In-app **Quit and apply** replaces the AppImage and relaunches; the next start merges the packaged dictionary the same way Windows `applyUpdate` does.
+The live data dictionary is `~/.config/Data Doctor/bunker.db` (the AppImage itself is read-only). In-app **Quit and apply** replaces **this file’s name** (even if you renamed it), relaunches, and does not leave an `updates/` folder or `.sh` next to the AppImage. The next start merges the packaged dictionary the same way Windows `applyUpdate` does.
 
 AppImages are host-native. A build from one distro/arch may not run on another glibc or CPU. Rebuild on the target class of machine:
 

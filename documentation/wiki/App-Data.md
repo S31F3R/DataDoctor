@@ -19,6 +19,7 @@ Application name is **Data Doctor** (no organization folder). Config is **per us
 | `quickLook/query/` | Saved query lists (Quick Looks), including former packaged examples after first launch |
 | `quickLook/sql/` | SQL Query Builder snippets (category assignment in `user.config`) |
 | `certs/` | Optional user-level Aquarius cert folder (created only if needed) |
+| `updates/` | AppImage only: downloaded payload until **Quit and apply** (not next to the `.AppImage`) |
 
 Passwords and API keys are **not** in `user.config`. They go to the OS keyring, service name `DataDoctor`:
 

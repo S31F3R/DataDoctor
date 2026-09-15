@@ -47,7 +47,7 @@ Unzip a **Windows** package and double-click `Data Doctor.exe`.
 
 ### Linux (AppImage)
 
-Download `DataDoctor-x86_64.AppImage` (or the matching arch), mark executable, run it. The live data dictionary is `~/.config/Data Doctor/bunker.db`. In-app update uses **Quit and apply** (replaces the AppImage and relaunches; dictionary merge prompts match Windows).
+Download `DataDoctor-x86_64.AppImage` (or the matching arch), mark executable, run it. The live data dictionary is `~/.config/Data Doctor/bunker.db`. In-app **Quit and apply** replaces that same filename (renames are kept), relaunches, and does not leave extra files next to the AppImage.
 
 Build on the same arch/glibc you intend to ship:
 

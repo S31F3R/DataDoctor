@@ -167,9 +167,17 @@ def installRoot() -> Path | None:
 def updateDir() -> Path | None:
     """
     Canonical drop folder is updates/.
+    AppImage: under the user config dir so Downloads stays a single .AppImage.
     3.0.x Data Doctor.exe only looks in Update\\, so until python-embed
     exists we still write there.
     """
+    if detectInstallKind() == "appimage":
+        try:
+            d = Path(Utils.getConfigDir()) / "updates"
+            d.mkdir(parents=True, exist_ok=True)
+            return d
+        except Exception:
+            return None
     root = installRoot()
     if root is None:
         return None
@@ -709,7 +717,8 @@ def launcherApplyScript() -> Path | None:
 def spawnAppImageReplaceAndExit(newAppImage: Path, mainWindow=None) -> bool:
     """
     Start a detached shell that waits for this process to exit, then replaces
-    the current AppImage with newAppImage. Then quit the QApplication.
+    the current AppImage (keeping its filename, even if the user renamed it)
+    and relaunches. Extra updater files are not left next to the AppImage.
     """
     current = appImagePath()
     if current is None:
@@ -718,17 +727,15 @@ def spawnAppImageReplaceAndExit(newAppImage: Path, mainWindow=None) -> bool:
     if not newAppImage.is_file():
         return False
 
-    # Always write the script we ship in this build so a planted
-    # applyAppImageUpdate.sh next to the AppImage cannot run.
-    d = updateDir()
-    if d is None:
-        return False
-    script = d / "applyAppImageUpdate.sh"
+    # Write the updater to /tmp — never next to the user's AppImage.
     try:
+        fd, scriptPath = tempfile.mkstemp(prefix="datadoctor-apply-", suffix=".sh")
+        os.close(fd)
+        script = Path(scriptPath)
         script.write_text(_APPIMAGE_APPLY_SCRIPT, encoding="utf-8")
-        script.chmod(script.stat().st_mode | 0o111)
+        script.chmod(0o700)
     except Exception as e:
-        Logic.logException("could not write applyAppImageUpdate.sh", e)
+        Logic.logException("could not write AppImage apply script", e)
         return False
 
     import subprocess
@@ -739,7 +746,7 @@ def spawnAppImageReplaceAndExit(newAppImage: Path, mainWindow=None) -> bool:
         "--current",
         str(current),
         "--new",
-        str(newAppImage),
+        str(newAppImage.resolve()),
         "--wait-pid",
         str(os.getpid()),
     ]
@@ -752,15 +759,22 @@ def spawnAppImageReplaceAndExit(newAppImage: Path, mainWindow=None) -> bool:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        Logic.logMessage("INFO", f"Spawned AppImage replace: {newAppImage} → {current}")
+        Logic.logMessage(
+            "INFO",
+            f"Spawned AppImage replace: {newAppImage} → {current.name}",
+        )
     except Exception as e:
         Logic.logException("spawnAppImageReplaceAndExit failed", e)
         return False
 
-    # Quit app so wait-pid can finish
     try:
         from PyQt6.QtWidgets import QApplication
         app = QApplication.instance()
+        if mainWindow is not None:
+            try:
+                mainWindow.close()
+            except Exception:
+                pass
         if app is not None:
             app.quit()
     except Exception:
@@ -769,7 +783,7 @@ def spawnAppImageReplaceAndExit(newAppImage: Path, mainWindow=None) -> bool:
 
 
 _APPIMAGE_APPLY_SCRIPT = r'''#!/bin/bash
-# Replace running AppImage after it exits.
+# Replace the running AppImage after it exits. Keeps the user's filename.
 # Usage: applyAppImageUpdate.sh --current PATH --new PATH --wait-pid PID
 set -e
 CURRENT=""
@@ -784,7 +798,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ -z "$CURRENT" ] || [ -z "$NEW" ]; then
-  echo "Usage: $0 --current /path/DataDoctor.AppImage --new /path/Update/new.AppImage [--wait-pid PID]" >&2
+  echo "Usage: $0 --current /path/AppImage --new /path/new.AppImage [--wait-pid PID]" >&2
   exit 1
 fi
 if [ ! -f "$NEW" ]; then
@@ -792,7 +806,6 @@ if [ ! -f "$NEW" ]; then
   exit 1
 fi
 if [ -n "$WAIT_PID" ]; then
-  # Wait until the app process is gone (max ~10 min)
   for i in $(seq 1 600); do
     if ! kill -0 "$WAIT_PID" 2>/dev/null; then
       break
@@ -814,46 +827,67 @@ case "$magic" in
     ;;
 esac
 chmod +x "$NEW" 2>/dev/null || true
-# Backup then replace
+HERE="$(dirname "$CURRENT")"
+# Replace in place, keeping the name the user launched (including a rename).
+rm -f "${CURRENT}.bak"
 if [ -f "$CURRENT" ]; then
-  BAK="${CURRENT}.bak"
-  rm -f "$BAK"
-  mv "$CURRENT" "$BAK" || true
+  rm -f "$CURRENT"
 fi
 mv "$NEW" "$CURRENT"
 chmod +x "$CURRENT" 2>/dev/null || true
-# Drop pending marker if present
-UPD_DIR="$(dirname "$CURRENT")/updates"
-rm -f "$UPD_DIR/pending.json" 2>/dev/null || true
-rm -f "$(dirname "$CURRENT")/Update/pending.json" 2>/dev/null || true
-echo "AppImage updated: $CURRENT"
-# Relaunch so the new image can merge bunker.db into the config copy
+# Leftovers from older updates (script / folder next to the AppImage).
+rm -f "$HERE/applyAppImageUpdate.sh" "$HERE/applyAppImageUpdate"
+rm -f "$HERE/updates/pending.json" "$HERE/updates/README.txt"
+rm -f "$HERE/Update/pending.json" "$HERE/Update/README.txt"
+rmdir "$HERE/updates" 2>/dev/null || true
+rmdir "$HERE/Update" 2>/dev/null || true
+NEW_DIR="$(dirname "$NEW")"
+rm -f "$NEW_DIR/pending.json" "$NEW_DIR/README.txt"
+# Relaunch the same path/name, then delete this helper script.
 if [ -x "$CURRENT" ]; then
   nohup "$CURRENT" >/dev/null 2>&1 &
 fi
+rm -f "$0"
 '''
 
 
 def ensureAppImageApplyScriptOnDisk() -> Path | None:
-    """Copy apply script next to AppImage / install root if missing."""
-    root = installRoot()
-    if root is None:
-        return None
-    dest = root / "applyAppImageUpdate.sh"
-    if dest.is_file():
-        return dest
-    try:
-        dest.write_text(_APPIMAGE_APPLY_SCRIPT, encoding="utf-8")
-        dest.chmod(dest.stat().st_mode | 0o111)
-        return dest
-    except Exception as e:
-        Logic.logException("ensureAppImageApplyScriptOnDisk failed", e)
-        return None
+    """No longer drop a .sh next to the AppImage (in-app update uses /tmp)."""
+    return None
 
 
 # ---------------------------------------------------------------------------
 # Qt UI helpers (lazy imports so non-GUI scripts can import Version-only paths)
 # ---------------------------------------------------------------------------
+
+def pendingAppImagePath() -> Path | None:
+    """Downloaded AppImage waiting for Quit and apply (config updates/)."""
+    if detectInstallKind() != "appimage":
+        return None
+    d = updateDir()
+    if d is None:
+        return None
+    marker = d / "pending.json"
+    payload = None
+    if marker.is_file():
+        try:
+            data = json.loads(marker.read_text(encoding="utf-8"))
+            p = data.get("payload")
+            if p:
+                payload = Path(p)
+        except Exception:
+            payload = None
+    if payload is None or not payload.is_file():
+        hits = sorted(
+            d.glob("*.AppImage"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        payload = hits[0] if hits else None
+    if payload is not None and payload.is_file():
+        return payload
+    return None
+
 
 def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
     """Fire a background update check after the main window is up."""
@@ -861,6 +895,25 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
         from PyQt6.QtCore import QTimer
 
         def _go():
+            pending = pendingAppImagePath()
+            if pending is not None:
+                from PyQt6.QtWidgets import QMessageBox
+                current = appImagePath()
+                name = current.name if current is not None else "the AppImage"
+                box = QMessageBox(parent)
+                box.setWindowTitle("Update ready")
+                box.setText(
+                    f"A downloaded update is ready to replace {name} and restart."
+                )
+                applyBtn = box.addButton(
+                    "Quit and apply", QMessageBox.ButtonRole.AcceptRole
+                )
+                box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+                box.setDefaultButton(applyBtn)
+                box.exec()
+                if box.clickedButton() is applyBtn:
+                    spawnAppImageReplaceAndExit(pending, parent)
+                return
             if windowsNeedsLauncherRefresh():
                 runWindowsLauncherRefreshUi(parent)
             else:
@@ -1114,9 +1167,12 @@ def _promptUpdate(parent, info: dict) -> None:
     needsWindowsZip = (info.get("assetKind") == "windows") or windowsNeedsLauncherRefresh()
     if kind == "appimage":
         lines.append("")
+        current = appImagePath()
+        name = current.name if current is not None else "this AppImage"
         lines.append(
-            "Download will place the new AppImage in updates/. "
-            "You can Quit and apply, or run applyAppImageUpdate.sh later."
+            f"Download, then Data Doctor will quit, replace {name} "
+            "(same filename), and restart. Extra updater files are not left "
+            "next to the AppImage."
         )
     elif kind == "launcher":
         lines.append("")
@@ -1208,8 +1264,6 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                     return
                 if path is not None:
                     writePendingMarker(self.info, path)
-                    if (self.info.get("kind") or detectInstallKind()) == "appimage":
-                        ensureAppImageApplyScriptOnDisk()
             except Exception as e:
                 Logic.logException("download worker failed", e)
                 path = None
@@ -1228,25 +1282,25 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
             return
         kind = info.get("kind") or detectInstallKind()
         if kind == "appimage":
+            current = appImagePath()
+            name = current.name if current is not None else "the AppImage"
             box = QMessageBox(parent)
             box.setWindowTitle("Download complete")
             box.setText(
-                f"Downloaded:\n{path}\n\n"
-                "Replace the current AppImage now?\n"
-                "Data Doctor will quit; the updater waits for exit, then swaps the file.\n\n"
-                "Or choose Later and run applyAppImageUpdate.sh after closing."
+                f"Replace {name} now and restart Data Doctor?\n"
+                "The file keeps its current name. Choose Later to apply on next launch."
             )
             applyBtn = box.addButton("Quit and apply", QMessageBox.ButtonRole.AcceptRole)
             box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(applyBtn)
             box.exec()
             if box.clickedButton() is applyBtn:
                 if not spawnAppImageReplaceAndExit(Path(path), parent):
                     QMessageBox.warning(
                         parent,
                         "Update",
-                        "Could not start the AppImage replace script.\n"
-                        f"Close Data Doctor, then run applyAppImageUpdate.sh with:\n"
-                        f"  --new {path}",
+                        "Could not start the AppImage updater.\n"
+                        "Try again from Help / the update prompt.",
                     )
             return
 
