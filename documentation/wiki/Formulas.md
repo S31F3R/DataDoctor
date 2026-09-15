@@ -65,7 +65,7 @@ Examples: `=A1-B1`  `=B1+.01`  `=SUM(A1:A24)`  `=IF(A1>0, A1, 0)`  `=ROUND(A1/B1
 
 A leading decimal is a number (Excel-style): `.01` means `0.01`.
 
-A formula typed in a **custom** column is added to the Query list as an equation item (`=<formula>|EQUATION|<header>`). **Enter** applies that cell only; use the fill handle to copy down. Saving a Quick Look and querying it again fills the whole time range (in case you only typed one cell). The list stores the column header, not the word `custom`. If a referenced series is **removed** (header Remove), the equation cells show `#REF!` right away. Changing that series’ Data ID or moving the column keeps the equation (letters update).
+A formula typed in a **custom** column is added to the Query list as `EQUATION|<header>` (the formula itself is stored, not shown). **Enter** applies that cell only; use the fill handle to copy down. Saving a Quick Look and querying it again fills the whole time range (in case you only typed one cell). If a referenced series is **removed** (header Remove), the equation cells show `#REF!` right away and the query-list row turns red until the formula is valid again. Changing that series’ Data ID or moving the column keeps the equation (letters update).
 
 ## Errors
 

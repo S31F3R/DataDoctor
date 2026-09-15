@@ -118,6 +118,10 @@ def _textIsEquation(text: str) -> bool:
     if s.startswith("="):
         return True
     parts = s.split("|")
+    if not parts:
+        return False
+    if parts[0].upper() == EQUATION_INTERVAL:
+        return True
     return len(parts) >= 3 and parts[1].upper() == EQUATION_INTERVAL
 
 
@@ -131,8 +135,10 @@ def equationHeader(header) -> str:
 
 def parseListText(text: str):
     """
-    'dataID|interval|database' or equation '=<formula>|EQUATION|<header>'.
-    Returns (kind, dataId, interval, database_or_header) or None.
+    Series: 'dataID|interval|database'.
+    Equation display: 'EQUATION|<header>'.
+    Legacy: '=<formula>|EQUATION|<header>' or '<formula>|EQUATION|<header>'.
+    Returns (kind, dataId_or_formula, interval, database_or_header) or None.
     """
     s = (text or "").strip()
     if not s:
@@ -143,19 +149,25 @@ def parseListText(text: str):
         label = parts[2] if len(parts) > 2 else ""
         return (KIND_EQUATION, formula, EQUATION_INTERVAL, equationHeader(label))
     parts = s.split("|")
+    if len(parts) == 2 and parts[0].upper() == EQUATION_INTERVAL:
+        return (KIND_EQUATION, "", EQUATION_INTERVAL, equationHeader(parts[1]))
     if len(parts) != 3:
         return None
     dataId, interval, database = parts
+    if dataId.upper() == EQUATION_INTERVAL:
+        return (KIND_EQUATION, "", EQUATION_INTERVAL, equationHeader(interval if interval.upper() != EQUATION_INTERVAL else database))
     if interval.upper() == EQUATION_INTERVAL:
         return (KIND_EQUATION, dataId, EQUATION_INTERVAL, equationHeader(database))
     return (KIND_SERIES, dataId, interval, database)
 
 
 def equationListText(formula: str, header: str | None = None) -> str:
-    f = (formula or "").strip()
-    if not f.startswith("="):
-        f = "=" + f
-    return f"{f}|{EQUATION_INTERVAL}|{equationHeader(header)}"
+    """Visible query-list / Quick Look text: EQUATION|<header> (formula is payload-only)."""
+    return f"{EQUATION_INTERVAL}|{equationHeader(header)}"
+
+
+def formulaIsBroken(formula) -> bool:
+    return "#REF!" in str(formula or "")
 
 
 def seriesFlagsFromQueryItem(queryItem) -> dict:
@@ -299,9 +311,17 @@ def recolorQueryList(listWidget):
             overlayFlags.append(bool(itemFlags(item).get("overlay")))
     primary, secondary = pairColors(listWidget)
     defaultFg = listWidget.palette().color(QPalette.ColorRole.Text)
+    brokenFg = _equationBrokenColor(listWidget)
     for i in range(n):
         item = listWidget.item(i)
         if item is None:
+            continue
+        if itemKind(item) == KIND_EQUATION:
+            payload = itemPayload(item)
+            if formulaIsBroken(payload.get("formula")) or formulaIsBroken(item.text()):
+                item.setForeground(QBrush(brokenFg))
+            else:
+                item.setForeground(QBrush(defaultFg))
             continue
         role = pairRoleForIndex(overlayFlags, i)
         if role == "primary":
@@ -310,6 +330,18 @@ def recolorQueryList(listWidget):
             item.setForeground(QBrush(secondary))
         else:
             item.setForeground(QBrush(defaultFg))
+
+
+def _equationBrokenColor(widget=None):
+    """Red that stays readable on light and dark Base."""
+    pal = widget.palette() if widget is not None else None
+    if pal is None:
+        app = QApplication.instance()
+        pal = app.palette() if app is not None else QPalette()
+    base = pal.color(QPalette.ColorRole.Base)
+    if _relLuma(base) < 0.45:
+        return QColor(255, 90, 90)
+    return QColor(178, 0, 0)
 
 
 def applyFlagToAll(listWidget, key: str, value: bool):
