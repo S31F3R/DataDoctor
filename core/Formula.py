@@ -182,6 +182,14 @@ def tokenize(formula: str):
             tokens.append(("STR", "".join(buf)))
             i = j + 1
             continue
+        if ch == "#":
+            j = i + 1
+            while j < n and (s[j].isalnum() or s[j] in "_/!"):
+                j += 1
+            word = s[i:j]
+            if word in _ERROR_VALUES:
+                raise ValueError(word)
+            raise ValueError(ERR_VALUE)
         raise ValueError(ERR_VALUE)
     return tokens
 

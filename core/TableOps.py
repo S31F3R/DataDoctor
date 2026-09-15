@@ -685,6 +685,10 @@ def removeColumnsAt(mainWindow, col, extraCols=None):
     Upload.applyEditability(table, mainWindow)
     Upload.selectTableColumns(table, [])
     mainWindow._headerSelectCols = []
+    try:
+        recalculateAll(mainWindow)
+    except Exception as e:
+        Logic.logException("removeColumnsAt: formula recalc failed", e)
     return True
 
 
