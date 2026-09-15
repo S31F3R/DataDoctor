@@ -10,3 +10,5 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- AppImage in-app update keeps the launched filename, relaunches, and does not leave updates/ or .sh next to the AppImage
+
