@@ -589,7 +589,7 @@ class uiDataDictionary(QMainWindow):
                 )
                 return
 
-            dbPath = Logic.resourcePath('core/bunker.db')
+            dbPath = Logic.bunkerDbPath()
 
             try:
                 Logic.ensureDataDictionarySchema()
@@ -610,14 +610,6 @@ class uiDataDictionary(QMainWindow):
                 QMessageBox.warning(self, "Save Failed", f"Could not save data dictionary:\n{e}")
                 return
 
-            self.sizeDictionaryColumns()
-            if self._headerFilters is not None:
-                self._headerFilters.rebuild()
-            q = getattr(self.winMain, "winQuery", None) if self.winMain is not None else None
-            search = getattr(q, "uiSearch", None) if q is not None else None
-            if search is not None and hasattr(search, "rebuildHeaderFilters"):
-                search.rebuildHeaderFilters()
-
             if Config.debug:
                 Logic.logMessage(
                     "DEBUG",
@@ -629,6 +621,22 @@ class uiDataDictionary(QMainWindow):
                 "Saved",
                 f"Data dictionary saved ({len(dataRows)} rows).",
             )
+            # Heavy UI refresh after the Saved dialog so a native crash in
+            # column-size / Search rebuild cannot swallow the confirmation.
+            def _postSaveRefresh():
+                try:
+                    self.sizeDictionaryColumns()
+                    if self._headerFilters is not None:
+                        self._headerFilters.rebuild()
+                    q = getattr(self.winMain, "winQuery", None) if self.winMain is not None else None
+                    search = getattr(q, "uiSearch", None) if q is not None else None
+                    if search is not None and hasattr(search, "rebuildHeaderFilters"):
+                        search.rebuildHeaderFilters()
+                except Exception as e:
+                    Logic.logException("DataDictionary post-save UI refresh failed", e)
+
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, _postSaveRefresh)
         finally:
             if self.mainTable is not None and sortingWasOn:
                 self.mainTable.setSortingEnabled(True)

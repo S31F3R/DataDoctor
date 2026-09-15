@@ -600,9 +600,9 @@ def extractSeries(table, columns=None, rows=None, columnMetadata=None):
     return timestamps, tsTexts, series, warnings
 
 
-# Legend toggle markers (checkbox look without a side panel)
-_LEGEND_ON = '☑'
-_LEGEND_OFF = '☐'
+# ASCII markers — Noto Sans has no U+2611 BALLOT BOX WITH CHECK (glyph 9745)
+_LEGEND_ON = '[x]'
+_LEGEND_OFF = '[ ]'
 
 
 class GraphPanel(QWidget):
@@ -989,7 +989,7 @@ class GraphPanel(QWidget):
     def _buildInteractiveLegend(self, theme):
         """
         In-plot legend (same spot as before). Click an entry to toggle that
-        series; labels use ☑/☐ so it still feels like checkboxes without a side panel.
+        series; labels use [x]/[ ] so it still feels like checkboxes without a side panel.
 
         Toggles are handled in button_press (not pick_event): zoom/pan mode holds
         canvas.widgetlock, which blocks Figure.pick and would silence legend clicks.
@@ -1219,7 +1219,7 @@ class GraphPanel(QWidget):
                 Logic.logMessage("DEBUG", f"_cancelToolbarInteraction: {e}")
 
     def _refreshLegendAppearance(self):
-        """Update ☑/☐ marks and dim legend proxies for hidden series."""
+        """Update [x]/[ ] marks and dim legend proxies for hidden series."""
         if self._legend is None:
             return
         try:
@@ -1695,7 +1695,7 @@ class GraphPanel(QWidget):
         else:
             ax.grid(True, alpha=0.3)
 
-        # In-plot legend with ☑/☐ click-to-toggle (no left panel)
+        # In-plot legend with [x]/[ ] click-to-toggle (no left panel)
         self._buildInteractiveLegend(theme)
 
         # Capture home extents before any pan (used as clamp bounds)

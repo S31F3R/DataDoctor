@@ -61,7 +61,11 @@ Unary minus works (`=-A1`). Text in quotes is allowed (`"ok"`).
 | `INT(n)` | Floor toward −∞ |
 | `PI()` | π |
 
-Examples: `=A1-B1`  `=SUM(A1:A24)`  `=IF(A1>0, A1, 0)`  `=ROUND(A1/B1, 2)`
+Examples: `=A1-B1`  `=B1+.01`  `=SUM(A1:A24)`  `=IF(A1>0, A1, 0)`  `=ROUND(A1/B1, 2)`
+
+A leading decimal is a number (Excel-style): `.01` means `0.01`.
+
+A formula typed in a **custom** column is added to the Query list as an equation item and stored on the Quick Look. It is filled down the whole time range. If a referenced series is **removed** from the query, the equation breaks (`#REF!`). Changing that series’ Data ID or moving the column keeps the equation (letters update).
 
 ## Errors
 

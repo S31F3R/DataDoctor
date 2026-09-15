@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QCoreApplication, QTimer
 from PyQt6.QtGui import QColor, QBrush, QFontMetrics
 from PyQt6.QtWidgets import QTableWidgetItem, QHeaderView, QAbstractItemView, QMessageBox, QSizePolicy, QProgressDialog
-from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils, Upload, TableColors
+from core import Logic, USBR, USGS, Aquarius, Config, QueryUtils, Utils, Upload, TableColors, QueryFlags
 
 # ---------------------------------------------------------------------------
 # Display timestamps by interval
@@ -931,7 +931,13 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
 
         for colIdx in range(min(numCols, len(rowData))):
             cellText = rowData[colIdx].strip() if colIdx < len(rowData) else ''
-            if not rawData and cellText:
+            flags = (
+                QueryFlags.seriesFlagsFromQueryItem(queryItems[colIdx])
+                if queryItems and colIdx < len(queryItems)
+                else None
+            )
+            rawThis = bool(flags.get("raw")) if flags else bool(rawData)
+            if not rawThis and cellText:
                 rule = seriesRules[colIdx] if colIdx < len(seriesRules) else Logic.DEFAULT_ROUNDING_SPEC
                 display = Logic.valuePrecision(cellText, rule=rule)
             else:
@@ -1020,6 +1026,9 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
         if isinstance(meta, dict) and meta.get('type') == 'delta':
             if Config.debug:
                 Logic.logMessage("DEBUG", f"qaqc: Skipping delta column {col}")
+            continue
+        flags = meta.get('flags') if isinstance(meta, dict) else None
+        if isinstance(flags, dict) and 'qaqc' in flags and not flags.get('qaqc'):
             continue
         lookupId = lookupIds[col] if lookupIds is not None and col < len(lookupIds) else None
         if Config.debug:
@@ -1229,6 +1238,8 @@ def executeQuery(
         Config.overlayChecked = overlayChecked
         Config.rawData = bool(rawDataChecked)
         Config.qaqcEnabled = bool(qaqcChecked)
+        equationItems = [it for it in (queryItems or []) if QueryFlags.isEquationQueryItem(it)]
+        queryItems = [it for it in (queryItems or []) if not QueryFlags.isEquationQueryItem(it)]
         if isRefresh and mainWindow is not None:
             try:
                 from core import TableOps
@@ -1246,7 +1257,10 @@ def executeQuery(
                 ),
             )
         if not isInternal:
-            queryItems = [item for item in queryItems if item[2] != 'AQUARIUS']
+            queryItems = [
+                item for item in queryItems
+                if QueryFlags.queryItemDatabase(item) != 'AQUARIUS'
+            ]
         if Config.debug:
             Logic.logMessage("DEBUG", "executeQuery: Filtered AQUARIUS for public query, remaining items={}".format(len(queryItems)))
         if not queryItems:
@@ -1255,7 +1269,10 @@ def executeQuery(
             if Config.debug:
                 Logic.logMessage("DEBUG", "executeQuery: No valid items after filtering, aborting")
             return
-        progressDialog = QProgressDialog(f"Querying data... (0/{len(set(item[2] for item in queryItems))} complete)", "Cancel", 0, 100, mainWindow)
+        progressDialog = QProgressDialog(
+            f"Querying data... (0/{len(set(QueryFlags.queryItemDatabase(item) for item in queryItems))} complete)",
+            "Cancel", 0, 100, mainWindow,
+        )
         progressDialog.setWindowModality(Qt.WindowModality.WindowModal)
         progressDialog.setAutoReset(False)
         progressDialog.setAutoClose(False)
@@ -1275,7 +1292,7 @@ def executeQuery(
             endDate = datetime.strptime(endDate, '%Y-%m-%d %H:%M')
         if Config.debug:
             Logic.logMessage("DEBUG", f"executeQuery: Ensured dates are datetime for rounding: start={startDate}, end={endDate}")
-        queryItems.sort(key=lambda x: x[4])
+        queryItems.sort(key=lambda x: x[4] if isinstance(x, (tuple, list)) and len(x) > 4 else 0)
         firstInterval = queryItems[0][1]
         firstDb = queryItems[0][2]
 
@@ -1321,7 +1338,8 @@ def executeQuery(
         labelsDict = {} # Always dict, populated only if isInternal
         groups = defaultdict(list)
 
-        for dataID, interval, db, mrid, origIndex in queryItems:
+        for item in queryItems:
+            dataID, interval, db, mrid, origIndex = item[0], item[1], item[2], item[3], item[4]
             if interval == 'INSTANT':
                 if db.startswith('USBR-'):
                     interval = 'INSTANT:60'
@@ -1491,7 +1509,8 @@ def executeQuery(
         progressDialog.repaint()
         QCoreApplication.processEvents()
 
-        for dataID, _, _, _, _ in queryItems:
+        for item in queryItems:
+            dataID = item[0]
             if dataID not in valueDict:
                 valueDict[dataID] = defaultBlanks
 
@@ -1590,8 +1609,18 @@ def executeQuery(
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Stored {len(rawResponses)} rawResponses for Aquarius")
 
-            # Modify table if query tools are checked
-            if deltaChecked or overlayChecked:
+            anyOverlay = overlayChecked or any(
+                QueryFlags.seriesFlagsFromQueryItem(it).get("overlay") for it in queryItems
+            )
+            anyDelta = deltaChecked or any(
+                QueryFlags.seriesFlagsFromQueryItem(it).get("delta") for it in queryItems
+            )
+            anyQaqc = qaqcChecked or any(
+                QueryFlags.seriesFlagsFromQueryItem(it).get("qaqc") for it in queryItems
+            )
+            Config.qaqcEnabled = bool(anyQaqc)
+            # Modify table if overlay/delta flags are on (checkbox or per-item)
+            if anyDelta or anyOverlay:
                 if progressDialog is not None:
                     progressDialog.setLabelText("Applying overlay/delta...")
                     progressDialog.setValue(97)
@@ -1634,7 +1663,7 @@ def executeQuery(
                         progressDialog=progressDialog,
                         mainWindow=mainWindow,
                     )
-                if overlayChecked:
+                if anyOverlay:
                     if progressDialog is not None:
                         progressDialog.setLabelText("Applying overlay colors...")
                         progressDialog.setValue(99)
@@ -1659,7 +1688,9 @@ def executeQuery(
                         'dataIds': mergedDataIds[col], 
                         'dbs': mergedDbs[col], 
                         'queryInfos': mergedQueryInfos[col], 
-                        'lookupId': lookupId  
+                        'lookupId': lookupId,
+                        'flags': QueryFlags.seriesFlagsFromQueryItem(queryItems[col])
+                        if col < len(queryItems) else None,
                     }
 
                     mainWindow.columnMetadata.append(metadata)
@@ -1693,6 +1724,13 @@ def executeQuery(
             QueryUtils.applyUsbrRbaseFallbackColors(
                 mainWindow.mainTable, mainWindow, progressDialog=progressDialog
             )
+
+            if equationItems:
+                try:
+                    from core import FormulaUi
+                    FormulaUi.applyEquationQueryItems(mainWindow, equationItems)
+                except Exception as e:
+                    Logic.logException("executeQuery: apply equations failed", e)
 
             # Column widths last: final headers + formatted cell text only
             # (never raw CSV from buildTable; never mid-modifyTable rewrite)

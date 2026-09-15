@@ -8,7 +8,7 @@ A desktop tool for querying, reviewing, and (on Reclamation HDB) editing hydrolo
 
 Built for Reclamation and USGS workflows: data dictionary labels, QAQC coloring, overlay/delta pairs, graphing, CSV export, and saved Quick Looks.
 
-Current version: **3.0.1** (see `core/Version.py`). Next Windows builds ship Python 3.14 embeddable.
+Current version: **3.2.2** (see `core/Version.py`). Windows builds ship Python 3.14 embeddable.
 
 [Wiki](https://github.com/S31F3R/DataDoctor/wiki) · [Releases](https://github.com/S31F3R/DataDoctor/releases) · [Issues](https://github.com/S31F3R/DataDoctor/issues)
 
@@ -47,7 +47,7 @@ Unzip a **Windows** package and double-click `Data Doctor.exe`.
 
 ### Linux (AppImage)
 
-Download `DataDoctor-x86_64.AppImage` (or the matching arch), mark executable, run it.
+Download `DataDoctor-x86_64.AppImage` (or the matching arch), mark executable, run it. The live data dictionary is `~/.config/Data Doctor/bunker.db`. In-app update uses **Quit and apply** (replaces the AppImage and relaunches; dictionary merge prompts match Windows).
 
 Build on the same arch/glibc you intend to ship:
 
@@ -92,7 +92,7 @@ Config and logs are **per user**, not inside the install folder.
 
 Inside that folder: `user.config`, `logs/app.log`, `quickLook/query/`, `quickLook/sql/`. On Windows the launcher and `applyUpdate` also write to `logs/app.log`; a window that never appears should leave `startup:` / `launcher:` lines there (and `logs/fault.log` for a native crash).
 
-The live data dictionary is `core/bunker.db` next to the app (Windows: `pythonFiles\core\bunker.db`). Do not overwrite it with a packaged copy if the dictionary has local edits — `applyUpdate` merges.
+The live data dictionary is `core/bunker.db` next to the app (Windows: `pythonFiles\core\bunker.db`; AppImage: `~/.config/Data Doctor/bunker.db`). Do not overwrite it with a packaged copy if the dictionary has local edits — `applyUpdate` (and AppImage first-run / post-update) merges. Answering **N** to Common Names / Data Types still inserts **new** IDs from the packaged dictionary.
 
 See [App Data](https://github.com/S31F3R/DataDoctor/wiki/App-Data).
 

@@ -2,28 +2,17 @@
 """
 Merge a packaged bunker.db into the user's bunker.db without wiping user edits.
 
-Rules (per To Do List):
+CLI wrapper around core.BunkerMerge. Rules:
   - Match rows on dataID + siteID
   - Always update from packaged: siteName, database (when packaged differs)
   - Prompt y/n (console): commonName, datatype  (existing rows only; new
-    rows always take the packaged values)
-  - Fill blanks only (never override user values): valuePrecision,
-    precisionOverride, expectedMin, expectedMax, cuttoffMin, cutoffMax,
-    rateOfChange
+    rows always take the packaged values — answering N does not skip inserts)
+  - Fill blanks only: valuePrecision, precisionOverride, expectedMin,
+    expectedMax, cuttoffMin, cutoffMax, rateOfChange
   - Insert rows that exist only in the packaged DB
   - Never delete user-only rows
   - No TTY / EOF → leave commonName and datatype on existing rows alone
-
-Typical Windows layout after packageWindows.py:
-  <install>/Project Files/temp/bunker.db   ← packaged merge source
-  <install>/Project Files/core/bunker.db   ← live user dictionary (destination)
-  <install>/Project Files/scripts/updateBunker.py
-  <install>/applyUpdate.cmd                ← full update (calls this for bunker merge)
-
-Full app updates run this automatically via applyUpdate.cmd / applyUpdate.py.
-Dictionary-only merges can invoke this script directly.
-
-After a successful merge (not dry-run), Project Files/temp/ is removed.
+  - Identical live vs packaged files → skip merge (no prompts)
 
 Usage:
   python updateBunker.py
@@ -34,94 +23,47 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import shutil
-import sqlite3
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-MERGE_THREADS = 6
 
-
-# Always update these from packaged when packaged has a non-empty different value
-ALWAYS_UPDATE_FIELDS = ("siteName", "database")
-# Existing rows: only if the user answers y (or --update-common-names / --update-datatypes)
-OPTIONAL_UPDATE_FIELDS = ("commonName", "datatype", "dataType")
-# Back-compat alias for callers/docs that still mention UPDATE_FIELDS
-UPDATE_FIELDS = ALWAYS_UPDATE_FIELDS + OPTIONAL_UPDATE_FIELDS
-# Fill user blanks only — never replace a value the user already set
-FILL_BLANK_FIELDS = (
-    "valuePrecision",
-    "precisionOverride",
-    "expectedMin",
-    "expectedMax",
-    "cuttoffMin",
-    "cutoffMax",
-    "rateOfChange",
-)
-# Match keys (case-insensitive column resolve)
-MATCH_KEYS = ("dataID", "siteID")
-
-
-def resolveColumns(conn: sqlite3.Connection, table: str = "dataDictionary"):
-    cur = conn.execute(f"PRAGMA table_info({table})")
-    cols = [row[1] for row in cur.fetchall()]
-    lowerMap = {c.lower(): c for c in cols}
-    return cols, lowerMap
-
-
-def col(lowerMap, *candidates):
-    for name in candidates:
-        if name.lower() in lowerMap:
-            return lowerMap[name.lower()]
-    return None
-
-
-def askYesNo(prompt: str, default: bool = False) -> bool:
-    """Terminal y/n. Empty / EOF / no TTY uses default (n unless default True)."""
-    suffix = " [Y/n] " if default else " [y/N] "
-    if not sys.stdin.isatty():
-        print(f"{prompt} (no console — default {'Y' if default else 'N'})")
-        return default
+def _loadMerge():
     try:
-        raw = input(prompt + suffix).strip().lower()
-    except EOFError:
-        return default
-    if not raw:
-        return default
-    if raw in ("y", "yes"):
-        return True
-    if raw in ("n", "no"):
-        return False
-    print("Please answer y or n.")
-    return askYesNo(prompt, default)
+        from core.BunkerMerge import askYesNo, filesIdentical, merge
+        return askYesNo, filesIdentical, merge
+    except ImportError:
+        pass
+    here = Path(__file__).resolve()
+    for p in here.parents:
+        if (p / "core" / "BunkerMerge.py").is_file():
+            if str(p) not in sys.path:
+                sys.path.insert(0, str(p))
+            from core.BunkerMerge import askYesNo, filesIdentical, merge
+            return askYesNo, filesIdentical, merge
+    raise ImportError("core.BunkerMerge not found (looked next to this script)")
 
 
-def openDb(path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(path))
-    conn.row_factory = sqlite3.Row
-    return conn
+askYesNo, filesIdentical, merge = _loadMerge()
 
 
 def findDefaultPaths():
     """
     Heuristic paths relative to this script.
 
-    Script location (packaged): <install>/Project Files/scripts/updateBunker.py
+    Script location (packaged): <install>/pythonFiles/scripts/updateBunker.py
       packaged → ../temp/bunker.db
       user     → ../core/bunker.db
     """
-    here = Path(__file__).resolve().parent  # .../Project Files/scripts
-    projectFiles = here.parent              # .../Project Files
-    installRoot = projectFiles.parent       # zip / install root
+    here = Path(__file__).resolve().parent
+    projectFiles = here.parent
+    installRoot = projectFiles.parent
 
     candidatesPackaged = [
         projectFiles / "temp" / "bunker.db",
         installRoot / "pythonFiles" / "temp" / "bunker.db",
         installRoot / "Project Files" / "temp" / "bunker.db",
-        # Legacy fallbacks if someone still drops packaged DB in core/
         projectFiles / "core" / "bunker.db.packaged",
         here / "bunker.db",
     ]
@@ -138,17 +80,13 @@ def findDefaultPaths():
 
 
 def cleanupTempFolder(packagedPath: Path):
-    """
-    After a successful merge, remove Project Files/temp/ when the packaged
-    bunker lived there (so users are not left with a stale merge source).
-    """
+    """After a successful merge, remove pythonFiles/temp/ when the packaged bunker lived there."""
     try:
         if packagedPath is None or not packagedPath.name.lower().startswith("bunker"):
             return
         tempDir = packagedPath.parent
         if tempDir.name.lower() != "temp":
             return
-        # Only remove temp if it sits under Project Files
         parentName = tempDir.parent.name.lower()
         if parentName not in ("pythonfiles", "project files", "projectfiles"):
             if "project" not in parentName and "python" not in parentName:
@@ -156,7 +94,6 @@ def cleanupTempFolder(packagedPath: Path):
         if packagedPath.is_file():
             packagedPath.unlink()
             print(f"Removed packaged file: {packagedPath}")
-        # Remove empty temp dir (and any leftover files we created)
         if tempDir.is_dir():
             for child in tempDir.iterdir():
                 try:
@@ -168,254 +105,9 @@ def cleanupTempFolder(packagedPath: Path):
                 tempDir.rmdir()
                 print(f"Removed temp folder: {tempDir}")
             except OSError:
-                # Non-empty or busy — leave it
                 print(f"Note: could not remove temp folder (not empty?): {tempDir}")
     except Exception as e:
         print(f"WARN: temp cleanup failed: {e}", file=sys.stderr)
-
-
-def merge(
-    packagedPath: Path,
-    userPath: Path,
-    dryRun: bool = False,
-    updateCommonNames: bool = False,
-    updateDatatypes: bool = False,
-) -> int:
-    if not packagedPath.is_file():
-        print(f"ERROR: packaged bunker not found: {packagedPath}", file=sys.stderr)
-        return 1
-    if not userPath.is_file():
-        print(f"ERROR: user bunker not found: {userPath}", file=sys.stderr)
-        return 1
-    if packagedPath.resolve() == userPath.resolve():
-        print(
-            "ERROR: packaged and user paths are the same file. "
-            "Pass a separate --packaged (from the update) and --user (live) path.",
-            file=sys.stderr,
-        )
-        return 1
-
-    # One backup only — drop prior bunker.db.bak* then write bunker.db.bak
-    if not dryRun:
-        for old in userPath.parent.glob(userPath.name + ".bak*"):
-            try:
-                old.unlink()
-                print(f"Removed old backup: {old}")
-            except OSError as e:
-                print(f"WARN: could not remove {old}: {e}", file=sys.stderr)
-        backup = userPath.with_suffix(userPath.suffix + ".bak")
-        shutil.copy2(userPath, backup)
-        print(f"Backup: {backup}", flush=True)
-
-    print("Merging...", flush=True)
-
-    pkg = openDb(packagedPath)
-    usr = openDb(userPath)
-    try:
-        pkgCols, pkgMap = resolveColumns(pkg)
-        usrCols, usrMap = resolveColumns(usr)
-
-        pkgDataId = col(pkgMap, "dataID", "dataId", "dataid")
-        pkgSiteId = col(pkgMap, "siteID", "siteId", "siteid")
-        usrDataId = col(usrMap, "dataID", "dataId", "dataid")
-        usrSiteId = col(usrMap, "siteID", "siteId", "siteid")
-        if not all([pkgDataId, pkgSiteId, usrDataId, usrSiteId]):
-            print("ERROR: dataID/siteID columns missing in one of the databases", file=sys.stderr)
-            return 1
-
-        mergeFieldNames = []
-        seenLower = set()
-        for f in list(ALWAYS_UPDATE_FIELDS) + list(OPTIONAL_UPDATE_FIELDS) + list(FILL_BLANK_FIELDS):
-            if f.lower() in seenLower:
-                continue
-            seenLower.add(f.lower())
-            mergeFieldNames.append(f)
-        pkgFields = {f: col(pkgMap, f) for f in mergeFieldNames}
-        usrFields = {f: col(usrMap, f) for f in mergeFieldNames}
-        fillBlankLower = {f.lower() for f in FILL_BLANK_FIELDS}
-        optionalAllowed = set()
-        if updateCommonNames:
-            optionalAllowed.add("commonname")
-        if updateDatatypes:
-            optionalAllowed.add("datatype")
-        optionalFieldLower = {f.lower() for f in OPTIONAL_UPDATE_FIELDS}
-
-        pkgRows = [dict(row) for row in pkg.execute("SELECT * FROM dataDictionary").fetchall()]
-        userByKey = {}
-        for row in usr.execute("SELECT * FROM dataDictionary").fetchall():
-            d = dict(row)
-            userByKey[_rowKey(d.get(usrDataId), d.get(usrSiteId))] = d
-
-        workers = min(MERGE_THREADS, max(1, len(pkgRows)))
-        chunks = _splitRows(pkgRows, workers)
-        updates = []
-        inserts = []
-        skipped = 0
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = [
-                pool.submit(
-                    _planChunk,
-                    chunk,
-                    userByKey,
-                    pkgCols,
-                    pkgDataId,
-                    pkgSiteId,
-                    usrDataId,
-                    usrSiteId,
-                    usrMap,
-                    mergeFieldNames,
-                    pkgFields,
-                    usrFields,
-                    fillBlankLower,
-                    optionalFieldLower,
-                    optionalAllowed,
-                )
-                for chunk in chunks
-            ]
-            for fut in as_completed(futures):
-                chunkUpdates, chunkInserts, chunkSkipped = fut.result()
-                updates.extend(chunkUpdates)
-                inserts.extend(chunkInserts)
-                skipped += chunkSkipped
-
-        if not dryRun:
-            for sql, params in updates:
-                usr.execute(sql, params)
-            for sql, params in inserts:
-                usr.execute(sql, params)
-            usr.commit()
-
-        print(
-            f"{'DRY-RUN ' if dryRun else ''}Merge complete: "
-            f"{len(updates)} updated, {len(inserts)} inserted, {skipped} unchanged/skipped",
-            flush=True,
-        )
-        return 0
-    finally:
-        pkg.close()
-        usr.close()
-
-
-def _filesIdentical(a: Path, b: Path) -> bool:
-    try:
-        if a.resolve() == b.resolve():
-            return True
-    except Exception:
-        pass
-    try:
-        if a.stat().st_size != b.stat().st_size:
-            return False
-    except OSError:
-        return False
-    h1 = hashlib.sha256()
-    h2 = hashlib.sha256()
-    try:
-        with open(a, "rb") as f:
-            for chunk in iter(lambda: f.read(1 << 20), b""):
-                h1.update(chunk)
-        with open(b, "rb") as f:
-            for chunk in iter(lambda: f.read(1 << 20), b""):
-                h2.update(chunk)
-    except OSError:
-        return False
-    return h1.digest() == h2.digest()
-
-
-def _rowKey(dataId, siteId):
-    return (
-        None if dataId is None else str(dataId),
-        None if siteId is None else str(siteId),
-    )
-
-
-def _splitRows(rows, n):
-    if not rows:
-        return []
-    n = max(1, min(n, len(rows)))
-    length = len(rows)
-    base, extra = divmod(length, n)
-    out = []
-    start = 0
-    for i in range(n):
-        size = base + (1 if i < extra else 0)
-        if size <= 0:
-            continue
-        out.append(rows[start:start + size])
-        start += size
-    return out
-
-
-def _planChunk(
-    rows,
-    userByKey,
-    pkgCols,
-    pkgDataId,
-    pkgSiteId,
-    usrDataId,
-    usrSiteId,
-    usrMap,
-    mergeFieldNames,
-    pkgFields,
-    usrFields,
-    fillBlankLower,
-    optionalFieldLower,
-    optionalAllowed,
-):
-    updates = []
-    inserts = []
-    skipped = 0
-    for row in rows:
-        dataId = row.get(pkgDataId)
-        siteId = row.get(pkgSiteId)
-        if dataId is None and siteId is None:
-            skipped += 1
-            continue
-        existing = userByKey.get(_rowKey(dataId, siteId))
-        if existing is not None:
-            sets = []
-            params = []
-            for field in mergeFieldNames:
-                pCol = pkgFields.get(field)
-                uCol = usrFields.get(field)
-                if not pCol or not uCol:
-                    continue
-                newVal = row.get(pCol)
-                oldVal = existing.get(uCol)
-                if newVal is None or str(newVal).strip() == "":
-                    continue
-                if oldVal is not None and str(oldVal) == str(newVal):
-                    continue
-                if field.lower() in fillBlankLower:
-                    if oldVal is not None and str(oldVal).strip() != "":
-                        continue
-                if field.lower() in optionalFieldLower and field.lower() not in optionalAllowed:
-                    continue
-                sets.append(f"{uCol} = ?")
-                params.append(newVal)
-            if sets:
-                params.extend([dataId, siteId])
-                sql = (
-                    f"UPDATE dataDictionary SET {', '.join(sets)} "
-                    f"WHERE {usrDataId} = ? AND {usrSiteId} = ?"
-                )
-                updates.append((sql, params))
-            else:
-                skipped += 1
-        else:
-            insertCols = []
-            insertVals = []
-            for c in pkgCols:
-                if c.lower() in usrMap:
-                    insertCols.append(usrMap[c.lower()])
-                    insertVals.append(row.get(c))
-            if not insertCols:
-                skipped += 1
-                continue
-            placeholders = ", ".join("?" * len(insertCols))
-            colList = ", ".join(insertCols)
-            sql = f"INSERT INTO dataDictionary ({colList}) VALUES ({placeholders})"
-            inserts.append((sql, insertVals))
-    return updates, inserts, skipped
 
 
 def main():
@@ -485,8 +177,11 @@ def main():
         print(f"No existing bunker.db — installed packaged dictionary → {dest}")
         cleanupTempFolder(Path(packaged))
         return 0
-    if _filesIdentical(Path(packaged), Path(user)):
-        print("Live bunker.db already matches packaged — skip merge (no prompts)")
+    if filesIdentical(Path(packaged), Path(user)):
+        print(
+            "Live bunker.db already matches packaged — skip merge "
+            "(no Common Name / Data Type prompts)"
+        )
         if not args.dryRun:
             cleanupTempFolder(Path(packaged))
         return 0
@@ -501,6 +196,8 @@ def main():
         f"commonName updates: {'yes' if updateCommon else 'no'}; "
         f"datatype updates: {'yes' if updateTypes else 'no'}"
     )
+    if not updateCommon or not updateTypes:
+        print("New rows still receive packaged commonName and datatype.")
     code = merge(
         packaged,
         user,

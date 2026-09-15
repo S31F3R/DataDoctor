@@ -827,6 +827,10 @@ UPD_DIR="$(dirname "$CURRENT")/updates"
 rm -f "$UPD_DIR/pending.json" 2>/dev/null || true
 rm -f "$(dirname "$CURRENT")/Update/pending.json" 2>/dev/null || true
 echo "AppImage updated: $CURRENT"
+# Relaunch so the new image can merge bunker.db into the config copy
+if [ -x "$CURRENT" ]; then
+  nohup "$CURRENT" >/dev/null 2>&1 &
+fi
 '''
 
 

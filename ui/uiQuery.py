@@ -9,7 +9,7 @@ from datetime import datetime
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QEvent
 from PyQt6 import uic
-from core import Logic, Query, Utils, Config, Upload, QuickLookDates
+from core import Logic, Query, Utils, Config, Upload, QuickLookDates, QueryFlags
 from ui.uiSearch import uiSearch
 
 # Full interval list for non-USGS databases (matches prior cbInterval population)
@@ -99,6 +99,10 @@ class uiQuery(QMainWindow):
         self.radioGroup.addButton(self.rbCustomDateTime)
         self.radioGroup.addButton(self.rbPrevDayToCurrent)
         self.radioGroup.addButton(self.rbPrevWeekToCurrent)
+        self._bulkFlagGuard = False
+        self.loadedQuickLookName = None
+        self._tableDirtyQuickLook = False
+        self._onLoadFingerprint = None
 
         # Interval combobox: full list by default; USGS-NWIS trims to daily max
         self.populateIntervalCombo(ALL_INTERVALS)
@@ -160,6 +164,14 @@ class uiQuery(QMainWindow):
             self.listQueryList.itemDoubleClicked.connect(self.onQueryListDoubleClicked)
             self.listQueryList.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             self.listQueryList.customContextMenuRequested.connect(self.showQueryListContextMenu)
+        for box, key in (
+            (self.chkbOverlay, "overlay"),
+            (self.chkbDelta, "delta"),
+            (self.chkbRawData, "raw"),
+            (self.chkbQAQC, "qaqc"),
+        ):
+            if box is not None:
+                box.toggled.connect(lambda checked, k=key: self._onOptionCheckboxToggled(k, checked))
 
         # Install event filters
         self.qleDataID.installEventFilter(self)
@@ -296,16 +308,29 @@ class uiQuery(QMainWindow):
             queryItems = []
 
             for i in range(self.listQueryList.count()):
-                itemText = self.listQueryList.item(i).text().strip()
-                parts = itemText.split('|')
-
+                listItem = self.listQueryList.item(i)
+                itemText = listItem.text().strip() if listItem is not None else ""
+                parsed = QueryFlags.parseListText(itemText)
                 if Config.debug:
-                    Logic.logMessage("DEBUG", f"Item text: '{itemText}', parts: {parts}, len: {len(parts)}")
-                if len(parts) != 3:
+                    Logic.logMessage("DEBUG", f"Item text: '{itemText}', parsed: {parsed}")
+                if parsed is None:
                     Logic.logMessage("WARN", f"Invalid item skipped: {itemText}")
                     continue
-
-                dataId, interval, database = parts
+                kind, dataId, interval, database = parsed
+                flags = QueryFlags.itemFlags(listItem)
+                itemId = QueryFlags.itemIdOf(listItem)
+                if kind == QueryFlags.KIND_EQUATION:
+                    payload = QueryFlags.itemPayload(listItem)
+                    queryItems.append({
+                        "kind": QueryFlags.KIND_EQUATION,
+                        "formula": payload.get("formula") or dataId,
+                        "header": payload.get("header"),
+                        "refs": payload.get("refs"),
+                        "id": itemId,
+                        "flags": QueryFlags.emptyFlags(),
+                        "index": i,
+                    })
+                    continue
                 if database == 'USGS-NWIS':
                     try:
                         from core import USGS
@@ -320,8 +345,7 @@ class uiQuery(QMainWindow):
                             return
                         if resolved != dataId:
                             dataId = resolved
-                            # Keep list in sync with resolved form
-                            self.listQueryList.item(i).setText(f"{dataId}|{interval}|{database}")
+                            listItem.setText(f"{dataId}|{interval}|{database}")
                     except Exception as e:
                         Logic.logException("btnQueryPressed: USGS list resolve failed", e)
                 mrid = '0'
@@ -329,7 +353,7 @@ class uiQuery(QMainWindow):
 
                 if database.startswith('USBR-') and '-' in dataId:
                     sdid, mrid = dataId.rsplit('-', 1)
-                queryItems.append((dataId, interval, database, mrid, i))
+                queryItems.append((dataId, interval, database, mrid, i, flags, itemId))
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Added queryItem: {(dataId, interval, database, mrid, i)}")
@@ -358,7 +382,8 @@ class uiQuery(QMainWindow):
 
                 if database.startswith('USBR-') and '-' in dataId:
                     sdid, mrid = dataId.rsplit('-', 1)
-                queryItems.append((dataId, interval, database, mrid, 0))
+                flags = self._defaultFlags()
+                queryItems.append((dataId, interval, database, mrid, 0, flags, QueryFlags.newItemId()))
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Added single query: {(dataId, interval, database, mrid, 0)}")
@@ -485,6 +510,9 @@ class uiQuery(QMainWindow):
                 idx = self.cbQuickLook.findText(name)
                 if idx >= 0:
                     self.cbQuickLook.setCurrentIndex(idx)
+            self.loadedQuickLookName = name
+            self._tableDirtyQuickLook = False
+            self._onLoadFingerprint = self._queryListFingerprint()
 
             if Config.debug:
                 Logic.logMessage(
@@ -495,21 +523,33 @@ class uiQuery(QMainWindow):
                 )
 
     def btnLoadQuickLookPressed(self):
-        meta = Logic.loadQuickLook(
-            self.cbQuickLook,
-            self.listQueryList,
-            chkbDelta=self.chkbDelta,
-            chkbOverlay=self.chkbOverlay,
-            chkbRawData=self.chkbRawData,
-            chkbQAQC=self.chkbQAQC,
-            dateRadios={
-                'custom': self.rbCustomDateTime,
-                'prevDay': self.rbPrevDayToCurrent,
-                'prevWeek': self.rbPrevWeekToCurrent,
-            },
-            dteStartDate=self.dteStartDate,
-            dteEndDate=self.dteEndDate,
+        if not self.promptSaveDirtyQuickLook("load another Quick Look"):
+            return
+        self._bulkFlagGuard = True
+        try:
+            meta = Logic.loadQuickLook(
+                self.cbQuickLook,
+                self.listQueryList,
+                chkbDelta=self.chkbDelta,
+                chkbOverlay=self.chkbOverlay,
+                chkbRawData=self.chkbRawData,
+                chkbQAQC=self.chkbQAQC,
+                dateRadios={
+                    'custom': self.rbCustomDateTime,
+                    'prevDay': self.rbPrevDayToCurrent,
+                    'prevWeek': self.rbPrevWeekToCurrent,
+                },
+                dteStartDate=self.dteStartDate,
+                dteEndDate=self.dteEndDate,
+            )
+        finally:
+            self._bulkFlagGuard = False
+        QueryFlags.recolorQueryList(self.listQueryList)
+        self.loadedQuickLookName = (
+            self.cbQuickLook.currentText() if self.cbQuickLook is not None else None
         )
+        self._tableDirtyQuickLook = False
+        self._onLoadFingerprint = self._queryListFingerprint()
         self.quickLookDateRule = (meta or {}).get('dateRule') if isinstance(meta, dict) else None
         # Prev Day / Prev Week / relative custom: snap to now
         self.refreshRelativeQueryTimes()
@@ -563,6 +603,10 @@ class uiQuery(QMainWindow):
         if item is None or self.listQueryList is None:
             return
         text = item.text().strip()
+        if QueryFlags.itemKind(item) == QueryFlags.KIND_EQUATION:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"onQueryListDoubleClicked: equation row {text!r}")
+            return
         # maxsplit=2 so dataIDs / DB labels that contain '|' still parse
         parts = text.split('|', 2)
         if len(parts) != 3:
@@ -607,15 +651,18 @@ class uiQuery(QMainWindow):
             and self.listQueryList is not None
             and 0 <= editIdx < self.listQueryList.count()
         ):
-            self.listQueryList.item(editIdx).setText(itemText)
+            existing = self.listQueryList.item(editIdx)
+            existing.setText(itemText)
+            QueryFlags.ensurePayload(existing, self._defaultFlags())
             self.listQueryList.setCurrentRow(editIdx)
             if Config.debug:
                 Logic.logMessage("DEBUG", f"btnAddQueryPressed: Updated index {editIdx}: {itemText}")
         else:
-            self.listQueryList.addItem(itemText)
+            self.listQueryList.addItem(self._makeQueryItem(itemText))
             self.listQueryList.scrollToBottom()
             if Config.debug:
                 Logic.logMessage("DEBUG", f"btnAddQueryPressed: Added item: {itemText}")
+        QueryFlags.recolorQueryList(self.listQueryList)
         self.editingQueryIndex = None
         self.qleDataID.clear()
         self.qleDataID.setFocus()
@@ -641,18 +688,28 @@ class uiQuery(QMainWindow):
             self.editingQueryIndex -= below
             if self.editingQueryIndex < 0 or self.editingQueryIndex >= self.listQueryList.count():
                 self.editingQueryIndex = None
+        QueryFlags.recolorQueryList(self.listQueryList)
         if Config.debug:
             Logic.logMessage("DEBUG", f"btnRemoveQueryPressed: Removed {len(selectedItems)} items")
 
     def btnClearQueryPressed(self):
+        if not self.promptSaveDirtyQuickLook("clear the query list"):
+            return
         self.listQueryList.clear()
         self.editingQueryIndex = None
         if self.qleDataID:
             self.qleDataID.clear()
         # Clear query-option checkboxes when the list is wiped
-        for box in (self.chkbDelta, self.chkbOverlay, self.chkbRawData, self.chkbQAQC):
-            if box is not None:
-                box.setChecked(False)
+        self._bulkFlagGuard = True
+        try:
+            for box in (self.chkbDelta, self.chkbOverlay, self.chkbRawData, self.chkbQAQC):
+                if box is not None:
+                    box.setChecked(False)
+        finally:
+            self._bulkFlagGuard = False
+        self.loadedQuickLookName = None
+        self._tableDirtyQuickLook = False
+        self._onLoadFingerprint = None
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
@@ -819,9 +876,8 @@ class uiQuery(QMainWindow):
 
     def showQueryListContextMenu(self, pos):
         """
-        Right-click a query list item: Insert Query Above / Below when DataID
-        is set, and Delete (clicked row, or all selected if the click is in
-        the selection).
+        Right-click a query list item: Insert / Delete, plus per-item Overlay,
+        Display Deltas, Raw Data, QAQC. Ctrl+click a flag to keep the menu open.
         """
         if self.listQueryList is None:
             return
@@ -836,8 +892,9 @@ class uiQuery(QMainWindow):
             self.listQueryList.setCurrentItem(item)
 
         dataID = self.qleDataID.text().strip() if self.qleDataID is not None else ''
-        nSel = len(self.listQueryList.selectedItems())
-        menu = QMenu(self)
+        targets = list(self.listQueryList.selectedItems())
+        nSel = len(targets)
+        menu = QueryFlags.StickyFlagMenu(self)
         actAbove = menu.addAction("Insert Query Above")
         actBelow = menu.addAction("Insert Query Below")
         canInsert = bool(dataID) and nSel <= 1
@@ -850,6 +907,18 @@ class uiQuery(QMainWindow):
             actAbove.setToolTip("Enter a Data ID first")
             actBelow.setToolTip("Enter a Data ID first")
         menu.addSeparator()
+        flagActions = {}
+        seriesTargets = [t for t in targets if QueryFlags.itemKind(t) != QueryFlags.KIND_EQUATION]
+        for key, label in QueryFlags.FLAG_LABELS.items():
+            act = menu.addAction(label)
+            act.setCheckable(True)
+            if seriesTargets:
+                allOn = all(QueryFlags.itemFlags(t).get(key) for t in seriesTargets)
+                act.setChecked(allOn)
+            else:
+                act.setEnabled(False)
+            flagActions[key] = act
+        menu.addSeparator()
         actDelete = menu.addAction("Delete" if nSel <= 1 else f"Delete ({nSel})")
 
         chosen = menu.exec(self.listQueryList.mapToGlobal(pos))
@@ -861,6 +930,11 @@ class uiQuery(QMainWindow):
             self.insertQueryAt(row, below=True)
         elif chosen == actDelete:
             self.btnRemoveQueryPressed()
+        else:
+            for key, act in flagActions.items():
+                if chosen is act:
+                    self._toggleFlagsOnItems(seriesTargets, key, act.isChecked())
+                    break
 
     def insertQueryAt(self, anchorRow, below=False):
         """Insert form values into the list above or below anchorRow (like Add Query)."""
@@ -873,8 +947,9 @@ class uiQuery(QMainWindow):
             return
         insertAt = anchorRow + 1 if below else anchorRow
         insertAt = max(0, min(insertAt, self.listQueryList.count()))
-        self.listQueryList.insertItem(insertAt, itemText)
+        self.listQueryList.insertItem(insertAt, self._makeQueryItem(itemText))
         self.listQueryList.setCurrentRow(insertAt)
+        QueryFlags.recolorQueryList(self.listQueryList)
         # Cancel any in-place edit mode so the next Add appends cleanly
         self.editingQueryIndex = None
         if self.qleDataID is not None:
@@ -1002,6 +1077,7 @@ class uiQuery(QMainWindow):
                     lst.scrollToItem(
                         current, QAbstractItemView.ScrollHint.EnsureVisible
                     )
+            QueryFlags.recolorQueryList(lst)
         finally:
             Utils.resetStyledButtonHover(senderBtn)
 
@@ -1036,18 +1112,132 @@ class uiQuery(QMainWindow):
             return 'prevWeek'
         return 'custom'
 
+    def _defaultFlags(self):
+        return QueryFlags.defaultFlagsFromCheckboxes(
+            self.chkbOverlay, self.chkbDelta, self.chkbRawData, self.chkbQAQC
+        )
+
+    def _makeQueryItem(self, text, flags=None, kind=None, extra=None):
+        kind = kind or QueryFlags.KIND_SERIES
+        return QueryFlags.makeListItem(
+            text, flags=flags if flags is not None else self._defaultFlags(),
+            kind=kind, extra=extra,
+        )
+
+    def _onOptionCheckboxToggled(self, key, checked):
+        if self._bulkFlagGuard:
+            return
+        QueryFlags.applyFlagToAll(self.listQueryList, key, bool(checked))
+
+    def _toggleFlagsOnItems(self, items, key, value):
+        if key not in QueryFlags.FLAG_KEYS:
+            return
+        for item in items or []:
+            if QueryFlags.itemKind(item) == QueryFlags.KIND_EQUATION:
+                continue
+            flags = QueryFlags.itemFlags(item)
+            flags[key] = bool(value)
+            QueryFlags.setItemFlags(item, flags)
+        QueryFlags.recolorQueryList(self.listQueryList)
+
+    def _queryListFingerprint(self):
+        if self.listQueryList is None:
+            return []
+        out = []
+        for i in range(self.listQueryList.count()):
+            item = self.listQueryList.item(i)
+            out.append(QueryFlags.serializeItem(item))
+        return out
+
+    def markQuickLookDirtyFromTable(self):
+        """Table-side list changes (move/remove/formula) — prompt on Clear/Load."""
+        if self.loadedQuickLookName:
+            self._tableDirtyQuickLook = True
+
+    def promptSaveDirtyQuickLook(self, actionLabel):
+        name = (self.loadedQuickLookName or "").strip()
+        if not name or not self._tableDirtyQuickLook:
+            return True
+        reply = QMessageBox.question(
+            self,
+            "Quick Look updated",
+            f"{name} has been updated, would you like to save it?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            deltaChecked = bool(self.chkbDelta.isChecked()) if self.chkbDelta is not None else False
+            overlayChecked = bool(self.chkbOverlay.isChecked()) if self.chkbOverlay is not None else False
+            rawChecked = bool(self.chkbRawData.isChecked()) if self.chkbRawData is not None else False
+            qaqcChecked = bool(self.chkbQAQC.isChecked()) if self.chkbQAQC is not None else False
+            dateMode = self._queryDateMode()
+            startStr = endStr = None
+            dateRule = self.quickLookDateRule
+            if dateMode == 'custom':
+                if self.dteStartDate is not None:
+                    startStr = self.dteStartDate.dateTime().toString('yyyy-MM-dd HH:mm')
+                if self.dteEndDate is not None:
+                    endStr = self.dteEndDate.dateTime().toString('yyyy-MM-dd HH:mm')
+            Logic.saveQuickLook(
+                name,
+                self.listQueryList,
+                displayDelta=deltaChecked,
+                overlayPairs=overlayChecked,
+                rawData=rawChecked,
+                qaqc=qaqcChecked,
+                dateMode=dateMode,
+                startDate=startStr,
+                endDate=endStr,
+                dateRule=dateRule,
+            )
+        self._tableDirtyQuickLook = False
+        self._onLoadFingerprint = self._queryListFingerprint()
+        return True
+
+    def syncEquationQueryItem(self, formula, col, header=None, refs=None):
+        """Insert or update an equation row in the query list for a custom column."""
+        if self.listQueryList is None or not formula:
+            return
+        text = QueryFlags.equationListText(formula)
+        extra = {"formula": formula, "header": header, "refs": refs or []}
+        # Update existing equation at the same formula/header, else insert at col-ish index
+        for i in range(self.listQueryList.count()):
+            item = self.listQueryList.item(i)
+            payload = QueryFlags.itemPayload(item)
+            if QueryFlags.itemKind(item) == QueryFlags.KIND_EQUATION and (
+                payload.get("formula") == formula or item.text() == text
+            ):
+                item.setText(text)
+                payload.update(extra)
+                payload["kind"] = QueryFlags.KIND_EQUATION
+                QueryFlags.setItemPayload(item, payload)
+                QueryFlags.recolorQueryList(self.listQueryList)
+                self.markQuickLookDirtyFromTable()
+                return
+        insertAt = max(0, min(int(col) if col is not None else self.listQueryList.count(), self.listQueryList.count()))
+        item = self._makeQueryItem(
+            text, flags=QueryFlags.emptyFlags(), kind=QueryFlags.KIND_EQUATION, extra=extra
+        )
+        self.listQueryList.insertItem(insertAt, item)
+        QueryFlags.recolorQueryList(self.listQueryList)
+        self.markQuickLookDirtyFromTable()
+
     def btnQueryOptionsInfoPressed(self):
         try:
             QMessageBox.information(
                 self,
                 "Query Options Info",
-                "Display Deltas: extra column of secondary − primary for each pair "
-                "(1–2, 3–4, …).\n\n"
-                "Overlay Pairs: one column per pair; primary value where both exist, "
-                "secondary fill where only the second series has a value.\n\n"
-                "Raw Data: skip display rounding in the table (full fixed-point text).\n\n"
-                "QAQC: color cells from the data dictionary limits (missing, expected, "
-                "cutoff, rate of change). Delta columns are skipped.",
+                "Each Query Option is a per-series flag. Checking a box flags every "
+                "current Data ID and anything added later. Unchecked, use the query-list "
+                "right-click menu (Overlay, Display Deltas, Raw Data, QAQC Data). "
+                "Hold Ctrl to toggle several without closing the menu.\n\n"
+                "Overlay: consecutive flagged neighbors are a pair (primary / secondary "
+                "in the list). A flagged ID next to an unflagged one stays flagged but "
+                "is not paired (not highlighted).\n\n"
+                "Display Deltas: extra column of primary − secondary for consecutive "
+                "delta-flagged neighbors.\n\n"
+                "Raw Data: skip display rounding for that series.\n\n"
+                "QAQC: color cells from the data dictionary limits. Delta columns are skipped.",
             )
         finally:
             Utils.resetStyledButtonHover(self.sender() or self.btnQueryOptionsInfo)

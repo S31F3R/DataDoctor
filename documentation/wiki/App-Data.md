@@ -33,7 +33,7 @@ On first launch with no `user.config`, **UTC offset** is set to the computer’s
 
 | File | Role |
 |------|------|
-| `core/bunker.db` | Live data dictionary (Windows: `pythonFiles\core\bunker.db`) |
+| `core/bunker.db` | Live data dictionary (Windows: `pythonFiles\core\bunker.db`). **AppImage:** writable copy at `~/.config/Data Doctor/bunker.db`; the file inside the image is the merge source only |
 | `core/valuePrecision.json` | Aquarius identifier → rounding spec |
 | Packaged `temp/bunker.db` | Merge source only — do not replace the live DB with this |
 

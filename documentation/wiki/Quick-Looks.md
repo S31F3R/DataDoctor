@@ -18,12 +18,14 @@ See [App Data](App-Data).
 
 In the Query window:
 
-1. Build the list (and set Display Deltas / Overlay Pairs / Raw Data / QAQC if you want them stored).
+1. Build the list (and set Display Deltas / Overlay Pairs / Raw Data / QAQC — checkboxes flag all rows, or set flags per row from the list context menu).
 2. **Save Quick Look** — the name box is filled from the combo when a Quick Look is already selected. If that name exists, confirm overwrite.
 3. Pick it in the combo and **Load Quick Look**.
 4. **Delete Quick Look** removes that saved file (including former packaged examples — they live in your profile).
 
-If an older file is missing overlay/delta/raw/QAQC metadata, those checkboxes stay **unchecked** when loaded.
+If an older file is missing overlay/delta/raw/QAQC metadata, those checkboxes stay **unchecked** when loaded. Newer saves store **per-item** flags on each query row (plus the checkbox defaults for new rows). Legacy string rows inherit the file’s top-level flags.
+
+If you load a Quick Look, then change the list from the **Data Query** table (move/remove columns, add a formula), **Clear Query List** or **Load Quick Look** asks *“&lt;name&gt; has been updated, would you like to save it?”* Date-only edits in the Query window do not trigger that prompt.
 
 Date range:
 

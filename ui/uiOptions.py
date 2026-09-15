@@ -1119,7 +1119,7 @@ class uiOptions(QDialog):
                     if os.path.isfile(cfg):
                         zf.write(cfg, "config/user.config")
                 if "dataDictionary" in parts:
-                    bunker = Logic.resourcePath("core/bunker.db")
+                    bunker = Logic.bunkerDbPath()
                     if os.path.isfile(bunker):
                         zf.write(bunker, "dataDictionary/bunker.db")
         except Exception as e:
@@ -1420,7 +1420,7 @@ class uiOptions(QDialog):
             if not os.path.isfile(src):
                 src = os.path.join(root, "bunker.db")
             if os.path.isfile(src):
-                dest = Logic.resourcePath("core/bunker.db")
+                dest = Logic.bunkerDbPath()
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 shutil.copy2(src, dest)
                 imported.append("Data Dictionary")

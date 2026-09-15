@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem, QWidget, QApplication,
 )
 
-from core import Config, Logic, Upload, Utils
+from core import Config, Logic, Upload, Utils, QueryFlags
 from core.Formula import FORMULA_KEY, shiftFormulaColumns
 from core.FormulaUi import _itemFormula, applyCellInput, recalculateAll
 from core.QueryUtils import (
@@ -776,24 +776,52 @@ def _applyColumnOrder(mainWindow, newOrder, log="", selectSrc=None):
 
 
 def _rebuildQueryItemsFromTable(mainWindow):
-    """Rebuild lastQueryItems from columnMetadata order (skip custom + delta)."""
+    """Rebuild lastQueryItems from columnMetadata order (skip delta)."""
     items = []
     seen = 0
-    for meta in _metas(mainWindow):
+    table = _table(mainWindow)
+    for col, meta in enumerate(_metas(mainWindow)):
         t = (meta or {}).get("type") or "normal"
-        if t in ("custom", "delta"):
+        if t == "delta":
+            continue
+        if t == "custom" or meta.get("equation"):
+            formula = None
+            if table is not None:
+                for r in range(table.rowCount()):
+                    f = _itemFormula(table.item(r, col))
+                    if f:
+                        from core.Formula import adjustFormula
+                        formula = adjustFormula(f, 0, -r)
+                        break
+            items.append({
+                "kind": QueryFlags.KIND_EQUATION,
+                "formula": formula or (meta.get("formula") or ""),
+                "header": meta.get("name") or firstHeaderLine(_headerText(table, col)),
+                "index": seen,
+                "flags": QueryFlags.emptyFlags(),
+                "id": meta.get("itemId") or meta.get("customId"),
+                "refs": meta.get("refs"),
+            })
+            seen += 1
             continue
         infos = meta.get("queryInfos") or []
         if not isinstance(infos, list):
             infos = [infos]
-        for q in infos:
+        itemFlags = meta.get("itemFlags")
+        for i, q in enumerate(infos):
             dataId, interval, database = Upload.parseQueryInfo(q)
             if not dataId:
                 continue
             mrid = "0"
             if str(database).startswith("USBR-") and "-" in dataId:
                 _sdid, mrid = dataId.rsplit("-", 1)
-            items.append((dataId, interval, database, mrid, seen))
+            flags = None
+            if isinstance(itemFlags, list) and i < len(itemFlags):
+                flags = itemFlags[i]
+            elif meta.get("flags"):
+                flags = meta.get("flags") if i == 0 else QueryFlags.emptyFlags()
+            itemId = meta.get("itemId") if i == 0 else None
+            items.append((dataId, interval, database, mrid, seen, flags or QueryFlags.emptyFlags(), itemId))
             seen += 1
     mainWindow.lastQueryItems = items
 
@@ -807,10 +835,37 @@ def _syncQueryList(mainWindow):
     lst.blockSignals(True)
     try:
         lst.clear()
-        for dataId, interval, database, _mrid, _idx in items:
-            lst.addItem(f"{dataId}|{interval}|{database}")
+        for entry in items:
+            if isinstance(entry, dict) and (
+                entry.get("kind") == QueryFlags.KIND_EQUATION
+                or str(entry.get("formula") or "").startswith("=")
+            ):
+                formula = entry.get("formula") or ""
+                text = QueryFlags.equationListText(formula)
+                extra = {
+                    "formula": formula,
+                    "header": entry.get("header"),
+                    "refs": entry.get("refs"),
+                    "id": entry.get("id") or QueryFlags.newItemId(),
+                }
+                lst.addItem(QueryFlags.makeListItem(
+                    text, flags=QueryFlags.emptyFlags(),
+                    kind=QueryFlags.KIND_EQUATION, extra=extra,
+                ))
+                continue
+            dataId, interval, database = entry[0], entry[1], entry[2]
+            flags = entry[5] if len(entry) > 5 else None
+            extra = {}
+            if len(entry) > 6 and entry[6]:
+                extra["id"] = entry[6]
+            lst.addItem(QueryFlags.makeListItem(
+                f"{dataId}|{interval}|{database}", flags=flags, extra=extra or None,
+            ))
     finally:
         lst.blockSignals(False)
+    QueryFlags.recolorQueryList(lst)
+    if winQuery is not None and hasattr(winQuery, "markQuickLookDirtyFromTable"):
+        winQuery.markQuickLookDirtyFromTable()
 
 
 def enableColumnDrag(mainWindow):
@@ -1060,7 +1115,7 @@ def _upsertDictionaryCommonName(mainWindow, spec):
         # SDID without MRID
         fields["dataID"] = str(dataId).split("-", 1)[0]
 
-    dbPath = Logic.resourcePath("core/bunker.db")
+    dbPath = Logic.bunkerDbPath()
     try:
         Logic.ensureDataDictionarySchema()
         with sqlite3.connect(dbPath) as conn:
@@ -1140,6 +1195,10 @@ def swapOverlayPrimarySecondary(mainWindow, col):
     meta["dataIds"] = dataIds
     meta["dbs"] = dbs
     meta["queryInfos"] = queryInfos
+    itemFlags = list(meta.get("itemFlags") or [])
+    if len(itemFlags) >= 2:
+        itemFlags[0], itemFlags[1] = itemFlags[1], itemFlags[0]
+        meta["itemFlags"] = itemFlags
 
     pRule = roundRules[0] if roundRules else None
     rules = getattr(table, "columnRoundingRules", None) or []

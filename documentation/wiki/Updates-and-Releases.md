@@ -1,6 +1,6 @@
 # Updates and Releases
 
-Data Doctor checks [GitHub Releases](https://github.com/S31F3R/DataDoctor/releases) at startup. If nothing is published yet, or you are already current, the check is silent (no popup). If GitHub cannot be reached (blocked, timeout, HTTP error), a dialog says **Unable to check GitHub for updates.** The About window shows the installed version. **About → Feature request: Form** opens a GitHub feature-request form.
+Data Doctor checks [GitHub Releases](https://github.com/S31F3R/DataDoctor/releases) at startup. If nothing is published yet, or you are already current, the check is silent (no popup). If GitHub cannot be reached (blocked, timeout, HTTP error), a dialog says **Unable to check GitHub for updates.** The About window shows the installed version as a link to that tag’s GitHub release notes. **About → Feature request: Form** opens a GitHub feature-request form.
 
 ## Channels
 
@@ -64,7 +64,9 @@ The raw Python zip ships `DataDoctor.py`. On Windows `applyUpdate` installs it a
 
 ## Apply on AppImage
 
-Download the new AppImage next to the current one (or into `updates/`). Use **Quit and apply** from the update prompt, or `scripts/applyAppImageUpdate.sh`.
+Download the new AppImage next to the current one (or into `updates/`). Use **Quit and apply** from the update prompt, or `applyAppImageUpdate.sh` next to the AppImage.
+
+That script waits for Data Doctor to exit, replaces the AppImage, then **relaunches** it. The live data dictionary is **not** inside the AppImage (the image is read-only). It lives at `~/.config/Data Doctor/bunker.db`. On first run the packaged copy is installed there. After an update, if the packaged dictionary differs, you get the same Common Name / Data Type prompts as Windows `applyUpdate` — answering **N** still inserts **new** IDs with the packaged names/types.
 
 ## Apply on macOS
 

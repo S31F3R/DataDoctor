@@ -188,8 +188,9 @@ class uiAbout(QDialog):
         retroFontObj.setStyleStrategy(QFont.StyleStrategy.NoAntialias)
         self._retroFam = fam
         self._retroPt = pt
+        ver = Version.displayVersion()
         self._aboutInfo = [
-            ('Version', Version.displayVersion()),
+            ('Version', f'https://github.com/{Version.GITHUB_REPO}/releases/tag/v{ver}'),
             ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
             ('Report issue', 'datadoctor://report'),
             (
@@ -302,6 +303,10 @@ class uiAbout(QDialog):
                     shown = "Form"
                 elif "template=feature.yml" in href:
                     shown = "Form"
+                elif "/releases/tag/" in href:
+                    shown = href.rsplit("/tag/", 1)[-1]
+                    if shown.lower().startswith("v"):
+                        shown = shown[1:]
                 elif len(shown) > 42:
                     shown = shown.split("://", 1)[-1][:42] + "…"
                 html += (

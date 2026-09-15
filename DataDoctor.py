@@ -2241,6 +2241,11 @@ if __name__ == '__main__':
         Utils.applyColorTheme()
 
         # Load data dictionary and quick looks (best-effort; do not block startup)
+        # AppImage: copy/merge packaged bunker into the writable config copy first.
+        try:
+            Logic.ensureLiveBunker(parent=winMain)
+        except Exception as e:
+            Logic.logException("Startup: ensureLiveBunker failed", e)
         # ensureDataDictionarySchema runs inside load/build (valuePrecision + precisionOverride)
         try:
             Logic.ensureDataDictionarySchema()

@@ -2498,6 +2498,11 @@ def applyColorTheme(theme=None):
                     graph = getattr(w, "tabGraph", None)
                     if graph is not None and hasattr(graph, "reapplyTheme"):
                         graph.reapplyTheme()
+                    winQuery = getattr(w, "winQuery", None)
+                    lst = getattr(winQuery, "listQueryList", None) if winQuery is not None else None
+                    if lst is not None:
+                        from core import QueryFlags
+                        QueryFlags.recolorQueryList(lst)
                     break
         except Exception:
             pass

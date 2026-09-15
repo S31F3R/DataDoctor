@@ -81,3 +81,10 @@ rm -f "$(dirname "$CURRENT")/Update/pending.json" 2>/dev/null || true
 
 echo "AppImage updated: $CURRENT"
 echo "Previous copy (if any): ${CURRENT}.bak"
+
+# Relaunch like applyUpdate.cmd does for launcher packages. Next start merges
+# the packaged bunker.db into the writable config copy.
+if [ -x "$CURRENT" ]; then
+  nohup "$CURRENT" >/dev/null 2>&1 &
+  echo "Relaunched: $CURRENT"
+fi

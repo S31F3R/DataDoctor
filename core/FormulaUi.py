@@ -17,9 +17,9 @@ from PyQt6.QtWidgets import (
 
 from core import Config, Logic, Upload
 from core.Formula import (
-    FORMULA_KEY, ERR_VALUE, FUNCTIONS, FUNCTION_HELP,
+    FORMULA_KEY, ERR_VALUE, ERR_REF, FUNCTIONS, FUNCTION_HELP,
     adjustFormula, colToLetters, evaluateFormula, formatFormulaResult,
-    looksLikeFormula, parseCellRef,
+    looksLikeFormula, parseCellRef, formatCellRef, _REF_IN_FORMULA,
 )
 
 HANDLE_PX = 7
@@ -219,6 +219,9 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, s
                 oldBg=oldBg, oldFg=oldFg, newBg=newBg, newFg=newFg,
                 oldEdit=oldEdit, newEdit=newEdit,
             )
+        if not asFill and (meta or {}).get("type") == "custom":
+            _fillFormulaColumn(mainWindow, col, raw, originRow=row)
+            _syncEquationListItem(mainWindow, col, raw, originRow=row)
         return True
     _setItemFormula(item, None)
     if item.text() != raw:
@@ -919,3 +922,160 @@ def installOnTable(mainWindow):
     filt.repositionHandle()
     if Config.debug:
         Logic.logMessage("DEBUG", "FormulaUi.installOnTable: formula delegate + fill handle")
+
+
+def _fillFormulaColumn(mainWindow, col, formula, originRow=0):
+    """Apply a row-relative formula to every row of a custom column."""
+    table = getattr(mainWindow, "mainTable", None)
+    if table is None or not looksLikeFormula(formula):
+        return
+    template = adjustFormula(formula, 0, -int(originRow or 0))
+    table.blockSignals(True)
+    try:
+        for r in range(table.rowCount()):
+            cellF = adjustFormula(template, 0, r)
+            applyCellInput(mainWindow, r, col, cellF, asFill=True, skipUndo=True)
+    finally:
+        table.blockSignals(False)
+    recalculateAll(mainWindow)
+
+
+def _columnItemId(mainWindow, col):
+    metas = getattr(mainWindow, "columnMetadata", None) or []
+    meta = metas[col] if col < len(metas) else {}
+    if meta.get("itemId"):
+        return meta.get("itemId")
+    ids = meta.get("dataIds") or []
+    return ids[0] if ids else None
+
+
+def collectFormulaRefs(mainWindow, formula):
+    refs = []
+    seen = set()
+    for m in _REF_IN_FORMULA.finditer(formula or ""):
+        parsed = parseCellRef(m.group(1))
+        if parsed is None:
+            continue
+        col, _row, absCol, absRow = parsed
+        if col in seen:
+            continue
+        seen.add(col)
+        refs.append({
+            "letter": colToLetters(col),
+            "col": col,
+            "itemId": _columnItemId(mainWindow, col),
+            "absCol": absCol,
+            "absRow": absRow,
+        })
+    return refs
+
+
+def _rewriteFormulaFromRefs(formula, refs, mainWindow):
+    """Map stored ref itemIds to current columns. Missing refs → #REF!."""
+    if not looksLikeFormula(formula):
+        return formula, True
+    table = getattr(mainWindow, "mainTable", None)
+    metas = getattr(mainWindow, "columnMetadata", None) or []
+    colById = {}
+    for c, meta in enumerate(metas):
+        iid = (meta or {}).get("itemId")
+        if iid:
+            colById[str(iid)] = c
+        for did in (meta or {}).get("dataIds") or []:
+            colById.setdefault(str(did), c)
+
+    broken = False
+
+    def repl(m):
+        nonlocal broken
+        token = m.group(1)
+        parsed = parseCellRef(token)
+        if parsed is None:
+            return token
+        col, row, absCol, absRow = parsed
+        letter = colToLetters(col)
+        match = None
+        for ref in refs or []:
+            if ref.get("letter") == letter or ref.get("col") == col:
+                match = ref
+                break
+        if match is None:
+            return token
+        key = match.get("itemId")
+        newCol = colById.get(str(key)) if key is not None else None
+        if newCol is None:
+            broken = True
+            return ERR_REF
+        return formatCellRef(newCol, row, absCol, absRow)
+
+    body = formula.strip()
+    prefix = "=" if body.startswith("=") else ""
+    if prefix:
+        body = body[1:]
+    return prefix + _REF_IN_FORMULA.sub(repl, body), broken
+
+
+def _syncEquationListItem(mainWindow, col, formula, originRow=0):
+    winQuery = getattr(mainWindow, "winQuery", None)
+    if winQuery is None or not hasattr(winQuery, "syncEquationQueryItem"):
+        return
+    table = getattr(mainWindow, "mainTable", None)
+    header = ""
+    if table is not None:
+        h = table.horizontalHeaderItem(col)
+        header = h.text().split("\n", 1)[0].strip() if h is not None else ""
+    template = adjustFormula(formula, 0, -int(originRow or 0))
+    refs = collectFormulaRefs(mainWindow, template)
+    winQuery.syncEquationQueryItem(template, col, header=header, refs=refs)
+
+
+def applyEquationQueryItems(mainWindow, equationItems):
+    """After a query, insert custom columns for saved equation list items and fill them."""
+    if not equationItems:
+        return
+    from core import TableOps, Utils
+    table = getattr(mainWindow, "mainTable", None)
+    if table is None or table.columnCount() == 0:
+        return
+    for eq in equationItems:
+        if isinstance(eq, dict):
+            formula = eq.get("formula") or ""
+            header = eq.get("header") or "Column"
+            refs = eq.get("refs")
+            idxHint = eq.get("index")
+        else:
+            formula = str(eq[0]) if eq else ""
+            header = "Column"
+            refs = None
+            idxHint = None
+        if not looksLikeFormula(formula):
+            continue
+        newFormula, broken = _rewriteFormulaFromRefs(formula, refs, mainWindow)
+        if refs and broken:
+            newFormula = newFormula
+        insertAt = table.columnCount()
+        if idxHint is not None:
+            try:
+                insertAt = max(0, min(int(idxHint), table.columnCount()))
+            except (TypeError, ValueError):
+                insertAt = table.columnCount()
+        if table.columnCount() <= 0:
+            continue
+        if insertAt >= table.columnCount():
+            newIdx = TableOps.insertBlankColumn(mainWindow, table.columnCount() - 1, side="right")
+        else:
+            newIdx = TableOps.insertBlankColumn(mainWindow, insertAt, side="left")
+        if newIdx < 0:
+            continue
+        if header:
+            TableOps._setHeaderText(table, newIdx, Utils.formatTableHeaderLabel(header))
+            metas = TableOps._metas(mainWindow)
+            if 0 <= newIdx < len(metas):
+                metas[newIdx]["name"] = header
+                metas[newIdx]["equation"] = True
+        _fillFormulaColumn(mainWindow, newIdx, newFormula, originRow=0)
+        if broken:
+            Logic.logMessage(
+                "WARN",
+                f"Equation {formula!r} has a removed column (#REF!)",
+            )

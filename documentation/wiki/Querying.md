@@ -16,10 +16,10 @@ Both open the same Query window. The window title / `queryType` decides what is 
 1. Pick **database**, **DataID**, **interval**, and a time range.
 2. **Add Query** (or **Insert Above / Insert Below / Delete** from the list context menu).
 3. Repeat for more series.
-4. Optional Query Options (all default **unchecked**): **Display Deltas**, **Overlay Pairs**, **Raw Data**, **QAQC**. See [Overlay and Delta](Overlay-and-Delta) and [Table colors](Table-Colors).
+4. Optional Query Options (all default **unchecked**): **Display Deltas**, **Overlay Pairs**, **Raw Data**, **QAQC**. Checking a box flags every current Data ID and new ones; right-click a row to toggle one series (hold **Ctrl** to keep the menu open). See [Overlay and Delta](Overlay-and-Delta) and [Table colors](Table-Colors).
 5. **Query**.
 
-Double-click a list row to edit it (interval and database can change). Select more than one row (Ctrl / Shift) to **Delete** or move with the up/down buttons; Insert Above / Below is disabled while several rows are selected. Moving stops at the topmost selected row going up, and the bottommost going down. **Clear Query List** also unchecks the Query Options boxes.
+Double-click a list row to edit it (interval and database can change). Select more than one row (Ctrl / Shift) to **Delete**, toggle flags, or move with the up/down buttons; Insert Above / Below is disabled while several rows are selected. Moving stops at the topmost selected row going up, and the bottommost going down. **Clear Query List** also unchecks the Query Options boxes. If a loaded Quick Look was changed from the Data Query table (column move, remove, formula), Clear / Load asks whether to save it first.
 
 **Prev Day** / **Prev Week** recompute “now” when you open the window, load a Quick Look, or run Query — they are not frozen timestamps from last week. A Quick Look remembers which of Custom / Prev Day / Prev Week was selected. Custom is the default and stores the picker times; the two rolling modes do not.
 
@@ -63,6 +63,6 @@ Right-click a **cell** for value details (internal, plus USGS public “Show det
 
 **Ctrl+Z** / **Ctrl+Y** undo and redo table edits. SQL Query Builder uses the same shortcuts (Ctrl+Y is wired even on Linux, where Qt’s default redo is Ctrl+Shift+Z). The toolbar Reset button still re-sorts by timestamp. Single-click a header to highlight the column; **double-click** sorts. Drag a header to reorder.
 
-Internal tables accept Excel-style **formulas** (`=A1+B1`, fill handle, `$` locks). See [Formulas](Formulas). Custom columns survive **Refresh** (formulas re-run). A new query drops them.
+Internal tables accept Excel-style **formulas** (`=A1+B1`, fill handle, `$` locks). A formula on a **custom** column is inserted into the query list and saved with the Quick Look; it fills the whole time range. Removing a referenced series breaks the equation (`#REF!`); moving or changing that series’ Data ID keeps it. See [Formulas](Formulas). Custom columns survive **Refresh** (formulas re-run).
 
 See [Data Dictionary](Data-Dictionary) for how column titles are built.

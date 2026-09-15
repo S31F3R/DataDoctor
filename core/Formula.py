@@ -22,7 +22,8 @@ ERR_CYCLE = "#CYCLE!"
 _ERROR_VALUES = (ERR_VALUE, ERR_REF, ERR_DIV, ERR_NAME, ERR_CYCLE)
 
 _COL_RE = re.compile(r"^\$?[A-Za-z]+\$?\d+$")
-_NUM_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$")
+# Leading-decimal (.01) and trailing-dot (1.) like Excel; exponent optional.
+_NUM_RE = re.compile(r"^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$")
 
 
 def colToLetters(index: int) -> str:

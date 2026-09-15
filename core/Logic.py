@@ -111,6 +111,70 @@ def resourcePath(relativePath):
     return os.path.normpath(os.path.join(basePath, relativePath))
 
 
+def isAppImageInstall():
+    p = os.environ.get("APPIMAGE") or ""
+    return bool(p and os.path.isfile(p))
+
+
+def packagedBunkerDbPath():
+    """Read-only packaged dictionary (AppImage squashfs / zip core/)."""
+    return resourcePath("core/bunker.db")
+
+
+def bunkerDbPath():
+    """
+    Live data dictionary.
+
+    AppImage is read-only, so the live file lives in the user config dir and
+    is merged from the packaged copy on first run / after an update.
+    Launcher and source installs keep the live file next to the app.
+    """
+    if isAppImageInstall():
+        live = os.path.join(Utils.getConfigDir(), "bunker.db")
+        return live
+    return resourcePath("core/bunker.db")
+
+
+def ensureLiveBunker(parent=None):
+    """
+    AppImage: copy or merge packaged bunker.db into the writable config copy.
+    Other installs: no-op (live path is already the packaged/app file).
+    """
+    if not isAppImageInstall():
+        return True
+    packaged = packagedBunkerDbPath()
+    live = bunkerDbPath()
+    if not os.path.isfile(packaged):
+        logMessage("WARN", f"ensureLiveBunker: packaged dictionary missing: {packaged}")
+        return False
+    liveDir = os.path.dirname(live)
+    if liveDir and not os.path.isdir(liveDir):
+        os.makedirs(liveDir, exist_ok=True)
+    if not os.path.isfile(live):
+        import shutil
+        shutil.copy2(packaged, live)
+        logMessage("INFO", f"ensureLiveBunker: installed packaged dictionary → {live}")
+        return True
+    try:
+        from core.BunkerMerge import filesIdentical, promptAndMergeGui
+        from pathlib import Path
+        if filesIdentical(Path(packaged), Path(live)):
+            logMessage(
+                "INFO",
+                "ensureLiveBunker: live bunker matches packaged — skip merge "
+                "(no Common Name / Data Type prompts)",
+            )
+            return True
+        code = promptAndMergeGui(parent, packaged, live)
+        if code != 0:
+            logMessage("WARN", f"ensureLiveBunker: merge returned {code}")
+            return False
+        return True
+    except Exception as e:
+        logException("ensureLiveBunker failed", e)
+        return False
+
+
 def _aquariusCertSearchDirs():
     """
     Candidate certs/ folder paths (never created here — only listed if they already exist).
@@ -889,7 +953,7 @@ def buildDataDictionary(table, columns=None, whereClause=None):
     # Keep schema current before any SELECT * / column list
     ensureDataDictionarySchema()
     loadAquariusRoundingSpecs()
-    dbPath = resourcePath('core/bunker.db')
+    dbPath = bunkerDbPath()
 
     try:
         with sqlite3.connect(dbPath) as conn:
@@ -1122,10 +1186,14 @@ def saveQuickLook(
     """
     Save query list + optional UI metadata to quickLook JSON.
 
-    Format (v2 object):
+    Format (v2 object, v3.3+ per-item flags):
       {
-        "queries": ["dataID|interval|database", ...],
-        "displayDelta": true/false,
+        "queries": [
+          {"q": "dataID|interval|database", "overlay": bool, "delta": bool,
+           "raw": bool, "qaqc": bool, "kind": "series"|"equation", ...},
+          ...
+        ],
+        "displayDelta": true/false,   # default for new rows / checkbox
         "overlayPairs": true/false,
         "rawData": true/false,
         "qaqc": true/false,
@@ -1133,6 +1201,7 @@ def saveQuickLook(
         "startDate" / "endDate": only when dateMode is custom
         "dateRule": optional relative-custom rule (#3)
       }
+    Legacy string queries still load; they inherit the top-level flags.
 
     Prev Day / Prev Week do not store timestamps — load refreshes from now.
     Legacy plain-array files still load; new saves always write the object form.
@@ -1143,7 +1212,13 @@ def saveQuickLook(
         if Config.debug:
             logMessage("WARN", "Empty quick look name—skipped.")
         return
-    queries = [listQueryList.item(x).text() for x in range(listQueryList.count())]
+    from core import QueryFlags
+    queries = []
+    for x in range(listQueryList.count()):
+        item = listQueryList.item(x)
+        if item is None:
+            continue
+        queries.append(QueryFlags.serializeItem(item))
     mode = dateMode if dateMode in ('custom', 'prevDay', 'prevWeek') else 'custom'
     payload = {
         'queries': queries,
@@ -1316,18 +1391,22 @@ def loadQuickLook(
                 raw = []
 
         data, meta = _parseQuickLookPayload(raw)
-        
-        for itemText in data:
-            if not isinstance(itemText, str):
-                continue
-            itemText = itemText.strip()
-            if not itemText:
-                continue
-            parts = itemText.split('|')
-            if len(parts) == 3:
-                dataID, interval, database = parts
+        from core import QueryFlags
+        defaultFlags = {
+            "overlay": bool(meta.get("overlayPairs")),
+            "delta": bool(meta.get("displayDelta")),
+            "raw": bool(meta.get("rawData")),
+            "qaqc": bool(meta.get("qaqc")),
+        }
 
-                # Convert historical INSTANT queries to new format
+        for entry in data:
+            parsed = QueryFlags.parseSavedEntry(entry, defaultFlags)
+            if parsed is None:
+                continue
+            text = parsed["text"]
+            parts = QueryFlags.parseListText(text)
+            if parts and parts[0] == QueryFlags.KIND_SERIES:
+                dataID, interval, database = parts[1], parts[2], parts[3]
                 if interval == 'INSTANT':
                     if database.startswith('USBR-'):
                         interval = 'INSTANT:60'
@@ -1335,10 +1414,24 @@ def loadQuickLook(
                         interval = 'INSTANT:15'
                     elif database == 'AQUARIUS':
                         interval = 'INSTANT:1'
-                listQueryList.addItem(f'{dataID}|{interval}|{database}')
+                    text = f'{dataID}|{interval}|{database}'
+            extra = {}
+            if parsed.get("formula"):
+                extra["formula"] = parsed["formula"]
+            if parsed.get("header"):
+                extra["header"] = parsed["header"]
+            if parsed.get("refs"):
+                extra["refs"] = parsed["refs"]
+            extra["id"] = parsed.get("id") or QueryFlags.newItemId()
+            listQueryList.addItem(QueryFlags.makeListItem(
+                text,
+                flags=parsed.get("flags"),
+                kind=parsed.get("kind") or QueryFlags.KIND_SERIES,
+                extra=extra,
+            ))
 
-                if Config.debug:
-                    logMessage("DEBUG", "loadQuickLook: Added item {}".format(f'{dataID}|{interval}|{database}'))
+            if Config.debug:
+                logMessage("DEBUG", "loadQuickLook: Added item {}".format(text))
 
         # Always set checkboxes from meta (defaults False for legacy / missing keys)
         if chkbDelta is not None:
@@ -1989,7 +2082,7 @@ def ensureDataDictionarySchema():
     immediately after datatype. Seeds valuePrecision from dataType keywords once
     for new columns (existing non-empty values are left alone).
     """
-    dbPath = resourcePath('core/bunker.db')
+    dbPath = bunkerDbPath()
     if not os.path.isfile(dbPath):
         logMessage('ERROR', f'ensureDataDictionarySchema: missing {dbPath}')
         return False

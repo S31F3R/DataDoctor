@@ -6,7 +6,7 @@ from datetime import datetime
 from PyQt6.QtCore import Qt, QCoreApplication
 from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QTableWidgetItem
-from core import Logic, Config, Utils, TableColors
+from core import Logic, Config, Utils, TableColors, QueryFlags
 
 # Unrounded API/table text, kept when buildTable applies a RoundingSpec.
 NATIVE_VALUE_ROLE = int(Qt.ItemDataRole.UserRole) + 32
@@ -114,9 +114,59 @@ def modifyTable(
                 yieldProgress(f"Overlay/delta: reading... col {c + 1}/{numCols}", 97)
         grid.append(colVals)
 
-    # Pair columns (0,1), (2,3), ... leftover odd column kept as-is
-    pairCount = numCols // 2
-    hasOdd = (numCols % 2) == 1
+    def _itemHasFlags(item):
+        if isinstance(item, dict) and "flags" in item:
+            return True
+        if isinstance(item, (tuple, list)) and len(item) > 5:
+            return True
+        return False
+
+    def _flagsAt(idx):
+        if queryItems and 0 <= idx < len(queryItems) and _itemHasFlags(queryItems[idx]):
+            return QueryFlags.seriesFlagsFromQueryItem(queryItems[idx])
+        return {
+            "overlay": bool(overlayChecked),
+            "delta": bool(deltaChecked),
+            "raw": bool(getattr(Config, "rawData", False)),
+            "qaqc": bool(getattr(Config, "qaqcEnabled", False)),
+        }
+
+    overlayFlags = [_flagsAt(i).get("overlay") for i in range(numCols)]
+    deltaFlags = [_flagsAt(i).get("delta") for i in range(numCols)]
+
+    def _firstHeaderLine(h):
+        if not h:
+            return ''
+        for line in str(h).split('\n'):
+            line = line.strip()
+            if line:
+                return line
+        return str(h).strip()
+
+    def _appendNormal(idx):
+        finalCols.append(list(grid[idx]))
+        finalRoles.append([None] * numRows)
+        finalHeaders.append(headers[idx] if idx < len(headers) else f"Col {idx}")
+        finalRules.append(ruleForId(idx))
+        db = databases[idx] if idx < len(databases) else ''
+        did = dataIds[idx] if idx < len(dataIds) else ''
+        lookupId = labelsDict.get(did, did) if db == 'AQUARIUS' else did
+        columnMetadata.append({
+            'type': 'normal',
+            'dataIds': [did],
+            'dbs': [db],
+            'queryInfos': [queryInfos[idx] if idx < len(queryInfos) else f"{did}||{db}"],
+            'lookupId': lookupId,
+            'flags': _flagsAt(idx),
+            'itemId': (
+                queryItems[idx][6] if (
+                    isinstance(queryItems, list)
+                    and idx < len(queryItems)
+                    and isinstance(queryItems[idx], (tuple, list))
+                    and len(queryItems[idx]) > 6
+                ) else (queryItems[idx].get("id") if isinstance(queryItems[idx], dict) else None)
+            ) if queryItems and idx < len(queryItems) else None,
+        })
 
     finalCols = []       # list of list[str] cell texts
     finalHeaders = []    # list[str]
@@ -128,9 +178,17 @@ def modifyTable(
     table.blockSignals(True)
     table.setSortingEnabled(False)
 
-    for pairIndex in range(pairCount):
-        pIdx = pairIndex * 2
-        sIdx = pIdx + 1
+    colIdx = 0
+    pairIndex = 0
+    while colIdx < numCols:
+        ovPair = bool(overlayFlags[colIdx] and colIdx + 1 < numCols and overlayFlags[colIdx + 1])
+        dPair = bool(deltaFlags[colIdx] and colIdx + 1 < numCols and deltaFlags[colIdx + 1])
+        if not (ovPair or dPair):
+            _appendNormal(colIdx)
+            colIdx += 1
+            continue
+        pIdx = colIdx
+        sIdx = colIdx + 1
         primaryVals = np.full(numRows, np.nan)
         secondaryVals = np.full(numRows, np.nan)
         # Exact string→Decimal deltas (avoids float binary noise / scientific notation)
@@ -157,7 +215,7 @@ def modifyTable(
                 primaryVals[r] = float(pDec)
             if sDec is not None:
                 secondaryVals[r] = float(sDec)
-            if overlayChecked:
+            if ovPair:
                 pDisp, sDisp, dStr = overlayPairDisplays(pText, sText, pRule)
                 pDispCol[r] = pDisp if pDec is not None else ''
                 sDispCol[r] = sDisp if sDec is not None else ''
@@ -170,7 +228,7 @@ def modifyTable(
                 if pDec is not None and sDec is not None:
                     deltaDecimals[r] = pDec - sDec
 
-        if overlayChecked:
+        if ovPair:
             # Merge secondary into primary column offline
             mergedText = [''] * numRows
             roles = [None] * numRows
@@ -186,10 +244,10 @@ def modifyTable(
                     'primaryNative': pNativeCol[r],
                     'secondaryNative': sNativeCol[r],
                     'delta': dStr,
-                    'dataId1': dataIds[pairIndex * 2],
-                    'dataId2': dataIds[pairIndex * 2 + 1],
-                    'db1': databases[pairIndex * 2],
-                    'db2': databases[pairIndex * 2 + 1],
+                    'dataId1': dataIds[pIdx],
+                    'dataId2': dataIds[sIdx],
+                    'db1': databases[pIdx],
+                    'db2': databases[sIdx],
                     'overlay': True,
                 }
                 mergedText[r] = pStr if hasP else (sStr if hasS else '')
@@ -199,75 +257,47 @@ def modifyTable(
             # Header: keep primary header (two-line style)
             finalHeaders.append(headers[pIdx] if pIdx < len(headers) else f"Overlay {pairIndex}")
 
-            def _firstHeaderLine(h):
-                """First non-empty line of a multi-line header (graph legends)."""
-                if not h:
-                    return ''
-                for line in str(h).split('\n'):
-                    line = line.strip()
-                    if line:
-                        return line
-                return str(h).strip()
-
             pHeaderFull = headers[pIdx] if pIdx < len(headers) else ''
             sHeaderFull = headers[sIdx] if sIdx < len(headers) else ''
             pHeaderFirst = _firstHeaderLine(pHeaderFull)
             sHeaderFirst = _firstHeaderLine(sHeaderFull)
 
-            primaryDb = databases[pairIndex * 2]
-            primaryId = dataIds[pairIndex * 2]
+            primaryDb = databases[pIdx]
+            primaryId = dataIds[pIdx]
             lookupId = [
                 labelsDict.get(primaryId, primaryId) if primaryDb == 'AQUARIUS' else primaryId,
-                labelsDict.get(dataIds[pairIndex * 2 + 1], dataIds[pairIndex * 2 + 1])
-                if databases[pairIndex * 2 + 1] == 'AQUARIUS'
-                else dataIds[pairIndex * 2 + 1],
+                labelsDict.get(dataIds[sIdx], dataIds[sIdx])
+                if databases[sIdx] == 'AQUARIUS'
+                else dataIds[sIdx],
             ]
             columnMetadata.append({
                 'type': 'overlay',
-                'dataIds': [dataIds[pairIndex * 2], dataIds[pairIndex * 2 + 1]],
-                'dbs': [databases[pairIndex * 2], databases[pairIndex * 2 + 1]],
-                'queryInfos': [queryInfos[pairIndex * 2], queryInfos[pairIndex * 2 + 1]],
+                'dataIds': [dataIds[pIdx], dataIds[sIdx]],
+                'dbs': [databases[pIdx], databases[sIdx]],
+                'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
                 'pairIndex': pairIndex,
                 'lookupId': lookupId,
                 'headerFirstLines': [pHeaderFirst, sHeaderFirst],
                 'headerFullLines': [pHeaderFull, sHeaderFull],
                 'roundRules': [pRule, sRule],
+                'flags': _flagsAt(pIdx),
+                'itemFlags': [_flagsAt(pIdx), _flagsAt(sIdx)],
             })
         else:
             # Keep both columns as normal (already formatted in buildTable; keep text)
-            finalCols.append(list(grid[pIdx]))
-            finalRoles.append([None] * numRows)
-            finalHeaders.append(headers[pIdx])
-            finalRules.append(pRule)
-            finalCols.append(list(grid[sIdx]))
-            finalRoles.append([None] * numRows)
-            finalHeaders.append(headers[sIdx])
-            finalRules.append(sRule)
-
-            primaryDb = databases[pairIndex * 2]
-            primaryId = dataIds[pairIndex * 2]
+            _appendNormal(pIdx)
+            _appendNormal(sIdx)
+            primaryDb = databases[pIdx]
+            primaryId = dataIds[pIdx]
             lookupIdPrimary = labelsDict.get(primaryId, primaryId) if primaryDb == 'AQUARIUS' else primaryId
-            columnMetadata.append({
-                'type': 'normal',
-                'dataIds': [dataIds[pairIndex * 2]],
-                'dbs': [databases[pairIndex * 2]],
-                'queryInfos': [queryInfos[pairIndex * 2]],
-                'lookupId': lookupIdPrimary,
-            })
-            secondaryDb = databases[pairIndex * 2 + 1]
-            secondaryId = dataIds[pairIndex * 2 + 1]
+            secondaryDb = databases[sIdx]
+            secondaryId = dataIds[sIdx]
             lookupIdSecondary = (
                 labelsDict.get(secondaryId, secondaryId) if secondaryDb == 'AQUARIUS' else secondaryId
             )
-            columnMetadata.append({
-                'type': 'normal',
-                'dataIds': [dataIds[pairIndex * 2 + 1]],
-                'dbs': [databases[pairIndex * 2 + 1]],
-                'queryInfos': [queryInfos[pairIndex * 2 + 1]],
-                'lookupId': lookupIdSecondary,
-            })
+            lookupId = [lookupIdPrimary, lookupIdSecondary]
 
-        if deltaChecked:
+        if dPair:
             dCol = [''] * numRows
             for r in range(numRows):
                 dCol[r] = formatDeltaValue(deltaDecimals[r], dRule)
@@ -275,36 +305,25 @@ def modifyTable(
             finalRoles.append([None] * numRows)
             finalHeaders.append("Delta")
             finalRules.append(dRule)
-            if not overlayChecked:
+            if ovPair:
+                pass  # lookupId already the overlay pair
+            else:
                 lookupId = [lookupIdPrimary, lookupIdSecondary]
             columnMetadata.append({
                 'type': 'delta',
-                'dataIds': [dataIds[pairIndex * 2], dataIds[pairIndex * 2 + 1]],
-                'dbs': [databases[pairIndex * 2], databases[pairIndex * 2 + 1]],
-                'queryInfos': [queryInfos[pairIndex * 2], queryInfos[pairIndex * 2 + 1]],
+                'dataIds': [dataIds[pIdx], dataIds[sIdx]],
+                'dbs': [databases[pIdx], databases[sIdx]],
+                'queryInfos': [queryInfos[pIdx], queryInfos[sIdx]],
                 'pairIndex': pairIndex,
                 'lookupId': lookupId,
+                'flags': _flagsAt(pIdx),
+                'itemFlags': [_flagsAt(pIdx), _flagsAt(sIdx)],
             })
 
-        if pairIndex % 2 == 0 or pairIndex == pairCount - 1:
-            yieldProgress(f"Overlay/delta: computing pairs... ({pairIndex + 1}/{pairCount})", 97)
-
-    if hasOdd:
-        last = numCols - 1
-        finalCols.append(list(grid[last]))
-        finalRoles.append([None] * numRows)
-        finalHeaders.append(headers[last])
-        finalRules.append(ruleForId(last))
-        lastDb = databases[-1]
-        lastId = dataIds[-1]
-        lookupIdLast = labelsDict.get(lastId, lastId) if lastDb == 'AQUARIUS' else lastId
-        columnMetadata.append({
-            'type': 'normal',
-            'dataIds': [dataIds[-1]],
-            'dbs': [databases[-1]],
-            'queryInfos': [queryInfos[-1]],
-            'lookupId': lookupIdLast,
-        })
+        pairIndex += 1
+        colIdx += 2
+        if pairIndex % 2 == 0:
+            yieldProgress(f"Overlay/delta: computing pairs... ({pairIndex})", 97)
 
     # --- Single rewrite of the table (no removeColumn loop) ---
     outCols = len(finalCols)
