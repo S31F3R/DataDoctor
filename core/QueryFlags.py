@@ -26,7 +26,9 @@ ITEM_ROLE = int(Qt.ItemDataRole.UserRole)
 KIND_SERIES = "series"
 KIND_EQUATION = "equation"
 EQUATION_INTERVAL = "EQUATION"
+# Legacy third field on old saves; new saves store the column header there.
 EQUATION_DATABASE = "custom"
+EQUATION_DEFAULT_HEADER = "Column"
 
 
 def newItemId() -> str:
@@ -119,10 +121,18 @@ def _textIsEquation(text: str) -> bool:
     return len(parts) >= 3 and parts[1].upper() == EQUATION_INTERVAL
 
 
+def equationHeader(header) -> str:
+    """Third query-list field for equations: the column header, not 'custom'."""
+    label = (header or "").strip().replace("|", " ").replace("\n", " ").replace("\r", " ")
+    if not label or label.lower() == EQUATION_DATABASE:
+        return EQUATION_DEFAULT_HEADER
+    return label
+
+
 def parseListText(text: str):
     """
-    'dataID|interval|database' or equation '=<formula>|EQUATION|custom'.
-    Returns (kind, dataId, interval, database) or None.
+    'dataID|interval|database' or equation '=<formula>|EQUATION|<header>'.
+    Returns (kind, dataId, interval, database_or_header) or None.
     """
     s = (text or "").strip()
     if not s:
@@ -130,21 +140,22 @@ def parseListText(text: str):
     if s.startswith("="):
         parts = s.split("|", 2)
         formula = parts[0]
-        return (KIND_EQUATION, formula, EQUATION_INTERVAL, EQUATION_DATABASE)
+        label = parts[2] if len(parts) > 2 else ""
+        return (KIND_EQUATION, formula, EQUATION_INTERVAL, equationHeader(label))
     parts = s.split("|")
     if len(parts) != 3:
         return None
     dataId, interval, database = parts
-    if interval.upper() == EQUATION_INTERVAL or database == EQUATION_DATABASE:
-        return (KIND_EQUATION, dataId, EQUATION_INTERVAL, EQUATION_DATABASE)
+    if interval.upper() == EQUATION_INTERVAL:
+        return (KIND_EQUATION, dataId, EQUATION_INTERVAL, equationHeader(database))
     return (KIND_SERIES, dataId, interval, database)
 
 
-def equationListText(formula: str) -> str:
+def equationListText(formula: str, header: str | None = None) -> str:
     f = (formula or "").strip()
     if not f.startswith("="):
         f = "=" + f
-    return f"{f}|{EQUATION_INTERVAL}|{EQUATION_DATABASE}"
+    return f"{f}|{EQUATION_INTERVAL}|{equationHeader(header)}"
 
 
 def seriesFlagsFromQueryItem(queryItem) -> dict:
@@ -344,9 +355,11 @@ def serializeItem(item) -> dict:
     }
     if kind == KIND_EQUATION:
         parsed = parseListText(text)
-        out["formula"] = data.get("formula") or (parsed[1] if parsed else text)
-        if data.get("header"):
-            out["header"] = data["header"]
+        formula = data.get("formula") or (parsed[1] if parsed else text)
+        header = data.get("header") or (parsed[3] if parsed else EQUATION_DEFAULT_HEADER)
+        out["formula"] = formula
+        out["header"] = equationHeader(header)
+        out["q"] = equationListText(formula, header)
         if data.get("refs"):
             out["refs"] = list(data["refs"])
     return out
@@ -366,25 +379,38 @@ def parseSavedEntry(entry, defaultFlags=None) -> dict | None:
             return None
         kind, dataId, interval, database = parsed
         if kind == KIND_EQUATION:
-            text = equationListText(dataId)
-        else:
-            text = f"{dataId}|{interval}|{database}"
+            text = equationListText(dataId, database)
+            return {
+                "kind": kind,
+                "text": text,
+                "flags": emptyFlags(),
+                "id": newItemId(),
+                "formula": dataId,
+                "header": equationHeader(database),
+            }
+        text = f"{dataId}|{interval}|{database}"
         return {
             "kind": kind,
             "text": text,
-            "flags": dict(defaults) if kind == KIND_SERIES else emptyFlags(),
+            "flags": dict(defaults),
             "id": newItemId(),
-            "formula": dataId if kind == KIND_EQUATION else None,
+            "formula": None,
         }
     if not isinstance(entry, dict):
         return None
     kind = entry.get("kind") or KIND_SERIES
     text = (entry.get("q") or entry.get("text") or "").strip()
     formula = entry.get("formula")
+    header = entry.get("header")
+    flags = emptyFlags()
     if kind == KIND_EQUATION or (formula and str(formula).startswith("=")) or _textIsEquation(text):
         kind = KIND_EQUATION
-        formula = formula or (parseListText(text)[1] if parseListText(text) else text)
-        text = equationListText(formula)
+        parsed = parseListText(text) if text else None
+        formula = formula or (parsed[1] if parsed else text)
+        if not header and parsed:
+            header = parsed[3]
+        header = equationHeader(header)
+        text = equationListText(formula, header)
         flags = emptyFlags()
     else:
         if not text:
@@ -398,12 +424,13 @@ def parseSavedEntry(entry, defaultFlags=None) -> dict | None:
             return None
         kind, dataId, interval, database = parsed
         if kind == KIND_EQUATION:
-            text = equationListText(dataId)
+            header = equationHeader(header or database)
+            text = equationListText(dataId, header)
+            formula = dataId
             flags = emptyFlags()
         else:
             text = f"{dataId}|{interval}|{database}"
             flags = normalizeFlags(entry, defaults)
-            # Allow nested flags dict too
             if isinstance(entry.get("flags"), dict):
                 flags = normalizeFlags(entry.get("flags"), defaults)
     return {
@@ -412,7 +439,7 @@ def parseSavedEntry(entry, defaultFlags=None) -> dict | None:
         "flags": flags,
         "id": entry.get("id") or newItemId(),
         "formula": formula,
-        "header": entry.get("header"),
+        "header": header,
         "refs": entry.get("refs"),
     }
 

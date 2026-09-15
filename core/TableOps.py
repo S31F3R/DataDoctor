@@ -841,10 +841,11 @@ def _syncQueryList(mainWindow):
                 or str(entry.get("formula") or "").startswith("=")
             ):
                 formula = entry.get("formula") or ""
-                text = QueryFlags.equationListText(formula)
+                header = entry.get("header")
+                text = QueryFlags.equationListText(formula, header)
                 extra = {
                     "formula": formula,
-                    "header": entry.get("header"),
+                    "header": QueryFlags.equationHeader(header),
                     "refs": entry.get("refs"),
                     "id": entry.get("id") or QueryFlags.newItemId(),
                 }
@@ -937,6 +938,17 @@ def renameHeader(mainWindow, col):
         _setHeaderText(table, col, Utils.formatTableHeaderLabel(newCommon))
         _rememberCustomColumns(mainWindow)
         Utils.autoSizeTableColumns(table)
+        winQuery = getattr(mainWindow, "winQuery", None)
+        if winQuery is not None and hasattr(winQuery, "syncEquationQueryItem"):
+            formula = None
+            for r in range(table.rowCount()):
+                f = _itemFormula(table.item(r, col))
+                if f:
+                    from core.Formula import adjustFormula
+                    formula = adjustFormula(f, 0, -r)
+                    break
+            if formula:
+                winQuery.syncEquationQueryItem(formula, col, header=newCommon)
         return
     if datatype and Utils.includeDataTypeInLabel(db):
         newFirst = f"{newCommon}-{datatype}"

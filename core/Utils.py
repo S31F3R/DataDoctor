@@ -11,7 +11,7 @@ import time
 import weakref
 from datetime import datetime
 from pathlib import Path
-from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer
+from PyQt6.QtCore import Qt, QStandardPaths, QSize, QObject, QEvent, QTimer, QUrl
 from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPlainTextEdit, QTextEdit, QTableWidget,
     QListWidget, QListWidgetItem, QTreeView, QPushButton, QCheckBox,
@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import (
     QFont, QFontDatabase, QFontInfo, QFontMetrics, QGuiApplication, QIcon,
-    QPixmap, QPalette, QColor, QCursor,
+    QPixmap, QPalette, QColor, QCursor, QDesktopServices,
 )
 from core import Logic, Config, Utils
 
@@ -385,6 +385,61 @@ def restartApplication():
     except Exception as e:
         Logic.logException("restartApplication failed", e)
         return False
+
+
+def openExternalUrl(url):
+    """
+    Open http(s) in the system browser.
+
+    QDesktopServices.openUrl → xdg-open → kde-open on this machine. kde-open is
+    a Qt app; if it inherits this process's QT_PLUGIN_PATH / AppImage
+    LD_LIBRARY_PATH it aborts (no xcb/wayland plugin) while Data Doctor itself
+    is fine. Strip those vars for the child. Other platforms use Qt as usual.
+    """
+    if hasattr(url, "toString"):
+        href = url.toString()
+        qurl = url
+    else:
+        href = str(url or "").strip()
+        qurl = QUrl(href)
+    if not href:
+        return False
+    if not sys.platform.startswith("linux"):
+        return bool(QDesktopServices.openUrl(qurl))
+    env = os.environ.copy()
+    appdir = env.get("APPDIR") or ""
+    for key in list(env):
+        if key.startswith("QT_") or key in (
+            "PYTHONPATH", "PYTHONHOME", "PYTHONNOUSERSITE",
+        ):
+            env.pop(key, None)
+    ld = env.get("LD_LIBRARY_PATH") or ""
+    if ld:
+        parts = [
+            p for p in ld.split(":")
+            if p and not (appdir and p.startswith(appdir))
+        ]
+        if parts:
+            env["LD_LIBRARY_PATH"] = ":".join(parts)
+        else:
+            env.pop("LD_LIBRARY_PATH", None)
+    try:
+        subprocess.Popen(
+            ["xdg-open", href],
+            env=env,
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+        return True
+    except Exception as e:
+        Logic.logMessage("WARN", f"openExternalUrl xdg-open failed: {e}")
+        try:
+            return bool(QDesktopServices.openUrl(qurl))
+        except Exception as e2:
+            Logic.logMessage("WARN", f"openExternalUrl fallback failed: {e2}")
+            return False
 
 
 class customPasswordEdit(QLineEdit):

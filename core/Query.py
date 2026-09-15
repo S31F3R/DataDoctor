@@ -1725,7 +1725,7 @@ def executeQuery(
                 mainWindow.mainTable, mainWindow, progressDialog=progressDialog
             )
 
-            if equationItems:
+            if equationItems and not isRefresh:
                 try:
                     from core import FormulaUi
                     FormulaUi.applyEquationQueryItems(mainWindow, equationItems)

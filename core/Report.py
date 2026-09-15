@@ -13,7 +13,6 @@ import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
-import webbrowser
 from pathlib import Path
 
 from core import Logic, Utils, Version
@@ -94,7 +93,7 @@ def openLogFolder() -> str | None:
     except Exception:
         pass
     try:
-        webbrowser.open(Path(folder).resolve().as_uri())
+        Utils.openExternalUrl(Path(folder).resolve().as_uri())
         return folder
     except Exception as e:
         Logic.logMessage("WARN", f"Report.openLogFolder: {e}")
@@ -395,7 +394,7 @@ class DeviceLoginDialog:
     def openGithub(self) -> None:
         url = verificationUrl(self.device)
         try:
-            webbrowser.open(url)
+            Utils.openExternalUrl(url)
         except Exception as e:
             Logic.logMessage("WARN", f"Report.openGithub: {e}")
             self.status.setText(
@@ -507,7 +506,7 @@ def showIssueCreated(parent, data: dict) -> None:
     box.exec()
     if openBtn is not None and box.clickedButton() is openBtn and url:
         try:
-            webbrowser.open(url)
+            Utils.openExternalUrl(url)
         except Exception as e:
             Logic.logMessage("WARN", f"Report.openIssueUrl: {e}")
 

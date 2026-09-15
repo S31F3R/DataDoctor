@@ -219,8 +219,9 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, s
                 oldBg=oldBg, oldFg=oldFg, newBg=newBg, newFg=newFg,
                 oldEdit=oldEdit, newEdit=newEdit,
             )
+        # Enter applies this cell only. Whole-column fill is for Quick Look /
+        # query replay (applyEquationQueryItems), or the fill handle.
         if not asFill and (meta or {}).get("type") == "custom":
-            _fillFormulaColumn(mainWindow, col, raw, originRow=row)
             _syncEquationListItem(mainWindow, col, raw, originRow=row)
         return True
     _setItemFormula(item, None)

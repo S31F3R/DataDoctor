@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QGraphicsOpacityEffect,
 )
 from PyQt6.QtCore import Qt, QUrl, QSize, QObject, QEvent, QTimer, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QPixmap, QFont, QIcon, QImage, QColor, QPainter, QDesktopServices
+from PyQt6.QtGui import QPixmap, QFont, QIcon, QImage, QColor, QPainter
 from PyQt6 import uic
 
 from core import Logic, Utils, Version
@@ -286,7 +286,7 @@ class uiAbout(QDialog):
             Report.showManualReportDialog(self)
             return
         if href.startswith("http://") or href.startswith("https://"):
-            QDesktopServices.openUrl(url)
+            Utils.openExternalUrl(url)
 
     def _aboutInfoHtml(self, pt):
         fam = getattr(self, "_retroFam", "monospace")

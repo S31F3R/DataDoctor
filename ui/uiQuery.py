@@ -324,7 +324,7 @@ class uiQuery(QMainWindow):
                     queryItems.append({
                         "kind": QueryFlags.KIND_EQUATION,
                         "formula": payload.get("formula") or dataId,
-                        "header": payload.get("header"),
+                        "header": payload.get("header") or database,
                         "refs": payload.get("refs"),
                         "id": itemId,
                         "flags": QueryFlags.emptyFlags(),
@@ -1198,8 +1198,8 @@ class uiQuery(QMainWindow):
         """Insert or update an equation row in the query list for a custom column."""
         if self.listQueryList is None or not formula:
             return
-        text = QueryFlags.equationListText(formula)
-        extra = {"formula": formula, "header": header, "refs": refs or []}
+        text = QueryFlags.equationListText(formula, header)
+        extra = {"formula": formula, "header": QueryFlags.equationHeader(header), "refs": refs or []}
         # Update existing equation at the same formula/header, else insert at col-ish index
         for i in range(self.listQueryList.count()):
             item = self.listQueryList.item(i)
