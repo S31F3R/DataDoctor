@@ -2,7 +2,8 @@ TEST FILE — tests to run
 ============================================================
 Grok writes the steps. Mark [x] when it passes, or note a fail.
 Workflow / publish how-to: documentation/status.grok (gitignored).
-“see updates” = collapse [x], tend RESPONSE, do To Do CURRENT TASKS/BUGS.
+“see updates” = collapse [x], handle every RESPONSE, do To Do CURRENT TASKS/BUGS.
+RESPONSE: under a test = Seifer ran it and left notes. Grok must act on those.
 Current Tests: untested / failed / retest. Passed [x] items collapse to Confirmed.
 Confirmed: tests passed since the last published X.Y.Z. A published
 publishRelease.py folds any titles missed in the change list, then clears this.
@@ -17,9 +18,37 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
+[x] Equation in query list / Quick Look
+   Steps:
+     a. Query two series. Insert column, type =B1+.01 in one cell and Enter.
+        That cell only changes. Query list shows EQUATION|<header> (not the formula,
+        not the word custom).
+     b. Rename the custom header. Query list shows EQUATION|<new label>.
+     c. Save Quick Look, new query from that Quick Look — list still says
+        EQUATION|<header>; equation column comes back filled for every row.
+     d. Header Remove on a referenced series: equation cells show #REF! immediately
+        and the EQUATION|<header> row turns red. Restore/fix the formula — red goes away.
+        Change a referenced Data ID or move the column — equation still runs.
+
+[ ] AppImage update + bunker (Linux AppImage install)
+   Steps:
+     a. Run the AppImage. Confirm ~/.config/Data Doctor/bunker.db exists and dictionary
+        saves persist after quit.
+     b. In-app update → Quit and apply. AppImage is replaced and the app relaunches.
+     c. If packaged bunker differs: Common Name / Data Type prompts. N still adds new IDs.
+
+[ ] Bunker merge N vs new rows (Windows update with a dictionary that actually differs)
+   Steps:
+     a. applyUpdate console: answer N to Common Names and Data Types.
+     b. Existing rows keep your names/types. New packaged dataIDs appear with packaged
+        names/types. Identical live vs packaged files skip prompts (logged).
+
 Confirmed
 --------------------------------------------------------------------------------
+Formula leading decimal
+Quick Look dirty prompt
+Data Dictionary save confirmation
+About version link
+Graph legend ASCII marks
+Query option flags + overlay colors
 
-Deferred / known
---------------------------------------------------------------------------------
-[!] AppImage applyUpdate path not wired the same as launcher packages yet
