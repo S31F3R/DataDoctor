@@ -203,6 +203,8 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, s
         except ValueError as e:
             display = str(e) or ERR_VALUE
         _setItemFormula(item, raw)
+        from core.QueryUtils import NATIVE_VALUE_ROLE
+        item.setData(NATIVE_VALUE_ROLE, display)
         if item.text() != display:
             item.setText(display)
         # Formula replaces queried QAQC/overlay paint; custom cols stay unflagged
@@ -225,8 +227,13 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, s
             _syncEquationListItem(mainWindow, col, raw, originRow=row)
         return True
     _setItemFormula(item, None)
-    if item.text() != raw:
-        item.setText(raw)
+    from core.QueryUtils import NATIVE_VALUE_ROLE
+    item.setData(NATIVE_VALUE_ROLE, raw)
+    display = _displayForNative(mainWindow, item, raw)
+    if item.text() != display:
+        item.setText(display)
+    else:
+        Upload.onItemChanged(mainWindow, item)
     if not skipUndo:
         from core import Undo
         newBg, newFg = Upload.captureItemColors(item)
@@ -237,6 +244,27 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, s
             oldEdit=oldEdit, newEdit=newEdit,
         )
     return True
+
+
+def _displayForNative(mainWindow, item, nativeText):
+    """Rounded table text for a queried cell; custom/raw columns stay native."""
+    if item is None or not nativeText:
+        return nativeText or ""
+    col = item.column()
+    metas = getattr(mainWindow, "columnMetadata", None) or []
+    meta = metas[col] if col < len(metas) else {}
+    if (meta or {}).get("type") == "custom":
+        return nativeText
+    flags = (meta or {}).get("flags") or {}
+    if flags.get("raw") or getattr(Config, "rawData", False):
+        return nativeText
+    table = getattr(mainWindow, "mainTable", None)
+    rules = getattr(table, "columnRoundingRules", None) or []
+    rule = rules[col] if col < len(rules) else Logic.DEFAULT_ROUNDING_SPEC
+    try:
+        return Logic.valuePrecision(nativeText, rule=rule)
+    except Exception:
+        return nativeText
 
 
 def recalculateAll(mainWindow):
@@ -329,7 +357,11 @@ class FormulaDelegate(QStyledItemDelegate):
         table = self.mainWindow.mainTable
         item = table.item(index.row(), index.column()) if table is not None else None
         formula = _itemFormula(item)
-        editor.setText(formula if formula else (item.text() if item is not None else ""))
+        if formula:
+            editor.setText(formula)
+        else:
+            from core.QueryUtils import itemNativeText
+            editor.setText(itemNativeText(item) if item is not None else "")
         editor.selectAll()
 
     def setModelData(self, editor, model, index):

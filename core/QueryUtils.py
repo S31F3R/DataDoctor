@@ -12,6 +12,17 @@ from core import Logic, Config, Utils, TableColors, QueryFlags
 NATIVE_VALUE_ROLE = int(Qt.ItemDataRole.UserRole) + 32
 
 
+def itemNativeText(item):
+    """Unrounded cell text (NATIVE_VALUE_ROLE), else the displayed text."""
+    if item is None:
+        return ""
+    v = item.data(NATIVE_VALUE_ROLE)
+    if v not in (None, ""):
+        return str(v).strip()
+    t = item.text()
+    return t.strip() if t else ""
+
+
 def modifyTable(
     table,
     deltaChecked,

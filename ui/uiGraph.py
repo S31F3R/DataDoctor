@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QApplication, QVBoxLayout, QWidget, QSizePolicy, QLabel, QToolTip,
     QFileDialog, QMessageBox, QToolButton,
 )
-from core import Config, Logic, Utils
+from core import Config, Logic, Utils, QueryUtils
 
 # Lazy matplotlib imports so startup still works if the package is missing
 _mplReady = False
@@ -468,6 +468,8 @@ def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None, rows=
     n = len(rows)
     primary = np.full(n, np.nan)
     secondary = np.full(n, np.nan)
+    primaryRounded = np.full(n, np.nan)
+    secondaryRounded = np.full(n, np.nan)
     primaryTexts = [''] * n
     secondaryTexts = [''] * n
     hasAny = False
@@ -479,12 +481,16 @@ def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None, rows=
         if not isinstance(role, dict) or not role.get('overlay'):
             continue
         hasAny = True
-        pRaw = role.get('primaryVal', '')
-        sRaw = role.get('secondaryVal', '')
+        pDisp = role.get('primaryVal', '')
+        sDisp = role.get('secondaryVal', '')
+        pRaw = role.get('primaryNative') or pDisp
+        sRaw = role.get('secondaryNative') or sDisp
         primary[i] = parseNumeric(pRaw)
         secondary[i] = parseNumeric(sRaw)
-        primaryTexts[i] = str(pRaw).strip() if pRaw not in (None, '') else ''
-        secondaryTexts[i] = str(sRaw).strip() if sRaw not in (None, '') else ''
+        primaryRounded[i] = parseNumeric(pDisp)
+        secondaryRounded[i] = parseNumeric(sDisp)
+        primaryTexts[i] = str(pDisp).strip() if pDisp not in (None, '') else ''
+        secondaryTexts[i] = str(sDisp).strip() if sDisp not in (None, '') else ''
 
     if not hasAny:
         return []
@@ -506,9 +512,9 @@ def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None, rows=
         sLabel = sName
     out = []
     if np.any(np.isfinite(primary)):
-        out.append((pLabel, primary, primaryTexts))
+        out.append((pLabel, primary, primaryTexts, primaryRounded))
     if np.any(np.isfinite(secondary)):
-        out.append((sLabel, secondary, secondaryTexts))
+        out.append((sLabel, secondary, secondaryTexts, secondaryRounded))
     return out
 
 
@@ -584,16 +590,22 @@ def extractSeries(table, columns=None, rows=None, columnMetadata=None):
                     continue
 
         vals = np.empty(n, dtype=float)
+        rounded = np.empty(n, dtype=float)
         texts = [''] * n
         for i, r in enumerate(rows):
             item = table.item(r, c)
-            raw = item.text() if item is not None else ''
-            vals[i] = parseNumeric(raw)
-            texts[i] = (raw or '').strip()
+            display = item.text() if item is not None else ''
+            native = ''
+            if item is not None:
+                nv = item.data(QueryUtils.NATIVE_VALUE_ROLE)
+                native = str(nv).strip() if nv not in (None, '') else (display or '')
+            vals[i] = parseNumeric(native or display)
+            rounded[i] = parseNumeric(display)
+            texts[i] = (display or '').strip()
         if not np.any(np.isfinite(vals)):
             warnings.append(f"Skipped '{label}' (no numeric values).")
             continue
-        series.append((label, vals, texts))
+        series.append((label, vals, texts, rounded))
 
     if not series:
         return timestamps, tsTexts, [], ["No numeric series found to graph."]
@@ -1344,7 +1356,9 @@ class GraphPanel(QWidget):
             if line is None or not line.get_visible():
                 continue
             xs = entry.get('xs')
-            ys = entry.get('ys')
+            ys = entry.get('yRounded')
+            if ys is None or len(ys) == 0:
+                ys = entry.get('ys')
             if xs is None or ys is None or len(ys) == 0:
                 continue
             xs = np.asarray(xs, dtype=float)
@@ -1609,6 +1623,7 @@ class GraphPanel(QWidget):
                 color = colorCycle[colorIdx % len(colorCycle)]
                 colorIdx += 1
                 y = np.array(vals, dtype=float)
+                yRounded = np.array(item[3], dtype=float) if len(item) > 3 else y
                 mask = np.isfinite(x) & np.isfinite(y)
                 if not np.any(mask):
                     continue
@@ -1640,6 +1655,7 @@ class GraphPanel(QWidget):
                     'label': label,
                     'xs': np.asarray(x[mask], dtype=float),
                     'ys': np.asarray(y[mask], dtype=float),
+                    'yRounded': np.asarray(yRounded[mask], dtype=float) if yRounded.size == y.size else np.asarray(y[mask], dtype=float),
                     'yTexts': yTexts,
                     'color': color,
                     'visible': True,
@@ -1698,6 +1714,8 @@ class GraphPanel(QWidget):
         # In-plot legend with [x]/[ ] click-to-toggle (no left panel)
         self._buildInteractiveLegend(theme)
 
+        # Y limits from rounded table values; lines/markers use raw (native) y
+        self._autoscaleYToXView()
         # Capture home extents before any pan (used as clamp bounds)
         self.canvas.draw()
         self._storeDataLimits()

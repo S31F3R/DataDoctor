@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt, QObject, QEvent, QRunnable, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtWidgets import QAbstractItemView, QMessageBox
 
-from core import Logic, Config, Oracle, TableColors
+from core import Logic, Config, Oracle, TableColors, QueryUtils
 from core.Formula import isErrorValue
 
 
@@ -488,10 +488,12 @@ def snapshotBaseline(table, mainWindow=None):
                 user = getUserDict(item)
                 bg, fg = captureItemColors(item)
                 text = item.text() if item.text() is not None else ''
+                native = QueryUtils.itemNativeText(item)
 
                 # Secondary-only overlay → auto edit to write secondary into primary
                 autoOverlayFill = False
                 originalText = text
+                originalNative = native
                 dirty = False
                 if (
                     isinstance(user, dict)
@@ -501,14 +503,19 @@ def snapshotBaseline(table, mainWindow=None):
                 ):
                     pStr = str(user.get('primaryVal', '') or '').strip()
                     sStr = str(user.get('secondaryVal', '') or '').strip()
+                    sNative = str(user.get('secondaryNative', '') or sStr).strip()
                     if not pStr and sStr:
                         autoOverlayFill = True
                         originalText = ''  # primary was empty — upload is a real write
+                        originalNative = ''
                         dirty = True
                         autoFillCount += 1
+                        if sNative:
+                            item.setData(QueryUtils.NATIVE_VALUE_ROLE, sNative)
 
                 user[editKey] = {
                     'originalText': originalText,
+                    'originalNative': originalNative,
                     'baselineBg': bg,
                     'baselineFg': fg,
                     'dirty': dirty,
@@ -619,14 +626,19 @@ def onItemChanged(mainWindow, item):
         }
 
     current = item.text() if item.text() is not None else ''
+    currentNative = QueryUtils.itemNativeText(item)
     original = edit.get('originalText', '')
+    originalNative = edit.get('originalNative')
+    if originalNative is None:
+        originalNative = original
     table.blockSignals(True)
     try:
-        if current != original:
+        if not _nativeEqual(currentNative, originalNative):
             edit['dirty'] = True
             edit['uploaded'] = False
             # Manual edit (or change away from auto fill) is a real user edit
-            if edit.get('autoOverlayFill') and current != (user.get('secondaryVal') or ''):
+            secNative = user.get('secondaryNative') or user.get('secondaryVal') or ''
+            if edit.get('autoOverlayFill') and not _nativeEqual(currentNative, secNative):
                 edit['autoOverlayFill'] = False
             user[editKey] = edit
             setUserDict(item, user)
@@ -643,10 +655,22 @@ def onItemChanged(mainWindow, item):
                 applyUploadOkStyle(item)
             else:
                 applyColors(item, edit.get('baselineBg'), edit.get('baselineFg'))
-            # If user cleared an auto-fill back to '' (original), that is fine
             _ = wasAuto
+            _ = current
     finally:
         table.blockSignals(False)
+
+
+def _nativeEqual(a, b):
+    """True when raw values match (numeric compare if both parse as numbers)."""
+    sa = '' if a is None else str(a).strip()
+    sb = '' if b is None else str(b).strip()
+    if sa == sb:
+        return True
+    try:
+        return Decimal(sa) == Decimal(sb)
+    except (InvalidOperation, ValueError):
+        return False
 
 
 def clearSelectedCells(mainWindow):
@@ -813,33 +837,37 @@ def pasteClipboardToSelection(mainWindow):
     numRows = table.rowCount()
     numCols = table.columnCount()
     changed = 0
-
-    for dr, rowCells in enumerate(pasteRows):
-        r = startR + dr
-        if r < 0 or r >= numRows:
-            break
-        for dc, cellText in enumerate(rowCells):
-            c = startC + dc
-            if c < 0 or c >= numCols:
+    from core import Undo
+    Undo.stackFor(mainWindow).beginMacro()
+    try:
+        for dr, rowCells in enumerate(pasteRows):
+            r = startR + dr
+            if r < 0 or r >= numRows:
                 break
-            if columnIsLocked(mainWindow, c):
-                continue
-            item = table.item(r, c)
-            if item is None:
-                item = QTableWidgetItem('')
-                item.setTextAlignment(
-                    Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
-                )
-                table.setItem(r, c, item)
-            if not (item.flags() & Qt.ItemFlag.ItemIsEditable):
-                continue
-            newText = cellText.strip() if cellText is not None else ''
-            if cellInputHook is not None:
-                if cellInputHook(mainWindow, r, c, newText):
+            for dc, cellText in enumerate(rowCells):
+                c = startC + dc
+                if c < 0 or c >= numCols:
+                    break
+                if columnIsLocked(mainWindow, c):
+                    continue
+                item = table.item(r, c)
+                if item is None:
+                    item = QTableWidgetItem('')
+                    item.setTextAlignment(
+                        Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+                    )
+                    table.setItem(r, c, item)
+                if not (item.flags() & Qt.ItemFlag.ItemIsEditable):
+                    continue
+                newText = cellText.strip() if cellText is not None else ''
+                if cellInputHook is not None:
+                    if cellInputHook(mainWindow, r, c, newText):
+                        changed += 1
+                elif item.text() != newText:
+                    item.setText(newText)
                     changed += 1
-            elif item.text() != newText:
-                item.setText(newText)
-                changed += 1
+    finally:
+        Undo.stackFor(mainWindow).endMacro()
 
     if changed and recalcHook is not None:
         recalcHook(mainWindow)
@@ -1540,7 +1568,9 @@ def collectUploadRows(mainWindow):
             originalText = edit.get('originalText', '')
             if originalText is None:
                 originalText = ''
-            value = item.text() if item.text() is not None else ''
+            value = QueryUtils.itemNativeText(item)
+            if not value:
+                value = item.text() if item.text() is not None else ''
             if isErrorValue(value):
                 continue
 

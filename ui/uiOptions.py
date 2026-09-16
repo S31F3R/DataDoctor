@@ -377,22 +377,21 @@ class uiOptions(QDialog):
         page = self.findChild(QWidget, "tabsAppearanceGeneral")
         lay = page.layout() if page is not None else None
         if lay is not None:
+            lay.setAlignment(Qt.AlignmentFlag.AlignTop)
+            lay.setSpacing(6)
             for i in range(lay.count()):
                 item = lay.itemAt(i)
                 sp = item.spacerItem() if item is not None else None
                 if sp is not None:
                     sp.changeSize(
-                        20, 8,
+                        0, 0,
                         QSizePolicy.Policy.Minimum,
                         QSizePolicy.Policy.Minimum,
                     )
+        self.setMinimumHeight(580)
         hint = self.sizeHint()
-        chrome = 220
-        needed = max(hint.height(), tbl.height() + chrome)
-        needed = min(max(needed, 640), 960)
-        self.setMinimumHeight(max(self.minimumHeight(), needed))
-        if self.height() < needed:
-            self.resize(max(self.width(), 840), needed)
+        h = min(max(hint.height(), 600), 780)
+        self.resize(max(self.width(), 840), h)
 
     def _onTableColorDoubleClick(self, row, _col):
         nameItem = self.tblTableColors.item(row, 0)

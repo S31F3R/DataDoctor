@@ -15,6 +15,7 @@ The **Graph** button plots the Data Query table into a Graph tab (or a detached 
 
 ## Hover and colors
 
+- Lines and markers use **raw** (unrounded) values so a tight rounding spec does not flatten the series. **Y-axis limits and ticks** still follow the rounded table values.
 - Hover tooltip shows the **same text as the table cell** (raw digits when Query **Raw Data** is on; rounded otherwise).
 - Axis tick labels stay short — they do not dump 7 decimal places.
 - Tooltip is stable at the top edge of the plot (no frame jump).
