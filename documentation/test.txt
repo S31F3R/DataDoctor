@@ -34,7 +34,7 @@ Current Tests
      b. Click Later. No second prompt this session (leave the app open; no need to wait 4 hours).
      c. Quit and relaunch — update prompt can appear again.
 
-[ ] SDID-MRID upload uses MODIFY_M_TABLE
+[x] SDID-MRID upload uses MODIFY_M_TABLE
    Steps:
      a. Internal query an SDID-MRID (MRID not 0), edit a cell, Upload.
      b. app.log DEBUG shows MODIFY_M_TABLE (not MODIFY_R_BASE). SDID-0 / no MRID still uses R_BASE.

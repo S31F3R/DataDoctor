@@ -1,6 +1,9 @@
 ####### CURRENT TASKS #######
+-Need to add a note into the README or in the Wkik for USBR, saying something about this program is able to query R and M tables at the same time, even able to write back to R and M
 
 ####### CURRENT BUGS #######
+-When Overlay primary flag and secondary flag got added to winOptions Appearance table, the vertical height of the window was never resized to make them fit properly and the Restore Defaults button is sitting on top of the table, cutting off the P in Uploaded this session text in that table
+    -The goal is the window height is supposed to fit that table without the need to scroll
 -I think there are 2 bugs in this. One is a timeout when trying to update, not sure if it's an issue in the code. The main one is a failure when trying to write Overlay data back, using secondary data to write back to primary. Here is the log:
     2026-09-15 14:11:01,027 [ERROR] Upload HDB-write worker 7 (lchdb) failed SDID=2763 ts='09/15/26 01:15:00' value='1010.000': ORA-00001: unique constraint (LCHDBA.IDX_REF_CHANGE_AGENT_LOOKUP) violated
     ORA-06512: at "LCHDBA.R_BASE_AFTER_UPDATE", line 16
