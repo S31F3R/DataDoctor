@@ -18,4 +18,5 @@ resets this file to this template.
 - About Feature request is an in-app GitHub form (same as Report issue)
 - USBR SDID-MRID uploads use MODIFY_M_TABLE
 - Options Save no longer strips Log Viewer level colors
+- AppImage Quit and apply waits for the file to unlock, logs to applyUpdate.log, and removes leftover updates/ + .sh next to the AppImage
 
