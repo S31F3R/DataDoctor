@@ -10,8 +10,3 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
-- USBR R and M series can be queried together and written back (R → MODIFY_R_BASE, M → MODIFY_M_TABLE)
-- Options Appearance window grows so the color table and Restore Defaults do not overlap
-- HDB upload writes one SDID at a time (fixes overlay fill ORA-00001 on IDX_REF_CHANGE_AGENT_LOOKUP)
-- Update downloads retry up to 3 times on SSL/handshake timeout
-
