@@ -16,6 +16,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 from datetime import datetime
 import urllib.error
 import urllib.parse
@@ -309,35 +310,60 @@ def _httpDownload(url: str, dest: Path, progress=None, cancelled=None) -> None:
     req = urllib.request.Request(url, headers={"User-Agent": _UA})
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            final = resp.geturl()
-            if not _httpsHostAllowed(final):
-                raise ValueError(f"refusing download redirect to {final}")
-            total = int(resp.headers.get("Content-Length") or 0)
-            done = 0
-            with open(tmp, "wb") as f:
-                while True:
-                    if cancelled and cancelled():
-                        raise RuntimeError("download cancelled")
-                    chunk = resp.read(256 * 1024)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    done += len(chunk)
-                    if progress and total:
-                        try:
-                            progress(done, total)
-                        except Exception:
-                            pass
-        tmp.replace(dest)
-    except Exception:
+    lastErr = None
+    for attempt in range(1, 4):
         try:
-            if tmp.is_file():
-                tmp.unlink()
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                final = resp.geturl()
+                if not _httpsHostAllowed(final):
+                    raise ValueError(f"refusing download redirect to {final}")
+                total = int(resp.headers.get("Content-Length") or 0)
+                done = 0
+                with open(tmp, "wb") as f:
+                    while True:
+                        if cancelled and cancelled():
+                            raise RuntimeError("download cancelled")
+                        chunk = resp.read(256 * 1024)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        done += len(chunk)
+                        if progress and total:
+                            try:
+                                progress(done, total)
+                            except Exception:
+                                pass
+            tmp.replace(dest)
+            return
+        except RuntimeError:
+            try:
+                if tmp.is_file():
+                    tmp.unlink()
+            except Exception:
+                pass
+            raise
+        except (TimeoutError, urllib.error.URLError, OSError) as e:
+            lastErr = e
+            Logic.logMessage(
+                "WARN",
+                f"Update download attempt {attempt}/3 failed: {e}",
+            )
+            try:
+                if tmp.is_file():
+                    tmp.unlink()
+            except Exception:
+                pass
+            if attempt < 3:
+                time.sleep(2 * attempt)
+            continue
         except Exception:
-            pass
-        raise
+            try:
+                if tmp.is_file():
+                    tmp.unlink()
+            except Exception:
+                pass
+            raise
+    raise lastErr
 
 
 def _releaseVersion(rel: dict) -> str:

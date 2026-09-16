@@ -19,7 +19,7 @@ Regional / office DSN names:
 | `pnhyd` | Pacific Northwest Regional Office |
 | `gphyd` | Great Plains Regional Office |
 
-DataIDs are **site datatype IDs (SDID)**. A model-run suffix is allowed: `SDID-MRID`. When MRID is `0` or omitted, the header second line is just the SDID.
+DataIDs are **site datatype IDs (SDID)**. A model-run suffix is allowed: `SDID-MRID`. When MRID is `0` or omitted, that series is the **R** (realtime) table; a non-zero MRID is the **M** (model) table. One query list can mix R and M series. Upload writes R rows with `MODIFY_R_BASE` / `DELETE_R_BASE` and M rows with `MODIFY_M_TABLE` in the same pass.
 
 ## BOP and EOP
 

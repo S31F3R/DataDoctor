@@ -7,7 +7,7 @@ Two query doors on the main window:
 | **Public Query** | No HDB write, no internal-only metadata | USGS-NWIS, public USBR web, Aquarius if configured |
 | **Internal Query** | Reclamation / HDB login | HDB (Oracle), Aquarius, USGS |
 
-Both open the same Query window. The window title / `queryType` decides what is allowed (internal can upload; public cells stay locked).
+Both open the same Query window. The window title / `queryType` decides what is allowed (internal can upload; public cells stay locked). Internal HDB queries can mix **R** (SDID or `SDID-0`) and **M** (`SDID-MRID`) series in one list; upload writes each to the matching table.
 
 **Options → Oracle → Access List** hides unchecked HDB names from **Internal Query** and **SQL Query Builder**. **Public Query** still lists every database. Data Dictionary is not filtered.
 
