@@ -66,7 +66,7 @@ The raw Python zip ships `DataDoctor.py`. On Windows `applyUpdate` installs it a
 
 ## Apply on AppImage
 
-In-app **Quit and apply** is the whole flow: Data Doctor downloads to `~/.config/Data Doctor/updates/`, quits, replaces **the same filename you launched** (even if you renamed the AppImage), restarts, and deletes leftover updater files. Your Downloads folder stays a single `.AppImage`. **Later** keeps the download in that config folder and offers apply on the next launch.
+In-app **Quit and apply** is the whole flow: Data Doctor downloads to `~/.config/Data Doctor/updates/`, quits, replaces **the same filename you launched** (even if you renamed the AppImage), restarts, and deletes leftover updater files (`updates/`, `applyAppImageUpdate.sh`) next to the AppImage. Apply progress is in `~/.config/Data Doctor/logs/applyUpdate.log`. **Later** keeps the download in the config folder and offers apply on the next launch.
 
 The live data dictionary is **not** inside the AppImage (the image is read-only). It lives at `~/.config/Data Doctor/bunker.db`. On first run the packaged copy is installed there. After an update, if the packaged dictionary differs, you get the same Common Name / Data Type prompts as Windows `applyUpdate` — answering **N** still inserts **new** IDs with the packaged names/types.
 

@@ -16,6 +16,7 @@ import re
 import shutil
 import sys
 import tempfile
+from datetime import datetime
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -714,6 +715,34 @@ def launcherApplyScript() -> Path | None:
     return None
 
 
+def _sanitizedUpdaterEnv() -> dict:
+    """
+    Child env without this AppImage's mount on LD_LIBRARY_PATH / APPDIR.
+    After we exit, that mount is gone; the updater's mv/chmod would fail if
+    they still pointed at it.
+    """
+    env = os.environ.copy()
+    appdir = env.get("APPDIR") or ""
+    for key in list(env):
+        if key.startswith("QT_") or key in (
+            "PYTHONPATH", "PYTHONHOME", "PYTHONNOUSERSITE",
+            "APPDIR", "APPIMAGE", "ARGV0", "OWD",
+        ):
+            env.pop(key, None)
+    ld = env.get("LD_LIBRARY_PATH") or ""
+    if ld:
+        parts = [
+            p for p in ld.split(":")
+            if p and not (appdir and p.startswith(appdir))
+            and "/.mount_" not in p
+        ]
+        if parts:
+            env["LD_LIBRARY_PATH"] = ":".join(parts)
+        else:
+            env.pop("LD_LIBRARY_PATH", None)
+    return env
+
+
 def spawnAppImageReplaceAndExit(newAppImage: Path, mainWindow=None) -> bool:
     """
     Start a detached shell that waits for this process to exit, then replaces
@@ -727,7 +756,12 @@ def spawnAppImageReplaceAndExit(newAppImage: Path, mainWindow=None) -> bool:
     if not newAppImage.is_file():
         return False
 
-    # Write the updater to /tmp — never next to the user's AppImage.
+    logPath = Path(Utils.getLogPath("applyUpdate.log"))
+    try:
+        logPath.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
     try:
         fd, scriptPath = tempfile.mkstemp(prefix="datadoctor-apply-", suffix=".sh")
         os.close(fd)
@@ -739,7 +773,6 @@ def spawnAppImageReplaceAndExit(newAppImage: Path, mainWindow=None) -> bool:
         return False
 
     import subprocess
-    env = os.environ.copy()
     cmd = [
         "bash",
         str(script),
@@ -749,61 +782,84 @@ def spawnAppImageReplaceAndExit(newAppImage: Path, mainWindow=None) -> bool:
         str(newAppImage.resolve()),
         "--wait-pid",
         str(os.getpid()),
+        "--log",
+        str(logPath),
     ]
     try:
+        logFh = open(logPath, "a", encoding="utf-8")
+        logFh.write(
+            f"\n{datetime.now().isoformat(timespec='seconds')} "
+            f"spawn: {' '.join(cmd)}\n"
+        )
+        logFh.flush()
         subprocess.Popen(
             cmd,
             cwd=str(current.parent),
-            env=env,
+            env=_sanitizedUpdaterEnv(),
             start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            stdout=logFh,
+            stderr=logFh,
         )
+        logFh.close()
         Logic.logMessage(
             "INFO",
-            f"Spawned AppImage replace: {newAppImage} → {current.name}",
+            f"Spawned AppImage replace: {newAppImage} → {current} (log {logPath})",
         )
     except Exception as e:
         Logic.logException("spawnAppImageReplaceAndExit failed", e)
         return False
 
-    try:
-        from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication
+
+    def _quit():
+        Logic.appIsQuitting = True
         app = QApplication.instance()
-        if mainWindow is not None:
-            try:
-                mainWindow.close()
-            except Exception:
-                pass
-        if app is not None:
-            app.quit()
-    except Exception:
-        pass
+        try:
+            if app is not None:
+                app.closeAllWindows()
+                app.quit()
+        except Exception:
+            pass
+
+    QTimer.singleShot(400, _quit)
     return True
 
 
 _APPIMAGE_APPLY_SCRIPT = r'''#!/bin/bash
 # Replace the running AppImage after it exits. Keeps the user's filename.
-# Usage: applyAppImageUpdate.sh --current PATH --new PATH --wait-pid PID
-set -e
+# Usage: --current PATH --new PATH --wait-pid PID [--log PATH]
 CURRENT=""
 NEW=""
 WAIT_PID=""
+LOG=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --current) CURRENT="$2"; shift 2 ;;
     --new) NEW="$2"; shift 2 ;;
     --wait-pid) WAIT_PID="$2"; shift 2 ;;
+    --log) LOG="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
-if [ -z "$CURRENT" ] || [ -z "$NEW" ]; then
-  echo "Usage: $0 --current /path/AppImage --new /path/new.AppImage [--wait-pid PID]" >&2
+log() {
+  echo "$(date -Iseconds 2>/dev/null || date) $*"
+}
+fail() {
+  log "ERROR: $*"
   exit 1
+}
+if [ -n "$LOG" ]; then
+  mkdir -p "$(dirname "$LOG")" 2>/dev/null || true
+  exec >>"$LOG" 2>&1
 fi
+if [ -z "$CURRENT" ] || [ -z "$NEW" ]; then
+  fail "Usage: $0 --current /path/AppImage --new /path/new.AppImage [--wait-pid PID]"
+fi
+log "apply: current=$CURRENT new=$NEW wait=$WAIT_PID"
 if [ ! -f "$NEW" ]; then
-  echo "ERROR: new AppImage not found: $NEW" >&2
-  exit 1
+  fail "new AppImage not found: $NEW"
 fi
 if [ -n "$WAIT_PID" ]; then
   for i in $(seq 1 600); do
@@ -812,40 +868,54 @@ if [ -n "$WAIT_PID" ]; then
     fi
     sleep 1
   done
-  sleep 1
+  sleep 2
   if kill -0 "$WAIT_PID" 2>/dev/null; then
-    echo "ERROR: process $WAIT_PID still running; not replacing AppImage" >&2
-    exit 1
+    fail "process $WAIT_PID still running; not replacing AppImage"
   fi
 fi
 magic=$(od -An -N4 -tx1 "$NEW" 2>/dev/null | tr -d ' \n')
 case "$magic" in
   7f454c46*|2321*) ;;
   *)
-    echo "ERROR: new file is not an ELF/AppImage: $NEW" >&2
-    exit 1
+    fail "new file is not an ELF/AppImage: $NEW"
     ;;
 esac
 chmod +x "$NEW" 2>/dev/null || true
 HERE="$(dirname "$CURRENT")"
-# Replace in place, keeping the name the user launched (including a rename).
-rm -f "${CURRENT}.bak"
-if [ -f "$CURRENT" ]; then
-  rm -f "$CURRENT"
+TMPBAK="/tmp/datadoctor-old-$$.AppImage"
+rm -f "$TMPBAK" "${CURRENT}.bak"
+MOVED=0
+for i in $(seq 1 60); do
+  if [ ! -e "$CURRENT" ]; then
+    MOVED=1
+    break
+  fi
+  if mv "$CURRENT" "$TMPBAK" 2>/dev/null; then
+    MOVED=1
+    break
+  fi
+  log "waiting to replace (file busy) $i"
+  sleep 1
+done
+if [ "$MOVED" != 1 ]; then
+  fail "could not move current AppImage aside (still in use?): $CURRENT"
 fi
-mv "$NEW" "$CURRENT"
+if ! mv "$NEW" "$CURRENT"; then
+  log "restore previous AppImage"
+  mv "$TMPBAK" "$CURRENT" 2>/dev/null || true
+  fail "could not move new AppImage into place"
+fi
 chmod +x "$CURRENT" 2>/dev/null || true
-# Leftovers from older updates (script / folder next to the AppImage).
-rm -f "$HERE/applyAppImageUpdate.sh" "$HERE/applyAppImageUpdate"
-rm -f "$HERE/updates/pending.json" "$HERE/updates/README.txt"
-rm -f "$HERE/Update/pending.json" "$HERE/Update/README.txt"
-rmdir "$HERE/updates" 2>/dev/null || true
-rmdir "$HERE/Update" 2>/dev/null || true
+rm -f "$TMPBAK"
+# Leftovers from older in-app updates next to the AppImage.
+rm -f "$HERE/applyAppImageUpdate.sh" "$HERE/applyAppImageUpdate" "${CURRENT}.bak"
+rm -rf "$HERE/updates" "$HERE/Update"
 NEW_DIR="$(dirname "$NEW")"
 rm -f "$NEW_DIR/pending.json" "$NEW_DIR/README.txt"
-# Relaunch the same path/name, then delete this helper script.
+log "AppImage updated: $CURRENT"
 if [ -x "$CURRENT" ]; then
   nohup "$CURRENT" >/dev/null 2>&1 &
+  log "Relaunched pid $!"
 fi
 rm -f "$0"
 '''
