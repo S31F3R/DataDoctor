@@ -34,13 +34,13 @@ Current Tests
      b. Click Later. No second prompt this session (leave the app open; no need to wait 4 hours).
      c. Quit and relaunch — update prompt can appear again.
 
-[ ] Options Appearance table fits
+[x] Options Appearance table fits
    Steps:
      a. Options → Appearance. Overlay primary/secondary flag rows are fully visible.
      b. Restore Defaults sits below the table, not on top of "Uploaded this session".
      c. No vertical scroll needed for that table.
 
-[ ] Overlay upload same-SDID
+[x] Overlay upload same-SDID
    Steps:
      a. Overlay pair, fill secondary into primary, Upload many timestamps of one SDID.
      b. No ORA-00001 IDX_REF_CHANGE_AGENT_LOOKUP. app.log shows one series per worker.

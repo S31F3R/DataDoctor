@@ -1,43 +1,16 @@
 ####### CURRENT TASKS #######
+-Graph axis is working perfectly, it's going off of the rounded values. I want the actual data points and lines of the graph to go off of raw values. This will make it so the graph doesn't "flat line" if someone has rounding too "tight", not allowing to see change in data
+    -Make sure to document this in the Wiki
 
 ####### CURRENT BUGS #######
-
--More on that unable to update error:
-    2026-09-16 09:41:09,895 [ERROR] Update download failed: <urlopen error _ssl.c:1064: The handshake operation timed out>
-    Traceback (most recent call last):
-    File "urllib\request.py", line 1320, in do_open
-    File "http\client.py", line 1386, in request
-    File "http\client.py", line 1432, in _send_request
-    File "http\client.py", line 1381, in endheaders
-    File "http\client.py", line 1141, in _send_output
-    File "http\client.py", line 1085, in send
-    File "http\client.py", line 1527, in connect
-    File "ssl.py", line 455, in wrap_socket
-    File "ssl.py", line 1076, in _create
-    File "ssl.py", line 1372, in do_handshake
-    TimeoutError: _ssl.c:1064: The handshake operation timed out
-
-    During handling of the above exception, another exception occurred:
-
-    Traceback (most recent call last):
-    File "C:\Program Files\Data Doctor\pythonFiles\core\Update.py", line 542, in downloadReleaseAsset
-        _httpDownload(url, target, cancelled=cancelled)
-        ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "C:\Program Files\Data Doctor\pythonFiles\core\Update.py", line 304, in _httpDownload
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
-    File "urllib\request.py", line 187, in urlopen
-    File "urllib\request.py", line 493, in open
-    File "urllib\request.py", line 602, in http_response
-    File "urllib\request.py", line 525, in error
-    File "urllib\request.py", line 464, in _call_chain
-    File "urllib\request.py", line 718, in http_error_302
-    File "urllib\request.py", line 487, in open
-    File "urllib\request.py", line 504, in _open
-    File "urllib\request.py", line 464, in _call_chain
-    File "urllib\request.py", line 1368, in https_open
-    File "urllib\request.py", line 1323, in do_open
-    urllib.error.URLError: <urlopen error _ssl.c:1064: The handshake operation timed out>
+-I copied a column with a formula, about 40 rows. I pasted that into another column, all 40 rows showed an edit and it was the values that pasted, not the formula. This is working as expected. I hit ctrl+z, it only undid the one at the bottom of the row. I hit ctrl+z, it did the one above that. If I hit ctrl+z enough, it eventually undoes all 40. Since this was a copy paste of all 40 in one go, it should have undid all 40, not one at a time
+-Spacing for the color table in Appearance got screwed up last round, again. Now there is a big gap inbetween color theme/it's combo box and the title "Table colors", then there is yet another big gap until getting to the table
+    -It looks like all spacing got messed up on Appearance tab, but I can't be too sure. It looks like there is more spacing between Retro Mode and the Color Theme title now and too much from that title to the combobox. Fix all of it
+    -From what I can see, when this is fixed we should be able to make the height of the window smaller
+-I copied out 3 decimal data and placed it in a safe spot so I can copy it back. I then changed all that data to 4 decimals by adding a 5 at the end. I loaded that back to the database then ran the query again. It all shows 3 decimals because of rounding rules but the raw data does show the 4th as a 5. When I paste that 3 decimal data back in, it's not showing up as a data edit because it matches the current rounding rules. When a user changes data, the marked for edit needs to go off of raw data
+    -Be careful when fixing this. A double click with no change might trigger the "marked for edit" improperly again. That was a bug we had in the paste
+    -Double clicking on a cell should actually show the raw data. Excel does this. You see the rounded data but if you double click for edit, you see the raw. This might help fix this logic if we add that in
+    -Filling primary with secondary also needs to take the raw version of secondary and put it into primary. I'm assuming it's not like that already
 
 ####### 3.4.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
