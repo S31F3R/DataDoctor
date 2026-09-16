@@ -98,9 +98,9 @@ queryWindowBase = (960, 668)
 queryRetroExtraWWin = 96
 queryRetroExtraWLinux = 0
 retroAlwaysLayouts = {
-    'btnRefresh': (54, 8, 32, 32),
-    'btnUndo': (90, 8, 32, 32),
-    'btnUpload': (126, 8, 32, 32),
+    'btnRefresh': (40, 8, 32, 32),
+    'btnUndo': (82, 8, 32, 32),
+    'btnUpload': (124, 8, 32, 32),
     'btnIntervalInfo': (164, 76, 31, 20),
     'btnQueryOptionsInfo': (170, 401, 31, 20),
 }
@@ -111,9 +111,9 @@ retroAlwaysLayouts = {
 controlLayouts = {
     # winMain — Data Query tab overlay icons (match winMain.ui; Windows y via platformLayoutYNudge)
     # .ui bases: Refresh (4,6), Undo (40,6), Upload (76,6) — 32×32, 4px gaps
-    'btnRefresh': (10, 6, 32, 32),
-    'btnUndo': (44, 6, 32, 32),
-    'btnUpload': (80, 6, 32, 32),
+    'btnRefresh': (10, 5, 32, 32),
+    'btnUndo': (46, 5, 32, 32),
+    'btnUpload': (82, 5, 32, 32),
     # winQuery
     'btnDataIdInfo': (376, 5, 31, 20),
     'btnIntervalInfo': (100, 76, 31, 20),
