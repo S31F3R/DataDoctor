@@ -1,38 +1,6 @@
 ####### CURRENT TASKS #######
--Have the program check for updates passivly in the background. When an update is available, give the user the same prompt that is given when an update is found when program is launched
-    -Not sure what a good timer for checking this is but want to make sure it's passive or on a seperate thread. Don't want it slowing down the program or making a slight stutter when it does the check
-    -If an update is out and the user says later, disable check for that session. Re-enable on next launch
--Need to update Wiki and/or README.md to show this program does work with Aquarius cloud servers
--Overlay text color codes are not in winOptions table. Need to fix that. Needs to show Overlay Primary Flag and Overlay Secondary Flag
--Report Issue is a form within the program, how come Feature Request is not? If it's possible, I'd want that within the program also
--Any USBR SDID-MRID pushes/updates need to use MODIFY_M_TABLE procedure. To figure out the inputs, review SQL from the procedure below:
-    PROCEDURE modify_m_table (
-    MODEL_RUN_ID NUMBER,
-                    SITE_DATATYPE_ID NUMBER,
-                    START_DATE_TIME DATE,
-                    END_DATE_TIME DATE,
-                    VALUE FLOAT,
-                    INTERVAL VARCHAR2,
-                    DO_UPDATE_Y_OR_N VARCHAR2 ) IS
-    END_DATE_TIME_NEW DATE;
-    BEGIN
-        /*  set the end_date_time variable to the value passed in, this gets around the issue if you pass in a null */
-        END_DATE_TIME_NEW := END_DATE_TIME;
-
-        MODIFY_M_TABLE_RAW (
-                            MODEL_RUN_ID,
-                            SITE_DATATYPE_ID,
-                START_DATE_TIME,
-                END_DATE_TIME_NEW,
-                VALUE,
-                INTERVAL,
-                DO_UPDATE_Y_OR_N );
-
-    END;
 
 ####### CURRENT BUGS #######
--If I have Log Viewer opened and I'm in winOptions, when I hit save, it removes all text colors from the Log Viewer
--I pushed wrong version number. I pushed last push as v3.2.3-RC.1 when it should have been v3.3.0-RC.1. I fixed on github and removed the tags. Need to make sure all files are fixed
 
 ####### 3.4.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look

@@ -27,6 +27,33 @@ Current Tests
         updates/ folder, no applyAppImageUpdate.sh, no .bak beside it.
      c. If packaged bunker differs: Common Name / Data Type prompts. N still adds new IDs.
 
+[ ] Background update check
+   Steps:
+     a. Launch the app. Startup check still runs (same Update available prompt).
+     b. Click Later. No second prompt this session (leave the app open; no need to wait 4 hours).
+     c. Quit and relaunch — update prompt can appear again.
+
+[ ] Overlay flag colors in Options
+   Steps:
+     a. Options → Appearance. Table includes Overlay primary flag and Overlay secondary flag.
+     b. Change those colors, Save. Query list overlay pairs use the new colors (Light and Dark).
+     c. Restore Defaults returns them.
+
+[ ] Feature request in-app form
+   Steps:
+     a. About → Feature request: Form. In-app dialog (not a GitHub webpage).
+     b. Submit creates a GitHub issue as your account (same login as Report issue).
+
+[ ] SDID-MRID upload uses MODIFY_M_TABLE
+   Steps:
+     a. Internal query an SDID-MRID (MRID not 0), edit a cell, Upload.
+     b. app.log DEBUG shows MODIFY_M_TABLE (not MODIFY_R_BASE). SDID-0 / no MRID still uses R_BASE.
+
+[ ] Log Viewer colors survive Options Save
+   Steps:
+     a. Open Log Viewer (colored INFO/WARN/ERROR lines). Open Options, Save.
+     b. Log Viewer still has level colors (not all default text).
+
 Confirmed
 --------------------------------------------------------------------------------
 Formula leading decimal
