@@ -1,6 +1,8 @@
 # Updates and Releases
 
-Data Doctor checks [GitHub Releases](https://github.com/S31F3R/DataDoctor/releases) at startup. If nothing is published yet, or you are already current, the check is silent (no popup). If GitHub cannot be reached (blocked, timeout, HTTP error), a dialog says **Unable to check GitHub for updates.** The About window shows the installed version as a link to that tag’s GitHub release notes. **About → Feature request: Form** opens a GitHub feature-request form.
+Data Doctor checks [GitHub Releases](https://github.com/S31F3R/DataDoctor/releases) at startup and again in the background about every **four hours** (a worker thread; the UI is not blocked). If nothing is published yet, or you are already current, the check is silent. If GitHub cannot be reached at startup (blocked, timeout, HTTP error), a dialog says **Unable to check GitHub for updates.** Background checks stay silent when GitHub is unreachable. **Later** on an update prompt skips further prompts until the next launch.
+
+The About window shows the installed version as a link to that tag’s GitHub release notes. **About → Report issue: Form** and **Feature request: Form** are in-app GitHub forms.
 
 ## Channels
 

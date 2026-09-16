@@ -19,6 +19,7 @@ lastDeltaChecked = False
 lastOverlayChecked = False
 lastRawDataChecked = False
 lastQaqcChecked = False
+skipUpdatePromptThisSession = False
 systemTextColor = ""
 colorTheme = "system"  # system | light | dark (Options → Appearance)
 labelDataTypeUSBR = True

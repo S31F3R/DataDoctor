@@ -18,6 +18,8 @@ These are the defaults (GitHub wiki cannot follow your custom palette):
 | Overlay differs | <span style="background:#222;color:#FF0000;padding:2px 14px;border:1px solid #888">Aa</span> | Overlay pair both present but not equal |
 | Overlay secondary only | <span style="background:#DDA0DD;color:#000;padding:2px 14px;border:1px solid #888">Aa</span> | Secondary has a value, primary does not (auto-marked for upload) |
 | Overlay primary only | <span style="background:#FFB6C1;color:#000;padding:2px 14px;border:1px solid #888">Aa</span> | Primary has a value, secondary does not |
+| Overlay primary flag | <span style="background:#eee;color:#308CC6;padding:2px 14px;border:1px solid #888">Aa</span> | Query list: overlay primary Data ID |
+| Overlay secondary flag | <span style="background:#eee;color:#2E8B57;padding:2px 14px;border:1px solid #888">Aa</span> | Query list: overlay secondary Data ID |
 | Pending edit / upload | <span style="background:#C2185B;color:#FFF;padding:2px 14px;border:1px solid #888">Aa</span> | User edit or overlay fill waiting to upload |
 | Uploaded this session | <span style="background:#00695C;color:#FFF;padding:2px 14px;border:1px solid #888">Aa</span> | Write succeeded this session |
 

@@ -193,10 +193,7 @@ class uiAbout(QDialog):
             ('Version', f'https://github.com/{Version.GITHUB_REPO}/releases/tag/v{ver}'),
             ('GitHub', f'https://github.com/{Version.GITHUB_REPO}'),
             ('Report issue', 'datadoctor://report'),
-            (
-                'Feature request',
-                f'https://github.com/{Version.GITHUB_REPO}/issues/new?template=feature.yml',
-            ),
+            ('Feature request', 'datadoctor://feature'),
             ('Author', 'S31F3R'),
             ('License', 'GPL-3.0'),
             ('Music', 'By Eric Matyas at www.soundimage.org')
@@ -283,7 +280,11 @@ class uiAbout(QDialog):
         href = url.toString() if url is not None else ""
         if href.startswith("datadoctor://report"):
             from core import Report
-            Report.showManualReportDialog(self)
+            Report.showManualReportDialog(self, kind="bug")
+            return
+        if href.startswith("datadoctor://feature"):
+            from core import Report
+            Report.showManualReportDialog(self, kind="feature")
             return
         if href.startswith("http://") or href.startswith("https://"):
             Utils.openExternalUrl(url)
@@ -300,6 +301,8 @@ class uiAbout(QDialog):
             if href.startswith("http://") or href.startswith("https://") or href.startswith("datadoctor://"):
                 shown = href
                 if href.startswith("datadoctor://report"):
+                    shown = "Form"
+                elif href.startswith("datadoctor://feature"):
                     shown = "Form"
                 elif "template=feature.yml" in href:
                     shown = "Form"

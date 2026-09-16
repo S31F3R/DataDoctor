@@ -30,7 +30,7 @@ Hourly HDB values are **period** values. Data Doctor needs to know whether the t
 | **EOP** (end of period) | Display time is the *end* of the hour | START = display − 1h, END = display |
 | **BOP** (beginning of period) | Display time is the *start* of the hour | START = display, END = display + 1h |
 
-This is **Options → USBR → HOUR Timestamp Method** (`hourTimestampMethod` in `user.config`). It affects both how hourly data is interpreted and how `MODIFY_R_BASE` / `DELETE_R_BASE` are called on upload.
+This is **Options → USBR → HOUR Timestamp Method** (`hourTimestampMethod` in `user.config`). It affects both how hourly data is interpreted and how `MODIFY_R_BASE` / `DELETE_R_BASE` / `MODIFY_M_TABLE` are called on upload.
 
 Daily / instant series do not use that hour window the same way.
 
@@ -38,8 +38,9 @@ Daily / instant series do not use that hour window the same way.
 
 Internal Data Query only. Edited cells (magenta) and overlay auto-fills can be sent with the upload button.
 
-- `MODIFY_R_BASE` for values
-- `DELETE_R_BASE` for blanks (Delete key can clear a multi-cell selection)
+- `MODIFY_R_BASE` for values on SDID (or `SDID-0`)
+- `DELETE_R_BASE` for blanks on those series (Delete key can clear a multi-cell selection)
+- `MODIFY_M_TABLE` for **SDID-MRID** when MRID is not `0` (`MODEL_RUN_ID`, `SITE_DATATYPE_ID`, start/end, value, interval, `DO_UPDATE_Y_OR_N`)
 - Overlay secondary-only fills are flagged automatically; changing the cell yourself clears the auto flag
 - **Options → USBR → Overwrite Flag** sets `MODIFY_R_BASE` `OVERWRITE_FLAG` to `O` when checked, or NULL when off. Existing HDB values are only replaced when that box is checked. Freehand SQL in the Query Builder does not get this flag — it is for the upload write path.
 

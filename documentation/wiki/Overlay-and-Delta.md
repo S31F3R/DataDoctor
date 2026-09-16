@@ -2,7 +2,7 @@
 
 On the Query window, **Overlay Pairs**, **Display Deltas**, **Raw Data**, and **QAQC** are **per-series flags**. Checking a box flags every current Data ID and anything added later. Unchecked, right-click a query-list row to toggle **Overlay**, **Display Deltas**, **Raw Data**, or **QAQC Data** (hold **Ctrl** to toggle several without closing the menu). All four default **unchecked**.
 
-**Overlay pairing** uses consecutive flagged neighbors in list order. A flagged ID next to an unflagged one stays flagged but is **not** a pair (not color-highlighted). Example: six IDs with the 2nd unflagged → first stays flagged but unpaired; 3rd is primary and 4th secondary; 5th/6th the next pair. The query list colors primaries and secondaries from the current theme (not hardcoded blue/green). Unpaired and unflagged rows keep the normal text color.
+**Overlay pairing** uses consecutive flagged neighbors in list order. A flagged ID next to an unflagged one stays flagged but is **not** a pair (not color-highlighted). Example: six IDs with the 2nd unflagged → first stays flagged but unpaired; 3rd is primary and 4th secondary; 5th/6th the next pair. The query list colors primaries and secondaries as **Overlay primary flag** / **Overlay secondary flag** in **Options → Appearance** (defaults follow the theme). Unpaired and unflagged rows keep the normal text color.
 
 ## Overlay
 

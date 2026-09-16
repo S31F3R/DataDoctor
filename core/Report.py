@@ -264,16 +264,30 @@ def refreshGithubToken() -> str:
     return token
 
 
-def createGithubIssue(title: str, body: str, token: str) -> dict:
+def createGithubIssue(title: str, body: str, token: str, labels=None) -> dict:
     path = f"/repos/{REPO}/issues"
     payload = {"title": (title or "Data Doctor issue")[:256], "body": body or ""}
-    return httpJson(
-        API_ROOT + path,
-        method="POST",
-        body=payload,
-        token=token,
-        accept="application/vnd.github+json",
-    )
+    if labels:
+        payload["labels"] = list(labels)
+    try:
+        return httpJson(
+            API_ROOT + path,
+            method="POST",
+            body=payload,
+            token=token,
+            accept="application/vnd.github+json",
+        )
+    except GithubHttpError:
+        if not labels:
+            raise
+        payload.pop("labels", None)
+        return httpJson(
+            API_ROOT + path,
+            method="POST",
+            body=payload,
+            token=token,
+            accept="application/vnd.github+json",
+        )
 
 
 def ensureGithubToken(parent=None) -> str:
@@ -449,7 +463,7 @@ class DeviceLoginDialog:
         self.dlg.accept()
 
 
-def submitIssue(parent, title: str, body: str) -> dict | None:
+def submitIssue(parent, title: str, body: str, labels=None) -> dict | None:
     """Authenticate if needed, POST the issue, return the GitHub issue dict."""
     from PyQt6.QtWidgets import QMessageBox
 
@@ -459,7 +473,7 @@ def submitIssue(parent, title: str, body: str) -> dict | None:
     lastError = None
     for attempt in range(2):
         try:
-            data = createGithubIssue(title, body, token)
+            data = createGithubIssue(title, body, token, labels=labels)
             number = data.get("number")
             url = data.get("html_url") or ""
             Logic.logMessage("INFO", f"GitHub issue created: #{number} {url}")
@@ -555,7 +569,7 @@ def showCrashDialog(excType, excValue, excTb) -> None:
         app.dataDoctorShowingErrorDialog = False
 
 
-def showManualReportDialog(parent=None) -> None:
+def showManualReportDialog(parent=None, kind: str = "bug") -> None:
     from PyQt6.QtWidgets import (
         QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
         QLineEdit, QPlainTextEdit, QPushButton, QVBoxLayout,
@@ -564,8 +578,9 @@ def showManualReportDialog(parent=None) -> None:
     if not ensureGithubToken(parent):
         return
 
+    isFeature = str(kind or "bug").lower() in ("feature", "enhancement")
     dlg = QDialog(parent)
-    dlg.setWindowTitle("Report an issue")
+    dlg.setWindowTitle("Request a feature" if isFeature else "Report an issue")
     dlg.setModal(True)
     dlg.setMinimumWidth(520)
     dlg.resize(560, 420)
@@ -575,14 +590,20 @@ def showManualReportDialog(parent=None) -> None:
     ))
     layout.addWidget(QLabel("Title"))
     titleEdit = QLineEdit(dlg)
-    titleEdit.setPlaceholderText("Short summary")
+    titleEdit.setPlaceholderText(
+        "Short name for the feature" if isFeature else "Short summary"
+    )
     layout.addWidget(titleEdit)
-    layout.addWidget(QLabel("What happened"))
+    layout.addWidget(QLabel("What you want" if isFeature else "What happened"))
     bodyEdit = QPlainTextEdit(dlg)
-    bodyEdit.setPlaceholderText("What you did, what you expected, what you got.")
+    bodyEdit.setPlaceholderText(
+        "What it should do, and why it would help."
+        if isFeature else
+        "What you did, what you expected, what you got."
+    )
     layout.addWidget(bodyEdit)
     includeLog = QCheckBox("Include app.log tail")
-    includeLog.setChecked(True)
+    includeLog.setChecked(not isFeature)
     layout.addWidget(includeLog)
     extraRow = QHBoxLayout()
     copyBtn = QPushButton("Copy log")
@@ -601,23 +622,30 @@ def showManualReportDialog(parent=None) -> None:
     layout.addWidget(buttons)
 
     def onSubmit():
-        title = titleEdit.text().strip() or "Data Doctor issue"
+        kindKey = "feature" if isFeature else "bug"
+        title = titleEdit.text().strip() or (
+            "Data Doctor feature request" if isFeature else "Data Doctor issue"
+        )
         summary = bodyEdit.toPlainText().strip() or "_describe it here_"
+        heading = "## Request" if isFeature else "## What happened"
         if includeLog.isChecked():
-            body = issueBody("bug", summary=summary)
+            body = issueBody(kindKey, summary=summary)
+            if isFeature:
+                body = body.replace("## What happened", heading, 1)
         else:
             body = "\n".join([
-                f"**Kind:** bug",
+                f"**Kind:** {kindKey}",
                 f"**Version:** {Version.displayVersion()}",
                 f"**OS:** {platform.system()} {platform.release()} ({platform.machine()})",
                 f"**Python:** {sys.version.split()[0]}",
                 "",
-                "## What happened",
+                heading,
                 "",
                 summary,
                 "",
             ])
-        data = submitIssue(dlg, title, body)
+        labels = ["enhancement"] if isFeature else None
+        data = submitIssue(dlg, title, body, labels=labels)
         if data:
             dlg.accept()
             showIssueCreated(parent, data)

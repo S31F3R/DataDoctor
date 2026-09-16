@@ -2683,6 +2683,25 @@ def applyLiveAppearance(app=None):
             graph.reapplyTheme()
         except Exception as e:
             Logic.logException("applyLiveAppearance: graph reapplyTheme failed", e)
+    try:
+        for w in app.topLevelWidgets():
+            if type(w).__name__ != "uiMain":
+                continue
+            populate = getattr(w, "populateLogViewer", None)
+            if not callable(populate):
+                break
+            tabLog = getattr(w, "tabLog", None)
+            tw = getattr(w, "tabWidget", None)
+            logOpen = False
+            if tw is not None and tabLog is not None and tw.indexOf(tabLog) != -1:
+                logOpen = True
+            elif tabLog is not None and tabLog.isVisible():
+                logOpen = True
+            if logOpen:
+                populate()
+            break
+    except Exception as e:
+        Logic.logException("applyLiveAppearance: log viewer refresh failed", e)
 
 
 def reloadGlobals():

@@ -1,18 +1,18 @@
 # Aquarius
 
-Aquarius Time-Series is an optional **internal/public** source. Configure it under **Options → Aquarius**:
+Aquarius Time-Series is an optional **internal/public** source. It works with **on-prem / VPN** servers and **Aquarius Cloud** (Aquatic Informatics hosted tenants). Configure it under **Options → Aquarius**:
 
 - Server URL (`aqServer`)
 - User (`aqUser`)
 - Password (`aqPassword`)
 
-All three live in the OS keyring, service `DataDoctor`. The server field is the Aquarius host / base URL. Empty server → Aquarius queries fail.
+All three live in the OS keyring, service `DataDoctor`. The server field is the Aquarius host / base URL (`https://…`). Cloud tenants typically look like `https://<site>.aquaticinformatics.net` (or your org’s cloud host). Empty server → Aquarius queries fail.
 
 Entra vs credential-account login is not implemented. Username and password are used.
 
 ## TLS certificates
 
-Aquarius is **HTTPS** on an internal/VPN network. Verification order:
+Aquarius is always **HTTPS**. On-prem installs often sit on an internal/VPN network; **Aquarius Cloud** uses a public certificate that the OS store already trusts. Verification order:
 
 1. **OS certificate store** (Windows Trusted Root, not the Mozilla `certifi` bundle). If IT already deploys the **issuing CA** with Group Policy, you do **not** need a yearly file on each PC — a new server leaf signed by that CA still verifies.
 2. Optional `certs/aquarius.pem` (extra CA). Prefer the **issuing CA**, not the yearly server certificate.

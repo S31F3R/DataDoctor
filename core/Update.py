@@ -889,10 +889,14 @@ def pendingAppImagePath() -> Path | None:
     return None
 
 
+BACKGROUND_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000  # 4 hours
+
+
 def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
-    """Fire a background update check after the main window is up."""
+    """Fire a background update check after the main window is up, then poll."""
     try:
         from PyQt6.QtCore import QTimer
+        from PyQt6.QtWidgets import QApplication
 
         def _go():
             pending = pendingAppImagePath()
@@ -908,11 +912,13 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
                 applyBtn = box.addButton(
                     "Quit and apply", QMessageBox.ButtonRole.AcceptRole
                 )
-                box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+                laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
                 box.setDefaultButton(applyBtn)
                 box.exec()
                 if box.clickedButton() is applyBtn:
                     spawnAppImageReplaceAndExit(pending, parent)
+                elif box.clickedButton() is laterBtn:
+                    Config.skipUpdatePromptThisSession = True
                 return
             if windowsNeedsLauncherRefresh():
                 runWindowsLauncherRefreshUi(parent)
@@ -920,8 +926,21 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
                 runUpdateCheckUi(parent, silentIfNone=True)
 
         QTimer.singleShot(delayMs, _go)
+        app = QApplication.instance()
+        if app is not None and getattr(app, "_dataDoctorUpdateTimer", None) is None:
+            t = QTimer(app)
+            t.setInterval(BACKGROUND_UPDATE_INTERVAL_MS)
+            t.timeout.connect(lambda: _backgroundUpdateTick(parent))
+            t.start()
+            app._dataDoctorUpdateTimer = t
     except Exception as e:
         Logic.logMessage("DEBUG", f"scheduleStartupUpdateCheck: {e}")
+
+
+def _backgroundUpdateTick(parent=None) -> None:
+    if getattr(Config, "skipUpdatePromptThisSession", False):
+        return
+    runUpdateCheckUi(parent, silentIfNone=True, silentIfUnreachable=True)
 
 
 def runWindowsLauncherRefreshUi(parent=None) -> None:
@@ -1075,10 +1094,11 @@ def runRevertToPublishedUi(parent=None) -> None:
     QThreadPool.globalInstance().start(_Worker(signals))
 
 
-def runUpdateCheckUi(parent=None, silentIfNone: bool = True) -> None:
+def runUpdateCheckUi(parent=None, silentIfNone: bool = True, silentIfUnreachable: bool = False) -> None:
     """
     Background-fetch latest release; if newer, prompt the user.
-    silentIfNone: no popup when already current / offline / no releases.
+    silentIfNone: no popup when already current / no releases.
+    silentIfUnreachable: no popup when GitHub cannot be reached (periodic checks).
     """
     from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
     from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -1103,8 +1123,11 @@ def runUpdateCheckUi(parent=None, silentIfNone: bool = True) -> None:
             self.signals.done.emit(info)
 
     def onDone(info):
+        if getattr(Config, "skipUpdatePromptThisSession", False):
+            return
         if isinstance(info, dict) and info.get("_unreachable"):
-            _showGithubUnreachable(parent, info.get("message"))
+            if not silentIfUnreachable:
+                _showGithubUnreachable(parent, info.get("message"))
             return
         if info is None:
             if not silentIfNone and parent is not None:
@@ -1191,10 +1214,12 @@ def _promptUpdate(parent, info: dict) -> None:
     box.setWindowTitle("Update available")
     box.setText("\n".join(lines))
     downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
-    box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+    laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
     box.setDefaultButton(downloadBtn)
     box.exec()
     if box.clickedButton() is not downloadBtn:
+        if box.clickedButton() is laterBtn:
+            Config.skipUpdatePromptThisSession = True
         return
 
     _downloadAndOfferApply(parent, info)

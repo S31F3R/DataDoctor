@@ -2,7 +2,7 @@
 
 Data Doctor is a desktop query and review tool for hydrologic time series from **USGS**, **USBR HDB**, and **Aquarius**. This wiki is the user guide. The [README](https://github.com/S31F3R/DataDoctor) is the short install overview.
 
-The installed version is shown in **About** (the number is a link to that version’s GitHub release notes). **Report issue: Form** is the in-app report. **Feature request: Form** opens a GitHub feature-request form.
+The installed version is shown in **About** (the number is a link to that version’s GitHub release notes). **Report issue: Form** and **Feature request: Form** are in-app GitHub forms (same login).
 
 ## Start here
 

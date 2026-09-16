@@ -77,6 +77,17 @@ deleteRBaseParamNames = (
     'LOADING_APPLICATION_ID',
 )
 
+# MODIFY_M_TABLE — SDID-MRID (model run) writes
+modifyMTableParamNames = (
+    'MODEL_RUN_ID',
+    'SITE_DATATYPE_ID',
+    'START_DATE_TIME',
+    'END_DATE_TIME',
+    'VALUE',
+    'INTERVAL',
+    'DO_UPDATE_Y_OR_N',
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers: DB kind / DSN / interval / style
@@ -150,6 +161,18 @@ def parseSdid(dataId):
     if s.isdigit():
         return int(s)
     raise ValueError(f'Invalid SITE_DATATYPE_ID (dataId): {dataId!r}')
+
+
+def parseMrid(dataId):
+    """
+    MODEL_RUN_ID from dataId suffix (20179-12 → 12). 0 if omitted or '-0'.
+    """
+    s = str(dataId or '').strip()
+    if '-' in s:
+        left, right = s.rsplit('-', 1)
+        if left.isdigit() and right.isdigit():
+            return int(right)
+    return 0
 
 
 def isBlankUploadValue(valueText):
@@ -1599,16 +1622,39 @@ def buildDeleteRBaseParams(uploadRow):
     return params
 
 
+def buildModifyMTableParams(uploadRow):
+    """Positional params for MODIFY_M_TABLE (SDID-MRID)."""
+    interval, startDt, endDt, sdid = resolveUploadDateTimes(uploadRow)
+    mrid = parseMrid(uploadRow.get('dataId'))
+    blank = isBlankUploadValue(uploadRow.get('value'))
+    value = None if blank else parseUploadValue(uploadRow.get('value'))
+    return [
+        int(mrid),                              # MODEL_RUN_ID
+        sdid,                                   # SITE_DATATYPE_ID
+        startDt,                                # START_DATE_TIME
+        endDt,                                  # END_DATE_TIME
+        value,                                  # VALUE (None → NULL)
+        interval,                               # INTERVAL
+        str(Config.hdbDoUpdateYorN or 'Y'),     # DO_UPDATE_Y_OR_N
+    ]
+
+
 def writeOneHdbValue(oracleConn, uploadRow, threadId=0):
     """
-    Call MODIFY_R_BASE (numeric value) or DELETE_R_BASE (blank cell).
-    Commit on success (via callproc helper).
+    R-table: MODIFY_R_BASE (value) or DELETE_R_BASE (blank).
+    M-table (SDID-MRID with MRID != 0): MODIFY_M_TABLE.
     """
     db = uploadRow.get('database', '')
     dsn = databaseToDsn(db)
     blank = isBlankUploadValue(uploadRow.get('value'))
+    mrid = parseMrid(uploadRow.get('dataId'))
 
-    if blank:
+    if mrid:
+        params = buildModifyMTableParams(uploadRow)
+        procName = 'MODIFY_M_TABLE'
+        paramNames = list(modifyMTableParamNames)
+        action = 'delete' if blank else 'modify'
+    elif blank:
         params = buildDeleteRBaseParams(uploadRow)
         procName = 'DELETE_R_BASE'
         paramNames = list(deleteRBaseParamNames)
@@ -1645,14 +1691,14 @@ def writeOneHdbValue(oracleConn, uploadRow, threadId=0):
         Logic.logMessage(
             "DEBUG",
             f"Upload.writeOneHdbValue thread={threadId}: OK {action} "
-            f"SDID={params[0]} interval={params[1]} ts={uploadRow.get('timestamp')!r} "
+            f"{procName} ts={uploadRow.get('timestamp')!r} "
             f"value={uploadRow.get('value')!r}",
         )
 
 
 def writeHdbRows(uploadRows):
     """
-    Write HDB rows via MODIFY_R_BASE (value) or DELETE_R_BASE (blank).
+    Write HDB rows via MODIFY_R_BASE / DELETE_R_BASE, or MODIFY_M_TABLE for MRID.
 
     Separate Oracle connections per database (no DB links on write).
     Within each DB: worker threads each hold one reusable session (like sqlRead).
@@ -1961,9 +2007,9 @@ def _finishUploadUi(
                 nDel = byDbDelete.get(db, 0)
                 parts = []
                 if nMod:
-                    parts.append(f"{nMod} modified (MODIFY_R_BASE)")
+                    parts.append(f"{nMod} modified")
                 if nDel:
-                    parts.append(f"{nDel} deleted (DELETE_R_BASE)")
+                    parts.append(f"{nDel} deleted")
                 detail = ', '.join(parts) if parts else f"{byDb[db]} value(s)"
                 lines.append(f"  {db}: {detail}")
 
@@ -2012,7 +2058,7 @@ def runUpload(mainWindow):
     """
     btnUpload entry point:
       - Collect user edits
-      - HDB (USBR-*): MODIFY_R_BASE for values; DELETE_R_BASE for blank cells
+      - HDB (USBR-*): MODIFY_R_BASE / DELETE_R_BASE; SDID-MRID uses MODIFY_M_TABLE
       - Aquarius: popup that write is not implemented, then teal success styling
       - No CSV dry-run
     """

@@ -4,11 +4,11 @@ A desktop tool for querying, reviewing, and (on Reclamation HDB) editing hydrolo
 
 - **USGS** Water Data for the Nation (OGC API + legacy NWIS)
 - **USBR** Hydrologic Database (HDB / Oracle)
-- **Aquarius** Time-Series
+- **Aquarius** Time-Series (on-prem / VPN and Aquarius Cloud)
 
 Built for Reclamation and USGS workflows: data dictionary labels, QAQC coloring, overlay/delta pairs, graphing, CSV export, and saved Quick Looks.
 
-Current version: **3.2.2** (see `core/Version.py`). Windows builds ship Python 3.14 embeddable.
+Current version: **3.3.0-rc.1** (see `core/Version.py`). Windows builds ship Python 3.14 embeddable.
 
 [Wiki](https://github.com/S31F3R/DataDoctor/wiki) · [Releases](https://github.com/S31F3R/DataDoctor/releases) · [Issues](https://github.com/S31F3R/DataDoctor/issues)
 

@@ -238,10 +238,18 @@ def pairRoleForIndex(flagList, index):
 
 def pairColors(widget=None):
     """
-    Theme-derived primary/secondary list colors (not hardcoded blue/green).
-    Primary = Highlight; secondary = a distinct hue shift of the same accent
-    so light, dark, and retro all stay readable on Base.
+    Query-list overlay primary/secondary colors.
+    Options → Appearance overrides (overlayPrimaryFlag / overlaySecondaryFlag)
+    win when set; otherwise derive from the theme Highlight color.
     """
+    try:
+        from core import TableColors
+        p = TableColors.qcolor("overlayPrimaryFlag", "fg")
+        s = TableColors.qcolor("overlaySecondaryFlag", "fg")
+        if p is not None and s is not None:
+            return p, s
+    except Exception:
+        pass
     pal = None
     if widget is not None:
         pal = widget.palette()
