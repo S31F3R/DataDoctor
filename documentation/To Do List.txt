@@ -823,6 +823,43 @@
     urllib.error.URLError: <urlopen error _ssl.c:1064: The handshake operation timed out>
     2026-09-15 05:43:02,125 [INFO] Downloading update 3.2.3-rc.1 → C:\Program Files\Data Doctor\updates\DataDoctor-Python-v3.2.3-rc.1.zip
 
+-More on that unable to update error:
+    2026-09-16 09:41:09,895 [ERROR] Update download failed: <urlopen error _ssl.c:1064: The handshake operation timed out>
+    Traceback (most recent call last):
+    File "urllib\request.py", line 1320, in do_open
+    File "http\client.py", line 1386, in request
+    File "http\client.py", line 1432, in _send_request
+    File "http\client.py", line 1381, in endheaders
+    File "http\client.py", line 1141, in _send_output
+    File "http\client.py", line 1085, in send
+    File "http\client.py", line 1527, in connect
+    File "ssl.py", line 455, in wrap_socket
+    File "ssl.py", line 1076, in _create
+    File "ssl.py", line 1372, in do_handshake
+    TimeoutError: _ssl.c:1064: The handshake operation timed out
+
+    During handling of the above exception, another exception occurred:
+
+    Traceback (most recent call last):
+    File "C:\Program Files\Data Doctor\pythonFiles\core\Update.py", line 542, in downloadReleaseAsset
+        _httpDownload(url, target, cancelled=cancelled)
+        ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\Program Files\Data Doctor\pythonFiles\core\Update.py", line 304, in _httpDownload
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+    File "urllib\request.py", line 187, in urlopen
+    File "urllib\request.py", line 493, in open
+    File "urllib\request.py", line 602, in http_response
+    File "urllib\request.py", line 525, in error
+    File "urllib\request.py", line 464, in _call_chain
+    File "urllib\request.py", line 718, in http_error_302
+    File "urllib\request.py", line 487, in open
+    File "urllib\request.py", line 504, in _open
+    File "urllib\request.py", line 464, in _call_chain
+    File "urllib\request.py", line 1368, in https_open
+    File "urllib\request.py", line 1323, in do_open
+    urllib.error.URLError: <urlopen error _ssl.c:1064: The handshake operation timed out>
+
 ####### 3.4.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
     -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
