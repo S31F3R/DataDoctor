@@ -367,6 +367,32 @@ class uiOptions(QDialog):
             + 6
         )
         tbl.setFixedHeight(max(rowsH, 160))
+        self._fitOptionsToAppearanceTable()
+
+    def _fitOptionsToAppearanceTable(self):
+        """Grow the dialog so the color table + Restore Defaults sit fully in view."""
+        tbl = getattr(self, "tblTableColors", None)
+        if tbl is None:
+            return
+        page = self.findChild(QWidget, "tabsAppearanceGeneral")
+        lay = page.layout() if page is not None else None
+        if lay is not None:
+            for i in range(lay.count()):
+                item = lay.itemAt(i)
+                sp = item.spacerItem() if item is not None else None
+                if sp is not None:
+                    sp.changeSize(
+                        20, 8,
+                        QSizePolicy.Policy.Minimum,
+                        QSizePolicy.Policy.Minimum,
+                    )
+        hint = self.sizeHint()
+        chrome = 220
+        needed = max(hint.height(), tbl.height() + chrome)
+        needed = min(max(needed, 640), 960)
+        self.setMinimumHeight(max(self.minimumHeight(), needed))
+        if self.height() < needed:
+            self.resize(max(self.width(), 840), needed)
 
     def _onTableColorDoubleClick(self, row, _col):
         nameItem = self.tblTableColors.item(row, 0)

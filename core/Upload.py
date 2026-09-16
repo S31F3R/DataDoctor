@@ -1725,16 +1725,27 @@ def writeHdbRows(uploadRows):
 
     def processDatabase(dbName, rows):
         dsn = databaseToDsn(dbName)
-        taskQueue = queue.Queue()
+        # One series (SDID+MRID) per queue item, written sequentially. Parallel
+        # MODIFY_R_BASE on the same SDID trips LCHDBA.IDX_REF_CHANGE_AGENT_LOOKUP
+        # in R_BASE_AFTER_UPDATE.
+        bySeries = {}
         for r in rows:
-            taskQueue.put(r)
+            try:
+                key = (parseSdid(r.get("dataId")), parseMrid(r.get("dataId")))
+            except Exception:
+                key = (str(r.get("dataId") or ""), 0)
+            bySeries.setdefault(key, []).append(r)
+        taskQueue = queue.Queue()
+        for seriesRows in bySeries.values():
+            seriesRows.sort(key=lambda x: str(x.get("timestamp") or ""))
+            taskQueue.put(seriesRows)
 
-        numThreads = min(maxWriteThreads, max(1, len(rows)))
+        numThreads = min(maxWriteThreads, max(1, len(bySeries)))
         if Config.debug:
             Logic.logMessage(
                 "DEBUG",
                 f"Upload.writeHdbRows: DB={dbName} dsn={dsn} rows={len(rows)} "
-                f"threads={numThreads}",
+                f"series={len(bySeries)} threads={numThreads}",
             )
 
         workerErrors = []
@@ -1758,49 +1769,58 @@ def writeHdbRows(uploadRows):
 
                 while True:
                     try:
-                        row = taskQueue.get_nowait()
+                        seriesRows = taskQueue.get_nowait()
                     except queue.Empty:
                         break
+                    if not isinstance(seriesRows, list):
+                        seriesRows = [seriesRows]
+                    stopWorker = False
                     try:
-                        writeOneHdbValue(oracleConn, row, threadId=threadId)
-                        with resultLock:
-                            successRows.append(row)
-                        tasksDone += 1
-                    except Exception as e:
-                        errText = str(e)
-                        Logic.logException(
-                            f"Upload HDB-write worker {threadId} ({dsn}) failed "
-                            f"SDID={row.get('dataId')} ts={row.get('timestamp')!r} "
-                            f"value={row.get('value')!r}",
-                            e,
-                        )
-                        failedEntry = dict(row)
-                        failedEntry['error'] = errText
-                        with resultLock:
-                            failedRows.append(failedEntry)
-                        with workerErrorsLock:
-                            workerErrors.append(e)
-                        if isinstance(e, Oracle.OracleAuthError) or Oracle.isAuthError(e):
-                            # Drain remaining tasks as auth failures so they don't hang
-                            while True:
-                                try:
-                                    leftover = taskQueue.get_nowait()
-                                except queue.Empty:
-                                    break
-                                failLeft = dict(leftover)
-                                failLeft['error'] = errText
+                        for row in seriesRows:
+                            try:
+                                writeOneHdbValue(oracleConn, row, threadId=threadId)
                                 with resultLock:
-                                    failedRows.append(failLeft)
-                                try:
-                                    taskQueue.task_done()
-                                except Exception:
-                                    pass
-                            break
+                                    successRows.append(row)
+                                tasksDone += 1
+                            except Exception as e:
+                                errText = str(e)
+                                Logic.logException(
+                                    f"Upload HDB-write worker {threadId} ({dsn}) failed "
+                                    f"SDID={row.get('dataId')} ts={row.get('timestamp')!r} "
+                                    f"value={row.get('value')!r}",
+                                    e,
+                                )
+                                failedEntry = dict(row)
+                                failedEntry['error'] = errText
+                                with resultLock:
+                                    failedRows.append(failedEntry)
+                                with workerErrorsLock:
+                                    workerErrors.append(e)
+                                if isinstance(e, Oracle.OracleAuthError) or Oracle.isAuthError(e):
+                                    while True:
+                                        try:
+                                            leftover = taskQueue.get_nowait()
+                                        except queue.Empty:
+                                            break
+                                        leftovers = leftover if isinstance(leftover, list) else [leftover]
+                                        for left in leftovers:
+                                            failLeft = dict(left)
+                                            failLeft['error'] = errText
+                                            with resultLock:
+                                                failedRows.append(failLeft)
+                                        try:
+                                            taskQueue.task_done()
+                                        except Exception:
+                                            pass
+                                    stopWorker = True
+                                    break
                     finally:
                         try:
                             taskQueue.task_done()
                         except Exception:
                             pass
+                    if stopWorker:
+                        break
             except Exception as e:
                 Logic.logException(
                     f"Upload HDB-write worker {threadId} ({dsn}) failed to start session",
@@ -1814,10 +1834,12 @@ def writeHdbRows(uploadRows):
                         leftover = taskQueue.get_nowait()
                     except queue.Empty:
                         break
-                    failLeft = dict(leftover)
-                    failLeft['error'] = str(e)
-                    with resultLock:
-                        failedRows.append(failLeft)
+                    leftovers = leftover if isinstance(leftover, list) else [leftover]
+                    for left in leftovers:
+                        failLeft = dict(left)
+                        failLeft['error'] = str(e)
+                        with resultLock:
+                            failedRows.append(failLeft)
                     try:
                         taskQueue.task_done()
                     except Exception:

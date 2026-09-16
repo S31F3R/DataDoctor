@@ -3,7 +3,7 @@
 A desktop tool for querying, reviewing, and (on Reclamation HDB) editing hydrologic time series from:
 
 - **USGS** Water Data for the Nation (OGC API + legacy NWIS)
-- **USBR** Hydrologic Database (HDB / Oracle)
+- **USBR** Hydrologic Database (HDB / Oracle) — R and M tables in one query, and write-back to both
 - **Aquarius** Time-Series (on-prem / VPN and Aquarius Cloud)
 
 Built for Reclamation and USGS workflows: data dictionary labels, QAQC coloring, overlay/delta pairs, graphing, CSV export, and saved Quick Looks.
