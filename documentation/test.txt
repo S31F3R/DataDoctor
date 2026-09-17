@@ -2,8 +2,9 @@ TEST FILE — tests to run
 ============================================================
 Grok writes the steps. Mark [x] when it passes, or note a fail.
 Workflow / publish how-to: documentation/status.grok (gitignored).
-“see updates” = collapse [x], handle every RESPONSE, do To Do CURRENT TASKS/BUGS.
-RESPONSE: under a test = Seifer ran it and left notes. Grok must act on those.
+“see updates” = handle RESPONSE (then DELETE the RESPONSE: block), collapse [x]
+to Confirmed, do To Do CURRENT TASKS/BUGS. Never leave a handled RESPONSE: in
+this file. [x] + leftover RESPONSE: still collapses — the [x] is the pass.
 Current Tests: untested / failed / retest. Passed [x] items collapse to Confirmed.
 Confirmed: tests passed since the last published X.Y.Z. A published
 publishRelease.py folds any titles missed in the change list, then clears this.
@@ -13,49 +14,15 @@ Current Tests
 [ ] Mac package script
    Steps:
      a. From project root: python scripts/packageMac.py --skip-venv
-     b. dist/DataDoctor-macOS-YYYYMMDD.zip contains Data Doctor.command + pythonFiles/
-        + updates/ + applyUpdate.sh + pythonFiles/certs/
-     c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
-     d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
-
-[x] AppImage update + bunker (Linux AppImage install)
-   Steps:
-     a. Rename the AppImage (e.g. MyDoctor.AppImage) and run it from Downloads.
-        Confirm ~/.config/Data Doctor/bunker.db exists and dictionary saves persist.
-     b. In-app update → Quit and apply. App quits, replaces MyDoctor.AppImage
-        (same name), relaunches. Downloads still has that one AppImage — no
-        updates/ folder, no applyAppImageUpdate.sh, no .bak beside it.
-     c. If packaged bunker differs: Common Name / Data Type prompts. N still adds new IDs.
-     d. If apply fails: ~/.config/Data Doctor/logs/applyUpdate.log has the updater output.
-
-[ ] Graph uses raw points, rounded axis
-   Steps:
-     a. Query a series with tight rounding (e.g. DEC(0) / 0 decimals) that still
-        changes in raw. Graph: line/dots show the wiggle; Y ticks stay rounded.
-     b. Wiki Graph page mentions raw lines vs rounded axis.
-
-[ ] Paste undo is one action
-   Steps:
-     a. Copy ~40 formula/value cells, paste into another column.
-     b. Ctrl+Z once undoes the whole paste, not one cell.
-     RESPONSE: I did a quick test with this on a public query. I copied the data from the query, pasted it into a NEW column i inserted. hit ctrl z, it all stayed there
-
-[ ] Appearance tab spacing
-   Steps:
-     a. Options → Appearance. Tight gaps: Retro Mode, Color Theme label, combo,
-        Table colors title, then the table, Restore Defaults under it.
-     b. No large empty bands; window is not oversized.
-
-[ ] Edit mark uses raw; double-click shows raw
-   Steps:
-     a. Query rounded to 3 decimals with raw 4th digit 5. Copy 3-decimal text
-        and paste over those cells → they mark as edits.
-     b. Double-click a rounded cell: editor shows the raw value. Enter with no
-        change does not mark an edit.
-     c. Overlay secondary-only fill uploads secondary native (raw), not rounded.
+     b. Zip contains Data Doctor.app, Data Doctor.command, Clear Quarantine.command,
+        pythonFiles/python-embed-arm64 and python-embed-x86_64 (bundled CPython).
+     c. On a Mac: unzip, Right-click Data Doctor.app → Open (Gatekeeper). No system Python.
+     d. If blocked: Clear Quarantine.command (Right-click → Open), then the app.
+     e. Optional on Mac only: python scripts/packageMac.py --app → frozen PyInstaller .app.
 
 Confirmed
 --------------------------------------------------------------------------------
+Appearance tab spacing
 Formula leading decimal
 Quick Look dirty prompt
 Data Dictionary save confirmation
@@ -71,4 +38,8 @@ SDID-MRID upload uses MODIFY_M_TABLE
 Background update check
 Options Appearance table fits
 Overlay upload same-SDID
+AppImage update + bunker
+Graph uses raw points, rounded axis
+Edit mark uses raw; double-click shows raw
+Paste undo is one action
 

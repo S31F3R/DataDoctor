@@ -1,9 +1,6 @@
 ####### CURRENT TASKS #######
--AppImage update is too wordy. We don't need to let the user know what we're doing, like keeping the appimage name, replacing .appimage, etc. It needs to be more generic like our windows message, saying it will restart and apply update or hitting button for later. mimic the windows one but Linux specific changes
 
 ####### CURRENT BUGS #######
--Appearance tab of winOptions, Restore Defaults button moves around a lot. On first launch, I was on Retro mode. I opened options, clicked appearance, and noticed the button top was touching the box. I un checked retro mode, the button was in the perfect spot. I turned retro back on, the button was in the perfect spot. WHen I close the window and re opened, clicked appearance tab, now the button was INSIDE the table. My same trick of toggling the modes while in there made it go to the perfect spot each time
-    -If I'm in non retro mode, the button is always in a good spot, so this bug is tied to retro mode
 
 ####### 3.4.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look

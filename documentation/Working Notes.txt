@@ -14,4 +14,12 @@ resets this file to this template.
 - Multi-cell paste undoes as one Ctrl+Z
 - Options Appearance spacing tightened (no extra gaps above Table colors)
 - Cell edit marking, double-click, and overlay fill use raw (unrounded) values
+- Multi-cell paste undo actually lands on the stack (Ctrl+Z undoes the whole paste)
+- AppImage update prompts match Windows (Download / Restart / Later)
+- Options Appearance Restore Defaults stays below the color table in Retro on first visit
+- Options Appearance layout no longer resizes the dialog or collapses the bottom stretch (Retro vs normal stay stable)
+- Options Appearance: Restore Defaults is under the color table again; the dialog grows so every row fits with no scrollbar
+- Appearance Restore Defaults moved up ~10px (tighter under the color table)
+- Appearance Restore Defaults nudged up another ~10px under the color table
+- macOS zip ships bundled CPython 3.14 (python-build-standalone) plus Data Doctor.app; Gatekeeper: Right-click → Open or Clear Quarantine.command
 
