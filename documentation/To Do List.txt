@@ -1,6 +1,11 @@
 ####### CURRENT TASKS #######
 
 ####### CURRENT BUGS #######
+-Not sure if this is Windows only but the behavior needs to be this way for all of them. On Windows, there was an update so I selected download. After the download was done, I didn't want to restart so I hit later. Behind that was the original update window with Download or Later. This window should have gone away when I hit Download or Later. I had to click Later twice with what I didn
+    -If download is hit, close that window and show the download progress bar. If after that is done and Later is hit, just close that window back to main program
+-When clicking the X on the graph legend to hide a data set, the [] collapse. Lets make it so they are open, like it can have something in there, so like this [ ]
+-I used an overlay query that had HDB and Aquarius data on public. This was a test to see if I could run this query and have it ignore the Aquarius query dataID since we can't query Aquarius on public. So the query was HDB, AQ, HDB, AQ, etc in that order for dataID. THe overlay skipped AQ and just used the next HDB, which is wrong. Need to make it so overlay doesn't go through if it can't query it's "paired data set" from the query list. it should have just done a normal non overlay query for that pair
+    -Some of the datasets in this query were HDB and USGS-NWIS. Those can still be overlayed. I'm just looking to fix combinations are not supposed to work, so in this example Aquarius
 
 ####### 3.4.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
