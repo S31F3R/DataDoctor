@@ -65,6 +65,9 @@ launcher/src/bin/
 launcher/src/obj/
 launcher/src/.vs/
 
+# Cached macOS CPython (python-build-standalone) for packageMac.py
+launcher/python-standalone/
+
 
 # Oracle client
 oracle/client

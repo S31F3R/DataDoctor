@@ -8,7 +8,7 @@ A desktop tool for querying, reviewing, and (on Reclamation HDB) editing hydrolo
 
 Built for Reclamation and USGS workflows: data dictionary labels, QAQC coloring, overlay/delta pairs, graphing, CSV export, and saved Quick Looks.
 
-Current version: **3.3.0-rc.1** (see `core/Version.py`). Windows builds ship Python 3.14 embeddable.
+Current version: **3.3.0-rc.1** (see `core/Version.py`). Windows and macOS zips ship a bundled Python 3.14.
 
 [Wiki](https://github.com/S31F3R/DataDoctor/wiki) · [Releases](https://github.com/S31F3R/DataDoctor/releases) · [Issues](https://github.com/S31F3R/DataDoctor/issues)
 
@@ -16,7 +16,7 @@ Current version: **3.3.0-rc.1** (see `core/Version.py`). Windows builds ship Pyt
 
 ## Requirements
 
-- **Python 3.14** (Windows launcher ships embeddable 3.14; from source / Linux / macOS: 3.14 recommended, 3.13 still works)
+- **Python 3.14** (Windows and macOS zips ship a bundled 3.14; from source / Linux AppImage: 3.14 recommended, 3.13 still works)
 - Dependencies in [`requirements.txt`](requirements.txt): PyQt6, requests, oracledb, keyring, matplotlib, numpy, pygame-ce
 - **USBR / HDB**: packaged Oracle Instant Client (when present) plus TNS / `tnsnames.ora`. The client in the package is used whenever it is there. `tnsnames.ora` and `sqlnet.ora` come from `TNS_ADMIN` if that env var is set, otherwise from packaged `oracle/network/admin/` (we do not ship `tnsnames.ora` — copy yours there).
 - **Aquarius** (TLS): a server certificate in a `certs/` folder — see [Aquarius](https://github.com/S31F3R/DataDoctor/wiki/Aquarius)
@@ -57,7 +57,7 @@ python scripts/packageAppImage.py
 
 ### macOS
 
-Unzip the macOS package and double-click `Data Doctor.command` (needs Python 3.14, or 3.13). Optional native `.app` via `python scripts/packageMac.py --app` on a Mac.
+Unzip the macOS package. Right-click **Data Doctor.app** → Open (Gatekeeper). No system Python — the zip ships CPython 3.14. If macOS blocks it, run **Clear Quarantine.command** once. Optional frozen `.app` via `python scripts/packageMac.py --app` on a Mac.
 
 More detail: [Installation](https://github.com/S31F3R/DataDoctor/wiki/Installation) and [Updates and Releases](https://github.com/S31F3R/DataDoctor/wiki/Updates-and-Releases).
 

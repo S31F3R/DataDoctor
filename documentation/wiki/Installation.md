@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Python 3.14** (Windows launcher ships embeddable 3.14; from source / Linux / macOS: 3.14 recommended, 3.13 still works)
+- **Python 3.14** (Windows and macOS zips ship a bundled interpreter; from source / Linux AppImage: 3.14 recommended, 3.13 still works)
 - From [`requirements.txt`](https://github.com/S31F3R/DataDoctor/blob/main/requirements.txt): PyQt6, requests, oracledb, keyring, matplotlib, numpy, pygame-ce
 - **USBR queries**: Oracle Instant Client + a working TNS / `tnsnames.ora`
 - **Aquarius**: optional TLS certificate (see [Aquarius](Aquarius))
@@ -78,10 +78,19 @@ Needs a matching tool under `scripts/appimagetool/` from [appimagetool releases]
 
 ## macOS
 
-1. Unzip `DataDoctor-macOS-*.zip`.
-2. Double-click **Data Doctor.command** (needs Python 3.14 or 3.13 and a venv or system env with requirements). Live app is `pythonFiles/DataDoctor.py`. If `updates/` has a zip, the command runs `applyUpdate.sh` then applyUpdate starts the command again.
+The zip **does not need a system Python**. It ships CPython 3.14 (python-build-standalone) for Apple Silicon and Intel, same idea as Windows `python-embed`.
 
-A portable zip can be built with `python scripts/packageMac.py`. A native `.app` requires `python scripts/packageMac.py --app` on macOS with PyInstaller.
+1. Unzip `DataDoctor-macOS-*.zip` to a writable folder.
+2. **Gatekeeper:** macOS may say it cannot open the app (downloaded from the internet).
+   - Right-click **Data Doctor.app** → **Open** → **Open**
+   - or double-click **Clear Quarantine.command** (Right-click → Open the first time), then open the app
+   - or Terminal: `xattr -cr "/path/to/the unzipped folder"`
+3. First launch pip-installs requirements into the bundled interpreter (needs internet once). After that it runs offline.
+4. `Data Doctor.command` is the same launcher if you prefer Terminal.
+
+Live app is `pythonFiles/DataDoctor.py`. If `updates/` has a zip, the launcher runs `applyUpdate.sh` then applyUpdate starts the app again.
+
+`python scripts/packageMac.py` (any host) builds that zip and downloads the macOS CPython archives into `launcher/python-standalone/`. `python scripts/packageMac.py --app` on a Mac builds a frozen PyInstaller `.app` instead.
 
 ## Oracle Instant Client
 

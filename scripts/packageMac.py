@@ -4,27 +4,18 @@ Package DataDoctor for macOS.
 
 Two modes:
 
-  1) Portable zip (default — can stage on any host, intended to run on a Mac):
+  1) Portable zip (default — can stage on Linux or a Mac):
        dist/DataDoctor-macOS-YYYYMMDD.zip
      Layout:
-       Data Doctor.command   (double-click launcher)
-       UPDATE.txt
-       LICENSE
-       README.txt
-       pythonFiles/
-         DataDoctor.py
-         core/  ui/  quickLook/  oracle/  requirements.txt
-         scripts/updateBunker.py
-         temp/bunker.db       (packaged dictionary for merge)
-         .venv/               (optional, if present and not --skip-venv)
+       Data Doctor.app       (Finder double-click; unsigned — see Gatekeeper)
+       Data Doctor.command
+       Clear Quarantine.command
+       pythonFiles/          (app + python-embed-arm64 / python-embed-x86_64)
+     Bundled CPython is python-build-standalone (same idea as Windows python-embed).
+     First launch pip-installs requirements into that embed (needs internet once).
 
-  2) Native .app via PyInstaller (must run on macOS with PyInstaller installed):
+  2) Native frozen .app via PyInstaller (must run on macOS):
        python scripts/packageMac.py --app
-       → dist/DataDoctor-macOS-YYYYMMDD.app  (and optional zip of the .app)
-
-Prerequisites for a usable package on the target Mac:
-  - Python 3.14 (3.13 still works)
-  - pythonFiles/.venv with requirements.txt, or a system/user env that has them
 
 Run from project root:
   python scripts/packageMac.py
@@ -36,20 +27,143 @@ Run from project root:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
 import shutil
 import subprocess
 import sys
+import tarfile
+import urllib.request
 import zipfile
 from datetime import datetime
 from pathlib import Path
 
 from oracleBundle import installOracleClient
 
+PBS_RELEASES = "https://api.github.com/repos/astral-sh/python-build-standalone/releases"
+PBS_UA = "DataDoctor-packageMac (+https://github.com/S31F3R/DataDoctor)"
+MAC_PY_VERSION_PREFIX = "cpython-3.14."
+
 
 def projectRoot() -> Path:
     return Path(__file__).resolve().parent.parent
+
+
+def _httpJson(url: str):
+    req = urllib.request.Request(url, headers={"User-Agent": PBS_UA, "Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _httpDownload(url: str, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    req = urllib.request.Request(url, headers={"User-Agent": PBS_UA})
+    print(f"Downloading {url}")
+    with urllib.request.urlopen(req, timeout=120) as resp, open(tmp, "wb") as f:
+        shutil.copyfileobj(resp, f)
+    tmp.replace(dest)
+
+
+def macosStandaloneSpecs() -> list[tuple[str, str]]:
+    """(folder name under pythonFiles, asset name needle)."""
+    return [
+        ("python-embed-arm64", "aarch64-apple-darwin-install_only_stripped.tar.gz"),
+        ("python-embed-x86_64", "x86_64-apple-darwin-install_only_stripped.tar.gz"),
+    ]
+
+
+def findStandaloneAssets() -> list[tuple[str, str, str]]:
+    """
+    Latest GitHub assets for macOS 3.14 install_only_stripped.
+    Returns list of (folder, filename, url).
+    """
+    releases = _httpJson(PBS_RELEASES + "?per_page=8")
+    if not isinstance(releases, list):
+        releases = [releases]
+    out = []
+    needles = macosStandaloneSpecs()
+    for rel in releases:
+        assets = rel.get("assets") or []
+        found = {}
+        for a in assets:
+            name = a.get("name") or ""
+            url = a.get("browser_download_url") or ""
+            if not name.startswith(MAC_PY_VERSION_PREFIX):
+                continue
+            for folder, needle in needles:
+                if name.endswith(needle):
+                    found[folder] = (name, url)
+        if len(found) == len(needles):
+            for folder, needle in needles:
+                name, url = found[folder]
+                out.append((folder, name, url))
+            return out
+    return []
+
+
+def extractStandaloneTar(archive: Path, dest: Path) -> None:
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True)
+    with tarfile.open(archive, "r:gz") as tf:
+        try:
+            tf.extractall(dest, filter="data")
+        except TypeError:
+            tf.extractall(dest)
+    nested = dest / "python"
+    if (nested / "bin" / "python3").is_file() or (nested / "bin" / "python").is_file():
+        for child in list(nested.iterdir()):
+            shutil.move(str(child), str(dest / child.name))
+        nested.rmdir()
+
+
+def installMacPythonEmbed(root: Path, projectFiles: Path) -> bool:
+    """
+    Put relocatable CPython 3.14 for macOS into pythonFiles/python-embed-*.
+    Archives cache under launcher/python-standalone/. Returns True if both
+    arches are present.
+    """
+    cache = root / "launcher" / "python-standalone"
+    cache.mkdir(parents=True, exist_ok=True)
+    try:
+        assets = findStandaloneAssets()
+    except Exception as e:
+        print(f"WARN: could not list python-build-standalone releases: {e}", file=sys.stderr)
+        assets = []
+
+    ok = True
+    for folder, needle in macosStandaloneSpecs():
+        dest = projectFiles / folder
+        cached = None
+        if assets:
+            match = next((a for a in assets if a[0] == folder), None)
+            if match:
+                _folder, filename, url = match
+                cached = cache / filename
+                if not cached.is_file():
+                    try:
+                        _httpDownload(url, cached)
+                    except Exception as e:
+                        print(f"WARN: download {filename} failed: {e}", file=sys.stderr)
+                        cached = None
+        if cached is None or not cached.is_file():
+            hits = sorted(cache.glob(f"*{needle}"))
+            cached = hits[-1] if hits else None
+        if cached is None or not cached.is_file():
+            print(f"WARN: no macOS Python archive for {folder}", file=sys.stderr)
+            ok = False
+            continue
+        print(f"Extracting {cached.name} → pythonFiles/{folder}/")
+        extractStandaloneTar(cached, dest)
+        py = dest / "bin" / "python3"
+        if not py.is_file():
+            py = dest / "bin" / "python"
+        if not py.is_file():
+            print(f"WARN: {folder} has no bin/python3", file=sys.stderr)
+            ok = False
+    return ok
 
 
 def copyTree(src: Path, dst: Path, ignoreNames=None):
@@ -81,21 +195,27 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 REQUIREMENTS
 ------------
 - macOS 12+ recommended
-- Python 3.14 (https://www.python.org/downloads/ or Homebrew: brew install python@3.14). 3.13 still works.
+- No system Python. This zip ships CPython 3.14 (python-build-standalone)
+  under pythonFiles/python-embed-arm64 and python-embed-x86_64.
+
+GATEKEEPER (macOS blocked the app)
+----------------------------------
+Apple quarantines apps downloaded from the internet. Double-click may say
+the file cannot be opened.
+
+  1) Right-click Data Doctor.app → Open → Open
+  or
+  2) Double-click Clear Quarantine.command (Right-click → Open the first time),
+     then open Data Doctor.app
+  or from Terminal:
+     xattr -cr "/path/to/this folder"
 
 FIRST RUN
 ---------
-1) Unzip this package to a folder you can write to (e.g. ~/Applications/DataDoctor
-   or ~/Documents/DataDoctor).
-2) Prefer: double-click "Data Doctor.command"
-   - First launch may ask Gatekeeper to allow the script; right-click → Open if needed.
-   - The script prefers pythonFiles/.venv when present.
-3) Or from Terminal:
-     cd "/path/to/this folder"
-     ./Data\\ Doctor.command
-4) If dependencies are missing:
-     python3 -m venv "pythonFiles/.venv"
-     "pythonFiles/.venv/bin/python" -m pip install -r "pythonFiles/requirements.txt"
+1) Unzip this package to a writable folder (e.g. ~/Applications/DataDoctor).
+2) Open Data Doctor.app (or Data Doctor.command).
+3) First launch installs Python packages into the bundled interpreter
+   (needs internet once). Later launches are offline.
 
 UPDATING AN EXISTING INSTALL
 ----------------------------
@@ -140,32 +260,43 @@ DICTIONARY-ONLY MERGE
     (stage / "UPDATE.txt").write_text(text.strip() + "\n", encoding="utf-8")
 
 
-def writeLauncher(stage: Path):
-    """Double-clickable .command script (bash) for macOS Finder."""
-    script = r'''#!/bin/bash
-# Data Doctor launcher (macOS)
+_LAUNCHER_BODY = r'''#!/bin/bash
+# Data Doctor launcher (macOS) — bundled CPython, then venv, then PATH.
 set -e
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+if [ -n "$DATADOCTOR_ROOT" ]; then
+  ROOT="$DATADOCTOR_ROOT"
+else
+  ROOT="$(cd "$(dirname "$0")" && pwd)"
+fi
 cd "$ROOT"
 
-# Zip in updates/ → applyUpdate.sh then exit. applyUpdate.py starts this
-# .command again when the zip is done.
 if { ls "$ROOT/updates"/*.zip >/dev/null 2>&1 || ls "$ROOT/Update"/*.zip >/dev/null 2>&1 || ls "$ROOT/update"/*.zip >/dev/null 2>&1; } \
    && [ -x "$ROOT/applyUpdate.sh" ]; then
   exec "$ROOT/applyUpdate.sh"
 fi
 
+ARCH="$(uname -m)"
+EMBED_ARM="$ROOT/pythonFiles/python-embed-arm64/bin/python3"
+EMBED_X64="$ROOT/pythonFiles/python-embed-x86_64/bin/python3"
 PY=""
-if [ -x "$ROOT/pythonFiles/.venv/bin/python" ]; then
+if [ "$ARCH" = "arm64" ] && [ -x "$EMBED_ARM" ]; then
+  PY="$EMBED_ARM"
+elif [ "$ARCH" = "x86_64" ] && [ -x "$EMBED_X64" ]; then
+  PY="$EMBED_X64"
+elif [ -x "$EMBED_ARM" ]; then
+  PY="$EMBED_ARM"
+elif [ -x "$EMBED_X64" ]; then
+  PY="$EMBED_X64"
+elif [ -x "$ROOT/pythonFiles/.venv/bin/python" ]; then
   PY="$ROOT/pythonFiles/.venv/bin/python"
 elif [ -x "$ROOT/pythonFiles/.venv/bin/python3" ]; then
   PY="$ROOT/pythonFiles/.venv/bin/python3"
 elif command -v python3 >/dev/null 2>&1; then
   PY="$(command -v python3)"
-elif command -v python >/dev/null 2>&1; then
-  PY="$(command -v python)"
-else
-  osascript -e 'display dialog "Python 3 was not found.\nInstall Python 3.14 from python.org or Homebrew, then try again." buttons {"OK"} default button 1 with title "Data Doctor"' 2>/dev/null || \
+fi
+
+if [ -z "$PY" ]; then
+  osascript -e 'display dialog "Python 3 was not found in this package.\nRe-download the macOS zip, or install Python 3.14." buttons {"OK"} default button 1 with title "Data Doctor"' 2>/dev/null || \
     echo "ERROR: Python 3 not found" >&2
   exit 1
 fi
@@ -176,13 +307,74 @@ if [ ! -f "$APP" ]; then
   exit 1
 fi
 
-# Prefer bundled Qt / SSL from venv; keep user env otherwise
+REQ="$ROOT/pythonFiles/requirements.txt"
+MARKER="$ROOT/pythonFiles/.deps-ok"
+if [ -f "$REQ" ] && [ ! -f "$MARKER" ]; then
+  echo "First launch: installing Python packages (once)..."
+  "$PY" -m pip install --upgrade pip >/dev/null 2>&1 || true
+  if ! "$PY" -m pip install -r "$REQ"; then
+    osascript -e 'display dialog "Could not install Python packages.\nCheck your network and try again." buttons {"OK"} default button 1 with title "Data Doctor"' 2>/dev/null || true
+    exit 1
+  fi
+  touch "$MARKER"
+fi
+
 export PYTHONUNBUFFERED=1
 exec "$PY" "$APP" "$@"
 '''
+
+
+def writeLauncher(stage: Path):
+    """Double-clickable .command script (bash) for macOS Finder."""
     path = stage / "Data Doctor.command"
+    path.write_text(_LAUNCHER_BODY, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def writeClearQuarantine(stage: Path):
+    script = r'''#!/bin/bash
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+xattr -cr "$ROOT" 2>/dev/null || true
+osascript -e 'display dialog "macOS quarantine flag cleared for this folder.\nYou can double-click Data Doctor.app." buttons {"OK"} default button 1 with title "Data Doctor"' 2>/dev/null || \
+  echo "Quarantine cleared. Open Data Doctor.app"
+'''
+    path = stage / "Clear Quarantine.command"
     path.write_text(script, encoding="utf-8")
     path.chmod(0o755)
+
+
+def writeAppBundle(stage: Path):
+    """Unsigned .app that runs the same launcher (ROOT = folder containing the .app)."""
+    macOs = stage / "Data Doctor.app" / "Contents" / "MacOS"
+    macOs.mkdir(parents=True, exist_ok=True)
+    exe = macOs / "Data Doctor"
+    exe.write_text(
+        '#!/bin/bash\n'
+        'HERE="$(cd "$(dirname "$0")" && pwd)"\n'
+        'export DATADOCTOR_ROOT="$(cd "$HERE/../../.." && pwd)"\n'
+        'exec "$DATADOCTOR_ROOT/Data Doctor.command" "$@"\n',
+        encoding="utf-8",
+    )
+    exe.chmod(0o755)
+    plist = stage / "Data Doctor.app" / "Contents" / "Info.plist"
+    plist.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Data Doctor</string>
+  <key>CFBundleDisplayName</key><string>Data Doctor</string>
+  <key>CFBundleIdentifier</key><string>com.s31f3r.datadoctor</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleExecutable</key><string>Data Doctor</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>
+""",
+        encoding="utf-8",
+    )
 
 
 def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
@@ -271,8 +463,17 @@ def stagePortable(root: Path, stage: Path, skipVenv: bool) -> None:
 set -e
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
+ARCH="$(uname -m)"
 PY=""
-if [ -x "$ROOT/pythonFiles/.venv/bin/python" ]; then
+if [ "$ARCH" = "arm64" ] && [ -x "$ROOT/pythonFiles/python-embed-arm64/bin/python3" ]; then
+  PY="$ROOT/pythonFiles/python-embed-arm64/bin/python3"
+elif [ "$ARCH" = "x86_64" ] && [ -x "$ROOT/pythonFiles/python-embed-x86_64/bin/python3" ]; then
+  PY="$ROOT/pythonFiles/python-embed-x86_64/bin/python3"
+elif [ -x "$ROOT/pythonFiles/python-embed-arm64/bin/python3" ]; then
+  PY="$ROOT/pythonFiles/python-embed-arm64/bin/python3"
+elif [ -x "$ROOT/pythonFiles/python-embed-x86_64/bin/python3" ]; then
+  PY="$ROOT/pythonFiles/python-embed-x86_64/bin/python3"
+elif [ -x "$ROOT/pythonFiles/.venv/bin/python" ]; then
   PY="$ROOT/pythonFiles/.venv/bin/python"
 elif [ -x "$ROOT/pythonFiles/.venv/bin/python3" ]; then
   PY="$ROOT/pythonFiles/.venv/bin/python3"
@@ -296,8 +497,11 @@ exec "$PY" "$SCRIPT" "$@"
     applySh.chmod(0o755)
 
     writeLauncher(stage)
+    writeClearQuarantine(stage)
+    writeAppBundle(stage)
     writeReadme(stage)
     writeUpdateReadme(stage)
+    installMacPythonEmbed(root, projectFiles)
 
     venv = root / ".venv"
     if not skipVenv and venv.is_dir():
@@ -501,7 +705,8 @@ def main() -> int:
         if not args.keepBuild and stage.exists():
             shutil.rmtree(stage, ignore_errors=True)
 
-    print("Done. On a Mac: unzip, then double-click Data Doctor.command")
+    print("Done. On a Mac: unzip, Right-click Data Doctor.app → Open")
+    print("  (or run Clear Quarantine.command if Gatekeeper blocks the first double-click)")
     return 0
 
 

@@ -310,13 +310,13 @@ class uiOptions(QDialog):
         self.tblTableColors.setColumnWidth(1, 88)
         self.tblTableColors.setShowGrid(True)
         self.tblTableColors.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
         self.tblTableColors.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.tblTableColors.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
         self.tblTableColors.cellDoubleClicked.connect(self._onTableColorDoubleClick)
         self.btnRestoreTableColors = QPushButton("Restore Defaults")
@@ -327,35 +327,23 @@ class uiOptions(QDialog):
             "Reset all table colors to the theme defaults."
         )
         self.btnRestoreTableColors.clicked.connect(self._onRestoreTableColors)
-        btnRow = QHBoxLayout()
-        btnRow.setContentsMargins(0, 0, 0, 0)
-        btnRow.addWidget(self.btnRestoreTableColors)
-        btnRow.addStretch(1)
-        # Keep the expanding spacer last so leftover height sits under the button,
-        # not between Color Theme and the table (and not over the button).
-        spacer = None
-        if lay.count():
+        titleRow = QHBoxLayout()
+        titleRow.setContentsMargins(0, 0, 0, 0)
+        titleRow.addWidget(lbl)
+        titleRow.addStretch(1)
+        titleRow.addWidget(self.btnRestoreTableColors)
+        # Drop the page stretch so the table (stretch 1) owns leftover height.
+        # Restore Defaults sits on the title row and cannot cover table rows.
+        while lay.count():
             last = lay.itemAt(lay.count() - 1)
-            if last is not None and last.spacerItem() is not None:
-                spacer = lay.takeAt(lay.count() - 1)
-        lay.addWidget(lbl)
-        lay.addWidget(self.tblTableColors)
-        lay.addLayout(btnRow)
-        if spacer is not None:
-            sp = spacer.spacerItem()
-            if sp is not None:
-                sp.changeSize(
-                    20, 1,
-                    QSizePolicy.Policy.Minimum,
-                    QSizePolicy.Policy.Expanding,
-                )
-            lay.addItem(spacer)
-        else:
-            lay.addStretch(1)
+            if last is None or last.spacerItem() is None:
+                break
+            lay.takeAt(lay.count() - 1)
+        lay.addLayout(titleRow)
+        lay.addWidget(self.tblTableColors, 1)
         lay.setAlignment(Qt.AlignmentFlag.AlignTop)
         lay.setSpacing(8)
         self._fillTableColorTable()
-        QTimer.singleShot(0, self._fillTableColorTable)
 
     def _fillTableColorTable(self):
         tbl = getattr(self, "tblTableColors", None)
@@ -392,14 +380,6 @@ class uiOptions(QDialog):
         minRow = max(fm.height() + 8, 22)
         for r in range(tbl.rowCount()):
             tbl.setRowHeight(r, max(tbl.rowHeight(r), minRow))
-        headerH = max(tbl.horizontalHeader().height(), minRow)
-        rowsH = (
-            headerH
-            + sum(tbl.rowHeight(r) for r in range(tbl.rowCount()))
-            + tbl.frameWidth() * 2
-            + 8
-        )
-        tbl.setFixedHeight(max(rowsH, 160))
 
     def _onTableColorDoubleClick(self, row, _col):
         nameItem = self.tblTableColors.item(row, 0)
