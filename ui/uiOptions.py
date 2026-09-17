@@ -294,7 +294,6 @@ class uiOptions(QDialog):
         lay = page.layout() if page is not None else None
         if lay is None:
             return
-        insertAt = max(0, lay.count() - 1)
         lbl = QLabel("Table colors")
         lbl.setToolTip(
             "Colors used in Data Query (QAQC, overlay, delta, pending upload). "
@@ -332,9 +331,29 @@ class uiOptions(QDialog):
         btnRow.setContentsMargins(0, 0, 0, 0)
         btnRow.addWidget(self.btnRestoreTableColors)
         btnRow.addStretch(1)
-        lay.insertWidget(insertAt, lbl)
-        lay.insertWidget(insertAt + 1, self.tblTableColors)
-        lay.insertLayout(insertAt + 2, btnRow)
+        # Keep the expanding spacer last so leftover height sits under the button,
+        # not between Color Theme and the table (and not over the button).
+        spacer = None
+        if lay.count():
+            last = lay.itemAt(lay.count() - 1)
+            if last is not None and last.spacerItem() is not None:
+                spacer = lay.takeAt(lay.count() - 1)
+        lay.addWidget(lbl)
+        lay.addWidget(self.tblTableColors)
+        lay.addLayout(btnRow)
+        if spacer is not None:
+            sp = spacer.spacerItem()
+            if sp is not None:
+                sp.changeSize(
+                    20, 1,
+                    QSizePolicy.Policy.Minimum,
+                    QSizePolicy.Policy.Expanding,
+                )
+            lay.addItem(spacer)
+        else:
+            lay.addStretch(1)
+        lay.setAlignment(Qt.AlignmentFlag.AlignTop)
+        lay.setSpacing(8)
         self._fillTableColorTable()
         QTimer.singleShot(0, self._fillTableColorTable)
 
@@ -362,10 +381,15 @@ class uiOptions(QDialog):
                 swatch.setForeground(QBrush())
             tbl.setItem(i, 0, nameItem)
             tbl.setItem(i, 1, swatch)
-        Utils.applyRoleFonts(root=tbl)
+        # Settings list uses UI font, not Data Query table font (avoids Retro
+        # Press Start row-height surprises on first Appearance visit).
+        uiFont = Utils.makeFontForRole("ui")
+        tbl.setFont(uiFont)
+        if tbl.horizontalHeader() is not None:
+            tbl.horizontalHeader().setFont(uiFont)
         tbl.resizeRowsToContents()
         fm = tbl.fontMetrics()
-        minRow = max(fm.height() + 10, 22)
+        minRow = max(fm.height() + 8, 22)
         for r in range(tbl.rowCount()):
             tbl.setRowHeight(r, max(tbl.rowHeight(r), minRow))
         headerH = max(tbl.horizontalHeader().height(), minRow)
@@ -376,31 +400,6 @@ class uiOptions(QDialog):
             + 8
         )
         tbl.setFixedHeight(max(rowsH, 160))
-        self._fitOptionsToAppearanceTable()
-
-    def _fitOptionsToAppearanceTable(self):
-        """Grow the dialog so the color table + Restore Defaults sit fully in view."""
-        tbl = getattr(self, "tblTableColors", None)
-        if tbl is None:
-            return
-        page = self.findChild(QWidget, "tabsAppearanceGeneral")
-        lay = page.layout() if page is not None else None
-        if lay is not None:
-            lay.setAlignment(Qt.AlignmentFlag.AlignTop)
-            lay.setSpacing(6)
-            for i in range(lay.count()):
-                item = lay.itemAt(i)
-                sp = item.spacerItem() if item is not None else None
-                if sp is not None:
-                    sp.changeSize(
-                        0, 0,
-                        QSizePolicy.Policy.Minimum,
-                        QSizePolicy.Policy.Minimum,
-                    )
-        self.setMinimumHeight(580)
-        hint = self.sizeHint()
-        h = min(max(hint.height(), 600), 780)
-        self.resize(max(self.width(), 840), h)
 
     def _onTableColorDoubleClick(self, row, _col):
         nameItem = self.tblTableColors.item(row, 0)
