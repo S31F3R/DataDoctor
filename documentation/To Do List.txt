@@ -1,4 +1,7 @@
 ####### CURRENT TASKS #######
+-Linux appimage is too wordy on New Version is Available. Make it more standard like the Windows version except the Linux specific pieces. No need to go into detail on what the updater is doing
+    -Same with restart message. This actually might be fixed and maybe the one above. It might be fixed in the version I'm going to but verify. What I'm seeing on the restart message is "replace data doctor.appimage now and restart data doctor? the file keeps its current name. choose later to apply on next launch." If this is different already, then leave it
+    -If the above isn't different but the New Version Available isn't, make sure to fix that one
 
 ####### CURRENT BUGS #######
 
