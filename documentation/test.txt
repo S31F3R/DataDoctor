@@ -22,24 +22,4 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
-Appearance tab spacing
-Formula leading decimal
-Quick Look dirty prompt
-Data Dictionary save confirmation
-About version link
-Graph legend ASCII marks
-Query option flags + overlay colors
-Equation in query list / Quick Look
-Bunker merge N vs new rows
-Overlay flag colors in Options
-Feature request in-app form
-Log Viewer colors survive Options Save
-SDID-MRID upload uses MODIFY_M_TABLE
-Background update check
-Options Appearance table fits
-Overlay upload same-SDID
-AppImage update + bunker
-Graph uses raw points, rounded axis
-Edit mark uses raw; double-click shows raw
-Paste undo is one action
 
