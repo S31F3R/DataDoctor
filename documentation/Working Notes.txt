@@ -10,3 +10,8 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Graph lines/markers use raw values; Y-axis limits stay on rounded table values
+- Multi-cell paste undoes as one Ctrl+Z
+- Options Appearance spacing tightened (no extra gaps above Table colors)
+- Cell edit marking, double-click, and overlay fill use raw (unrounded) values
+

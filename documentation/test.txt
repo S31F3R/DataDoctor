@@ -18,7 +18,7 @@ Current Tests
      c. On a Mac: unzip, double-click Data Doctor.command (needs Python 3.13 / venv).
      d. Optional on Mac only: python scripts/packageMac.py --app → .app via PyInstaller.
 
-[ ] AppImage update + bunker (Linux AppImage install)
+[x] AppImage update + bunker (Linux AppImage install)
    Steps:
      a. Rename the AppImage (e.g. MyDoctor.AppImage) and run it from Downloads.
         Confirm ~/.config/Data Doctor/bunker.db exists and dictionary saves persist.
@@ -28,22 +28,31 @@ Current Tests
      c. If packaged bunker differs: Common Name / Data Type prompts. N still adds new IDs.
      d. If apply fails: ~/.config/Data Doctor/logs/applyUpdate.log has the updater output.
 
-[ ] Background update check
+[ ] Graph uses raw points, rounded axis
    Steps:
-     a. Launch the app. Startup check still runs (same Update available prompt).
-     b. Click Later. No second prompt this session (leave the app open; no need to wait 4 hours).
-     c. Quit and relaunch — update prompt can appear again.
+     a. Query a series with tight rounding (e.g. DEC(0) / 0 decimals) that still
+        changes in raw. Graph: line/dots show the wiggle; Y ticks stay rounded.
+     b. Wiki Graph page mentions raw lines vs rounded axis.
 
-[x] Options Appearance table fits
+[ ] Paste undo is one action
    Steps:
-     a. Options → Appearance. Overlay primary/secondary flag rows are fully visible.
-     b. Restore Defaults sits below the table, not on top of "Uploaded this session".
-     c. No vertical scroll needed for that table.
+     a. Copy ~40 formula/value cells, paste into another column.
+     b. Ctrl+Z once undoes the whole paste, not one cell.
+     RESPONSE: I did a quick test with this on a public query. I copied the data from the query, pasted it into a NEW column i inserted. hit ctrl z, it all stayed there
 
-[x] Overlay upload same-SDID
+[ ] Appearance tab spacing
    Steps:
-     a. Overlay pair, fill secondary into primary, Upload many timestamps of one SDID.
-     b. No ORA-00001 IDX_REF_CHANGE_AGENT_LOOKUP. app.log shows one series per worker.
+     a. Options → Appearance. Tight gaps: Retro Mode, Color Theme label, combo,
+        Table colors title, then the table, Restore Defaults under it.
+     b. No large empty bands; window is not oversized.
+
+[ ] Edit mark uses raw; double-click shows raw
+   Steps:
+     a. Query rounded to 3 decimals with raw 4th digit 5. Copy 3-decimal text
+        and paste over those cells → they mark as edits.
+     b. Double-click a rounded cell: editor shows the raw value. Enter with no
+        change does not mark an edit.
+     c. Overlay secondary-only fill uploads secondary native (raw), not rounded.
 
 Confirmed
 --------------------------------------------------------------------------------
@@ -59,4 +68,7 @@ Overlay flag colors in Options
 Feature request in-app form
 Log Viewer colors survive Options Save
 SDID-MRID upload uses MODIFY_M_TABLE
+Background update check
+Options Appearance table fits
+Overlay upload same-SDID
 
