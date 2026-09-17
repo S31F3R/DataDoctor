@@ -1256,13 +1256,19 @@ def executeQuery(
                     rawDataChecked, qaqcChecked,
                 ),
             )
+        # Public cannot query Aquarius. Drop those IDs, but do not let the next
+        # queryable neighbor inherit the broken overlay/delta pair.
         if not isInternal:
-            queryItems = [
-                item for item in queryItems
-                if QueryFlags.queryItemDatabase(item) != 'AQUARIUS'
-            ]
-        if Config.debug:
-            Logic.logMessage("DEBUG", "executeQuery: Filtered AQUARIUS for public query, remaining items={}".format(len(queryItems)))
+            beforeCount = len(queryItems)
+            queryItems = QueryFlags.dropUnqueryablePairMembers(
+                queryItems, False, overlayChecked, deltaChecked,
+            )
+            if Config.debug:
+                Logic.logMessage(
+                    "DEBUG",
+                    "executeQuery: after unqueryable-pair filter "
+                    f"{beforeCount} → {len(queryItems)}",
+                )
         if not queryItems:
             QMessageBox.warning(mainWindow, "No Valid Items", "No valid query items (AQUARIUS not allowed in public queries).")
 

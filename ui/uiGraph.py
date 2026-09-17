@@ -612,9 +612,10 @@ def extractSeries(table, columns=None, rows=None, columnMetadata=None):
     return timestamps, tsTexts, series, warnings
 
 
-# ASCII markers — Noto Sans has no U+2611 BALLOT BOX WITH CHECK (glyph 9745)
+# ASCII markers — Noto Sans has no U+2611 BALLOT BOX WITH CHECK (glyph 9745).
+# EN SPACE so hidden '[ ]' stays as open as '[x]' (regular space collapses).
 _LEGEND_ON = '[x]'
-_LEGEND_OFF = '[ ]'
+_LEGEND_OFF = '[\u2002]'
 
 
 class GraphPanel(QWidget):
@@ -1244,10 +1245,10 @@ class GraphPanel(QWidget):
                 visible = bool(line.get_visible()) if line is not None else True
                 base = entry.get('label') or ''
                 legTexts[i].set_text(self._legendLabel(base, visible))
-                alpha = 1.0 if visible else 0.35
-                legTexts[i].set_alpha(alpha)
+                # Keep [ ] readable; only dim the color sample when hidden
+                legTexts[i].set_alpha(1.0)
                 if i < len(legLines):
-                    legLines[i].set_alpha(alpha)
+                    legLines[i].set_alpha(1.0 if visible else 0.35)
         except Exception:
             pass
 

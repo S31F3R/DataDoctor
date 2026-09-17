@@ -198,6 +198,99 @@ def queryItemDatabase(queryItem) -> str:
     return ""
 
 
+def _queryItemHasFlags(queryItem) -> bool:
+    if isinstance(queryItem, dict) and "flags" in queryItem:
+        return True
+    if isinstance(queryItem, (tuple, list)) and len(queryItem) > 5:
+        return True
+    return False
+
+
+def databaseQueryable(database, isInternal: bool) -> bool:
+    """False when this source cannot be queried in the current mode."""
+    db = str(database or "").strip().upper()
+    if db == "AQUARIUS" and not isInternal:
+        return False
+    return True
+
+
+def itemQueryable(queryItem, isInternal: bool) -> bool:
+    if isEquationQueryItem(queryItem):
+        return True
+    return databaseQueryable(queryItemDatabase(queryItem), isInternal)
+
+
+def _cloneItemWithFlags(queryItem, flags):
+    flags = normalizeFlags(flags)
+    if isinstance(queryItem, dict):
+        out = dict(queryItem)
+        out["flags"] = flags
+        return out
+    if isinstance(queryItem, (tuple, list)):
+        lst = list(queryItem)
+        while len(lst) < 6:
+            lst.append(None)
+        lst[5] = flags
+        return tuple(lst)
+    return queryItem
+
+
+def dropUnqueryablePairMembers(queryItems, isInternal, overlayChecked=False, deltaChecked=False):
+    """
+    Public queries cannot fetch Aquarius. If an overlay/delta pair includes a
+    series that will not be queried, do not overlay that pair — keep the
+    remaining series as a normal column. Neighbors must not re-pair with the
+    next queryable ID.
+
+    Returns a new list (unqueryable series removed; flags rewritten on copies).
+    """
+    items = list(queryItems or [])
+    n = len(items)
+    if n == 0:
+        return items
+
+    def flagAt(idx, key, bulk):
+        it = items[idx]
+        if isEquationQueryItem(it):
+            return False
+        if _queryItemHasFlags(it):
+            return bool(seriesFlagsFromQueryItem(it).get(key))
+        return bool(bulk)
+
+    overlayFlags = [flagAt(i, "overlay", overlayChecked) for i in range(n)]
+    deltaFlags = [flagAt(i, "delta", deltaChecked) for i in range(n)]
+    queryable = [itemQueryable(it, isInternal) for it in items]
+
+    overlayKeep = set()
+    deltaKeep = set()
+    overlayPairs, _ = consecutiveFlagPairs(overlayFlags)
+    deltaPairs, _ = consecutiveFlagPairs(deltaFlags)
+    for p, s in overlayPairs:
+        if queryable[p] and queryable[s]:
+            overlayKeep.add(p)
+            overlayKeep.add(s)
+    for p, s in deltaPairs:
+        if queryable[p] and queryable[s]:
+            deltaKeep.add(p)
+            deltaKeep.add(s)
+
+    kept = []
+    for i, it in enumerate(items):
+        if not queryable[i]:
+            continue
+        flags = dict(seriesFlagsFromQueryItem(it))
+        if not _queryItemHasFlags(it):
+            flags["overlay"] = overlayFlags[i]
+            flags["delta"] = deltaFlags[i]
+        # Only pairs that can actually be queried stay overlay/delta.
+        # Unpaired flags would otherwise re-pair with the next neighbor
+        # after an unqueryable ID is dropped.
+        flags["overlay"] = i in overlayKeep
+        flags["delta"] = i in deltaKeep
+        kept.append(_cloneItemWithFlags(it, flags))
+    return kept
+
+
 def consecutiveFlagPairs(flagList):
     """
     Walk flags in order. Two True neighbors become a pair; a True next to

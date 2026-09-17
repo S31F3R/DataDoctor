@@ -4,6 +4,8 @@ On the Query window, **Overlay Pairs**, **Display Deltas**, **Raw Data**, and **
 
 **Overlay pairing** uses consecutive flagged neighbors in list order. A flagged ID next to an unflagged one stays flagged but is **not** a pair (not color-highlighted). Example: six IDs with the 2nd unflagged → first stays flagged but unpaired; 3rd is primary and 4th secondary; 5th/6th the next pair. The query list colors primaries and secondaries as **Overlay primary flag** / **Overlay secondary flag** in **Options → Appearance** (defaults follow the theme). Unpaired and unflagged rows keep the normal text color.
 
+**Public Query** cannot fetch Aquarius. If a flagged overlay (or delta) pair includes Aquarius, that pair is **not** overlaid: the remaining queryable ID (HDB, USGS-NWIS, …) runs as a normal column. The next queryable ID in the list does **not** take Aquarius’s place in the pair. HDB + USGS-NWIS pairs still overlay on public.
+
 ## Overlay
 
 One table column holds two series. Where both have a value, you see the **primary**. Where only the secondary exists, that value is filled in and **auto-marked for upload** (magenta edit) so a Refresh does not treat it as an untouched blank.

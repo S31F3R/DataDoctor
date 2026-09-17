@@ -4,7 +4,7 @@ Two query doors on the main window:
 
 | Button | Who it is for | Typical sources |
 |--------|----------------|-----------------|
-| **Public Query** | No HDB write, no internal-only metadata | USGS-NWIS, public USBR web, Aquarius if configured |
+| **Public Query** | No HDB write, no internal-only metadata | USGS-NWIS, public USBR web (Aquarius IDs in the list are skipped) |
 | **Internal Query** | Reclamation / HDB login | HDB (Oracle), Aquarius, USGS |
 
 Both open the same Query window. The window title / `queryType` decides what is allowed (internal can upload; public cells stay locked). Internal HDB queries can mix **R** (SDID or `SDID-0`) and **M** (`SDID-MRID`) series in one list; upload writes each to the matching table.

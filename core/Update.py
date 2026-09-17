@@ -1094,11 +1094,16 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
             "Download the Windows package, then hit Restart to apply."
         )
         downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
-        box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
         box.setDefaultButton(downloadBtn)
         box.exec()
-        if box.clickedButton() is downloadBtn:
+        clicked = box.clickedButton()
+        box.hide()
+        box.close()
+        if clicked is downloadBtn:
             _downloadAndOfferApply(parent, info)
+        elif clicked is laterBtn:
+            Config.skipUpdatePromptThisSession = True
 
     signals = _Signals()
     app = QApplication.instance()
@@ -1173,11 +1178,16 @@ def runRevertToPublishedUi(parent=None) -> None:
             "Download the published build and restart to leave the beta/RC channel?"
         )
         downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
-        box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
         box.setDefaultButton(downloadBtn)
         box.exec()
-        if box.clickedButton() is downloadBtn:
+        clicked = box.clickedButton()
+        box.hide()
+        box.close()
+        if clicked is downloadBtn:
             _downloadAndOfferApply(parent, info)
+        elif clicked is laterBtn:
+            Config.skipUpdatePromptThisSession = True
 
     signals = _Signals()
     app = QApplication.instance()
@@ -1255,7 +1265,7 @@ def _showGithubUnreachable(parent, message=None) -> None:
 
 
 def _promptUpdate(parent, info: dict) -> None:
-    from PyQt6.QtWidgets import QMessageBox
+    from PyQt6.QtWidgets import QApplication, QMessageBox
 
     ver = info.get("version") or "?"
     local = Version.displayVersion()
@@ -1305,8 +1315,14 @@ def _promptUpdate(parent, info: dict) -> None:
     laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
     box.setDefaultButton(downloadBtn)
     box.exec()
-    if box.clickedButton() is not downloadBtn:
-        if box.clickedButton() is laterBtn:
+    clicked = box.clickedButton()
+    box.hide()
+    box.close()
+    app = QApplication.instance()
+    if app is not None:
+        app.processEvents()
+    if clicked is not downloadBtn:
+        if clicked is laterBtn:
             Config.skipUpdatePromptThisSession = True
         return
 
@@ -1347,6 +1363,10 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
     boxLay.addWidget(progBar)
     boxLay.addWidget(progCancel, alignment=Qt.AlignmentFlag.AlignHCenter)
     progress.resize(400, progress.sizeHint().height())
+    app = QApplication.instance()
+    holder = parent or app
+    if holder is not None:
+        holder._updateDownloadProgress = progress  # type: ignore[attr-defined]
     progress.show()
 
     class _Signals(QObject):
@@ -1383,6 +1403,7 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
             self.signals.done.emit(path)
 
     def onDone(path):
+        progress.hide()
         progress.close()
         if path is False:
             return
@@ -1401,10 +1422,13 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                 "Hit Restart to update, or close this window to restart later."
             )
             restartBtn = box.addButton("Restart", QMessageBox.ButtonRole.AcceptRole)
-            box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+            laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
             box.setDefaultButton(restartBtn)
             box.exec()
-            if box.clickedButton() is restartBtn:
+            clicked = box.clickedButton()
+            box.hide()
+            box.close()
+            if clicked is restartBtn:
                 if not spawnAppImageReplaceAndExit(Path(path), parent):
                     QMessageBox.warning(
                         parent,
@@ -1412,6 +1436,8 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                         "Could not start applyUpdate.\n"
                         "Try again from Help / the update prompt.",
                     )
+            elif clicked is laterBtn:
+                Config.skipUpdatePromptThisSession = True
             return
 
         assetName = (info.get("asset_name") or str(path) or "").lower()
@@ -1426,10 +1452,13 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
             "Hit Restart to update, or close this window to restart later."
         )
         restartBtn = box.addButton("Restart", QMessageBox.ButtonRole.AcceptRole)
-        box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
         box.setDefaultButton(restartBtn)
         box.exec()
-        if box.clickedButton() is restartBtn:
+        clicked = box.clickedButton()
+        box.hide()
+        box.close()
+        if clicked is restartBtn:
             if not spawnApplyAndExit(parent):
                 QMessageBox.warning(
                     parent,
@@ -1437,6 +1466,8 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                     "Could not start applyUpdate.\n"
                     "Close Data Doctor and run applyUpdate.cmd from the install folder.",
                 )
+        elif clicked is laterBtn:
+            Config.skipUpdatePromptThisSession = True
 
     signals = _Signals()
     app = QApplication.instance()
