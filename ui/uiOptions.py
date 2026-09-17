@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QHeaderView, QColorDialog,
 )
 from PyQt6.QtCore import QTimer, QEvent, QObject, QRunnable, QThreadPool, pyqtSignal, Qt, QSize
-from PyQt6.QtGui import QIcon, QPixmap, QColor, QBrush
+from PyQt6.QtGui import QIcon, QPixmap, QColor, QBrush, QGuiApplication
 from PyQt6 import uic
 from core import Logic, Utils, Config, TableColors
 
@@ -310,13 +310,13 @@ class uiOptions(QDialog):
         self.tblTableColors.setColumnWidth(1, 88)
         self.tblTableColors.setShowGrid(True)
         self.tblTableColors.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.tblTableColors.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.tblTableColors.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         self.tblTableColors.cellDoubleClicked.connect(self._onTableColorDoubleClick)
         self.btnRestoreTableColors = QPushButton("Restore Defaults")
@@ -327,23 +327,23 @@ class uiOptions(QDialog):
             "Reset all table colors to the theme defaults."
         )
         self.btnRestoreTableColors.clicked.connect(self._onRestoreTableColors)
-        titleRow = QHBoxLayout()
-        titleRow.setContentsMargins(0, 0, 0, 0)
-        titleRow.addWidget(lbl)
-        titleRow.addStretch(1)
-        titleRow.addWidget(self.btnRestoreTableColors)
-        # Drop the page stretch so the table (stretch 1) owns leftover height.
-        # Restore Defaults sits on the title row and cannot cover table rows.
+        btnRow = QHBoxLayout()
+        btnRow.setContentsMargins(0, 4, 0, 0)
+        btnRow.addWidget(self.btnRestoreTableColors)
+        btnRow.addStretch(1)
         while lay.count():
             last = lay.itemAt(lay.count() - 1)
             if last is None or last.spacerItem() is None:
                 break
             lay.takeAt(lay.count() - 1)
-        lay.addLayout(titleRow)
-        lay.addWidget(self.tblTableColors, 1)
+        lay.addWidget(lbl)
+        lay.addWidget(self.tblTableColors)
+        lay.addLayout(btnRow)
+        lay.addStretch(1)
         lay.setAlignment(Qt.AlignmentFlag.AlignTop)
         lay.setSpacing(8)
         self._fillTableColorTable()
+        QTimer.singleShot(0, self._fillTableColorTable)
 
     def _fillTableColorTable(self):
         tbl = getattr(self, "tblTableColors", None)
@@ -380,6 +380,39 @@ class uiOptions(QDialog):
         minRow = max(fm.height() + 8, 22)
         for r in range(tbl.rowCount()):
             tbl.setRowHeight(r, max(tbl.rowHeight(r), minRow))
+        headerH = max(tbl.horizontalHeader().height(), minRow)
+        rowsH = (
+            headerH
+            + sum(tbl.rowHeight(r) for r in range(tbl.rowCount()))
+            + tbl.frameWidth() * 2
+            + 8
+        )
+        tbl.setFixedHeight(max(rowsH, 160))
+        QTimer.singleShot(0, self._fitAppearanceDialog)
+
+    def _fitAppearanceDialog(self):
+        """Grow Options so the full color table + Restore Defaults fit (no scrollbar)."""
+        tbl = getattr(self, "tblTableColors", None)
+        page = self.findChild(QWidget, "tabsAppearanceGeneral")
+        if tbl is None or page is None or not page.isVisible():
+            return
+        lay = page.layout()
+        contentH = lay.sizeHint().height() if lay is not None else tbl.height() + 160
+        extra = 56
+        tabs = getattr(self, "tabsAppearance", None)
+        if tabs is not None and tabs.tabBar() is not None:
+            extra += tabs.tabBar().height()
+        box = getattr(self, "btnbOptions", None)
+        if box is not None:
+            extra += box.sizeHint().height() + 12
+        needed = contentH + extra
+        screen = QGuiApplication.primaryScreen()
+        maxH = 900
+        if screen is not None:
+            maxH = max(640, int(screen.availableGeometry().height() * 0.92))
+        needed = min(max(needed, 600), maxH)
+        self.setMinimumHeight(580)
+        self.resize(max(self.width(), 840), needed)
 
     def _onTableColorDoubleClick(self, row, _col):
         nameItem = self.tblTableColors.item(row, 0)
@@ -968,6 +1001,7 @@ class uiOptions(QDialog):
             Logic.logMessage("DEBUG", "Saved user.config with retroMode: {}".format(newRetro))
         Utils.reloadGlobals()
         Utils.applyLiveAppearance()
+        self._fillTableColorTable()
         if Config.debug and newRetro != previousRetro:
             Logic.logMessage("DEBUG", f"Retro mode applied live: {previousRetro} → {newRetro}")
 
