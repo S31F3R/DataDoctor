@@ -328,7 +328,7 @@ class uiOptions(QDialog):
         )
         self.btnRestoreTableColors.clicked.connect(self._onRestoreTableColors)
         btnRow = QHBoxLayout()
-        btnRow.setContentsMargins(0, 4, 0, 0)
+        btnRow.setContentsMargins(0, 0, 0, 0)
         btnRow.addWidget(self.btnRestoreTableColors)
         btnRow.addStretch(1)
         while lay.count():
@@ -385,7 +385,6 @@ class uiOptions(QDialog):
             headerH
             + sum(tbl.rowHeight(r) for r in range(tbl.rowCount()))
             + tbl.frameWidth() * 2
-            + 8
         )
         tbl.setFixedHeight(max(rowsH, 160))
         QTimer.singleShot(0, self._fitAppearanceDialog)
