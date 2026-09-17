@@ -328,7 +328,7 @@ class uiOptions(QDialog):
         )
         self.btnRestoreTableColors.clicked.connect(self._onRestoreTableColors)
         btnRow = QHBoxLayout()
-        btnRow.setContentsMargins(0, 0, 0, 0)
+        btnRow.setContentsMargins(0, -10, 0, 0)
         btnRow.addWidget(self.btnRestoreTableColors)
         btnRow.addStretch(1)
         while lay.count():
