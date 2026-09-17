@@ -285,6 +285,9 @@ class uiOptions(QDialog):
         tabs = page.findChild(QTabWidget) if page is not None else None
         self.tabWidget = tabs if tabs is not None else self.tabsGeneral
         self.onOptionsTabChanged()
+        if index == 1:
+            # Appearance: measure row heights after the page (and retro font) is shown
+            QTimer.singleShot(0, self._fillTableColorTable)
 
     def _buildTableColorUi(self):
         page = self.findChild(QWidget, "tabsAppearanceGeneral")
@@ -359,12 +362,18 @@ class uiOptions(QDialog):
                 swatch.setForeground(QBrush())
             tbl.setItem(i, 0, nameItem)
             tbl.setItem(i, 1, swatch)
+        Utils.applyRoleFonts(root=tbl)
         tbl.resizeRowsToContents()
+        fm = tbl.fontMetrics()
+        minRow = max(fm.height() + 10, 22)
+        for r in range(tbl.rowCount()):
+            tbl.setRowHeight(r, max(tbl.rowHeight(r), minRow))
+        headerH = max(tbl.horizontalHeader().height(), minRow)
         rowsH = (
-            tbl.horizontalHeader().height()
+            headerH
             + sum(tbl.rowHeight(r) for r in range(tbl.rowCount()))
             + tbl.frameWidth() * 2
-            + 6
+            + 8
         )
         tbl.setFixedHeight(max(rowsH, 160))
         self._fitOptionsToAppearanceTable()

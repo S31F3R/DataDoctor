@@ -92,9 +92,12 @@ class TableUndoStack:
         self._macro = []
 
     def endMacro(self):
-        if self._macro:
-            self._push(_Macro(self._macro))
+        # Clear _macro before _push so the batch lands on undoList, not
+        # nested back into the open macro (which was then discarded).
+        cmds = self._macro
         self._macro = None
+        if cmds:
+            self._push(_Macro(cmds))
 
     def _push(self, cmd):
         if self.blocked or cmd is None:

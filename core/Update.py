@@ -998,20 +998,18 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
             pending = pendingAppImagePath()
             if pending is not None:
                 from PyQt6.QtWidgets import QMessageBox
-                current = appImagePath()
-                name = current.name if current is not None else "the AppImage"
                 box = QMessageBox(parent)
                 box.setWindowTitle("Update ready")
                 box.setText(
-                    f"A downloaded update is ready to replace {name} and restart."
+                    "Hit Restart to update, or close this window to restart later."
                 )
-                applyBtn = box.addButton(
-                    "Quit and apply", QMessageBox.ButtonRole.AcceptRole
+                restartBtn = box.addButton(
+                    "Restart", QMessageBox.ButtonRole.AcceptRole
                 )
                 laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
-                box.setDefaultButton(applyBtn)
+                box.setDefaultButton(restartBtn)
                 box.exec()
-                if box.clickedButton() is applyBtn:
+                if box.clickedButton() is restartBtn:
                     spawnAppImageReplaceAndExit(pending, parent)
                 elif box.clickedButton() is laterBtn:
                     Config.skipUpdatePromptThisSession = True
@@ -1286,13 +1284,7 @@ def _promptUpdate(parent, info: dict) -> None:
     needsWindowsZip = (info.get("assetKind") == "windows") or windowsNeedsLauncherRefresh()
     if kind == "appimage":
         lines.append("")
-        current = appImagePath()
-        name = current.name if current is not None else "this AppImage"
-        lines.append(
-            f"Download, then Data Doctor will quit, replace {name} "
-            "(same filename), and restart. Extra updater files are not left "
-            "next to the AppImage."
-        )
+        lines.append("Download, then hit Restart to apply.")
     elif kind == "launcher":
         lines.append("")
         if needsWindowsZip:
@@ -1403,24 +1395,21 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
             return
         kind = info.get("kind") or detectInstallKind()
         if kind == "appimage":
-            current = appImagePath()
-            name = current.name if current is not None else "the AppImage"
             box = QMessageBox(parent)
             box.setWindowTitle("Download complete")
             box.setText(
-                f"Replace {name} now and restart Data Doctor?\n"
-                "The file keeps its current name. Choose Later to apply on next launch."
+                "Hit Restart to update, or close this window to restart later."
             )
-            applyBtn = box.addButton("Quit and apply", QMessageBox.ButtonRole.AcceptRole)
+            restartBtn = box.addButton("Restart", QMessageBox.ButtonRole.AcceptRole)
             box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
-            box.setDefaultButton(applyBtn)
+            box.setDefaultButton(restartBtn)
             box.exec()
-            if box.clickedButton() is applyBtn:
+            if box.clickedButton() is restartBtn:
                 if not spawnAppImageReplaceAndExit(Path(path), parent):
                     QMessageBox.warning(
                         parent,
                         "Update",
-                        "Could not start the AppImage updater.\n"
+                        "Could not start applyUpdate.\n"
                         "Try again from Help / the update prompt.",
                     )
             return
