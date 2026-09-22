@@ -20,6 +20,37 @@ Current Tests
      d. If blocked: Clear Quarantine.command (Right-click → Open), then the app.
      e. Optional on Mac only: python scripts/packageMac.py --app → frozen PyInstaller .app.
 
+[ ] AppImage update prompts match Windows
+   Steps:
+     a. On Linux AppImage, when a newer release is offered, the window is
+        "A newer version is available" with Installed / Available / Release page
+        and "Download, then hit Restart to apply." (no text about replacing
+        the AppImage filename or leftover updater files.)
+     b. After Download, Restart/Later says "Hit Restart to update, or close
+        this window to restart later." Buttons are Restart / Later.
+
+[ ] Update Download closes the first prompt
+   Steps:
+     a. When an update is offered, click Download.
+     b. The Download / Later window must close. Only the progress bar remains.
+     c. After the download, Restart / Later appears. Click Later.
+     d. That window closes. Main window only — no leftover Download / Later behind it.
+
+[ ] Graph legend hidden mark stays [ ]
+   Steps:
+     a. Query something and open Graph.
+     b. Click [x] on a legend row to hide that series.
+     c. The mark must stay an open box like [ ], not collapsed [].
+
+[ ] Public overlay does not re-pair when Aquarius is skipped
+   Steps:
+     a. Public Query. Overlay on. List order: HDB, Aquarius, HDB, Aquarius
+        (or HDB, AQ, HDB, USGS — USGS pair should still overlay).
+     b. Run the query.
+     c. Aquarius IDs are skipped. Each HDB that was paired with Aquarius is a
+        normal column (not overlaid with the next HDB).
+     d. HDB + USGS-NWIS overlay pairs still overlay.
+
 Confirmed
 --------------------------------------------------------------------------------
 

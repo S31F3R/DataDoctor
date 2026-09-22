@@ -10,3 +10,7 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Download closes the update prompt before the progress bar; Later on Restart returns to the main window
+- Graph legend hidden mark stays an open [ ] (does not collapse to [])
+- Public overlay/delta pairs that include Aquarius run the remaining series as a normal column (do not re-pair with the next HDB)
+
