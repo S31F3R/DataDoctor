@@ -36,13 +36,13 @@ Current Tests
      c. After the download, Restart / Later appears. Click Later.
      d. That window closes. Main window only — no leftover Download / Later behind it.
 
-[ ] Graph legend hidden mark stays [ ]
+[x] Graph legend hidden mark stays [ ]
    Steps:
      a. Query something and open Graph.
      b. Click [x] on a legend row to hide that series.
      c. The mark must stay an open box like [ ], not collapsed [].
 
-[ ] Public overlay does not re-pair when Aquarius is skipped
+[x] Public overlay does not re-pair when Aquarius is skipped
    Steps:
      a. Public Query. Overlay on. List order: HDB, Aquarius, HDB, Aquarius
         (or HDB, AQ, HDB, USGS — USGS pair should still overlay).
