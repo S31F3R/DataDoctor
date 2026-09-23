@@ -1689,6 +1689,13 @@ def executeQuery(
                     dataId = mergedDataIds[col][0] if mergedDataIds[col] else None
                     db = mergedDbs[col][0]
                     lookupId = labelsDict.get(dataId, dataId) if db == 'AQUARIUS' else dataId
+                    itemId = None
+                    if col < len(queryItems):
+                        it = queryItems[col]
+                        if isinstance(it, (tuple, list)) and len(it) > 6:
+                            itemId = it[6]
+                        elif isinstance(it, dict):
+                            itemId = it.get("id")
                     metadata = {
                         'type': 'normal',
                         'dataIds': mergedDataIds[col], 
@@ -1697,6 +1704,7 @@ def executeQuery(
                         'lookupId': lookupId,
                         'flags': QueryFlags.seriesFlagsFromQueryItem(queryItems[col])
                         if col < len(queryItems) else None,
+                        'itemId': itemId,
                     }
 
                     mainWindow.columnMetadata.append(metadata)

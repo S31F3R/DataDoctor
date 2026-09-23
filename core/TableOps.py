@@ -524,11 +524,19 @@ def _rememberCustomColumns(mainWindow):
                 "text": item.text() if item is not None else "",
                 "formula": _itemFormula(item),
             }
+        formulaTemplate = None
+        from core.Formula import templateAtRowZero
+        for r in range(table.rowCount()):
+            f = _itemFormula(table.item(r, c))
+            if f:
+                formulaTemplate = templateAtRowZero(f, r)
+                break
         saved.append({
             "id": meta.get("customId") or uuid.uuid4().hex[:12],
             "name": meta.get("name") or firstHeaderLine(_headerText(table, c)) or "Column",
             "indexHint": c,
             "cells": cells,
+            "formulaTemplate": formulaTemplate,
         })
     mainWindow.customColumns = saved
 
@@ -558,6 +566,13 @@ def restoreCustomColumns(mainWindow):
             metas[newIdx]["customId"] = spec.get("id")
             metas[newIdx]["name"] = name
         _setHeaderText(table, newIdx, Utils.formatTableHeaderLabel(name))
+        template = spec.get("formulaTemplate")
+        if template:
+            # Same formula on every row of the new date range. A1 stays A1
+            # on row 0; it is not tied to the old timestamps.
+            from core.FormulaUi import _fillFormulaColumn
+            _fillFormulaColumn(mainWindow, newIdx, template, originRow=0)
+            continue
         cells = spec.get("cells") or {}
         table.blockSignals(True)
         try:
@@ -791,11 +806,11 @@ def _rebuildQueryItemsFromTable(mainWindow):
         if t == "custom" or meta.get("equation"):
             formula = None
             if table is not None:
+                from core.Formula import templateAtRowZero
                 for r in range(table.rowCount()):
                     f = _itemFormula(table.item(r, col))
                     if f:
-                        from core.Formula import adjustFormula
-                        formula = adjustFormula(f, 0, -r)
+                        formula = templateAtRowZero(f, r)
                         break
             items.append({
                 "kind": QueryFlags.KIND_EQUATION,
@@ -948,8 +963,8 @@ def renameHeader(mainWindow, col):
             for r in range(table.rowCount()):
                 f = _itemFormula(table.item(r, col))
                 if f:
-                    from core.Formula import adjustFormula
-                    formula = adjustFormula(f, 0, -r)
+                    from core.Formula import templateAtRowZero
+                    formula = templateAtRowZero(f, r)
                     break
             if formula:
                 winQuery.syncEquationQueryItem(formula, col, header=newCommon)

@@ -19,6 +19,7 @@ from core import Config, Logic, Upload
 from core.Formula import (
     FORMULA_KEY, ERR_VALUE, ERR_REF, FUNCTIONS, FUNCTION_HELP,
     adjustFormula, colToLetters, evaluateFormula, formatFormulaResult,
+    templateAtRowZero,
     looksLikeFormula, parseCellRef, formatCellRef, _REF_IN_FORMULA,
 )
 
@@ -1037,6 +1038,10 @@ def _rewriteFormulaFromRefs(formula, refs, mainWindow):
         key = match.get("itemId")
         newCol = colById.get(str(key)) if key is not None else None
         if newCol is None:
+            # Same quick look, new dates: the letter is still the column.
+            # #REF! only when that letter is no longer on the sheet.
+            if table is not None and 0 <= col < table.columnCount():
+                return token
             broken = True
             return ERR_REF
         return formatCellRef(newCol, row, absCol, absRow)
@@ -1057,7 +1062,7 @@ def _syncEquationListItem(mainWindow, col, formula, originRow=0):
     if table is not None:
         h = table.horizontalHeaderItem(col)
         header = h.text().split("\n", 1)[0].strip() if h is not None else ""
-    template = adjustFormula(formula, 0, -int(originRow or 0))
+    template = templateAtRowZero(formula, originRow)
     refs = collectFormulaRefs(mainWindow, template)
     winQuery.syncEquationQueryItem(template, col, header=header, refs=refs)
 
@@ -1083,9 +1088,10 @@ def applyEquationQueryItems(mainWindow, equationItems):
             idxHint = None
         if not looksLikeFormula(formula):
             continue
-        newFormula, broken = _rewriteFormulaFromRefs(formula, refs, mainWindow)
-        if refs and broken:
-            newFormula = newFormula
+        # Keep A1 as A1. The equation column is inserted at the same list
+        # index, so the letters still name the same series on a new date range.
+        newFormula = templateAtRowZero(formula, 0)
+        broken = ERR_REF in str(newFormula)
         insertAt = table.columnCount()
         if idxHint is not None:
             try:

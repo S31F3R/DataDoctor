@@ -302,7 +302,41 @@ def _makeToolbarClass():
                 )
                 if not fname:
                     return fname
-                self.canvas.figure.savefig(fname)
+                fig = self.canvas.figure
+                panel = self.parent()
+                result = getattr(panel, "_result", None) if panel is not None else None
+                label = (result.labelText if result is not None else "") or ""
+                footerAx = None
+                oldBottom = fig.subplotpars.bottom
+                if label:
+                    # Own axes under the plot so the equation is not drawn on the points.
+                    lines = label.count("\n") + 1
+                    footerH = min(0.46, 0.032 * lines + 0.04)
+                    fig.subplots_adjust(bottom=footerH + 0.08)
+                    color = "#222222"
+                    try:
+                        from ui.uiGraph import isSystemDarkMode
+                        if Config.retroMode and isSystemDarkMode():
+                            color = "#00FF00"
+                        elif isSystemDarkMode():
+                            color = "#e0e0e0"
+                    except Exception:
+                        pass
+                    footerAx = fig.add_axes([0.02, 0.006, 0.96, footerH])
+                    footerAx.set_axis_off()
+                    footerAx.text(
+                        0.0, 0.0, label,
+                        va="bottom", ha="left", fontsize=8, color=color,
+                        transform=footerAx.transAxes, clip_on=False,
+                    )
+                try:
+                    fig.set_tight_layout(False)
+                    fig.savefig(fname)
+                finally:
+                    if footerAx is not None:
+                        fig.delaxes(footerAx)
+                    fig.subplots_adjust(bottom=oldBottom)
+                    self.canvas.draw_idle()
                 saveDir = os.path.dirname(os.path.abspath(fname))
                 config = Utils.loadConfig()
                 config["lastRegressionSavePath"] = saveDir

@@ -4,7 +4,7 @@ import json
 import os
 from PyQt6.QtWidgets import (QMainWindow, QLineEdit, QComboBox, QDateTimeEdit, QListWidget, QPushButton, QRadioButton,
                             QButtonGroup, QCheckBox, QMessageBox, QInputDialog, QMenu, QAbstractItemView,
-                            QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QListWidgetItem)
+                            QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QListWidgetItem, QSizePolicy)
 from datetime import datetime
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import Qt, QEvent
@@ -744,11 +744,16 @@ class uiQuery(QMainWindow):
         now = datetime.now()
         intervalMin = self._queryIntervalMinutes()
         choices = QuickLookDates.propose(start or now, end or now, now, intervalMin)
-        dlg = QDialog(self)
+        # Parent is the main window. The query window is a fixed short size,
+        # and a child dialog there squishes the button row onto the list.
+        host = getattr(self, "winMain", None) or self
+        dlg = QDialog(host)
         dlg.setWindowTitle("Quick Look Date Range")
         dlg.setModal(True)
-        dlg.setMinimumWidth(520)
+        dlg.setMinimumWidth(560)
         layout = QVBoxLayout(dlg)
+        layout.setSpacing(20 if Config.retroMode else 10)
+        layout.setContentsMargins(12, 12, 12, 12)
         intro = QLabel(
             "Custom dates can mean a rolling window. Pick how this Quick Look "
             "should set start and end when you load it (and when you Query)."
@@ -756,15 +761,24 @@ class uiQuery(QMainWindow):
         intro.setWordWrap(True)
         layout.addWidget(intro)
         listing = QListWidget(dlg)
+        listing.setObjectName("quickLookDateList")
         listing.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        listing.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        listing.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         for choice in choices:
             item = QListWidgetItem(choice["label"])
             item.setData(Qt.ItemDataRole.UserRole, choice)
             listing.addItem(item)
-        rowH = listing.sizeHintForRow(0)
-        if rowH < 18:
-            rowH = listing.fontMetrics().height() + 10
-        listing.setMinimumHeight(rowH * 5 + 2 * listing.frameWidth() + 4)
+        Utils.applyRetroFont(dlg)
+        rowH = listing.sizeHintForRow(0) if listing.count() else 0
+        fmH = listing.fontMetrics().height() + listing.fontMetrics().leading()
+        if Config.retroMode:
+            rowH = max(rowH, fmH + 16, 28)
+        else:
+            rowH = max(rowH, fmH + 8, 22)
+        visible = min(7, max(listing.count(), 1))
+        listH = rowH * visible + 2 * listing.frameWidth() + 8
+        listing.setFixedHeight(listH)
         layout.addWidget(listing)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -778,6 +792,12 @@ class uiQuery(QMainWindow):
         buttons.accepted.connect(dlg.accept)
         buttons.rejected.connect(dlg.reject)
         layout.addWidget(buttons)
+        dlg.adjustSize()
+        # Extra room under the list so the buttons sit below the scrollbar.
+        extra = 36 if Config.retroMode else 12
+        dlg.resize(max(dlg.width(), 560), dlg.height() + extra)
+        dlg.setMinimumHeight(dlg.height())
+        Utils.centerWindowToParent(dlg)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return False
         selected = listing.currentItem()

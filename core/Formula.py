@@ -706,6 +706,22 @@ def adjustFormula(formula: str, dCol: int, dRow: int) -> str:
     return prefix + _REF_IN_FORMULA.sub(repl, body)
 
 
+def templateAtRowZero(formula: str, originRow: int = 0) -> str:
+    """
+    Formula as it reads on row 0, for replay on another date range.
+
+    A fill from row 0 (`=A6` on row 5) becomes `=A1`. A formula that already
+    says `=A1` on a later row is kept as `=A1` — shifting it would be #REF!,
+    and the next query should still start at A1.
+    """
+    if not looksLikeFormula(formula):
+        return formula
+    templ = adjustFormula(formula, 0, -int(originRow or 0))
+    if ERR_REF in str(templ):
+        return formula
+    return templ
+
+
 def shiftFormulaColumns(formula: str, insertAt: int, delta: int = 1) -> str:
     """
     Shift every cell-ref column >= insertAt by delta (insert/delete columns).

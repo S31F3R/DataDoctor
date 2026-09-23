@@ -269,6 +269,49 @@ def test_split_half():
     return 0
 
 
+def test_collinear_sandwich():
+    """Upstream and downstream of the same wave both stay in the equation."""
+    rng = np.random.default_rng(11)
+    n = 500
+    upstream = np.zeros(n)
+    upstream[0] = rng.normal()
+    for t in range(1, n):
+        upstream[t] = 0.97 * upstream[t - 1] + 0.15 * rng.normal()
+    downstream = np.roll(upstream, 9) + 0.01 * rng.normal(size=n)
+    downstream[:9] = np.nan
+    target = np.full(n, np.nan)
+    for t in range(n):
+        tu = t - 3
+        td = t + 6
+        if 0 <= tu < n and 0 <= td < n and np.isfinite(upstream[tu]) and np.isfinite(downstream[td]):
+            target[t] = 0.55 * upstream[tu] + 0.45 * downstream[td] + 2.0
+    result, err = fitColumns(
+        [
+            column("A", "upstream", 0, upstream, step=3600),
+            column("B", "target", 1, target, step=3600),
+            column("C", "downstream", 2, downstream, step=3600),
+        ],
+        1,
+    )
+    if err:
+        return _fail("sandwich", err)
+    keys = [p.key for p in result.predictors]
+    if keys != ["A", "C"]:
+        return _fail("sandwich", f"{keys} {result.equationText}")
+    print("ok sandwich", result.equationText)
+    return 0
+
+
+def test_formula_keeps_a1():
+    from core.Formula import templateAtRowZero
+    if templateAtRowZero("=1.037*B1+0.214*D1+8.6", 8) != "=1.037*B1+0.214*D1+8.6":
+        return _fail("formula", templateAtRowZero("=1.037*B1+0.214*D1+8.6", 8))
+    if templateAtRowZero("=A6+B12", 5) != "=A1+B7":
+        return _fail("formula", templateAtRowZero("=A6+B12", 5))
+    print("ok formula")
+    return 0
+
+
 def test_cli():
     rng = np.random.default_rng(10)
     n = 400
@@ -312,6 +355,8 @@ def main():
         test_daily_short_warns,
         test_edge_lag_warns,
         test_split_half,
+        test_collinear_sandwich,
+        test_formula_keeps_a1,
         test_cli,
     ):
         failed += fn()

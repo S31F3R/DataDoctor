@@ -156,23 +156,41 @@ def _fitOls(design, y):
 
 def _isDead(r2Full, r2Without, coef, xColumn, y, peakRho) -> bool:
     """
-    Near-zero weight, or the column does not improve the fit enough to keep.
+    Drop a column only when it has no real weight.
 
-    Judged on the full model's rows so dropping a column does not change N.
+    Unique r² can be tiny when two gages carry the same wave (upstream and
+    downstream of the target). That is not "near zero" — the coefficient
+    still moves the target. A flat, unrelated column has a weak peak and
+    does not earn its term.
     """
     gained = float(r2Full) - float(r2Without)
-    if gained < 0.02:
-        return True
     stdY = float(np.std(y))
     stdX = float(np.std(xColumn))
     if stdY <= 1e-12:
         return True
-    contrib = abs(float(coef)) * stdX
-    if contrib < 0.02 * stdY:
+    contrib = abs(float(coef)) * stdX / stdY
+    if abs(float(peakRho)) < 0.15 and gained < 0.02:
         return True
-    if abs(float(peakRho)) < 0.15 and gained < 0.05:
+    if gained < 0.01 and contrib < 0.05:
         return True
     return False
+
+
+def _lagCoverage(grid, targetKey, det) -> int:
+    """Target rows where this lagged predictor is also finite."""
+    yGrid = grid.columns[targetKey]
+    arr = grid.columns.get(det.key)
+    if arr is None:
+        return 0
+    n = int(grid.length)
+    count = 0
+    for t in range(n):
+        if not np.isfinite(yGrid[t]):
+            continue
+        j = t + int(det.lagSteps)
+        if 0 <= j < n and np.isfinite(arr[j]):
+            count += 1
+    return count
 
 
 def _warnings(stepSeconds, spanSeconds, n, nEff, r2, cvR2, predictors):
@@ -310,6 +328,24 @@ def fitColumns(columns, targetIndex: int):
 
     if len(keep) != len(detections):
         detections = [detections[i] for i in keep]
+        built = _completeDesign(grid, target.key, detections)
+        if built is None:
+            return _refuse("No overlap left after lagging.")
+        indices, design, y = built
+        fitted = _fitOls(design, y)
+        if fitted is None:
+            return _refuse("The target does not vary, so Regression did not fit.")
+        coef, yhat, A, r2, me, rmse = fitted
+
+    # A short custom column (a formula filled on only a few rows) must not
+    # throw out the gages that actually overlap. Drop the sparsest and refit.
+    while len(detections) > 1:
+        p = 1 + len(detections)
+        n = int(y.size)
+        if n >= max(20, 10 * p):
+            break
+        covers = [_lagCoverage(grid, target.key, det) for det in detections]
+        detections.pop(int(np.argmin(covers)))
         built = _completeDesign(grid, target.key, detections)
         if built is None:
             return _refuse("No overlap left after lagging.")
