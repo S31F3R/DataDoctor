@@ -6,7 +6,7 @@ A desktop tool for querying, reviewing, and (on Reclamation HDB) editing hydrolo
 - **USBR** Hydrologic Database (HDB / Oracle) — R and M tables in one query, and write-back to both
 - **Aquarius** Time-Series (on-prem / VPN and Aquarius Cloud)
 
-Built for Reclamation and USGS workflows: data dictionary labels, QAQC coloring, overlay/delta pairs, graphing, CSV export, and saved Quick Looks.
+Built for Reclamation and USGS workflows: data dictionary labels, QAQC coloring, overlay/delta pairs, graphing, lagged regression, CSV export, and saved Quick Looks.
 
 Current version: **3.3.0-rc.1** (see `core/Version.py`). Windows and macOS zips ship a bundled Python 3.14.
 

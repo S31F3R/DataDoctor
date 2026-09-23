@@ -12,6 +12,7 @@
 - [Overlay and Delta](Overlay-and-Delta)
 - [Quick Looks](Quick-Looks)
 - [Graph](Graph)
+- [Regression](Regression)
 - [CSV Export](CSV-Export)
 - [Formulas](Formulas)
 - [Table colors](Table-Colors)

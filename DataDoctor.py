@@ -354,6 +354,7 @@ class uiMain(QMainWindow):
         self.tabSQL = self.findChild(QWidget, 'tabSQL')
         self.tabLog = self.findChild(QWidget, 'tabLog')
         self.tabGraph = None # created on first graph (GraphPanel)
+        self.tabRegression = None # created on first Regression
         self.pteLog = self.findChild(QPlainTextEdit, 'pteLog')
         self.lastQueryType = None
         self.lastQueryItems = []
@@ -525,6 +526,7 @@ class uiMain(QMainWindow):
         self.dataQueryTitle = "Data Query"
         self.sqlTitle = "SQL Query Builder"
         self.graphTitle = "Graph"
+        self.regressionTitle = "Regression"
         self.logTitle = "Log Viewer"
 
         # Log viewer tab: layout pteLog to fill, hide until opened via btnViewLog
@@ -1294,6 +1296,12 @@ class uiMain(QMainWindow):
                     columns=self._columnsForHeaderGraph(c)
                 )
             )
+            regAction = menu.addAction("Regression")
+            regAction.triggered.connect(
+                lambda checked=False, c=col: self.regressionFromSelection(
+                    columns=self._columnsForHeaderGraph(c)
+                )
+            )
 
             if menu.actions(): menu.exec(header.mapToGlobal(pos))
             if Config.debug:
@@ -1474,6 +1482,8 @@ class uiMain(QMainWindow):
             if menu.actions(): menu.addSeparator()
             graphAction = menu.addAction("Graph")
             graphAction.triggered.connect(lambda: self.graphTableSelection())
+            regAction = menu.addAction("Regression")
+            regAction.triggered.connect(lambda: self.regressionFromSelection())
 
             # Clipboard: always Copy; Paste only on internal (public is read-only)
             menu.addSeparator()
@@ -1690,12 +1700,14 @@ class uiMain(QMainWindow):
         """Return 'graph' / 'log' / 'sql' for detachable tabs, else None."""
         if widget is None: return None
         if self.tabGraph is not None and widget is self.tabGraph: return 'graph'
+        if self.tabRegression is not None and widget is self.tabRegression: return 'regression'
         if self.tabLog is not None and widget is self.tabLog: return 'log'
         if self.tabSQL is not None and widget is self.tabSQL: return 'sql'
 
         # objectName fallback (reparent edge cases)
         name = widget.objectName() if hasattr(widget, 'objectName') else ''
         if name == 'tabGraph': return 'graph'
+        if name == 'tabRegression': return 'regression'
         if name == 'tabLog': return 'log'
         if name == 'tabSQL': return 'sql'
         return None
@@ -1706,18 +1718,25 @@ class uiMain(QMainWindow):
         dataIdx = self.tabWidget.indexOf(self.tabMain) if self.tabMain is not None else -1
         return dataIdx + 1 if dataIdx != -1 else 0
 
-    def sqlInsertIndex(self):
-        """
-        SQL after Data Query and Graph (normal order:
-        Data Query | Graph | SQL | Log).
-        """
+    def regressionInsertIndex(self):
+        """Regression sits to the right of Graph when Graph is open."""
         if self.tabWidget is None: return 0
         idx = self.graphInsertIndex()
-
-        # If Graph is already in the main tab bar, place SQL after it
         if self.tabGraph is not None:
             gIdx = self.tabWidget.indexOf(self.tabGraph)
             if gIdx != -1: idx = gIdx + 1
+        return idx
+
+    def sqlInsertIndex(self):
+        """
+        SQL after Data Query, Graph, and Regression
+        (Data Query | Graph | Regression | SQL | Log).
+        """
+        if self.tabWidget is None: return 0
+        idx = self.regressionInsertIndex()
+        if self.tabRegression is not None:
+            rIdx = self.tabWidget.indexOf(self.tabRegression)
+            if rIdx != -1: idx = rIdx + 1
         return idx
 
     def ensureGraphPanel(self):
@@ -1796,6 +1815,37 @@ class uiMain(QMainWindow):
         self.showGraphInMainTabs(select=True)
         if message and Config.debug: Logic.logMessage("DEBUG", f"graphTableSelection: {message}")
 
+    def ensureRegressionPanel(self):
+        """Create RegressionPanel once; reuse across show/hide/detach."""
+        if self.tabRegression is None:
+            from ui.uiRegression import RegressionPanel
+            self.tabRegression = RegressionPanel(None)
+            self.tabRegression.setObjectName('tabRegression')
+        return self.tabRegression
+
+    def showRegressionInMainTabs(self, select=True):
+        """Insert Regression after Graph when it is not detached."""
+        if self.tabWidget is None: return -1
+        panel = self.ensureRegressionPanel()
+        if self.detachedWindows.get('regression') is not None:
+            win = self.detachedWindows['regression']
+            win.show()
+            win.raise_()
+            win.activateWindow()
+            return -1
+        idx = self.tabWidget.indexOf(panel)
+        if idx == -1:
+            idx = self.tabWidget.insertTab(
+                self.regressionInsertIndex(), panel, self.regressionTitle,
+            )
+        if select and idx >= 0: self.tabWidget.setCurrentIndex(idx)
+        return idx
+
+    def regressionFromSelection(self, columns=None, rows=None):
+        """Right-click Regression. Fit refusal stays on the status bar."""
+        from ui.uiRegression import runRegression
+        runRegression(self, columns=columns, rows=rows)
+
     def onMainTabBarContextMenu(self, pos):
         """Right-click Graph or Log tab → Detach tab."""
         if self.tabWidget is None: return
@@ -1814,7 +1864,7 @@ class uiMain(QMainWindow):
         """
         Pop Graph, Log, or SQL into its own maximizable window (one window per tab).
         """
-        if key not in ('graph', 'log', 'sql'): return
+        if key not in ('graph', 'log', 'sql', 'regression'): return
         if self.detachedWindows.get(key) is not None:
             win = self.detachedWindows[key]
             win.show()
@@ -1824,6 +1874,9 @@ class uiMain(QMainWindow):
         if key == 'graph':
             content = self.ensureGraphPanel()
             title = self.graphTitle
+        elif key == 'regression':
+            content = self.ensureRegressionPanel()
+            title = self.regressionTitle
         elif key == 'sql':
             content = self.tabSQL
             title = self.sqlTitle
@@ -1860,6 +1913,9 @@ class uiMain(QMainWindow):
         if key == 'graph':
             content = self.tabGraph or win.contentWidget
             title = self.graphTitle
+        elif key == 'regression':
+            content = self.tabRegression or win.contentWidget
+            title = self.regressionTitle
         elif key == 'sql':
             content = self.tabSQL or win.contentWidget
             title = self.sqlTitle
@@ -1881,6 +1937,9 @@ class uiMain(QMainWindow):
             self.tabGraph = content
             insertAt = self.graphInsertIndex()
             idx = self.tabWidget.insertTab(insertAt, content, title)
+        elif key == 'regression':
+            self.tabRegression = content
+            idx = self.tabWidget.insertTab(self.regressionInsertIndex(), content, title)
         elif key == 'sql':
             self.tabSQL = content
             idx = self.tabWidget.insertTab(self.sqlInsertIndex(), content, title)

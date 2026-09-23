@@ -2,6 +2,8 @@
 
 Internal **Data Query** cells can hold Excel-style formulas. Type `=` then an expression. The cell **shows the result**; upload / graph / CSV use that number. Double-click (or F2) to see and edit the formula.
 
+[Regression](Regression) can copy a paste-ready line (`=1.037*B1+8.6`). The lag is not part of that formula. The regression label tells you which row the lagged series came from.
+
 Public Query **queried** cells stay read-only. **Custom** columns (Insert column left/right) are editable on public and internal tables, including formulas. Filling a formula down a custom column is not flagged as a database edit. **Delta** columns stay locked. On **Overlay** columns the formula writes the **primary** value (the number you see), not the secondary series. Putting a formula on a queried cell clears QAQC/overlay paint; **Ctrl+Z** restores it.
 
 **Ctrl+Z** / **Ctrl+Y** undo and redo table edits, including cell colors. SQL Query Builder uses the same shortcuts.

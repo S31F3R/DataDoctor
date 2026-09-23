@@ -2553,6 +2553,9 @@ def applyColorTheme(theme=None):
                     graph = getattr(w, "tabGraph", None)
                     if graph is not None and hasattr(graph, "reapplyTheme"):
                         graph.reapplyTheme()
+                    reg = getattr(w, "tabRegression", None)
+                    if reg is not None and hasattr(reg, "reapplyTheme"):
+                        reg.reapplyTheme()
                     winQuery = getattr(w, "winQuery", None)
                     lst = getattr(winQuery, "listQueryList", None) if winQuery is not None else None
                     if lst is not None:
@@ -2641,6 +2644,7 @@ def applyLiveAppearance(app=None):
     mainTable = None
     queryList = None
     graph = None
+    regression = None
     try:
         for w in app.topLevelWidgets():
             if type(w).__name__ == "uiMain":
@@ -2648,6 +2652,7 @@ def applyLiveAppearance(app=None):
                 q = getattr(w, "winQuery", None)
                 queryList = getattr(q, "listQueryList", None) if q is not None else None
                 graph = getattr(w, "tabGraph", None)
+                regression = getattr(w, "tabRegression", None)
                 if q is not None:
                     applyRetroQueryWindow(q)
                 break
@@ -2683,6 +2688,11 @@ def applyLiveAppearance(app=None):
             graph.reapplyTheme()
         except Exception as e:
             Logic.logException("applyLiveAppearance: graph reapplyTheme failed", e)
+    if regression is not None and hasattr(regression, "reapplyTheme"):
+        try:
+            regression.reapplyTheme()
+        except Exception as e:
+            Logic.logException("applyLiveAppearance: regression reapplyTheme failed", e)
     try:
         for w in app.topLevelWidgets():
             if type(w).__name__ != "uiMain":

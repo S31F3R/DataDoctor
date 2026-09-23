@@ -33,4 +33,4 @@ Overlay columns plot both members. Legend labels are the first header line (`com
 
 ## Related
 
-[Overlay and Delta](Overlay-and-Delta) · [Querying](Querying)
+[Regression](Regression) · [Overlay and Delta](Overlay-and-Delta) · [Querying](Querying)
