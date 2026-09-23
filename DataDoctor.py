@@ -344,7 +344,7 @@ class uiMain(QMainWindow):
         self.btnViewLog = self.findChild(QPushButton, 'btnViewLog')
         self.btnInternalQuery = self.findChild(QPushButton, 'btnInternalQuery')
         self.btnSQL = self.findChild(QPushButton, 'btnSQL')
-        self.btnGraph = self.findChild(QPushButton, 'btnGraph')
+        self.btnPlotter = self.findChild(QPushButton, 'btnPlotter')
         self.btnGoat = self.findChild(QPushButton, 'btnGoat')
         self.btnRefresh = self.findChild(QPushButton, 'btnRefresh')
         self.btnUndo = self.findChild(QPushButton, 'btnUndo')
@@ -354,7 +354,9 @@ class uiMain(QMainWindow):
         self.tabSQL = self.findChild(QWidget, 'tabSQL')
         self.tabLog = self.findChild(QWidget, 'tabLog')
         self.tabGraph = None # created on first graph (GraphPanel)
+        self.tabPlotter = None # created on first Plotter query
         self.tabRegression = None # created on first Regression
+        self.winPlotter = None
         self.pteLog = self.findChild(QPlainTextEdit, 'pteLog')
         self.lastQueryType = None
         self.lastQueryItems = []
@@ -370,7 +372,7 @@ class uiMain(QMainWindow):
         self.uploadBaselineReady = False
         self.uploadTrackingBlocked = False
 
-        # Detached floating windows ({'graph'|'log'|'sql': detachedTabWindow})
+        # Detached floating windows ({'graph'|'plotter'|'log'|'sql'|'regression': detachedTabWindow})
         self.detachedWindows = {}
         self.sqlWorkbench = None
         self._appIcon = QIcon() # set from main after load (Windows re-apply)
@@ -395,7 +397,7 @@ class uiMain(QMainWindow):
                         (self.btnInfo, "Info", 36),
                         (self.btnInternalQuery, "InternalQuery", 36),
                         (self.btnSQL, "SQL", 36),
-                        (self.btnGraph, "Graph", 36),
+                        (self.btnPlotter, "Plotter", 36),
                         (self.btnUndo, "Reset", 36),
                         (self.btnRefresh, "Refresh", 36),
                         (self.btnUpload, "Upload", 36),
@@ -412,7 +414,7 @@ class uiMain(QMainWindow):
             self.btnPublicQuery: "Public Queries",
             self.btnInternalQuery: "Internal Queries",
             self.btnSQL: "SQL Query Builder",
-            self.btnGraph: "Graph data table",
+            self.btnPlotter: "Plotter",
             self.btnDataDictionary: "Data Dictionary",
             self.btnExportCSV: "Export current table to CSV",
             self.btnOptions: "Options",
@@ -448,7 +450,7 @@ class uiMain(QMainWindow):
         self.btnInternalQuery.clicked.connect(self.btnInternalQueryPressed)
 
         if self.btnSQL is not None: self.btnSQL.clicked.connect(self.btnSQLPressed)
-        if self.btnGraph is not None: self.btnGraph.clicked.connect(self.btnGraphPressed)
+        if self.btnPlotter is not None: self.btnPlotter.clicked.connect(self.btnPlotterPressed)
         if self.btnGoat is not None: self.btnGoat.clicked.connect(self.btnGoatPressed)
         self.btnRefresh.clicked.connect(self.btnRefreshPressed)
         self.btnUndo.clicked.connect(self.btnUndoPressed)
@@ -526,6 +528,7 @@ class uiMain(QMainWindow):
         self.dataQueryTitle = "Data Query"
         self.sqlTitle = "SQL Query Builder"
         self.graphTitle = "Graph"
+        self.plotterTitle = "Plotter-Line"
         self.regressionTitle = "Regression"
         self.logTitle = "Log Viewer"
 
@@ -1712,6 +1715,7 @@ class uiMain(QMainWindow):
         """Return 'graph' / 'log' / 'sql' for detachable tabs, else None."""
         if widget is None: return None
         if self.tabGraph is not None and widget is self.tabGraph: return 'graph'
+        if self.tabPlotter is not None and widget is self.tabPlotter: return 'plotter'
         if self.tabRegression is not None and widget is self.tabRegression: return 'regression'
         if self.tabLog is not None and widget is self.tabLog: return 'log'
         if self.tabSQL is not None and widget is self.tabSQL: return 'sql'
@@ -1719,6 +1723,7 @@ class uiMain(QMainWindow):
         # objectName fallback (reparent edge cases)
         name = widget.objectName() if hasattr(widget, 'objectName') else ''
         if name == 'tabGraph': return 'graph'
+        if name == 'tabPlotter': return 'plotter'
         if name == 'tabRegression': return 'regression'
         if name == 'tabLog': return 'log'
         if name == 'tabSQL': return 'sql'
@@ -1739,16 +1744,25 @@ class uiMain(QMainWindow):
             if gIdx != -1: idx = gIdx + 1
         return idx
 
-    def sqlInsertIndex(self):
-        """
-        SQL after Data Query, Graph, and Regression
-        (Data Query | Graph | Regression | SQL | Log).
-        """
+    def plotterInsertIndex(self):
+        """Plotter sits to the right of Regression when Regression is open."""
         if self.tabWidget is None: return 0
         idx = self.regressionInsertIndex()
         if self.tabRegression is not None:
             rIdx = self.tabWidget.indexOf(self.tabRegression)
             if rIdx != -1: idx = rIdx + 1
+        return idx
+
+    def sqlInsertIndex(self):
+        """
+        SQL after Data Query, Graph, Regression, and Plotter
+        (Data Query | Graph | Regression | Plotter | SQL | Log).
+        """
+        if self.tabWidget is None: return 0
+        idx = self.plotterInsertIndex()
+        if self.tabPlotter is not None:
+            pIdx = self.tabWidget.indexOf(self.tabPlotter)
+            if pIdx != -1: idx = pIdx + 1
         return idx
 
     def ensureGraphPanel(self):
@@ -1776,9 +1790,54 @@ class uiMain(QMainWindow):
         if select and idx >= 0: self.tabWidget.setCurrentIndex(idx)
         return idx
 
-    def btnGraphPressed(self):
-        """Graph toolbar button — plots current table selection (or full table)."""
-        self.graphTableSelection()
+    def btnPlotterPressed(self):
+        """Toolbar Plotter — open the plot query window. Does not graph the table."""
+        self.ensurePlotterWindow()
+        win = self.winPlotter
+        if win is None:
+            return
+        win.show()
+        win.raise_()
+        win.activateWindow()
+
+    def ensurePlotterWindow(self):
+        if self.winPlotter is None:
+            from ui.uiPlotter import uiPlotter
+            self.winPlotter = uiPlotter(self)
+        return self.winPlotter
+
+    def ensurePlotterPanel(self):
+        if self.tabPlotter is None:
+            from ui.uiPlotter import PlotterPanel
+            self.tabPlotter = PlotterPanel(None)
+            self.tabPlotter.setObjectName('tabPlotter')
+        return self.tabPlotter
+
+    def showPlotterInMainTabs(self, title=None, select=True):
+        """Show the Plotter tab, or the detached window, and retitle it for this plot type."""
+        if title:
+            self.plotterTitle = title
+        if self.tabWidget is None:
+            return -1
+        panel = self.ensurePlotterPanel()
+        if self.detachedWindows.get('plotter') is not None:
+            win = self.detachedWindows['plotter']
+            win.tabTitle = self.plotterTitle
+            win.setWindowTitle(f"Data Doctor — {self.plotterTitle}")
+            if win.hostTabs is not None and win.hostTabs.count() > 0:
+                win.hostTabs.setTabText(0, self.plotterTitle)
+            win.show()
+            win.raise_()
+            win.activateWindow()
+            return -1
+        idx = self.tabWidget.indexOf(panel)
+        if idx == -1:
+            idx = self.tabWidget.insertTab(self.plotterInsertIndex(), panel, self.plotterTitle)
+        else:
+            self.tabWidget.setTabText(idx, self.plotterTitle)
+        if select and idx >= 0:
+            self.tabWidget.setCurrentIndex(idx)
+        return idx
 
     def graphTableSelection(self, columns=None, rows=None):
         """
@@ -1876,7 +1935,7 @@ class uiMain(QMainWindow):
         """
         Pop Graph, Log, or SQL into its own maximizable window (one window per tab).
         """
-        if key not in ('graph', 'log', 'sql', 'regression'): return
+        if key not in ('graph', 'plotter', 'log', 'sql', 'regression'): return
         if self.detachedWindows.get(key) is not None:
             win = self.detachedWindows[key]
             win.show()
@@ -1886,6 +1945,9 @@ class uiMain(QMainWindow):
         if key == 'graph':
             content = self.ensureGraphPanel()
             title = self.graphTitle
+        elif key == 'plotter':
+            content = self.ensurePlotterPanel()
+            title = self.plotterTitle
         elif key == 'regression':
             content = self.ensureRegressionPanel()
             title = self.regressionTitle
@@ -1925,6 +1987,9 @@ class uiMain(QMainWindow):
         if key == 'graph':
             content = self.tabGraph or win.contentWidget
             title = self.graphTitle
+        elif key == 'plotter':
+            content = self.tabPlotter or win.contentWidget
+            title = self.plotterTitle
         elif key == 'regression':
             content = self.tabRegression or win.contentWidget
             title = self.regressionTitle
@@ -1949,6 +2014,9 @@ class uiMain(QMainWindow):
             self.tabGraph = content
             insertAt = self.graphInsertIndex()
             idx = self.tabWidget.insertTab(insertAt, content, title)
+        elif key == 'plotter':
+            self.tabPlotter = content
+            idx = self.tabWidget.insertTab(self.plotterInsertIndex(), content, title)
         elif key == 'regression':
             self.tabRegression = content
             idx = self.tabWidget.insertTab(self.regressionInsertIndex(), content, title)

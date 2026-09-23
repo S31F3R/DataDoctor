@@ -130,6 +130,9 @@ queryRetroSmallControls = frozenset({
     'rbCustomDateTime',
     'rbPrevDayToCurrent',
     'rbPrevWeekToCurrent',
+    'rbPlotLine',
+    'rbPlotScatter',
+    'rbPlotTimeLag',
     'chkbDelta',
     'chkbOverlay',
     'chkbRawData',
@@ -1374,9 +1377,9 @@ def loadDataDictionary(table):
     except Exception:
         pass
 
-def loadQuickLooks(cbQuickLook):
+def loadQuickLooks(cbQuickLook, directory=None):
     """Load all Quick Looks into the provided combobox."""
-    Logic.loadAllQuickLooks(cbQuickLook)
+    Logic.loadAllQuickLooks(cbQuickLook, directory=directory)
 
 def hdbDatabaseLabel(entry):
     """
@@ -1464,7 +1467,7 @@ def programDatabases(queryType=None, applyAccessList=None):
         applyAccessList = queryType in ('internal', 'sql')
     unchecked = hdbAccessUncheckedNames() if applyAccessList else set()
 
-    if queryType == 'internal':
+    if queryType in ('internal', 'plotter'):
         add('AQUARIUS')
 
     for entry in getattr(Config, 'hdbOracleDatabases', ()) or ():
@@ -2158,6 +2161,18 @@ def getQuickLookDir():
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"getQuickLookDir: Skipped moving {srcPath} as it already exists in {queryDir}")
     return queryDir
+
+def getPlotQuickLookDir():
+    """Plot Quick Looks. JSON only; does not migrate legacy .txt query files."""
+    quickLookDir = os.path.join(getConfigDir(), "quickLook")
+    plotsDir = os.path.join(quickLookDir, "plots")
+    if not os.path.exists(quickLookDir):
+        ensurePrivateDir(quickLookDir)
+    if not os.path.exists(plotsDir):
+        ensurePrivateDir(plotsDir)
+        if Config.debug:
+            Logic.logMessage("DEBUG", f"getPlotQuickLookDir: Created plots directory: {plotsDir}")
+    return plotsDir
 
 def getExampleQuickLookDir():
     return Logic.resourcePath("quickLook")

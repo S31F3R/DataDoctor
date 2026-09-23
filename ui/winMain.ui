@@ -418,16 +418,16 @@
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="btnGraph">
+        <widget class="QPushButton" name="btnPlotter">
          <property name="toolTip">
-          <string>Graph data table</string>
+          <string>Plotter</string>
          </property>
          <property name="text">
           <string/>
          </property>
          <property name="icon">
           <iconset>
-           <normaloff>icons/Graph.png</normaloff>icons/Graph.png</iconset>
+           <normaloff>icons/Plotter.png</normaloff>icons/Plotter.png</iconset>
          </property>
          <property name="iconSize">
           <size>

@@ -1559,6 +1559,23 @@ class GraphPanel(QWidget):
         timestamps, tsTexts, series, warnings = extractSeries(
             table, columns=columns, rows=rows, columnMetadata=columnMetadata
         )
+        return self.plotPrepared(timestamps, tsTexts, series, warnings)
+
+    def plotPrepared(self, timestamps, tsTexts, series, warnings=None, xValues=None, markersOnly=False):
+        """
+        Draw series that are already numeric.
+
+        series: (label, values, texts[, rounded])
+        xValues: optional numeric X for scatter. Otherwise X is time or row index.
+        markersOnly: points, no connecting line.
+        """
+        if not _ensureMatplotlib():
+            return False, (
+                "matplotlib is not installed.\n\n"
+                "Install it with:\n  pip install matplotlib\n"
+                "Then restart Data Doctor."
+            )
+        warnings = list(warnings or [])
         if not series:
             msg = warnings[0] if warnings else "Nothing to graph."
             return False, msg
@@ -1598,18 +1615,22 @@ class GraphPanel(QWidget):
         colorCycle = self._colorCycle(theme)
 
         n = len(series[0][1])
-        useDatetime = (
-            timestamps
-            and sum(1 for t in timestamps if t is not None) >= max(2, int(n * 0.5))
-        )
+        if xValues is not None:
+            x = np.asarray(xValues, dtype=float)
+            useDatetime = False
+        else:
+            useDatetime = (
+                timestamps
+                and sum(1 for t in timestamps if t is not None) >= max(2, int(n * 0.5))
+            )
         self._useDatetime = useDatetime
-        self._tsDisplayFmt = detectTimestampDisplayFormat(tsTexts)
+        self._tsDisplayFmt = detectTimestampDisplayFormat(tsTexts or [])
 
-        if useDatetime:
+        if xValues is None and useDatetime:
             x = mdates.date2num([
                 t if t is not None else np.nan for t in timestamps
             ])
-        else:
+        elif xValues is None:
             x = np.arange(n, dtype=float)
 
         self._lineData = []
@@ -1640,6 +1661,7 @@ class GraphPanel(QWidget):
                     label=label,
                     color=color,
                     linewidth=1.4,
+                    linestyle='None' if markersOnly else '-',
                     marker='o',
                     markersize=markerSize,
                     markevery=markerIdx.tolist() if markerIdx.size else None,
@@ -1661,6 +1683,7 @@ class GraphPanel(QWidget):
                     'color': color,
                     'visible': True,
                     'axisIndex': axisIndex,
+                    'seriesId': item[4] if len(item) > 4 else None,
                 })
             axTarget.set_ylabel('')
 
@@ -1972,6 +1995,13 @@ class GraphPanel(QWidget):
             self._lastXLim = curX
             self._scheduleAutoscaleY()
         self._refreshMarkerDensity(draw=True)
+        hook = getattr(self, "onViewChanged", None)
+        if hook is not None:
+            try:
+                hook()
+            except Exception as e:
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"onViewChanged: {e}")
 
     def _onButtonPress(self, event):
         """

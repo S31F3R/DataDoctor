@@ -1097,14 +1097,16 @@ class uiOptions(QDialog):
         lay = QVBoxLayout(dlg)
         lay.addWidget(QLabel("Include:"))
         ckQuery = QCheckBox("Query Quick Looks")
+        ckPlot = QCheckBox("Plot Quick Looks")
         ckSql = QCheckBox("SQL Quick Looks")
         ckCfg = QCheckBox("Config")
         ckDict = QCheckBox("Data Dictionary")
         ckQuery.setChecked(True)
+        ckPlot.setChecked(True)
         ckSql.setChecked(True)
         ckCfg.setChecked(True)
         ckDict.setChecked(True)
-        for c in (ckQuery, ckSql, ckCfg, ckDict):
+        for c in (ckQuery, ckPlot, ckSql, ckCfg, ckDict):
             lay.addWidget(c)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -1117,6 +1119,8 @@ class uiOptions(QDialog):
         parts = []
         if ckQuery.isChecked():
             parts.append("queryQuickLooks")
+        if ckPlot.isChecked():
+            parts.append("plotQuickLooks")
         if ckSql.isChecked():
             parts.append("sqlQuickLooks")
         if ckCfg.isChecked():
@@ -1145,6 +1149,10 @@ class uiOptions(QDialog):
                 if "queryQuickLooks" in parts:
                     self._zipDir(
                         zf, Utils.getQuickLookDir(), "queryQuickLooks", (".json", ".txt")
+                    )
+                if "plotQuickLooks" in parts:
+                    self._zipDir(
+                        zf, Utils.getPlotQuickLookDir(), "plotQuickLooks", (".json",)
                     )
                 if "sqlQuickLooks" in parts:
                     self._zipDir(
@@ -1222,7 +1230,7 @@ class uiOptions(QDialog):
                 if os.path.isfile(os.path.join(inner, PROFILE_MANIFEST)):
                     return inner
                 return inner
-        for name in ("queryQuickLooks", "sqlQuickLooks", "config", "dataDictionary"):
+        for name in ("queryQuickLooks", "plotQuickLooks", "sqlQuickLooks", "config", "dataDictionary"):
             if os.path.isdir(os.path.join(folder, name)):
                 return folder
         if os.path.isfile(os.path.join(folder, "user.config")):
@@ -1410,6 +1418,8 @@ class uiOptions(QDialog):
         if not parts:
             if os.path.isdir(os.path.join(root, "queryQuickLooks")):
                 parts.append("queryQuickLooks")
+            if os.path.isdir(os.path.join(root, "plotQuickLooks")):
+                parts.append("plotQuickLooks")
             if os.path.isdir(os.path.join(root, "sqlQuickLooks")):
                 parts.append("sqlQuickLooks")
             if os.path.isdir(os.path.join(root, "config")) or os.path.isfile(
@@ -1433,6 +1443,14 @@ class uiOptions(QDialog):
                     src, dest, (".json", ".txt"), "query Quick Look"
                 )
                 imported.append(f"Query Quick Looks ({n})")
+        if "plotQuickLooks" in parts:
+            src = os.path.join(root, "plotQuickLooks")
+            if os.path.isdir(src):
+                dest = Utils.getPlotQuickLookDir()
+                n, _renames = self._mergeImportedFiles(
+                    src, dest, (".json",), "plot Quick Look"
+                )
+                imported.append(f"Plot Quick Looks ({n})")
         if "sqlQuickLooks" in parts:
             src = os.path.join(root, "sqlQuickLooks")
             if os.path.isdir(src):
@@ -1522,6 +1540,13 @@ class uiOptions(QDialog):
                 Utils.loadQuickLooks(cb)
         except Exception as e:
             Logic.logException("import profile: refresh Quick Looks failed", e)
+        try:
+            plotter = getattr(win, "winPlotter", None)
+            cbPlot = getattr(plotter, "cbQuickLook", None) if plotter is not None else None
+            if cbPlot is not None:
+                Utils.loadQuickLooks(cbPlot, Utils.getPlotQuickLookDir())
+        except Exception as e:
+            Logic.logException("import profile: refresh Plot Quick Looks failed", e)
         try:
             if hasattr(win, "loadSnippets"):
                 win.loadSnippets()

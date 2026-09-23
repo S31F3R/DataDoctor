@@ -185,7 +185,7 @@ class queryWorkerSignals(QObject):
     resultSignal = pyqtSignal(tuple)
 
 class queryWorker(QRunnable):
-    def __init__(self, groupKey, groupItems, signals, startDate, endDate, isInternal, timestamps, defaultBlanks):
+    def __init__(self, groupKey, groupItems, signals, startDate, endDate, isInternal, timestamps, defaultBlanks, apiOnly=False):
         super().__init__()
         self.groupKey = groupKey
         self.groupItems = groupItems
@@ -193,6 +193,7 @@ class queryWorker(QRunnable):
         self.startDate = startDate
         self.endDate = endDate
         self.isInternal = isInternal
+        self.apiOnly = bool(apiOnly)
         self.timestamps = timestamps
         self.defaultBlanks = defaultBlanks
 
@@ -217,8 +218,8 @@ class queryWorker(QRunnable):
                         table = 'M' if mrid != '0' else 'R'
                         apiInterval = interval
 
-                        # If internal, switch to sqlRead
-                        if self.isInternal:
+                        # Internal HDB uses Oracle. apiOnly (Plotter) stays on the public API.
+                        if self.isInternal and not self.apiOnly:
                             result = USBR.sqlRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
                         else: # External use apiRead
                             result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
@@ -228,7 +229,7 @@ class queryWorker(QRunnable):
                     except Exception as e:
                         Logic.logException(f"queryWorker: USBR read failed for SDIDs {SDIDs}", e)
                         result = {}
-                elif db == 'AQUARIUS' and self.isInternal:
+                elif db == 'AQUARIUS' and (self.isInternal or self.apiOnly):
                     try:
                         result = Aquarius.apiRead(SDIDs, self.startDate, self.endDate, interval)
                         
@@ -1225,7 +1226,7 @@ def timestampSortTable(table, dataDictionaryTable):
 def executeQuery(
     mainWindow, queryItems, startDate, endDate, isInternal, dataDictionaryTable,
     deltaChecked=False, overlayChecked=False, rawDataChecked=False, qaqcChecked=False,
-    isRefresh=False,
+    isRefresh=False, apiOnly=False, seriesSink=None,
 ):
     progressDialog = None
     if getattr(mainWindow, "_queryRunning", False):
@@ -1234,10 +1235,12 @@ def executeQuery(
     if mainWindow is not None:
         mainWindow._queryRunning = True
     try:
-        Config.deltaChecked = deltaChecked
-        Config.overlayChecked = overlayChecked
-        Config.rawData = bool(rawDataChecked)
-        Config.qaqcEnabled = bool(qaqcChecked)
+        # Plotter fetches through this same path but must not change table-query flags.
+        if not apiOnly:
+            Config.deltaChecked = deltaChecked
+            Config.overlayChecked = overlayChecked
+            Config.rawData = bool(rawDataChecked)
+            Config.qaqcEnabled = bool(qaqcChecked)
         equationItems = [it for it in (queryItems or []) if QueryFlags.isEquationQueryItem(it)]
         queryItems = [it for it in (queryItems or []) if not QueryFlags.isEquationQueryItem(it)]
         if isRefresh and mainWindow is not None:
@@ -1258,7 +1261,8 @@ def executeQuery(
             )
         # Public cannot query Aquarius. Drop those IDs, but do not let the next
         # queryable neighbor inherit the broken overlay/delta pair.
-        if not isInternal:
+        # Plotter (apiOnly) keeps Aquarius and calls the Time-Series API.
+        if not isInternal and not apiOnly:
             beforeCount = len(queryItems)
             queryItems = QueryFlags.dropUnqueryablePairMembers(
                 queryItems, False, overlayChecked, deltaChecked,
@@ -1421,7 +1425,7 @@ def executeQuery(
             signals = queryWorkerSignals()
 
             # Pass str dates to queryWorker if it expects str; assuming it does based on original
-            worker = queryWorker(groupKey, groups[groupKey], signals, startDateStr, endDateStr, isInternal, timestamps, defaultBlanks)
+            worker = queryWorker(groupKey, groups[groupKey], signals, startDateStr, endDateStr, isInternal, timestamps, defaultBlanks, apiOnly=apiOnly)
             signals.resultSignal.connect(lambda result, i=i: [Logic.logMessage("DEBUG", f"executeQuery: Signal received for group {result[0]}") if Config.debug else None, resultQueue.put(result), handleResult(result)][-1])
             pool.start(worker)
             threadsStarted += 1
@@ -1522,6 +1526,33 @@ def executeQuery(
 
                 if Config.debug:
                     Logic.logMessage("DEBUG", f"Added empty result for dataID {dataID}")
+        # Plotter: hand back aligned series and skip the Data Query table.
+        if seriesSink is not None:
+            series = []
+            for item in queryItems:
+                dataID = item[0]
+                interval = item[1] if len(item) > 1 else firstInterval
+                db = item[2] if len(item) > 2 else ""
+                label = dataID
+                if labelsDict:
+                    site = labelsDict.get(dataID)
+                    if site is not None and str(site).strip():
+                        label = str(site).strip()
+                series.append({
+                    "dataId": dataID,
+                    "interval": interval,
+                    "database": db,
+                    "label": label,
+                    "values": list(valueDict.get(dataID, defaultBlanks)),
+                })
+            seriesSink.append({
+                "timestamps": list(timestamps),
+                "interval": firstInterval,
+                "series": series,
+            })
+            if progressDialog is not None and not progressDialog.wasCanceled():
+                progressDialog.setValue(100)
+            return
         originalDataIds = [item[0] for item in queryItems]
         originalIntervals = [item[1] for item in queryItems]
         databases = [item[2] for item in queryItems]

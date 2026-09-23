@@ -1005,12 +1005,14 @@ def buildDataDictionary(table, columns=None, whereClause=None):
     if Config.debug:
         logMessage("DEBUG", f"Built DataDictionary with {table.rowCount()} rows, {table.columnCount()} columns")
 
-def loadAllQuickLooks(cbQuickLook):
+def loadAllQuickLooks(cbQuickLook, directory=None):
     cbQuickLook.clear()
     quickLookNames = set() # Use set to avoid duplicates
     
     # User-specific Quick Looks from query subfolder (prefer .json, but include .txt for legacy)
-    userDir = Utils.getQuickLookDir()
+    userDir = directory or Utils.getQuickLookDir()
+    if not os.path.isdir(userDir):
+        return
     for ext in ['.json', '.txt']: # Scan .json first
         for file in os.listdir(userDir):
             if file.endswith(ext):
@@ -1182,6 +1184,8 @@ def saveQuickLook(
     startDate=None,
     endDate=None,
     dateRule=None,
+    directory=None,
+    extra=None,
 ):
     """
     Save query list + optional UI metadata to quickLook JSON.
@@ -1238,7 +1242,18 @@ def saveQuickLook(
                 payload['endDate'] = endDate
             if isinstance(dateRule, dict) and dateRule:
                 payload['dateRule'] = dateRule
-    quicklookPath = os.path.join(Utils.getQuickLookDir(), f'{name}.json')
+    if isinstance(extra, dict):
+        plotType = extra.get('plotType')
+        if plotType in ('line', 'scatter', 'timeLag'):
+            payload['plotType'] = plotType
+        for key in ('recommendedLag', 'sliderLag'):
+            if extra.get(key) is None:
+                continue
+            try:
+                payload[key] = int(extra.get(key))
+            except (TypeError, ValueError):
+                pass
+    quicklookPath = os.path.join(directory or Utils.getQuickLookDir(), f'{name}.json')
     os.makedirs(os.path.dirname(quicklookPath), exist_ok=True)
 
     try:
@@ -1295,6 +1310,9 @@ def _parseQuickLookPayload(data):
         'startDate': None,
         'endDate': None,
         'dateRule': None,
+        'plotType': None,
+        'recommendedLag': None,
+        'sliderLag': None,
     }
     if isinstance(data, dict):
         queries = data.get('queries')
@@ -1326,6 +1344,17 @@ def _parseQuickLookPayload(data):
         rule = data.get('dateRule') or data.get('customDateRule')
         if isinstance(rule, dict):
             meta['dateRule'] = rule
+        plotType = data.get('plotType')
+        if plotType in ('line', 'scatter', 'timeLag'):
+            meta['plotType'] = plotType
+        for key in ('recommendedLag', 'sliderLag'):
+            rawLag = data.get(key)
+            if rawLag is None or rawLag == '':
+                continue
+            try:
+                meta[key] = int(rawLag)
+            except (TypeError, ValueError):
+                pass
         return queries, meta
     if isinstance(data, list):
         # Legacy plain array — no metadata stored → checkboxes off
@@ -1343,6 +1372,7 @@ def loadQuickLook(
     dateRadios=None,
     dteStartDate=None,
     dteEndDate=None,
+    directory=None,
 ):
     """
     Load quick look into listQueryList. Always restore query-option checkboxes
@@ -1358,8 +1388,9 @@ def loadQuickLook(
             logMessage("DEBUG", "loadQuickLook: No quick look selected")
         return None
     listQueryList.clear()
-    userJsonPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.json')
-    userTxtPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.txt') # Fallback for legacy
+    baseDir = directory or Utils.getQuickLookDir()
+    userJsonPath = os.path.join(baseDir, f'{quickLookName}.json')
+    userTxtPath = os.path.join(baseDir, f'{quickLookName}.txt') # Fallback for legacy
     
     # Determine the path to load from, preferring JSON
     quickLookPath = None
@@ -1514,6 +1545,7 @@ def loadQuickLook(
                 rawData=rawVal,
                 qaqc=qaqcVal,
                 dateMode=mode,
+                directory=baseDir,
             )
             os.remove(userTxtPath)
             if Config.debug:
@@ -1523,21 +1555,22 @@ def loadQuickLook(
         logMessage("ERROR", "loadQuickLook: Failed to load Quick Look from {}: {}".format(quickLookPath, e))
         return None
 
-def quickLookExists(quickLookName) -> bool:
+def quickLookExists(quickLookName, directory=None) -> bool:
     """True if a user Quick Look JSON already uses this name."""
     name = (quickLookName or "").strip()
     if not name:
         return False
-    userPath = os.path.join(Utils.getQuickLookDir(), f"{name}.json")
+    baseDir = directory or Utils.getQuickLookDir()
+    userPath = os.path.join(baseDir, f"{name}.json")
     return os.path.isfile(userPath)
 
 
-def deleteQuickLook(quickLookName):
+def deleteQuickLook(quickLookName, directory=None):
     if not quickLookName:        
         logMessage("WARN", "Empty quick look name—cannot delete.")
         return False
-    
-    userQuickLookPath = os.path.join(Utils.getQuickLookDir(), f'{quickLookName}.json')
+    baseDir = directory or Utils.getQuickLookDir()
+    userQuickLookPath = os.path.join(baseDir, f'{quickLookName}.json')
     
     if os.path.exists(userQuickLookPath):
         try:
@@ -2279,7 +2312,7 @@ def initializeQueryWindow(ui, rbCustomDateTime, dteStartDate, dteEndDate):
     if Config.debug:
         logMessage("DEBUG", "initializeQueryWindow: Set default dates and radio button")
 
-def loadLastQuickLook(cbQuickLook):
+def loadLastQuickLook(cbQuickLook, configKey='lastQuickLook'):
     configPath = Utils.getConfigPath()
     config = {}
 
@@ -2288,12 +2321,12 @@ def loadLastQuickLook(cbQuickLook):
             with open(configPath, 'r', encoding='utf-8') as configFile:
                 config = json.load(configFile)
             if Config.debug:
-                logMessage("DEBUG", f"Loaded config for quick look: {config.get('lastQuickLook', 'none')}")
+                logMessage("DEBUG", f"Loaded config for quick look: {config.get(configKey, 'none')}")
         except Exception as e:
             if Config.debug:
                 logMessage("DEBUG", f"Failed to load user.config for quick look: {e}")
-    if 'lastQuickLook' in config:
-        lastQuickLook = config['lastQuickLook']
+    if configKey in config:
+        lastQuickLook = config[configKey]
         index = cbQuickLook.findText(lastQuickLook)
 
         if index != -1:
