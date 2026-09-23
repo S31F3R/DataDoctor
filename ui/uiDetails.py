@@ -8,7 +8,7 @@ from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
 from PyQt6.QtCore import Qt, QTimer, QSize, QObject, QEvent
 from PyQt6 import uic
 from datetime import datetime
-from core import Logic, Config
+from core import Logic, Config, Utils
 
 # Cap visible metadata rows; beyond this, show a themed vertical scrollbar
 maxVisibleMetaRows = 16
@@ -95,15 +95,19 @@ class CurrentPageTabWidget(QTabWidget):
 class uiDetails(QWidget):
     """Details window: Displays metadata or overlay info for a specific timeseries cell."""    
     def __init__(self, parent=None):
-        super().__init__(parent)
+        # No Qt parent. A child window shade-minimizes to a stray title bar
+        # above the taskbar instead of the app button. Same pattern as Query,
+        # About, and Data Dictionary. `parent` is the owner (main window).
+        super().__init__(None)
         self.mainWindow = parent
+        self.winMain = parent
+        self._centered = False
         
         # Load the UI file
         uic.loadUi(Logic.resourcePath('ui/winDetails.ui'), self)
-        
-        # Set window flags to stay on top of parent
-        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowMaximizeButtonHint)  
+
+        # Real top-level window: minimize joins the app taskbar button.
+        Utils.bindIndependentWindow(self, owner=parent, allowMaximize=False)
         
         # Set icon
         self.setWindowIcon(QIcon(Logic.resourcePath('ui/icons/Info.png')))
@@ -144,6 +148,13 @@ class uiDetails(QWidget):
         
         if Config.debug:
             Logic.logMessage("DEBUG", "uiDetails initialized")
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._centered:
+            return
+        self._centered = True
+        Utils.centerWindowToParent(self)
 
     def configureMetaTable(self, table, twoColumn=True):
         """Apply shared details-table settings and a fixed column layout."""
