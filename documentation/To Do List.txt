@@ -1,6 +1,7 @@
 ####### CURRENT TASKS #######
 
 ####### CURRENT BUGS #######
+-After hitting Plot, the Plotter window doesn't go away. It needs to react just like the query windows. Query shows a progress bar
 
 ####### 3.5.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
