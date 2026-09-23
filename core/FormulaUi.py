@@ -19,7 +19,7 @@ from core import Config, Logic, Upload
 from core.Formula import (
     FORMULA_KEY, ERR_VALUE, ERR_REF, FUNCTIONS, FUNCTION_HELP,
     adjustFormula, colToLetters, evaluateFormula, formatFormulaResult,
-    templateAtRowZero,
+    formulaShifted, templateAtRowZero,
     looksLikeFormula, parseCellRef, formatCellRef, _REF_IN_FORMULA,
 )
 
@@ -293,6 +293,9 @@ def recalculateAll(mainWindow):
         table.blockSignals(False)
     for item in changed:
         Upload.onItemChanged(mainWindow, item)
+    refresh = getattr(mainWindow, "refreshHeaderDetails", None)
+    if callable(refresh):
+        refresh(None)
 
 
 def formulaMayEdit(mainWindow, col: int) -> bool:
@@ -932,7 +935,12 @@ class FormulaTableFilter(QObject):
         src = table.item(srcR, srcC)
         formula = _itemFormula(src)
         if formula:
-            text = adjustFormula(formula, dstC - srcC, dstR - srcR)
+            text = formulaShifted(
+                formula, dstC - srcC, dstR - srcR,
+                rowCount=table.rowCount(), colCount=table.columnCount(),
+            )
+            if text is None:
+                return applyCellInput(self.mainWindow, dstR, dstC, "", asFill=True)
         else:
             text = src.text() if src is not None else ""
         return applyCellInput(self.mainWindow, dstR, dstC, text, asFill=True)
@@ -959,16 +967,25 @@ def installOnTable(mainWindow):
 
 
 def _fillFormulaColumn(mainWindow, col, formula, originRow=0):
-    """Apply a row-relative formula to every row of a custom column."""
+    """
+    Apply a row-relative formula down a custom column.
+
+    originRow is the row the formula was written on. A ref that would sit
+    above row 1 or below the last row leaves that cell blank (no #REF!).
+    Lag -3 / +6 written on row 4 as A1 and C10 stays on row 4.
+    """
     table = getattr(mainWindow, "mainTable", None)
     if table is None or not looksLikeFormula(formula):
         return
-    template = adjustFormula(formula, 0, -int(originRow or 0))
+    anchor = int(originRow or 0)
+    nRows = table.rowCount()
     table.blockSignals(True)
     try:
-        for r in range(table.rowCount()):
-            cellF = adjustFormula(template, 0, r)
-            applyCellInput(mainWindow, r, col, cellF, asFill=True, skipUndo=True)
+        for r in range(nRows):
+            cellF = formulaShifted(formula, 0, r - anchor, rowCount=nRows)
+            applyCellInput(
+                mainWindow, r, col, cellF or "", asFill=True, skipUndo=True,
+            )
     finally:
         table.blockSignals(False)
     recalculateAll(mainWindow)
@@ -1062,9 +1079,10 @@ def _syncEquationListItem(mainWindow, col, formula, originRow=0):
     if table is not None:
         h = table.horizontalHeaderItem(col)
         header = h.text().split("\n", 1)[0].strip() if h is not None else ""
-    template = templateAtRowZero(formula, originRow)
-    refs = collectFormulaRefs(mainWindow, template)
-    winQuery.syncEquationQueryItem(template, col, header=header, refs=refs)
+    refs = collectFormulaRefs(mainWindow, formula)
+    winQuery.syncEquationQueryItem(
+        formula, col, header=header, refs=refs, anchorRow=int(originRow or 0),
+    )
 
 
 def applyEquationQueryItems(mainWindow, equationItems):
@@ -1081,16 +1099,22 @@ def applyEquationQueryItems(mainWindow, equationItems):
             header = eq.get("header") or "Column"
             refs = eq.get("refs")
             idxHint = eq.get("index")
+            anchorRow = eq.get("anchorRow")
         else:
             formula = str(eq[0]) if eq else ""
             header = "Column"
             refs = None
             idxHint = None
+            anchorRow = 0
         if not looksLikeFormula(formula):
             continue
-        # Keep A1 as A1. The equation column is inserted at the same list
-        # index, so the letters still name the same series on a new date range.
-        newFormula = templateAtRowZero(formula, 0)
+        # Keep the formula on the row it was written. Letters still name the
+        # same series. Rows that fall off the new sheet stay blank.
+        newFormula = formula
+        try:
+            anchorRow = int(anchorRow if anchorRow is not None else 0)
+        except (TypeError, ValueError):
+            anchorRow = 0
         broken = ERR_REF in str(newFormula)
         insertAt = table.columnCount()
         if idxHint is not None:
@@ -1116,7 +1140,7 @@ def applyEquationQueryItems(mainWindow, equationItems):
             if 0 <= newIdx < len(metas):
                 metas[newIdx]["name"] = header
                 metas[newIdx]["equation"] = True
-        _fillFormulaColumn(mainWindow, newIdx, newFormula, originRow=0)
+        _fillFormulaColumn(mainWindow, newIdx, newFormula, originRow=anchorRow)
         if broken:
             Logic.logMessage(
                 "WARN",

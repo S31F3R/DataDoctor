@@ -326,6 +326,7 @@ class uiQuery(QMainWindow):
                         "formula": payload.get("formula") or dataId,
                         "header": payload.get("header") or database,
                         "refs": payload.get("refs"),
+                        "anchorRow": payload.get("anchorRow"),
                         "id": itemId,
                         "flags": QueryFlags.emptyFlags(),
                         "index": i,
@@ -1222,12 +1223,17 @@ class uiQuery(QMainWindow):
         self._onLoadFingerprint = self._queryListFingerprint()
         return True
 
-    def syncEquationQueryItem(self, formula, col, header=None, refs=None):
+    def syncEquationQueryItem(self, formula, col, header=None, refs=None, anchorRow=0):
         """Insert or update an equation row in the query list for a custom column."""
         if self.listQueryList is None or not formula:
             return
         text = QueryFlags.equationListText(formula, header)
-        extra = {"formula": formula, "header": QueryFlags.equationHeader(header), "refs": refs or []}
+        extra = {
+            "formula": formula,
+            "header": QueryFlags.equationHeader(header),
+            "refs": refs or [],
+            "anchorRow": int(anchorRow or 0),
+        }
         # Update existing equation at the same formula/header, else insert at col-ish index
         for i in range(self.listQueryList.count()):
             item = self.listQueryList.item(i)

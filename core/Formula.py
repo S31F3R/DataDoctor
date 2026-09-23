@@ -706,6 +706,46 @@ def adjustFormula(formula: str, dCol: int, dRow: int) -> str:
     return prefix + _REF_IN_FORMULA.sub(repl, body)
 
 
+def formulaShifted(formula: str, dCol: int = 0, dRow: int = 0, rowCount=None, colCount=None):
+    """
+    Shift refs by dCol / dRow.
+
+    Return None when a row would fall off the sheet (before row 1 or past
+    the last row). Those cells stay blank — a lag of -3 cannot start until
+    row 4, and a lag of +6 cannot use a row that is not in the table.
+    A column that lands off the sheet is #REF!.
+    """
+    if not looksLikeFormula(formula):
+        return formula
+    rowOff = False
+
+    def repl(m):
+        nonlocal rowOff
+        token = m.group(1)
+        parsed = parseCellRef(token)
+        if parsed is None:
+            return token
+        col, row, absCol, absRow = parsed
+        newCol = col if absCol else col + dCol
+        newRow = row if absRow else row + dRow
+        if newCol < 0 or (colCount is not None and newCol >= colCount):
+            return ERR_REF
+        if newRow < 0 or (rowCount is not None and newRow >= rowCount):
+            rowOff = True
+            return token
+        return formatCellRef(newCol, newRow, absCol, absRow)
+
+    body = formula.strip()
+    prefix = ""
+    if body.startswith("="):
+        prefix = "="
+        body = body[1:]
+    shifted = prefix + _REF_IN_FORMULA.sub(repl, body)
+    if rowOff:
+        return None
+    return shifted
+
+
 def templateAtRowZero(formula: str, originRow: int = 0) -> str:
     """
     Formula as it reads on row 0, for replay on another date range.

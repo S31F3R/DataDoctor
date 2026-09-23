@@ -441,6 +441,24 @@ def _recalcDeltaForGroup(mainWindow, group):
     _syncQueryList(mainWindow)
 
 
+def _refreshHeaderDetails(mainWindow, col=None, insertAt=None, delta=0, oldToNew=None):
+    """Update open header-detail windows after an edit, rename, or column move."""
+    for win in list(getattr(mainWindow, "_headerDetailWindows", []) or []):
+        note = getattr(win, "noteColumnsChanged", None)
+        if (insertAt is not None or oldToNew is not None) and callable(note):
+            try:
+                note(insertAt=insertAt, delta=delta, oldToNew=oldToNew)
+            except Exception:
+                pass
+            continue
+        refresh = getattr(win, "refreshWatched", None)
+        if callable(refresh):
+            try:
+                refresh(col)
+            except Exception:
+                pass
+
+
 def _shiftFormulas(table, insertAt, delta):
     if table is None or not delta:
         return
@@ -531,6 +549,7 @@ def insertBlankColumn(mainWindow, col, side="right", adjustFormulas=True):
             recalculateAll(mainWindow)
         except Exception as e:
             Logic.logException("insertBlankColumn: formula recalc failed", e)
+    _refreshHeaderDetails(mainWindow, insertAt=insertAt, delta=1)
     if Config.debug:
         Logic.logMessage("DEBUG", f"TableOps.insertBlankColumn at {insertAt} id={customId}")
     return insertAt
@@ -560,11 +579,12 @@ def _rememberCustomColumns(mainWindow):
                 "formula": _itemFormula(item),
             }
         formulaTemplate = None
-        from core.Formula import templateAtRowZero
+        formulaAnchorRow = 0
         for r in range(table.rowCount()):
             f = _itemFormula(table.item(r, c))
             if f:
-                formulaTemplate = templateAtRowZero(f, r)
+                formulaTemplate = f
+                formulaAnchorRow = r
                 break
         saved.append({
             "id": meta.get("customId") or uuid.uuid4().hex[:12],
@@ -572,6 +592,7 @@ def _rememberCustomColumns(mainWindow):
             "indexHint": c,
             "cells": cells,
             "formulaTemplate": formulaTemplate,
+            "formulaAnchorRow": formulaAnchorRow,
         })
     mainWindow.customColumns = saved
 
@@ -608,7 +629,10 @@ def restoreCustomColumns(mainWindow):
             # Same formula on every row of the new date range. A1 stays A1
             # on row 0; it is not tied to the old timestamps.
             from core.FormulaUi import _fillFormulaColumn
-            _fillFormulaColumn(mainWindow, newIdx, template, originRow=0)
+            _fillFormulaColumn(
+                mainWindow, newIdx, template,
+                originRow=int(spec.get("formulaAnchorRow") or 0),
+            )
             continue
         cells = spec.get("cells") or {}
         table.blockSignals(True)
@@ -719,6 +743,7 @@ def removeColumnsAt(mainWindow, col, extraCols=None):
     for start, count in reversed(_contiguousRuns(sorted(dropSet))):
         _shiftFormulas(table, start, -count)
         _shiftEquationPayloads(mainWindow, start, -count)
+        _refreshHeaderDetails(mainWindow, insertAt=start, delta=-count)
     keep = [i for i in range(n) if i not in dropSet]
     if not keep:
         table.blockSignals(True)
@@ -831,6 +856,11 @@ def _applyColumnOrder(mainWindow, newOrder, log="", selectSrc=None):
     _rebuildQueryItemsFromTable(mainWindow)
     _rememberCustomColumns(mainWindow)
     _syncQueryList(mainWindow)
+    if len(newOrder) == n:
+        _refreshHeaderDetails(
+            mainWindow,
+            oldToNew={old: new for new, old in enumerate(newOrder)},
+        )
     if selectSrc:
         srcSet = set(selectSrc)
         dest = [i for i, src in enumerate(newOrder) if src in srcSet]
@@ -857,12 +887,13 @@ def _rebuildQueryItemsFromTable(mainWindow):
             continue
         if t == "custom" or meta.get("equation"):
             formula = None
+            anchorRow = 0
             if table is not None:
-                from core.Formula import templateAtRowZero
                 for r in range(table.rowCount()):
                     f = _itemFormula(table.item(r, col))
                     if f:
-                        formula = templateAtRowZero(f, r)
+                        formula = f
+                        anchorRow = r
                         break
             items.append({
                 "kind": QueryFlags.KIND_EQUATION,
@@ -872,6 +903,7 @@ def _rebuildQueryItemsFromTable(mainWindow):
                 "flags": QueryFlags.emptyFlags(),
                 "id": meta.get("itemId") or meta.get("customId"),
                 "refs": meta.get("refs"),
+                "anchorRow": anchorRow,
             })
             seen += 1
             continue
@@ -919,6 +951,7 @@ def _syncQueryList(mainWindow):
                     "header": QueryFlags.equationHeader(header),
                     "refs": entry.get("refs"),
                     "id": entry.get("id") or QueryFlags.newItemId(),
+                    "anchorRow": int(entry.get("anchorRow") or 0),
                 }
                 lst.addItem(QueryFlags.makeListItem(
                     text, flags=QueryFlags.emptyFlags(),
@@ -1009,17 +1042,20 @@ def renameHeader(mainWindow, col):
         _setHeaderText(table, col, Utils.formatTableHeaderLabel(newCommon))
         _rememberCustomColumns(mainWindow)
         Utils.autoSizeTableColumns(table)
+        _refreshHeaderDetails(mainWindow, col)
         winQuery = getattr(mainWindow, "winQuery", None)
         if winQuery is not None and hasattr(winQuery, "syncEquationQueryItem"):
             formula = None
             for r in range(table.rowCount()):
                 f = _itemFormula(table.item(r, col))
                 if f:
-                    from core.Formula import templateAtRowZero
-                    formula = templateAtRowZero(f, r)
+                    formula = f
+                    anchorRow = r
                     break
             if formula:
-                winQuery.syncEquationQueryItem(formula, col, header=newCommon)
+                winQuery.syncEquationQueryItem(
+                    formula, col, header=newCommon, anchorRow=anchorRow,
+                )
         return
     if datatype and Utils.includeDataTypeInLabel(db):
         newFirst = f"{newCommon}-{datatype}"
@@ -1027,6 +1063,7 @@ def renameHeader(mainWindow, col):
         newFirst = newCommon
     newHeader = newFirst if not rest.strip() else f"{newFirst} \n{rest.lstrip()}"
     _setHeaderText(table, col, Utils.formatTableHeaderLabel(newHeader))
+    _refreshHeaderDetails(mainWindow, col)
     if dataId:
         renames = getattr(mainWindow, "headerRenames", None)
         if renames is None:

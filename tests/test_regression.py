@@ -319,6 +319,25 @@ def test_column_letters_follow_insert_and_move():
     return 0
 
 
+def test_lag_fill_starts_on_row_4():
+    """A lag -3 and C lag +6, written on row 4 as A1 and C10."""
+    from core.Formula import formulaShifted
+    formula = "=0.532*A1+0.466*C10+3.516"
+    anchor = 3  # row 4, 0-based
+    n = 20
+    if formulaShifted(formula, 0, 0 - anchor, rowCount=n) is not None:
+        return _fail("lagfill", "row 1 should stay blank")
+    if formulaShifted(formula, 0, anchor - anchor, rowCount=n) != formula:
+        return _fail("lagfill", formulaShifted(formula, 0, 0, rowCount=n))
+    nxt = formulaShifted(formula, 0, 4 - anchor, rowCount=n)
+    if nxt != "=0.532*A2+0.466*C11+3.516":
+        return _fail("lagfill", nxt)
+    if formulaShifted(formula, 0, 14 - anchor, rowCount=n) is not None:
+        return _fail("lagfill", "row past C should stay blank")
+    print("ok lagfill")
+    return 0
+
+
 def test_formula_keeps_a1():
     from core.Formula import templateAtRowZero
     if templateAtRowZero("=1.037*B1+0.214*D1+8.6", 8) != "=1.037*B1+0.214*D1+8.6":
@@ -375,6 +394,7 @@ def main():
         test_split_half,
         test_collinear_sandwich,
         test_column_letters_follow_insert_and_move,
+        test_lag_fill_starts_on_row_4,
         test_formula_keeps_a1,
         test_cli,
     ):

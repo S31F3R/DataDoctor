@@ -495,6 +495,11 @@ def serializeItem(item) -> dict:
         out["q"] = equationListText(formula, header)
         if data.get("refs"):
             out["refs"] = list(data["refs"])
+        if data.get("anchorRow") is not None:
+            try:
+                out["anchorRow"] = int(data.get("anchorRow"))
+            except (TypeError, ValueError):
+                pass
     return out
 
 
@@ -574,6 +579,7 @@ def parseSavedEntry(entry, defaultFlags=None) -> dict | None:
         "formula": formula,
         "header": header,
         "refs": entry.get("refs"),
+        "anchorRow": entry.get("anchorRow"),
     }
 
 

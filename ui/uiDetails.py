@@ -471,7 +471,7 @@ class uiDetails(QWidget):
 
             # Clear existing rows and set columns dynamically
             self.detailsTable.setRowCount(0)
-            twoColTypes = {"overlay", "headerNormal", "headerDelta", "headerOverlay", "USBR", "USGS"}
+            twoColTypes = {"overlay", "headerNormal", "headerCustom", "headerDelta", "headerOverlay", "USBR", "USGS"}
             self.configureMetaTable(self.detailsTable, twoColumn=(queryType in twoColTypes))
 
             # Handler dictionary for database-specific metadata (easy to add USGS)
@@ -590,10 +590,16 @@ class uiDetails(QWidget):
                     self.populateOverlay(timestampStr, response)
                 elif queryType == "headerNormal":
                     self.populateHeaderNormal(response)
+                    self.watchHeader(response.get("col") if isinstance(response, dict) else None, customOnly=False)
+                elif queryType == "headerCustom":
+                    self.populateHeaderCustom(response)
+                    self.watchHeader(response.get("col") if isinstance(response, dict) else None, customOnly=True)
                 elif queryType == "headerDelta":
                     self.populateHeaderDelta(response)
+                    self.watchHeader(response.get("col") if isinstance(response, dict) else None, customOnly=False)
                 elif queryType == "headerOverlay":
                     self.populateHeaderOverlay(response)
+                    self.watchHeader(response.get("col") if isinstance(response, dict) else None, customOnly=False)
                 elif queryType in metadataHandlers:
                     metadataHandlers[queryType](timestampStr, response, interval=interval)
                 else:
@@ -644,6 +650,111 @@ class uiDetails(QWidget):
         self.addRow("Secondary Value", str(secondaryVal), table=table)        
         self.addRow("Delta", str(delta), table=table)
     
+    def populateHeaderCustom(self, meta):
+        """Custom column: name, max, min, mean. No query metadata."""
+        meta = meta or {}
+        col = meta.get("col")
+        if col is None:
+            col = -1
+        name = self._headerFirstLine(col)
+        self.addRow("Header Name", name)
+        maxStr, minStr, meanStr = self.computeColumnStats(col)
+        self.addRow("Max", maxStr)
+        self.addRow("Min", minStr)
+        self.addRow("Mean", meanStr)
+
+    def _headerFirstLine(self, col):
+        main = self.mainWindow if self.mainWindow is not None else self.parent()
+        table = getattr(main, "mainTable", None) if main is not None else None
+        if table is None or col is None or col < 0:
+            return ""
+        item = table.horizontalHeaderItem(col)
+        text = item.text() if item is not None else ""
+        for line in str(text).split("\n"):
+            line = line.strip()
+            if line:
+                return line
+        return ""
+
+    def watchHeader(self, col, customOnly=False):
+        """Keep title and stats in step with table edits and renames."""
+        try:
+            self._watchCol = int(col) if col is not None else None
+        except (TypeError, ValueError):
+            self._watchCol = None
+        self._customOnly = bool(customOnly)
+        main = self.mainWindow
+        if main is None or self._watchCol is None:
+            return
+        wins = getattr(main, "_headerDetailWindows", None)
+        if wins is None:
+            wins = []
+            main._headerDetailWindows = wins
+        if self not in wins:
+            wins.append(self)
+
+    def closeEvent(self, event):
+        main = self.mainWindow
+        wins = getattr(main, "_headerDetailWindows", None) if main is not None else None
+        if wins and self in wins:
+            wins.remove(self)
+        super().closeEvent(event)
+
+    def noteColumnsChanged(self, insertAt=None, delta=0, oldToNew=None):
+        col = getattr(self, "_watchCol", None)
+        if col is None:
+            return
+        if oldToNew is not None:
+            newCol = oldToNew.get(col)
+            if newCol is None:
+                self.close()
+                return
+            self._watchCol = int(newCol)
+        elif insertAt is not None and delta:
+            if delta > 0 and col >= insertAt:
+                self._watchCol = col + delta
+            elif delta < 0:
+                removed = -delta
+                if insertAt <= col < insertAt + removed:
+                    self.close()
+                    return
+                if col >= insertAt + removed:
+                    self._watchCol = col + delta
+        self.refreshWatched(None)
+
+    def refreshWatched(self, col=None):
+        watch = getattr(self, "_watchCol", None)
+        if watch is None:
+            return
+        if col is not None and col != watch:
+            return
+        name = self._headerFirstLine(watch)
+        if name:
+            self.lblTitle.setText(f" Details for {name}")
+        if getattr(self, "_customOnly", False):
+            self._setDetailValue("Header Name", name)
+        maxStr, minStr, meanStr = self.computeColumnStats(watch)
+        self._setDetailValue("Max", maxStr)
+        self._setDetailValue("Min", minStr)
+        self._setDetailValue("Mean", meanStr)
+
+    def _setDetailValue(self, label, value):
+        table = self.detailsTable
+        if table is None:
+            return
+        want = str(label).strip()
+        for row in range(table.rowCount()):
+            key = table.item(row, 0)
+            if key is None or key.text().strip() != want:
+                continue
+            val = table.item(row, 1)
+            text = "" if value is None else str(value)
+            if val is None:
+                table.setItem(row, 1, QTableWidgetItem(text))
+            else:
+                val.setText(text)
+            return
+
     def populateHeaderNormal(self, meta):
         """Internal method to populate for normal header metadata."""
         meta = meta or {}

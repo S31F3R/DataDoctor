@@ -1213,6 +1213,18 @@ class uiMain(QMainWindow):
     def onMainTableItemChanged(self, item):
         """Flag user edits for upload (magenta); restore baseline when text matches original."""
         Upload.onItemChanged(self, item)
+        self.refreshHeaderDetails(item.column() if item is not None else None)
+
+    def refreshHeaderDetails(self, col=None):
+        """Live max / min / mean (and custom title) on open header details."""
+        for win in list(getattr(self, "_headerDetailWindows", []) or []):
+            refresh = getattr(win, "refreshWatched", None)
+            if not callable(refresh):
+                continue
+            try:
+                refresh(col)
+            except Exception:
+                pass
 
     def onMainHeaderClicked(self, col):
         """Single-click column header: highlight the whole column (no sort)."""
@@ -1255,7 +1267,7 @@ class uiMain(QMainWindow):
                     qType = {
                         'delta': 'headerDelta',
                         'overlay': 'headerOverlay',
-                        'custom': 'headerNormal',
+                        'custom': 'headerCustom',
                     }.get(meta.get('type'), 'headerNormal')
                     action.triggered.connect(
                         lambda checked=False, qt=qType, m=meta: self.showHeaderDetails(qt, m)
