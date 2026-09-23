@@ -1,7 +1,6 @@
 ####### CURRENT TASKS #######
 
 ####### CURRENT BUGS #######
--Meta data window doesn't minimize to the same "app" icon. It minimizes into a weird location above windows task bar. This is the way all child windows used to work but then they got switched to all minimize to the same app icon so it's easier to find. lets make the meta data details window do the same
 
 ####### 3.5.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
