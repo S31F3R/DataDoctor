@@ -11,6 +11,38 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
+[ ] Plotter toolbar opens a plot query
+   Steps:
+     a. The toolbar button tooltip is Plotter. It opens the Plotter window.
+        It does not graph the Data Query table.
+     b. Right-click a table header or cells → Graph still graphs the table.
+     c. Plot Types are radios: Line (default), Scatter, Time Lag.
+     d. The database list includes Aquarius and the HDB names. There is no
+        Overlay, Display Deltas, Raw, or QAQC. List right-click is Insert Above,
+        Insert Below, and Delete.
+
+[ ] Plotter Line, Scatter, and Time Lag
+   Steps:
+     a. Line: one or more Data IDs, then Plot. A tab titled Plotter-Line opens
+        to the right of Regression (or Graph, if Regression is closed). Each
+        series is its own line. The Data Query table does not change.
+     b. Run Scatter from that same window. The same tab retitles to
+        Plotter-Scatter. It does not open a second Plotter tab.
+        Scatter with one Data ID warns and does not run. With two, the first
+        list row is X and the second is Y.
+     c. Time Lag needs at least two Data IDs, upstream first and downstream
+        last. The tab retitles to Plotter-Time Lag. The slider runs from 0 up
+        to a max taken from the data. The readout shows steps and clock time,
+        like 12 steps (3:00), and a correlation.
+     d. Drag the slider. The last line and the correlation update live.
+        Zoom or pan the time axis. The lines refit, and the correlation is for
+        the time window on screen.
+     e. Save a Plot Quick Look, load it, and Plot again. The plot type comes
+        back, and Time Lag restores the slider lag you saved.
+     f. Options → Export / Import includes Plot Quick Looks.
+     g. Detach the Plotter tab. It minimizes to the Data Doctor taskbar button.
+        Attach puts it back.
+
 [ ] Mac package script
    Steps:
      a. From project root: python scripts/packageMac.py --skip-venv

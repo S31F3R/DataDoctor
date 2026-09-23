@@ -25,4 +25,7 @@ resets this file to this template.
 - Fill handle hides when a query rebuilds the table
 - Header details update max, min, and mean as cells change; custom columns show name, max, min, and mean and follow a rename
 - Metadata details window minimizes to the app taskbar button
+- Toolbar Plotter runs an API-only plot query (Line, Scatter, Time Lag) into one Plotter tab; table right-click Graph is unchanged
+- Plot Quick Looks live in quickLook/plots/ and export with the profile
+- Time Lag shifts the last series with a live slider; the hydrograph and correlation follow the visible time window
 
