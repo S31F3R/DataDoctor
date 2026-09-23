@@ -966,6 +966,26 @@ def installOnTable(mainWindow):
         Logic.logMessage("DEBUG", "FormulaUi.installOnTable: formula delegate + fill handle")
 
 
+def hideFillChrome(mainWindow):
+    """Hide the fill handle and drag box. A rebuilt table does not clear them."""
+    table = getattr(mainWindow, "mainTable", None)
+    filt = getattr(table, "_formulaFilter", None) if table is not None else None
+    if filt is None:
+        return
+    filt._drag = None
+    band = getattr(filt, "_band", None)
+    if band is not None:
+        band.hide()
+    handle = getattr(filt, "_handle", None)
+    if handle is not None:
+        handle.hide()
+    if table is not None:
+        try:
+            table.viewport().releaseMouse()
+        except Exception:
+            pass
+
+
 def _fillFormulaColumn(mainWindow, col, formula, originRow=0):
     """
     Apply a row-relative formula down a custom column.

@@ -1422,6 +1422,8 @@ def loadQuickLook(
                 extra["header"] = parsed["header"]
             if parsed.get("refs"):
                 extra["refs"] = parsed["refs"]
+            if parsed.get("anchorRow") is not None:
+                extra["anchorRow"] = parsed.get("anchorRow")
             extra["id"] = parsed.get("id") or QueryFlags.newItemId()
             listQueryList.addItem(QueryFlags.makeListItem(
                 text,

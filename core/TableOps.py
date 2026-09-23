@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 
 from core import Config, Logic, Upload, Utils, QueryFlags
 from core.Formula import FORMULA_KEY, remapFormulaColumns, shiftFormulaColumns
-from core.FormulaUi import _itemFormula, applyCellInput, recalculateAll
+from core.FormulaUi import _itemFormula, applyCellInput, hideFillChrome, recalculateAll
 from core.QueryUtils import (
     NATIVE_VALUE_ROLE, formatDeltaValue, parseDecimalText, overlayPairDisplays,
 )
@@ -1516,3 +1516,4 @@ def afterQuery(mainWindow, isRefresh=False):
         mainWindow.customColumns = []
     enableColumnDrag(mainWindow)
     Undo.stackFor(mainWindow).clear()
+    hideFillChrome(mainWindow)

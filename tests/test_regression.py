@@ -319,6 +319,24 @@ def test_column_letters_follow_insert_and_move():
     return 0
 
 
+def test_saved_anchor_row_is_row_4():
+    """Quick Look anchorRow 3 keeps A1 and D10 on row 4, not row 1."""
+    from core.Formula import formulaShifted
+    formula = "= 0.5412*A1 + 0.4521*D10 + 32.291"
+    anchor = 3
+    n = 305
+    if formulaShifted(formula, 0, 0 - anchor, rowCount=n) is not None:
+        return _fail("anchor", "row 1 should stay blank")
+    kept = formulaShifted(formula, 0, anchor - anchor, rowCount=n)
+    if kept != formula:
+        return _fail("anchor", kept)
+    nxt = formulaShifted(formula, 0, 1, rowCount=n)
+    if nxt is None or "A2" not in nxt or "D11" not in nxt:
+        return _fail("anchor", nxt)
+    print("ok anchor")
+    return 0
+
+
 def test_lag_fill_starts_on_row_4():
     """A lag -3 and C lag +6, written on row 4 as A1 and C10."""
     from core.Formula import formulaShifted
@@ -394,6 +412,7 @@ def main():
         test_split_half,
         test_collinear_sandwich,
         test_column_letters_follow_insert_and_move,
+        test_saved_anchor_row_is_row_4,
         test_lag_fill_starts_on_row_4,
         test_formula_keeps_a1,
         test_cli,

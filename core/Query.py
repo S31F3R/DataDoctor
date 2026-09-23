@@ -1560,6 +1560,11 @@ def executeQuery(
             progressDialog.setValue(90)
             progressDialog.repaint()
             QCoreApplication.processEvents()
+            try:
+                from core.FormulaUi import hideFillChrome
+                hideFillChrome(mainWindow)
+            except Exception:
+                pass
             mainWindow.mainTable.clear()
             mainWindow.mainTable.setRowCount(0)
             mainWindow.mainTable.setColumnCount(0) # Fully reset table to prevent freeze on column count change
