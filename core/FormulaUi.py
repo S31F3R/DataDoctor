@@ -1101,9 +1101,13 @@ def applyEquationQueryItems(mainWindow, equationItems):
         if table.columnCount() <= 0:
             continue
         if insertAt >= table.columnCount():
-            newIdx = TableOps.insertBlankColumn(mainWindow, table.columnCount() - 1, side="right")
+            newIdx = TableOps.insertBlankColumn(
+                mainWindow, table.columnCount() - 1, side="right", adjustFormulas=False,
+            )
         else:
-            newIdx = TableOps.insertBlankColumn(mainWindow, insertAt, side="left")
+            newIdx = TableOps.insertBlankColumn(
+                mainWindow, insertAt, side="left", adjustFormulas=False,
+            )
         if newIdx < 0:
             continue
         if header:

@@ -61,10 +61,12 @@ def test_two_predictor():
         return _fail("two_predictor", f"coefs {byKey['A'].coef} {byKey['D'].coef}")
     if abs(result.intercept - 8.6) > 1e-6:
         return _fail("two_predictor", f"intercept {result.intercept}")
-    if "A[t-3]" not in result.equationText or "D[t+2]" not in result.equationText:
+    if "1.037*A" not in result.equationText or "0.214*D" not in result.equationText:
         return _fail("two_predictor", result.equationText)
-    if result.copyText != "=1.037*A1+0.214*D1+8.6":
+    if "[t" in result.equationText or result.copyText != result.equationText:
         return _fail("two_predictor", result.copyText)
+    if "copy:" in result.labelText:
+        return _fail("two_predictor", result.labelText)
     if "E" in result.copyText:
         return _fail("two_predictor", "noise column kept")
     if result.warnings:
@@ -102,8 +104,10 @@ def test_single_positive_lag():
         return _fail("positive_lag", f"lag {pred.lagSteps} coef {pred.coef} b {result.intercept}")
     if result.scatterMode != "lagged":
         return _fail("positive_lag", result.scatterMode)
-    if "[t+4]" not in result.equationText or "*B1" not in result.copyText:
-        return _fail("positive_lag", result.equationText + " " + result.copyText)
+    if "*B" not in result.equationText or "[t" in result.equationText:
+        return _fail("positive_lag", result.equationText)
+    if result.copyText != result.equationText:
+        return _fail("positive_lag", result.copyText)
     print("ok positive_lag")
     return 0
 
@@ -143,9 +147,9 @@ def test_zero_lag():
         return _fail("zero_lag", err)
     if result.predictors[0].lagSteps != 0:
         return _fail("zero_lag", result.predictors[0].lagSteps)
-    if "[t]" not in result.equationText or "[t+" in result.equationText or "[t-" in result.equationText:
+    if "[t" in result.equationText:
         return _fail("zero_lag", result.equationText)
-    if result.copyText != "=0.5*A1+4":
+    if result.copyText != result.equationText or result.equationText != "Y = 0.5*A + 4":
         return _fail("zero_lag", result.copyText)
     print("ok zero_lag")
     return 0
@@ -302,6 +306,19 @@ def test_collinear_sandwich():
     return 0
 
 
+def test_column_letters_follow_insert_and_move():
+    from core.Formula import remapFormulaColumns, shiftFormulaColumns
+    inserted = shiftFormulaColumns("=0.5*D1+A1", 3, 1)
+    if inserted != "=0.5*E1+A1":
+        return _fail("letters", inserted)
+    # D (index 3) moves one slot right; A stays.
+    moved = remapFormulaColumns("=0.5*D1+A1", {0: 0, 1: 1, 2: 2, 3: 4, 4: 3})
+    if moved != "=0.5*E1+A1":
+        return _fail("letters", moved)
+    print("ok letters")
+    return 0
+
+
 def test_formula_keeps_a1():
     from core.Formula import templateAtRowZero
     if templateAtRowZero("=1.037*B1+0.214*D1+8.6", 8) != "=1.037*B1+0.214*D1+8.6":
@@ -336,8 +353,9 @@ def test_cli():
             code = cliMain([path, "--target", "Y"])
         if code != 0:
             return _fail("cli", f"exit {code}: {buf.getvalue()}")
-        if "B[t-3]" not in buf.getvalue() or "=1.25*B1+2" not in buf.getvalue():
-            return _fail("cli", buf.getvalue())
+        text = buf.getvalue()
+        if "Y = 1.25*B + 2" not in text or "[t" in text.splitlines()[0]:
+            return _fail("cli", text)
     print("ok cli")
     return 0
 
@@ -356,6 +374,7 @@ def main():
         test_edge_lag_warns,
         test_split_half,
         test_collinear_sandwich,
+        test_column_letters_follow_insert_and_move,
         test_formula_keeps_a1,
         test_cli,
     ):

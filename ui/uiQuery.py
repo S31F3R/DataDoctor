@@ -744,10 +744,10 @@ class uiQuery(QMainWindow):
         now = datetime.now()
         intervalMin = self._queryIntervalMinutes()
         choices = QuickLookDates.propose(start or now, end or now, now, intervalMin)
-        # Parent is the main window. The query window is a fixed short size,
-        # and a child dialog there squishes the button row onto the list.
-        host = getattr(self, "winMain", None) or self
-        dlg = QDialog(host)
+        # Owned by the Query window so it centers there and does not
+        # raise the main window over Query.
+        dlg = QDialog(self)
+        dlg.setWindowModality(Qt.WindowModality.WindowModal)
         dlg.setWindowTitle("Quick Look Date Range")
         dlg.setModal(True)
         dlg.setMinimumWidth(560)
@@ -798,7 +798,15 @@ class uiQuery(QMainWindow):
         dlg.resize(max(dlg.width(), 560), dlg.height() + extra)
         dlg.setMinimumHeight(dlg.height())
         Utils.centerWindowToParent(dlg)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
+        self.raise_()
+        dlg.raise_()
+        dlg.activateWindow()
+        try:
+            accepted = dlg.exec() == QDialog.DialogCode.Accepted
+        finally:
+            self.raise_()
+            self.activateWindow()
+        if not accepted:
             return False
         selected = listing.currentItem()
         if selected is None:

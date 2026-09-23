@@ -87,66 +87,47 @@ def formatSteps(lagSteps: int) -> str:
     return "0 steps"
 
 
-def lagBracket(lagSteps: int) -> str:
-    """ASCII bracket for the equation line: [t], [t-3], [t+2]."""
-    n = int(lagSteps)
-    if n == 0:
-        return "[t]"
-    if n < 0:
-        return f"[t-{abs(n)}]"
-    return f"[t+{n}]"
-
-
 def renderEquation(terms, intercept) -> tuple[str, str]:
     """
     terms: list of (key, coef, lagSteps) in table order.
 
-    equationText is the human line (`Y = 1.037*B[t-3] + 8.6`).
-    copyText is what double-click puts on the clipboard (`=1.037*B1+8.6`).
+    The line is `Y = 1.037*B + 8.6`. Lag lives in the lag section, not in
+    [t-3] brackets. Double-click copies this same line.
     """
     eqParts = []
-    copyParts = []
-    for i, (key, coef, lagSteps) in enumerate(terms):
+    for i, (key, coef, _lagSteps) in enumerate(terms):
         mag = formatNumber(abs(float(coef)))
-        body = f"{key}{lagBracket(lagSteps)}"
-        cell = f"{key}1"
+        body = str(key)
         if i == 0:
             if float(coef) < 0:
                 eqParts.append(f"-{mag}*{body}")
-                copyParts.append(f"-{mag}*{cell}")
             else:
                 eqParts.append(f"{mag}*{body}")
-                copyParts.append(f"{mag}*{cell}")
         else:
             if float(coef) < 0:
                 eqParts.append(f" - {mag}*{body}")
-                copyParts.append(f"-{mag}*{cell}")
             else:
                 eqParts.append(f" + {mag}*{body}")
-                copyParts.append(f"+{mag}*{cell}")
 
     b = float(intercept)
     bText = formatNumber(abs(b))
     if not eqParts:
         equation = f"Y = {formatNumber(b)}"
-        copy = f"={formatNumber(b)}"
-        return equation, copy
+        return equation, equation
     if b < 0:
         eqParts.append(f" - {bText}")
-        copyParts.append(f"-{bText}")
     elif b > 0:
         eqParts.append(f" + {bText}")
-        copyParts.append(f"+{bText}")
     equation = "Y = " + "".join(eqParts)
-    copy = "=" + "".join(copyParts)
-    return equation, copy
+    return equation, equation
 
 
 def renderLabel(equationText, copyText, lagParts, r2, me, rmse, n, stepLabel, warnings) -> str:
     """
     lagParts: list of (key, lagSteps, stepSeconds) for kept predictors.
+    copyText is unused; double-click copies the Y line itself.
     """
-    lines = [equationText, f"copy: {copyText}"]
+    lines = [equationText]
     if lagParts:
         bits = []
         for key, lagSteps, stepSeconds in lagParts:

@@ -761,3 +761,31 @@ def shiftFormulaColumns(formula: str, insertAt: int, delta: int = 1) -> str:
         prefix = "="
         body = body[1:]
     return prefix + _REF_IN_FORMULA.sub(repl, body)
+
+
+def remapFormulaColumns(formula: str, oldToNew: dict) -> str:
+    """
+    Point each ref at the column's new index after a move.
+
+    oldToNew maps the column index the letter had before the move.
+    A column that is gone becomes #REF!.
+    """
+    if not looksLikeFormula(formula):
+        return formula
+
+    def repl(m):
+        token = m.group(1)
+        parsed = parseCellRef(token)
+        if parsed is None:
+            return token
+        col, row, absCol, absRow = parsed
+        if col not in oldToNew:
+            return ERR_REF
+        return formatCellRef(int(oldToNew[col]), row, absCol, absRow)
+
+    body = formula.strip()
+    prefix = ""
+    if body.startswith("="):
+        prefix = "="
+        body = body[1:]
+    return prefix + _REF_IN_FORMULA.sub(repl, body)

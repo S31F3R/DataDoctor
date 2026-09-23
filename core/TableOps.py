@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from core import Config, Logic, Upload, Utils, QueryFlags
-from core.Formula import FORMULA_KEY, shiftFormulaColumns
+from core.Formula import FORMULA_KEY, remapFormulaColumns, shiftFormulaColumns
 from core.FormulaUi import _itemFormula, applyCellInput, recalculateAll
 from core.QueryUtils import (
     NATIVE_VALUE_ROLE, formatDeltaValue, parseDecimalText, overlayPairDisplays,
@@ -459,8 +459,35 @@ def _shiftFormulas(table, insertAt, delta):
                 Upload.setUserDict(item, user)
 
 
-def insertBlankColumn(mainWindow, col, side="right"):
-    """Insert an empty custom column left or right of col. Returns new index."""
+def _shiftEquationPayloads(mainWindow, insertAt, delta):
+    """Keep Quick Look equation text on the same columns after an insert or delete."""
+    if not delta:
+        return
+    winQuery = getattr(mainWindow, "winQuery", None)
+    lst = getattr(winQuery, "listQueryList", None) if winQuery is not None else None
+    if lst is None:
+        return
+    for i in range(lst.count()):
+        item = lst.item(i)
+        if item is None or QueryFlags.itemKind(item) != QueryFlags.KIND_EQUATION:
+            continue
+        payload = QueryFlags.itemPayload(item) or {}
+        old = payload.get("formula") or ""
+        if not old:
+            continue
+        new = shiftFormulaColumns(old, insertAt, delta)
+        if new == old:
+            continue
+        payload["formula"] = new
+        QueryFlags.setItemPayload(item, payload)
+
+
+def insertBlankColumn(mainWindow, col, side="right", adjustFormulas=True):
+    """Insert an empty custom column left or right of col. Returns new index.
+
+    adjustFormulas=False when the insert puts back a column the formulas
+    were already written against (equation replay, refresh restore).
+    """
     table = _table(mainWindow)
     if table is None or table.columnCount() <= 0:
         return -1
@@ -491,11 +518,19 @@ def insertBlankColumn(mainWindow, col, side="right"):
             rules.append(Logic.DEFAULT_ROUNDING_SPEC)
         rules.insert(insertAt, Logic.DEFAULT_ROUNDING_SPEC)
         table.columnRoundingRules = rules
-        _shiftFormulas(table, insertAt, 1)
+        if adjustFormulas:
+            _shiftFormulas(table, insertAt, 1)
     finally:
         table.blockSignals(False)
+    if adjustFormulas:
+        _shiftEquationPayloads(mainWindow, insertAt, 1)
     Upload.applyEditability(table, mainWindow)
     _rememberCustomColumns(mainWindow)
+    if adjustFormulas:
+        try:
+            recalculateAll(mainWindow)
+        except Exception as e:
+            Logic.logException("insertBlankColumn: formula recalc failed", e)
     if Config.debug:
         Logic.logMessage("DEBUG", f"TableOps.insertBlankColumn at {insertAt} id={customId}")
     return insertAt
@@ -554,9 +589,11 @@ def restoreCustomColumns(mainWindow):
     for spec in saved:
         idx = int(spec.get("indexHint") or 0) + offset
         if idx >= table.columnCount():
-            newIdx = insertBlankColumn(mainWindow, table.columnCount() - 1, side="right")
+            newIdx = insertBlankColumn(
+                mainWindow, table.columnCount() - 1, side="right", adjustFormulas=False,
+            )
         else:
-            newIdx = insertBlankColumn(mainWindow, idx, side="left")
+            newIdx = insertBlankColumn(mainWindow, idx, side="left", adjustFormulas=False)
         if newIdx < 0:
             continue
         offset += 1
@@ -681,6 +718,7 @@ def removeColumnsAt(mainWindow, col, extraCols=None):
         return False
     for start, count in reversed(_contiguousRuns(sorted(dropSet))):
         _shiftFormulas(table, start, -count)
+        _shiftEquationPayloads(mainWindow, start, -count)
     keep = [i for i in range(n) if i not in dropSet]
     if not keep:
         table.blockSignals(True)
@@ -761,10 +799,24 @@ def _applyColumnOrder(mainWindow, newOrder, log="", selectSrc=None):
             table.setColumnCount(keepN)
         newMetas = []
         newRules = []
+        # A reorder keeps every column. Rewrite letters so =D1 still
+        # points at the series that moved, not whatever now sits in D.
+        # A deletion already shifted letters before this call.
+        oldToNew = None
+        if len(newOrder) == n:
+            oldToNew = {old: new for new, old in enumerate(newOrder)}
         for dest, src in enumerate(newOrder):
             h, items, meta, rule, width = packs[src]
             _setHeaderText(table, dest, h)
             for r, item in enumerate(items):
+                if oldToNew is not None:
+                    formula = _itemFormula(item)
+                    if formula:
+                        newF = remapFormulaColumns(formula, oldToNew)
+                        if newF != formula:
+                            user = Upload.getUserDict(item)
+                            user[FORMULA_KEY] = newF
+                            Upload.setUserDict(item, user)
                 table.setItem(r, dest, item)
             table.setColumnWidth(dest, width)
             newMetas.append(meta)

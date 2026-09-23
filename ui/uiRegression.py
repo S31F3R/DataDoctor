@@ -234,7 +234,7 @@ class EquationLabel(QLabel):
         self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._menu)
-        self.setToolTip("Double-click to copy the formula.")
+        self.setToolTip("Double-click to copy the equation.")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
 
     def mouseDoubleClickEvent(self, event):
@@ -411,7 +411,7 @@ class RegressionPanel(QWidget):
         QApplication.clipboard().setText(text)
         host = self.window()
         main = getattr(host, "mainWindow", None) or host
-        noteStatus(main, "Copied regression formula.")
+        noteStatus(main, "Copied regression equation.")
 
     def reapplyTheme(self):
         """Restyle after light/dark/retro change. Same fit, same view."""
