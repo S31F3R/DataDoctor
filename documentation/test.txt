@@ -11,7 +11,7 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] Plotter toolbar opens a plot query
+[x] Plotter toolbar opens a plot query
    Steps:
      a. The toolbar button tooltip is Plotter. It opens the Plotter window.
         It does not graph the Data Query table.
@@ -21,7 +21,7 @@ Current Tests
         Overlay, Display Deltas, Raw, or QAQC. List right-click is Insert Above,
         Insert Below, and Delete.
 
-[ ] Plotter Line, Scatter, and Time Lag
+[x] Plotter Line, Scatter, and Time Lag
    Steps:
      a. Line: one or more Data IDs, then Plot. A tab titled Plotter-Line opens
         to the right of Regression (or Graph, if Regression is closed). Each
@@ -68,7 +68,7 @@ Current Tests
      c. After the download, Restart / Later appears. Click Later.
      d. That window closes. Main window only — no leftover Download / Later behind it.
 
-[ ] Equation formula stays A1 on a new date range
+[x] Equation formula stays A1 on a new date range
    Steps:
      a. On a custom column, enter a formula that uses A1 (or D1). Save it in a Quick Look.
      b. Load that Quick Look and Query a different month.
@@ -83,13 +83,13 @@ Current Tests
         It does not move to C1. Rows 1–3 stay blank. Rows where D runs off
         the sheet stay blank. No #REF! for those.
 
-[ ] Fill handle hides after a query
+[x] Fill handle hides after a query
    Steps:
      a. Select a cell in a custom formula column so the small drag box shows.
      b. Run a new query.
      c. The drag box is gone. It does not sit on the table until you click.
 
-[ ] Header details follow edits and custom columns
+[x] Header details follow edits and custom columns
    Steps:
      a. Right-click a queried column header → Show Query Info. Note Max, Min, Mean.
      b. Edit a cell in that column to a new high and a new low. The open details
@@ -101,7 +101,7 @@ Current Tests
      e. Type numbers in the custom column. Max, Min, and Mean update while the
         window is open.
 
-[ ] Metadata window minimizes with the app
+[x] Metadata window minimizes with the app
    Steps:
      a. On Windows, open Show details (cell or header).
      b. Minimize that window. It goes to the Data Doctor taskbar button,
