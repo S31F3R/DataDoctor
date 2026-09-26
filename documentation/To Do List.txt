@@ -1,30 +1,6 @@
 ####### CURRENT TASKS #######
--When right clicking on a single column and hitting regresstion, the message pops up in a status bar at the bottom. The rest of our notifications are pop ups. Make this one a pop up as well
--When double clicking on a item in the query list, the dataID gets sent back up to the bar for edit. At this point, make the Add Query button say Update Query. If the text is deleted, (not changed, deleted), set it back to Add Query. After button is hit, change back to Add Query
-    -Bascially trying to make sure our "update" dataID logic in this section makes the button reflect Update Query
--Plotter Time Lag I want to show the stats like we do in Regression and I want to add NSE. Currently we only have the r squared and that's in the lower right spot. I want to use the same spot we used in the Regression. Slider location is fine, just put staves above it and below the grah axis labels
--Regression shows same stats for 
 
 ####### CURRENT BUGS #######
--After hitting Plot, the Plotter window doesn't go away. It needs to react just like the query windows. Query shows a progress bar
--Got an error when trying to update some HDB/Oracle data. Out of the whole update data set, only 1 didn't go through:
-    Upload finished: 47 succeeded, 1 failed
-
-    USBR-LCHDB: 47 modified
-
-    Failed (1):
-    USBR-LCHDB SDID=2020 @ 09/23/26 01:00:00: ORA-00001: unique constraint (LCHDBA.IDX_REF_CHANGE_AGENT_LOOKUP) violated
-    ORA-06512: at "LCHDBA.R_BASE_AFTER_UPDATE", line 16
-    ORA-01403: no data found
-    ORA-06512: at "LCHDBA.R_BASE_AFTER_UPDATE", line 6
-    ORA-04088: error during execution of trigger 'LCHDBA.R_BASE_AFTER_UPDATE'
-    ORA-06512: at "LCHDBA.UPDATE_R_BASE_RAW", line 124
-    ORA-06512: at "LCHDBA.MODIFY_R_BASE_RAW", line 166
-    ORA-06512: at "LCHDBA.MODIFY_R_BASE", line 23
-    ORA-06512: at line 1
-    Help: https://docs.oracle.com/error-help/db/ora-00001/
--I ran a query of 1 minute data from 01/01/25 01:00 to current date/time. The query worked fine but the building table seemed to hang. It got to 90% and just sat there
-    -I think what might have caused this is I was pulling in 1 minute data but for most of the query range, the data was HOUR. It was only 1 minute for the last 30-40 days. Not sure if this was the cause or not
 
 ####### 3.5.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look

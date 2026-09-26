@@ -11,37 +11,21 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[x] Plotter toolbar opens a plot query
+[x] Time Lag stats are per slider and colored
    Steps:
-     a. The toolbar button tooltip is Plotter. It opens the Plotter window.
-        It does not graph the Data Query table.
-     b. Right-click a table header or cells → Graph still graphs the table.
-     c. Plot Types are radios: Line (default), Scatter, Time Lag.
-     d. The database list includes Aquarius and the HDB names. There is no
-        Overlay, Display Deltas, Raw, or QAQC. List right-click is Insert Above,
-        Insert Below, and Delete.
+     a. Time Lag with three Data IDs. Each slider has its own r², NSE, ME,
+        RMSE, and N line above it.
+     b. That stat line uses the same color as the slider handle and the step text.
+     c. Move the middle slider. That line and its stats change. The other
+        slider's stats stay put. Zoom the time axis. Each stat line follows
+        the points on screen for that series against the first.
 
-[x] Plotter Line, Scatter, and Time Lag
+[ ] Large 1-minute query keeps moving past 90%
    Steps:
-     a. Line: one or more Data IDs, then Plot. A tab titled Plotter-Line opens
-        to the right of Regression (or Graph, if Regression is closed). Each
-        series is its own line. The Data Query table does not change.
-     b. Run Scatter from that same window. The same tab retitles to
-        Plotter-Scatter. It does not open a second Plotter tab.
-        Scatter with one Data ID warns and does not run. With two, the first
-        list row is X and the second is Y.
-     c. Time Lag needs at least two Data IDs, upstream first and downstream
-        last. The tab retitles to Plotter-Time Lag. The slider runs from 0 up
-        to a max taken from the data. The readout shows steps and clock time,
-        like 12 steps (3:00), and a correlation.
-     d. Drag the slider. The last line and the correlation update live.
-        Zoom or pan the time axis. The lines refit, and the correlation is for
-        the time window on screen.
-     e. Save a Plot Quick Look, load it, and Plot again. The plot type comes
-        back, and Time Lag restores the slider lag you saved.
-     f. Options → Export / Import includes Plot Quick Looks.
-     g. Detach the Plotter tab. It minimizes to the Data Doctor taskbar button.
-        Attach puts it back.
+     a. Query 1-minute data across a long range (a year is enough).
+     b. At Building table, the label moves through Preparing timestamps
+        and then Building table (row counts). It does not sit on 90%
+        with a frozen label.
 
 [ ] Mac package script
    Steps:
@@ -68,48 +52,20 @@ Current Tests
      c. After the download, Restart / Later appears. Click Later.
      d. That window closes. Main window only — no leftover Download / Later behind it.
 
-[x] Equation formula stays A1 on a new date range
-   Steps:
-     a. On a custom column, enter a formula that uses A1 (or D1). Save it in a Quick Look.
-     b. Load that Quick Look and Query a different month.
-     c. The equation still calculates. It is not #REF!.
-     d. Insert a column to the left of a referenced column (Insert column right
-        on the column before D). D becomes E in the formula, and in the Quick Look.
-     e. Remove a column to the left of that ref. The letter moves back.
-     f. Drag a referenced column to a new spot. The formula letter follows it.
-     g. Dual-input Quick Look: the formula column is C, written on row 4 as
-        =0.5412*A1 + 0.4521*D10 + 32.291 (A1 is 3 hours back, D10 is 6 ahead).
-        Load it and Query. The formula still starts on C4 with A1 and D10.
-        It does not move to C1. Rows 1–3 stay blank. Rows where D runs off
-        the sheet stay blank. No #REF! for those.
-
-[x] Fill handle hides after a query
-   Steps:
-     a. Select a cell in a custom formula column so the small drag box shows.
-     b. Run a new query.
-     c. The drag box is gone. It does not sit on the table until you click.
-
-[x] Header details follow edits and custom columns
-   Steps:
-     a. Right-click a queried column header → Show Query Info. Note Max, Min, Mean.
-     b. Edit a cell in that column to a new high and a new low. The open details
-        window updates Max, Min, and Mean without reopening.
-     c. Insert a custom column. Right-click its header → Show details.
-        It shows Header Name, Max, Min, and Mean only.
-     d. Rename that header to Regression. The title becomes Details for Regression,
-        and Header Name matches.
-     e. Type numbers in the custom column. Max, Min, and Mean update while the
-        window is open.
-
-[x] Metadata window minimizes with the app
-   Steps:
-     a. On Windows, open Show details (cell or header).
-     b. Minimize that window. It goes to the Data Doctor taskbar button,
-        not a stray title bar above the taskbar.
-     c. Restore it from that button. Closing the main window still closes it.
-
 Confirmed
 --------------------------------------------------------------------------------
+Regression refusal is a popup
+Update Query while editing a list row
+Plotter closes like Query
+Regression stats follow the view
+Time Lag slider per series
+Time Lag stats sit above the slider
+Plotter toolbar opens a plot query
+Plotter Line, Scatter, and Time Lag
+Equation formula stays A1 on a new date range
+Fill handle hides after a query
+Header details follow edits and custom columns
+Metadata window minimizes with the app
 Graph legend hidden mark stays [ ]
 Public overlay does not re-pair when Aquarius is skipped
 Quick Look date dialog buttons sit under the list
