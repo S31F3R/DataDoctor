@@ -10,22 +10,3 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
-- Download closes the update prompt before the progress bar; Later on Restart returns to the main window
-- Graph legend hidden mark stays an open [ ] (does not collapse to [])
-- Public overlay/delta pairs that include Aquarius run the remaining series as a normal column (do not re-pair with the next HDB)
-- Right-click Regression: lagged fit, Relationship and Aligned views; double-click copies the Y line
-- Regression keeps upstream and downstream when they share a wave; saved image includes the equation and stats
-- Quick Look date dialog buttons sit under the list
-- Equation formulas stay A1 across a new date range instead of #REF!
-- Regression equation is Y = a*B + c with no [t] brackets or copy line; double-click copies that line
-- Formula letters follow column insert, delete, and move
-- Quick Look date dialog is owned by the Query window
-- Lagged formulas stay on the row they were written; rows that would fall off the sheet stay blank
-- Quick Look load keeps the formula start row (row 4 stays row 4)
-- Fill handle hides when a query rebuilds the table
-- Header details update max, min, and mean as cells change; custom columns show name, max, min, and mean and follow a rename
-- Metadata details window minimizes to the app taskbar button
-- Toolbar Plotter runs an API-only plot query (Line, Scatter, Time Lag) into one Plotter tab; table right-click Graph is unchanged
-- Plot Quick Looks live in quickLook/plots/ and export with the profile
-- Time Lag shifts the last series with a live slider; the hydrograph and correlation follow the visible time window
-
