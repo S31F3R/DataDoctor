@@ -985,7 +985,8 @@ def pendingAppImagePath() -> Path | None:
     return None
 
 
-BACKGROUND_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000  # 4 hours
+# A beta published while the app is open should show up well inside an hour.
+BACKGROUND_UPDATE_INTERVAL_MS = 15 * 60 * 1000  # 15 minutes
 
 
 def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
@@ -1012,7 +1013,7 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
                 if box.clickedButton() is restartBtn:
                     spawnAppImageReplaceAndExit(pending, parent)
                 elif box.clickedButton() is laterBtn:
-                    Config.skipUpdatePromptThisSession = True
+                    noteDeferredUpdate()
                 return
             if windowsNeedsLauncherRefresh():
                 runWindowsLauncherRefreshUi(parent)
@@ -1031,9 +1032,29 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
         Logic.logMessage("DEBUG", f"scheduleStartupUpdateCheck: {e}")
 
 
+def noteDeferredUpdate(version=None) -> None:
+    """Later: stay quiet for this release, but a newer beta/rc may still prompt."""
+    Config.skipUpdatePromptThisSession = True
+    if version:
+        Config.dismissedUpdateVersion = str(version)
+
+
+def updatePromptDeferred(info) -> bool:
+    """
+    True when this session already said Later and `info` is not a newer release.
+    A beta published after Later still returns False so the passive check can show it.
+    """
+    if not getattr(Config, "skipUpdatePromptThisSession", False):
+        return False
+    if not isinstance(info, dict) or info.get("_unreachable") or not info.get("version"):
+        return True
+    dismissed = getattr(Config, "dismissedUpdateVersion", None)
+    if not dismissed:
+        return True
+    return Version.compareVersions(str(info.get("version")), str(dismissed)) <= 0
+
+
 def _backgroundUpdateTick(parent=None) -> None:
-    if getattr(Config, "skipUpdatePromptThisSession", False):
-        return
     runUpdateCheckUi(parent, silentIfNone=True, silentIfUnreachable=True)
 
 
@@ -1103,7 +1124,7 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
         if clicked is downloadBtn:
             _downloadAndOfferApply(parent, info)
         elif clicked is laterBtn:
-            Config.skipUpdatePromptThisSession = True
+            noteDeferredUpdate(ver)
 
     signals = _Signals()
     app = QApplication.instance()
@@ -1187,7 +1208,7 @@ def runRevertToPublishedUi(parent=None) -> None:
         if clicked is downloadBtn:
             _downloadAndOfferApply(parent, info)
         elif clicked is laterBtn:
-            Config.skipUpdatePromptThisSession = True
+            noteDeferredUpdate(ver)
 
     signals = _Signals()
     app = QApplication.instance()
@@ -1227,7 +1248,7 @@ def runUpdateCheckUi(parent=None, silentIfNone: bool = True, silentIfUnreachable
             self.signals.done.emit(info)
 
     def onDone(info):
-        if getattr(Config, "skipUpdatePromptThisSession", False):
+        if updatePromptDeferred(info):
             return
         if isinstance(info, dict) and info.get("_unreachable"):
             if not silentIfUnreachable:
@@ -1323,7 +1344,7 @@ def _promptUpdate(parent, info: dict) -> None:
         app.processEvents()
     if clicked is not downloadBtn:
         if clicked is laterBtn:
-            Config.skipUpdatePromptThisSession = True
+            noteDeferredUpdate(ver)
         return
 
     _downloadAndOfferApply(parent, info)
@@ -1437,7 +1458,7 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                         "Try again from Help / the update prompt.",
                     )
             elif clicked is laterBtn:
-                Config.skipUpdatePromptThisSession = True
+                noteDeferredUpdate(info.get("version"))
             return
 
         assetName = (info.get("asset_name") or str(path) or "").lower()
@@ -1467,7 +1488,7 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                     "Close Data Doctor and run applyUpdate.cmd from the install folder.",
                 )
         elif clicked is laterBtn:
-            Config.skipUpdatePromptThisSession = True
+            noteDeferredUpdate(info.get("version"))
 
     signals = _Signals()
     app = QApplication.instance()
