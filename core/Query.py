@@ -870,6 +870,11 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
             f"retro={Config.retroMode} platform={__import__('sys').platform}",
         )
 
+    if progressDialog is not None and numRows > 8000:
+        progressDialog.setLabelText(f"Preparing table... ({numRows} rows)")
+        progressDialog.setValue(90)
+        progressDialog.repaint()
+        QCoreApplication.processEvents()
     table.setRowCount(numRows)
     table.setColumnCount(numCols)
     table.setHorizontalHeaderLabels(headers)
@@ -878,7 +883,37 @@ def buildTable(table, data, buildHeader, dataDictionaryTable, intervals, lookupI
     timestamps = []
     if dataDictionaryTable:
         timestamps = [row.split(',', 1)[0].strip() for row in data]
-        table.setVerticalHeaderLabels(timestamps)
+        headerAlign = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
+        vHeader.setDefaultAlignment(headerAlign)
+        if progressDialog is not None:
+            progressDialog.setLabelText(f"Preparing timestamps... (0/{numRows})")
+            progressDialog.setValue(90)
+            progressDialog.repaint()
+            QCoreApplication.processEvents()
+        # setVerticalHeaderLabels on a year of 1-minute rows blocks the UI
+        # with no chance to repaint. Write the rail in chunks instead.
+        if numRows > 8000:
+            chunk = 10000
+            for start in range(0, numRows, chunk):
+                end = min(numRows, start + chunk)
+                for r in range(start, end):
+                    label = timestamps[r] if r < len(timestamps) else ""
+                    headerItem = QTableWidgetItem(label)
+                    headerItem.setTextAlignment(headerAlign)
+                    table.setVerticalHeaderItem(r, headerItem)
+                if progressDialog is not None:
+                    progressDialog.setLabelText(
+                        f"Preparing timestamps... ({end}/{numRows})"
+                    )
+                    progressDialog.repaint()
+                    QCoreApplication.processEvents()
+                    if progressDialog.wasCanceled():
+                        table.blockSignals(False)
+                        table.setUpdatesEnabled(True)
+                        table.setSortingEnabled(False)
+                        return
+        else:
+            table.setVerticalHeaderLabels(timestamps)
         vHeader.setVisible(True)
         Utils.sizeVerticalHeader(table)
     else:

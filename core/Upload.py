@@ -5,6 +5,7 @@
 
 import queue
 import threading
+import time
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta
 
@@ -1669,6 +1670,37 @@ def buildModifyMTableParams(uploadRow):
     ]
 
 
+def isChangeAgentLookupRace(err) -> bool:
+    """
+    R_BASE_AFTER_UPDATE looks up the change agent, misses, then inserts.
+    A second writer can insert that row first and the first insert hits
+    IDX_REF_CHANGE_AGENT_LOOKUP (ORA-00001). The next try finds the row.
+    """
+    text = str(err or "")
+    return "ORA-00001" in text and "IDX_REF_CHANGE_AGENT_LOOKUP" in text
+
+
+def retryChangeAgentRace(action, attempts=4, pause=None):
+    """Run action(). On a change-agent lookup collision, wait and try again."""
+    sleeper = pause if pause is not None else time.sleep
+    last = None
+    for attempt in range(max(1, int(attempts))):
+        try:
+            return action()
+        except Exception as e:
+            last = e
+            if attempt + 1 >= attempts or not isChangeAgentLookupRace(e):
+                raise
+            Logic.logMessage(
+                "WARN",
+                f"Upload: change-agent lookup collision, retry {attempt + 1}: {e}",
+            )
+            sleeper(0.05 * (attempt + 1))
+    if last is not None:
+        raise last
+    return None
+
+
 def writeOneHdbValue(oracleConn, uploadRow, threadId=0):
     """
     R-table: MODIFY_R_BASE (value) or DELETE_R_BASE (blank).
@@ -1710,12 +1742,15 @@ def writeOneHdbValue(oracleConn, uploadRow, threadId=0):
             f"{procName} [{paired}]",
         )
 
-    oracleConn.callStoredProcedureWithRetry(
-        procName,
-        params=params,
-        commit=True,
-        paramNames=paramNames,
-    )
+    def callProc():
+        return oracleConn.callStoredProcedureWithRetry(
+            procName,
+            params=params,
+            commit=True,
+            paramNames=paramNames,
+        )
+
+    retryChangeAgentRace(callProc)
 
     if Config.debug:
         Logic.logMessage(

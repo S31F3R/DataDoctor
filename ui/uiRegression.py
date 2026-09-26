@@ -191,10 +191,10 @@ def askTarget(parent, columns):
 
 
 def runRegression(window, columns=None, rows=None):
-    """Right-click entry. Refuses on the status bar and does not open a tab."""
+    """Right-click entry. Refuses in a dialog and does not open a tab."""
     table = getattr(window, "mainTable", None)
     if table is None or table.rowCount() <= 0 or table.columnCount() <= 0:
-        noteStatus(window, "No data to regress. Run a Data Query first.")
+        QMessageBox.information(window, "Regression", "No data to regress. Run a Data Query first.")
         return
     if not _ensureMatplotlib():
         QMessageBox.warning(
@@ -208,14 +208,16 @@ def runRegression(window, columns=None, rows=None):
     meta = getattr(window, "columnMetadata", None)
     cols, tsTexts = gatherColumns(table, columns=columns, rows=rows, columnMetadata=meta)
     if len(cols) < 2:
-        noteStatus(window, "Regression needs at least two numeric columns.")
+        QMessageBox.information(
+            window, "Regression", "Regression needs at least two numeric columns.",
+        )
         return
     targetIndex = askTarget(window, cols)
     if targetIndex is None:
         return
     result, err = fitColumns(cols, int(targetIndex))
     if err or result is None:
-        noteStatus(window, err or "Regression did not fit.")
+        QMessageBox.warning(window, "Regression", err or "Regression did not fit.")
         return
 
     panel = window.ensureRegressionPanel()

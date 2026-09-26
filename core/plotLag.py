@@ -191,6 +191,49 @@ def shiftByLag(values, lag):
     return out
 
 
+def viewPairScores(xValues, observed, simulated, x0, x1):
+    """
+    Scores for the visible window. observed is the first series, simulated is
+    the lagged last series. r² is the squared Pearson correlation. NSE is
+    Nash-Sutcliffe of simulated against observed. ME is mean(simulated − observed).
+
+    Returns n, r2, nse, me, rmse. r2 / nse / me / rmse are None when they
+    are not defined (too few points, or a flat observed series for NSE).
+    """
+    x = np.asarray(xValues, dtype=float)
+    obs = np.asarray(observed, dtype=float)
+    sim = np.asarray(simulated, dtype=float)
+    n = min(x.size, obs.size, sim.size)
+    empty = {"n": 0, "r2": None, "nse": None, "me": None, "rmse": None}
+    if n < 1:
+        return empty
+    x = x[:n]
+    obs = obs[:n]
+    sim = sim[:n]
+    lo = float(min(x0, x1))
+    hi = float(max(x0, x1))
+    mask = np.isfinite(x) & np.isfinite(obs) & np.isfinite(sim) & (x >= lo) & (x <= hi)
+    count = int(np.sum(mask))
+    out = {"n": count, "r2": None, "nse": None, "me": None, "rmse": None}
+    if count < 3:
+        return out
+    yy = obs[mask]
+    hh = sim[mask]
+    resid = hh - yy
+    out["me"] = float(np.mean(resid))
+    out["rmse"] = float(np.sqrt(np.mean(resid ** 2)))
+    if float(np.std(yy)) > 0 and float(np.std(hh)) > 0:
+        score = float(np.corrcoef(yy, hh)[0, 1])
+        if np.isfinite(score):
+            out["r2"] = float(score * score)
+    centered = yy - float(np.mean(yy))
+    ssTot = float(np.dot(centered, centered))
+    ssRes = float(np.dot(resid, resid))
+    if ssTot > 1e-18:
+        out["nse"] = float(1.0 - ssRes / ssTot)
+    return out
+
+
 def pearsonInRange(xValues, left, right, x0, x1):
     """
     Pearson r of left vs right where both are finite and x is inside [x0, x1].

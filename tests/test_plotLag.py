@@ -21,6 +21,7 @@ from core.plotLag import (
     pearsonInRange,
     positiveLagSums,
     shiftByLag,
+    viewPairScores,
 )
 
 
@@ -113,9 +114,33 @@ def testViewPearson():
     return 0
 
 
+def testViewScores():
+    x = np.arange(4, dtype=float)
+    obs = np.array([1, 2, 3, 4], dtype=float)
+    sim = np.array([1, 2, 3, 5], dtype=float)
+    scores = viewPairScores(x, obs, sim, 0, 3)
+    if scores["n"] != 4:
+        return fail("score n", scores)
+    if scores["nse"] is None or abs(scores["nse"] - 0.8) > 1e-9:
+        return fail("nse", scores["nse"])
+    if scores["me"] is None or abs(scores["me"] - 0.25) > 1e-9:
+        return fail("me", scores["me"])
+    if scores["rmse"] is None or abs(scores["rmse"] - 0.5) > 1e-9:
+        return fail("rmse", scores["rmse"])
+    if scores["r2"] is None or scores["r2"] <= 0.9:
+        return fail("r2", scores["r2"])
+    early = viewPairScores(x, obs, sim, 0, 1)
+    if early["n"] != 2 or early["r2"] is not None:
+        return fail("short window", early)
+    return 0
+
+
 def main():
     errors = 0
-    for check in (testClock, testMaxLag, testShiftAndSums, testBestLagAndChain, testViewPearson):
+    for check in (
+        testClock, testMaxLag, testShiftAndSums, testBestLagAndChain,
+        testViewPearson, testViewScores,
+    ):
         errors += check()
     if errors:
         print(f"{errors} failed")

@@ -19,8 +19,9 @@ from PyQt6 import uic
 
 from core import Config, Logic, Query, QueryFlags, QuickLookDates, Utils
 from core.plotLag import (
-    chainLag, lagClockText, maxLagSteps, overlapCount, pearsonInRange, shiftByLag,
+    chainLag, lagClockText, maxLagSteps, overlapCount, shiftByLag, viewPairScores,
 )
+from core.regression.equation import formatNumber
 from ui.uiGraph import GraphPanel, parseNumeric
 from ui.uiQuery import ALL_INTERVALS, USGS_DEFAULT_INTERVAL, USGS_INTERVALS
 from ui.uiSearch import uiSearch
@@ -117,24 +118,37 @@ class PlotterPanel(GraphPanel):
         self.lagSlider.setSingleStep(1)
         self.lagSlider.setPageStep(1)
         self.lagReadout = QLabel("Time Lag", self.lagBar)
-        self.lagReadout.setMinimumWidth(280)
+        self.lagReadout.setMinimumWidth(220)
         row.addWidget(self.lagSlider, stretch=1)
         row.addWidget(self.lagReadout)
+        self.lagStats = QLabel("", self)
+        self.lagStats.setContentsMargins(8, 2, 8, 2)
+        self.lagStats.setWordWrap(True)
+        self._layout.addWidget(self.lagStats)
         self._layout.addWidget(self.lagBar)
+        self.lagStats.hide()
         self.lagBar.hide()
         self.lagSlider.valueChanged.connect(self.onLagSlider)
 
     def pinLagBar(self):
-        if self.lagBar is None:
-            return
-        self._layout.removeWidget(self.lagBar)
-        self._layout.addWidget(self.lagBar)
+        if self.lagStats is not None:
+            self._layout.removeWidget(self.lagStats)
+            self._layout.addWidget(self.lagStats)
+        if self.lagBar is not None:
+            self._layout.removeWidget(self.lagBar)
+            self._layout.addWidget(self.lagBar)
+
+    def hideLagChrome(self):
+        if self.lagStats is not None:
+            self.lagStats.hide()
+        if self.lagBar is not None:
+            self.lagBar.hide()
 
     def showLine(self, fetched):
         self.plotKind = "line"
         self.lagState = None
         self.lastLagInfo = None
-        self.lagBar.hide()
+        self.hideLagChrome()
         times, texts, columns, labels, rawTexts = self.bundle(fetched)
         series = []
         for i, col in enumerate(columns):
@@ -151,7 +165,7 @@ class PlotterPanel(GraphPanel):
         self.plotKind = "scatter"
         self.lagState = None
         self.lastLagInfo = None
-        self.lagBar.hide()
+        self.hideLagChrome()
         _times, _texts, columns, labels, rawTexts = self.bundle(fetched)
         if len(columns) != 2:
             return False, "Scatter needs exactly two Data IDs. The first is X and the second is Y."
@@ -182,13 +196,13 @@ class PlotterPanel(GraphPanel):
         self.lagState = None
         times, texts, columns, labels, rawTexts = self.bundle(fetched)
         if len(columns) < 2:
-            self.lagBar.hide()
+            self.hideLagChrome()
             return False, (
                 "Time Lag needs at least two Data IDs. "
                 "Put the upstream series first and the downstream series last."
             )
         if not np.any(np.isfinite(columns[0])) or not np.any(np.isfinite(columns[-1])):
-            self.lagBar.hide()
+            self.hideLagChrome()
             return False, "Time Lag needs numeric values on the first and last Data IDs."
         n = int(columns[0].size)
         window = max(0, n - 1)
@@ -214,7 +228,7 @@ class PlotterPanel(GraphPanel):
         ok, note = self.plotPrepared(times, texts, series)
         self.pinLagBar()
         if not ok:
-            self.lagBar.hide()
+            self.hideLagChrome()
             return ok, note
         targetEntry = self.entryById("target")
         refEntry = self.entryById("reference")
@@ -245,6 +259,7 @@ class PlotterPanel(GraphPanel):
             self.lagSlider.setEnabled(limit > 0)
         finally:
             self.lagSlider.blockSignals(False)
+        self.lagStats.show()
         self.lagBar.show()
         self.refreshViewStats()
         return True, note
@@ -348,17 +363,28 @@ class PlotterPanel(GraphPanel):
         if x is None:
             return
         lag = int(state.get("slider") or 0)
-        score, count = pearsonInRange(
-            x, state["reference"], shiftByLag(state["target"], lag), x0, x1,
-        )
+        shifted = shiftByLag(state["target"], lag)
+        scores = viewPairScores(x, state["reference"], shifted, x0, x1)
         clock = lagClockText(lag, state.get("interval"))
         if int(state.get("maxLag") or 0) <= 0:
-            text = "Not enough overlap to estimate a lag."
-        elif score is None:
-            text = f"{clock}    not enough overlap in view"
+            self.lagReadout.setText("Not enough overlap to estimate a lag.")
         else:
-            text = f"{clock}    r = {score:.3f} ({count} in view)"
-        self.lagReadout.setText(text)
+            self.lagReadout.setText(clock)
+        self.lagStats.setText(self.statsLine(scores))
+
+    def statsLine(self, scores):
+        """Same block Regression uses, plus NSE, for the points in view."""
+        count = int((scores or {}).get("n") or 0)
+        if count < 3:
+            return "Not enough overlap in view"
+        def piece(name, key):
+            value = scores.get(key)
+            shown = "—" if value is None else formatNumber(value)
+            return f"{name} = {shown}"
+        return (
+            f"{piece('r²', 'r2')}   {piece('NSE', 'nse')}   "
+            f"{piece('ME', 'me')}   {piece('RMSE', 'rmse')}   N = {count}"
+        )
 
 
 class uiPlotter(QMainWindow):
@@ -478,6 +504,7 @@ class uiPlotter(QMainWindow):
                 btn.clicked.connect(slot)
 
         self.qleDataID.installEventFilter(self)
+        self.qleDataID.textChanged.connect(self.onDataIdTextChanged)
         self.installEventFilter(self)
         Logic.initializeQueryWindow(self, self.rbCustomDateTime, self.dteStartDate, self.dteEndDate)
         Logic.setDefaultButton(self, None, self.btnAddQuery, self.btnQuery)
@@ -595,34 +622,34 @@ class uiPlotter(QMainWindow):
             startDate = self.dteStartDate.dateTime().toString("yyyy-MM-dd hh:mm")
             endDate = self.dteEndDate.dateTime().toString("yyyy-MM-dd hh:mm")
             bucket = []
-            self.raise_()
-            self.activateWindow()
+            host = self.winMain if self.winMain is not None else self
+            # Same as Query: hide this window, progress stays on the main window,
+            # then close so Plot is not left sitting over the tab.
+            self.hide()
             Query.executeQuery(
-                self, items, startDate, endDate,
+                host, items, startDate, endDate,
                 False, None,
                 apiOnly=True, seriesSink=bucket,
             )
-            if not bucket:
-                return
-            if self.winMain is None:
-                return
-            panel = self.winMain.ensurePlotterPanel()
-            seed = self.restoreLag
-            self.restoreLag = None
-            if seed is None and kind == "timeLag":
-                info = getattr(panel, "lastLagInfo", None)
-                if isinstance(info, dict) and info.get("slider") is not None:
-                    seed = info.get("slider")
-            if kind == "line":
-                ok, message = panel.showLine(bucket[0])
-            elif kind == "scatter":
-                ok, message = panel.showScatter(bucket[0])
-            else:
-                ok, message = panel.showTimeLag(bucket[0], restoreLag=seed)
-            if not ok:
-                QMessageBox.warning(self, "Plotter", message or "Could not build the plot.")
-                return
-            self.winMain.showPlotterInMainTabs(PLOT_TITLES.get(kind, "Plotter"), select=True)
+            if bucket and self.winMain is not None:
+                panel = self.winMain.ensurePlotterPanel()
+                seed = self.restoreLag
+                self.restoreLag = None
+                if seed is None and kind == "timeLag":
+                    info = getattr(panel, "lastLagInfo", None)
+                    if isinstance(info, dict) and info.get("slider") is not None:
+                        seed = info.get("slider")
+                if kind == "line":
+                    ok, message = panel.showLine(bucket[0])
+                elif kind == "scatter":
+                    ok, message = panel.showScatter(bucket[0])
+                else:
+                    ok, message = panel.showTimeLag(bucket[0], restoreLag=seed)
+                if not ok:
+                    QMessageBox.warning(host, "Plotter", message or "Could not build the plot.")
+                else:
+                    self.winMain.showPlotterInMainTabs(PLOT_TITLES.get(kind, "Plotter"), select=True)
+            self.close()
         except Exception as e:
             Logic.logException("btnPlotPressed failed", e)
             QMessageBox.warning(self, "Plotter", f"Failed to plot:\n{e}")
@@ -715,8 +742,22 @@ class uiPlotter(QMainWindow):
             self.listQueryList.addItem(self.makeItem(itemText))
             self.listQueryList.scrollToBottom()
         self.editingQueryIndex = None
+        self.setQueryAddMode(False)
         self.qleDataID.clear()
         self.qleDataID.setFocus()
+
+    def setQueryAddMode(self, updating):
+        if self.btnAddQuery is None:
+            return
+        self.btnAddQuery.setText("Update Query" if updating else "Add Query")
+
+    def onDataIdTextChanged(self, text):
+        if self.editingQueryIndex is None:
+            return
+        if str(text or "").strip():
+            return
+        self.editingQueryIndex = None
+        self.setQueryAddMode(False)
 
     def btnRemoveQueryPressed(self):
         selected = self.listQueryList.selectedItems()
@@ -725,6 +766,7 @@ class uiPlotter(QMainWindow):
         removed = {self.listQueryList.row(item) for item in selected}
         if self.editingQueryIndex is not None and self.editingQueryIndex in removed:
             self.editingQueryIndex = None
+            self.setQueryAddMode(False)
             self.qleDataID.clear()
         for item in selected:
             self.listQueryList.takeItem(self.listQueryList.row(item))
@@ -733,10 +775,12 @@ class uiPlotter(QMainWindow):
             self.editingQueryIndex -= below
             if self.editingQueryIndex < 0 or self.editingQueryIndex >= self.listQueryList.count():
                 self.editingQueryIndex = None
+                self.setQueryAddMode(False)
 
     def btnClearQueryPressed(self):
         self.listQueryList.clear()
         self.editingQueryIndex = None
+        self.setQueryAddMode(False)
         if self.qleDataID is not None:
             self.qleDataID.clear()
 
@@ -748,6 +792,7 @@ class uiPlotter(QMainWindow):
             return
         dataId, interval, database = parts
         self.editingQueryIndex = self.listQueryList.row(item)
+        self.setQueryAddMode(True)
         self.qleDataID.setText(dataId)
         self.qleDataID.setFocus()
         self.qleDataID.selectAll()
@@ -799,6 +844,7 @@ class uiPlotter(QMainWindow):
         self.listQueryList.insertItem(insertAt, self.makeItem(itemText))
         self.listQueryList.setCurrentRow(insertAt)
         self.editingQueryIndex = None
+        self.setQueryAddMode(False)
         self.qleDataID.clear()
         self.qleDataID.setFocus()
 

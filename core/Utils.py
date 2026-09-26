@@ -761,10 +761,15 @@ def sizeVerticalHeader(table):
         pass
     align = Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
     vHeader.setDefaultAlignment(align)
-    for r in range(n):
-        it = table.verticalHeaderItem(r)
-        if it is not None:
-            it.setTextAlignment(align)
+    # A year of 1-minute rows is hundreds of thousands of header items.
+    # Walking every one freezes the progress dialog on "Building table...".
+    # Default alignment covers that case. Smaller tables still set it per item
+    # so a header created before the default was applied stays centered.
+    if n <= 8000:
+        for r in range(n):
+            it = table.verticalHeaderItem(r)
+            if it is not None:
+                it.setTextAlignment(align)
     vHeader.setFixedWidth(w)
 
 

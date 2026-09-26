@@ -175,6 +175,7 @@ class uiQuery(QMainWindow):
 
         # Install event filters
         self.qleDataID.installEventFilter(self)
+        self.qleDataID.textChanged.connect(self.onDataIdTextChanged)
         self.installEventFilter(self)
 
         # Set initial state
@@ -616,6 +617,7 @@ class uiQuery(QMainWindow):
             return
         dataId, interval, database = parts
         self.editingQueryIndex = self.listQueryList.row(item)
+        self.setQueryAddMode(True)
         if self.qleDataID is not None:
             self.qleDataID.setText(dataId)
             self.qleDataID.setFocus()
@@ -665,8 +667,24 @@ class uiQuery(QMainWindow):
                 Logic.logMessage("DEBUG", f"btnAddQueryPressed: Added item: {itemText}")
         QueryFlags.recolorQueryList(self.listQueryList)
         self.editingQueryIndex = None
+        self.setQueryAddMode(False)
         self.qleDataID.clear()
         self.qleDataID.setFocus()
+
+    def setQueryAddMode(self, updating):
+        """Add Query while appending. Update Query while a double-clicked row is loaded."""
+        if self.btnAddQuery is None:
+            return
+        self.btnAddQuery.setText("Update Query" if updating else "Add Query")
+
+    def onDataIdTextChanged(self, text):
+        """Clearing the Data ID (not editing it) leaves update mode."""
+        if self.editingQueryIndex is None:
+            return
+        if str(text or "").strip():
+            return
+        self.editingQueryIndex = None
+        self.setQueryAddMode(False)
 
     def btnRemoveQueryPressed(self):
         selectedItems = self.listQueryList.selectedItems()
@@ -679,6 +697,7 @@ class uiQuery(QMainWindow):
         removedRows = {self.listQueryList.row(item) for item in selectedItems}
         if self.editingQueryIndex is not None and self.editingQueryIndex in removedRows:
             self.editingQueryIndex = None
+            self.setQueryAddMode(False)
             if self.qleDataID:
                 self.qleDataID.clear()
         for item in selectedItems:
@@ -689,6 +708,7 @@ class uiQuery(QMainWindow):
             self.editingQueryIndex -= below
             if self.editingQueryIndex < 0 or self.editingQueryIndex >= self.listQueryList.count():
                 self.editingQueryIndex = None
+                self.setQueryAddMode(False)
         QueryFlags.recolorQueryList(self.listQueryList)
         if Config.debug:
             Logic.logMessage("DEBUG", f"btnRemoveQueryPressed: Removed {len(selectedItems)} items")
@@ -698,6 +718,7 @@ class uiQuery(QMainWindow):
             return
         self.listQueryList.clear()
         self.editingQueryIndex = None
+        self.setQueryAddMode(False)
         if self.qleDataID:
             self.qleDataID.clear()
         # Clear query-option checkboxes when the list is wiped
@@ -981,6 +1002,7 @@ class uiQuery(QMainWindow):
         QueryFlags.recolorQueryList(self.listQueryList)
         # Cancel any in-place edit mode so the next Add appends cleanly
         self.editingQueryIndex = None
+        self.setQueryAddMode(False)
         if self.qleDataID is not None:
             self.qleDataID.clear()
             self.qleDataID.setFocus()
