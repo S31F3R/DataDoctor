@@ -112,25 +112,15 @@ class PlotterPanel(GraphPanel):
         self.lagHostLayout.setContentsMargins(8, 0, 8, 6)
         self.lagHostLayout.setSpacing(2)
         self.lagRows = []
-        self.lagStats = QLabel("", self)
-        self.lagStats.setContentsMargins(8, 2, 8, 2)
-        self.lagStats.setWordWrap(True)
-        self._layout.addWidget(self.lagStats)
         self._layout.addWidget(self.lagHost)
-        self.lagStats.hide()
         self.lagHost.hide()
 
     def pinLagBar(self):
-        if self.lagStats is not None:
-            self._layout.removeWidget(self.lagStats)
-            self._layout.addWidget(self.lagStats)
         if self.lagHost is not None:
             self._layout.removeWidget(self.lagHost)
             self._layout.addWidget(self.lagHost)
 
     def hideLagChrome(self):
-        if self.lagStats is not None:
-            self.lagStats.hide()
         if self.lagHost is not None:
             self.lagHost.hide()
 
@@ -164,10 +154,18 @@ class PlotterPanel(GraphPanel):
         for i in range(1, len(lags)):
             color = self.colorForSeries(f"lag{i}")
             wrap = QWidget(self.lagHost)
-            layout = QHBoxLayout(wrap)
+            outer = QVBoxLayout(wrap)
+            outer.setContentsMargins(0, 2, 0, 2)
+            outer.setSpacing(0)
+            stats = QLabel("", wrap)
+            stats.setWordWrap(True)
+            stats.setStyleSheet(f"color: {color};")
+            outer.addWidget(stats)
+            bar = QWidget(wrap)
+            layout = QHBoxLayout(bar)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(8)
-            slider = QSlider(Qt.Orientation.Horizontal, wrap)
+            slider = QSlider(Qt.Orientation.Horizontal, bar)
             slider.setMinimum(0)
             slider.setMaximum(max(0, int(limit)))
             slider.setValue(int(lags[i]))
@@ -175,17 +173,19 @@ class PlotterPanel(GraphPanel):
             slider.setSingleStep(1)
             slider.setPageStep(1)
             slider.setStyleSheet(self.sliderStyle(color))
-            readout = QLabel("", wrap)
-            readout.setMinimumWidth(220)
+            readout = QLabel("", bar)
+            readout.setMinimumWidth(160)
             readout.setStyleSheet(f"color: {color};")
             layout.addWidget(slider, stretch=1)
             layout.addWidget(readout)
+            outer.addWidget(bar)
             self.lagHostLayout.addWidget(wrap)
             slider.valueChanged.connect(lambda value, index=i: self.onLagSlider(index, value))
             self.lagRows.append({
                 "index": i,
                 "slider": slider,
                 "readout": readout,
+                "stats": stats,
                 "widget": wrap,
             })
         self.refreshLagReadouts()
@@ -301,7 +301,6 @@ class PlotterPanel(GraphPanel):
         }
         self.rememberLagInfo()
         self.rebuildLagRows(lags, limit, self.lagState["interval"])
-        self.lagStats.show()
         self.lagHost.show()
         self.refreshViewStats()
         return True, note
@@ -422,7 +421,7 @@ class PlotterPanel(GraphPanel):
             return
         self.refreshLagReadouts()
         state = self.lagState
-        if self._ax is None or self.lagStats is None:
+        if self._ax is None:
             return
         try:
             x0, x1 = self._ax.get_xlim()
@@ -436,11 +435,17 @@ class PlotterPanel(GraphPanel):
                 state["x"] = x
         columns = state.get("columns") or []
         lags = state.get("lags") or []
-        if x is None or len(columns) < 2 or len(lags) < 2:
+        if x is None or not columns:
             return
-        shifted = shiftByLag(columns[-1], int(lags[-1]))
-        scores = viewPairScores(x, columns[0], shifted, x0, x1)
-        self.lagStats.setText(self.statsLine(scores))
+        reference = columns[0]
+        for row in self.lagRows:
+            index = row["index"]
+            label = row.get("stats")
+            if label is None or index >= len(columns) or index >= len(lags):
+                continue
+            shifted = shiftByLag(columns[index], int(lags[index]))
+            scores = viewPairScores(x, reference, shifted, x0, x1)
+            label.setText(self.statsLine(scores))
 
     def statsLine(self, scores):
         """Same block Regression uses, plus NSE, for the points in view."""
