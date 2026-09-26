@@ -107,42 +107,88 @@ class PlotterPanel(GraphPanel):
         self.lastLagInfo = None
         self.onViewChanged = self.refreshViewStats
 
-        self.lagBar = QWidget(self)
-        row = QHBoxLayout(self.lagBar)
-        row.setContentsMargins(8, 2, 8, 6)
-        row.setSpacing(8)
-        self.lagSlider = QSlider(Qt.Orientation.Horizontal, self.lagBar)
-        self.lagSlider.setMinimum(0)
-        self.lagSlider.setMaximum(0)
-        self.lagSlider.setEnabled(False)
-        self.lagSlider.setSingleStep(1)
-        self.lagSlider.setPageStep(1)
-        self.lagReadout = QLabel("Time Lag", self.lagBar)
-        self.lagReadout.setMinimumWidth(220)
-        row.addWidget(self.lagSlider, stretch=1)
-        row.addWidget(self.lagReadout)
+        self.lagHost = QWidget(self)
+        self.lagHostLayout = QVBoxLayout(self.lagHost)
+        self.lagHostLayout.setContentsMargins(8, 0, 8, 6)
+        self.lagHostLayout.setSpacing(2)
+        self.lagRows = []
         self.lagStats = QLabel("", self)
         self.lagStats.setContentsMargins(8, 2, 8, 2)
         self.lagStats.setWordWrap(True)
         self._layout.addWidget(self.lagStats)
-        self._layout.addWidget(self.lagBar)
+        self._layout.addWidget(self.lagHost)
         self.lagStats.hide()
-        self.lagBar.hide()
-        self.lagSlider.valueChanged.connect(self.onLagSlider)
+        self.lagHost.hide()
 
     def pinLagBar(self):
         if self.lagStats is not None:
             self._layout.removeWidget(self.lagStats)
             self._layout.addWidget(self.lagStats)
-        if self.lagBar is not None:
-            self._layout.removeWidget(self.lagBar)
-            self._layout.addWidget(self.lagBar)
+        if self.lagHost is not None:
+            self._layout.removeWidget(self.lagHost)
+            self._layout.addWidget(self.lagHost)
 
     def hideLagChrome(self):
         if self.lagStats is not None:
             self.lagStats.hide()
-        if self.lagBar is not None:
-            self.lagBar.hide()
+        if self.lagHost is not None:
+            self.lagHost.hide()
+
+    def sliderStyle(self, color):
+        return (
+            "QSlider::groove:horizontal { height: 4px; background: rgba(128,128,128,90); border-radius: 2px; }"
+            "QSlider::handle:horizontal {"
+            f" background: {color}; width: 16px; margin: -6px 0; border-radius: 8px;"
+            "}"
+        )
+
+    def clearLagRows(self):
+        for row in self.lagRows:
+            widget = row.get("widget")
+            slider = row.get("slider")
+            if slider is not None:
+                slider.blockSignals(True)
+            if widget is not None:
+                self.lagHostLayout.removeWidget(widget)
+                widget.deleteLater()
+        self.lagRows = []
+
+    def colorForSeries(self, seriesId):
+        entry = self.entryById(seriesId)
+        color = entry.get("color") if entry else None
+        return str(color) if color else "#1f77b4"
+
+    def rebuildLagRows(self, lags, limit, interval):
+        """One slider per series after the first. Handle and step text use that line's color."""
+        self.clearLagRows()
+        for i in range(1, len(lags)):
+            color = self.colorForSeries(f"lag{i}")
+            wrap = QWidget(self.lagHost)
+            layout = QHBoxLayout(wrap)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(8)
+            slider = QSlider(Qt.Orientation.Horizontal, wrap)
+            slider.setMinimum(0)
+            slider.setMaximum(max(0, int(limit)))
+            slider.setValue(int(lags[i]))
+            slider.setEnabled(int(limit) > 0)
+            slider.setSingleStep(1)
+            slider.setPageStep(1)
+            slider.setStyleSheet(self.sliderStyle(color))
+            readout = QLabel("", wrap)
+            readout.setMinimumWidth(220)
+            readout.setStyleSheet(f"color: {color};")
+            layout.addWidget(slider, stretch=1)
+            layout.addWidget(readout)
+            self.lagHostLayout.addWidget(wrap)
+            slider.valueChanged.connect(lambda value, index=i: self.onLagSlider(index, value))
+            self.lagRows.append({
+                "index": i,
+                "slider": slider,
+                "readout": readout,
+                "widget": wrap,
+            })
+        self.refreshLagReadouts()
 
     def showLine(self, fetched):
         self.plotKind = "line"
@@ -191,7 +237,7 @@ class PlotterPanel(GraphPanel):
         self.pinLagBar()
         return ok, note
 
-    def showTimeLag(self, fetched, restoreLag=None):
+    def showTimeLag(self, fetched, restoreLag=None, restoreLags=None):
         self.plotKind = "timeLag"
         self.lagState = None
         times, texts, columns, labels, rawTexts = self.bundle(fetched)
@@ -208,61 +254,67 @@ class PlotterPanel(GraphPanel):
         window = max(0, n - 1)
         limit = maxLagSteps(overlapCount(columns[0], columns[-1]), window)
         recommended, _pairs, lagVsFirst, _direct = chainLag(columns, limit)
-        seed = recommended
-        if restoreLag is not None:
+        lags = [int(min(max(int(v), 0), limit)) for v in lagVsFirst]
+        if not lags:
+            lags = [0]
+        lags[0] = 0
+        if isinstance(restoreLags, (list, tuple)) and restoreLags:
+            for offset, raw in enumerate(restoreLags):
+                index = offset + 1
+                if index >= len(lags):
+                    break
+                try:
+                    lags[index] = int(min(max(int(raw), 0), limit))
+                except (TypeError, ValueError):
+                    pass
+        elif restoreLag is not None and len(lags) > 1:
             try:
-                seed = int(restoreLag)
+                lags[-1] = int(min(max(int(restoreLag), 0), limit))
             except (TypeError, ValueError):
-                seed = recommended
-        seed = int(min(max(seed, 0), limit))
+                pass
         series = []
         for i, col in enumerate(columns):
             if i not in (0, len(columns) - 1) and not np.any(np.isfinite(col)):
                 continue
-            lag = seed if i == len(columns) - 1 else lagVsFirst[i]
+            lag = lags[i] if i < len(lags) else 0
             shifted = shiftByLag(col, lag)
-            seriesId = "target" if i == len(columns) - 1 else ("reference" if i == 0 else "")
             series.append((
-                labels[i], shifted, shiftedTexts(rawTexts[i], lag), shifted, seriesId,
+                labels[i], shifted, shiftedTexts(rawTexts[i], lag), shifted, f"lag{i}",
             ))
         ok, note = self.plotPrepared(times, texts, series)
         self.pinLagBar()
         if not ok:
             self.hideLagChrome()
             return ok, note
-        targetEntry = self.entryById("target")
-        refEntry = self.entryById("reference")
+        refEntry = self.entryById("lag0")
         x = None
         if refEntry is not None and refEntry.get("line") is not None:
             x = np.asarray(refEntry["line"].get_xdata(), dtype=float)
         self.lagState = {
             "x": x,
-            "reference": columns[0],
-            "target": columns[-1],
-            "targetTexts": rawTexts[-1],
+            "columns": columns,
+            "texts": rawTexts,
+            "lags": lags,
             "interval": (fetched or {}).get("interval") or "",
             "maxLag": limit,
             "recommended": recommended,
-            "slider": seed,
-            "lastEntry": targetEntry,
         }
-        self.lastLagInfo = {
-            "recommended": recommended,
-            "slider": seed,
-            "maxLag": limit,
-        }
-        self.lagSlider.blockSignals(True)
-        try:
-            self.lagSlider.setMinimum(0)
-            self.lagSlider.setMaximum(max(0, limit))
-            self.lagSlider.setValue(seed)
-            self.lagSlider.setEnabled(limit > 0)
-        finally:
-            self.lagSlider.blockSignals(False)
+        self.rememberLagInfo()
+        self.rebuildLagRows(lags, limit, self.lagState["interval"])
         self.lagStats.show()
-        self.lagBar.show()
+        self.lagHost.show()
         self.refreshViewStats()
         return True, note
+
+    def rememberLagInfo(self):
+        state = self.lagState or {}
+        lags = list(state.get("lags") or [])
+        self.lastLagInfo = {
+            "recommended": state.get("recommended"),
+            "slider": lags[-1] if len(lags) > 1 else 0,
+            "sliderLags": [int(v) for v in lags[1:]],
+            "maxLag": state.get("maxLag"),
+        }
 
     def bundle(self, fetched):
         times, texts = parsedTimes(fetched)
@@ -282,38 +334,43 @@ class PlotterPanel(GraphPanel):
                 return entry
         return None
 
-    def onLagSlider(self, value):
+    def onLagSlider(self, index, value):
         if self.plotKind != "timeLag" or not self.lagState:
             return
-        self.applyLastLag(int(value))
+        self.applySeriesLag(int(index), int(value))
 
-    def applyLastLag(self, lag):
+    def applySeriesLag(self, index, lag):
         state = self.lagState
         if not state:
             return
-        lag = int(min(max(lag, 0), int(state.get("maxLag") or 0)))
-        entry = state.get("lastEntry") or self.entryById("target")
+        columns = state.get("columns") or []
+        lags = state.get("lags") or []
+        if index <= 0 or index >= len(columns) or index >= len(lags):
+            return
+        limit = int(state.get("maxLag") or 0)
+        lag = int(min(max(lag, 0), limit))
+        entry = self.entryById(f"lag{index}")
         line = entry.get("line") if entry else None
         if line is None:
             return
-        y = shiftByLag(state["target"], lag)
+        y = shiftByLag(columns[index], lag)
         try:
             line.set_ydata(y)
         except Exception as e:
-            Logic.logException("applyLastLag set_ydata failed", e)
+            Logic.logException("applySeriesLag set_ydata failed", e)
             return
         x = np.asarray(line.get_xdata(), dtype=float)
         mask = np.isfinite(x) & np.isfinite(y)
         entry["xs"] = np.asarray(x[mask], dtype=float)
         entry["ys"] = np.asarray(y[mask], dtype=float)
         entry["yRounded"] = np.asarray(y[mask], dtype=float)
-        moved = shiftedTexts(state.get("targetTexts"), lag)
+        texts = (state.get("texts") or [])
+        raw = texts[index] if index < len(texts) else []
+        moved = shiftedTexts(raw, lag)
         if len(moved) == y.size:
             entry["yTexts"] = [moved[i] for i, keep in enumerate(mask) if keep]
-        state["slider"] = lag
-        state["lastEntry"] = entry
-        if isinstance(self.lastLagInfo, dict):
-            self.lastLagInfo["slider"] = lag
+        lags[index] = lag
+        self.rememberLagInfo()
         self.expandStoredYLimits()
         self._autoscaleYToXView()
         self._refreshMarkerDensity(draw=False)
@@ -344,11 +401,28 @@ class PlotterPanel(GraphPanel):
             if len(self._yDataLims) > 1:
                 self._y2DataLim = self._yDataLims[1]
 
+    def refreshLagReadouts(self):
+        state = self.lagState or {}
+        lags = state.get("lags") or []
+        interval = state.get("interval") or ""
+        limit = int(state.get("maxLag") or 0)
+        for row in self.lagRows:
+            index = row["index"]
+            lag = int(lags[index]) if index < len(lags) else 0
+            readout = row.get("readout")
+            if readout is None:
+                continue
+            if limit <= 0:
+                readout.setText("Not enough overlap to estimate a lag.")
+            else:
+                readout.setText(lagClockText(lag, interval))
+
     def refreshViewStats(self):
-        if self.plotKind != "timeLag" or not self.lagState or self.lagReadout is None:
+        if self.plotKind != "timeLag" or not self.lagState:
             return
+        self.refreshLagReadouts()
         state = self.lagState
-        if self._ax is None:
+        if self._ax is None or self.lagStats is None:
             return
         try:
             x0, x1 = self._ax.get_xlim()
@@ -356,20 +430,16 @@ class PlotterPanel(GraphPanel):
             return
         x = state.get("x")
         if x is None:
-            ref = self.entryById("reference")
+            ref = self.entryById("lag0")
             if ref is not None and ref.get("line") is not None:
                 x = np.asarray(ref["line"].get_xdata(), dtype=float)
                 state["x"] = x
-        if x is None:
+        columns = state.get("columns") or []
+        lags = state.get("lags") or []
+        if x is None or len(columns) < 2 or len(lags) < 2:
             return
-        lag = int(state.get("slider") or 0)
-        shifted = shiftByLag(state["target"], lag)
-        scores = viewPairScores(x, state["reference"], shifted, x0, x1)
-        clock = lagClockText(lag, state.get("interval"))
-        if int(state.get("maxLag") or 0) <= 0:
-            self.lagReadout.setText("Not enough overlap to estimate a lag.")
-        else:
-            self.lagReadout.setText(clock)
+        shifted = shiftByLag(columns[-1], int(lags[-1]))
+        scores = viewPairScores(x, columns[0], shifted, x0, x1)
         self.lagStats.setText(self.statsLine(scores))
 
     def statsLine(self, scores):
@@ -399,6 +469,7 @@ class uiPlotter(QMainWindow):
         self.editingQueryIndex = None
         self.quickLookDateRule = None
         self.restoreLag = None
+        self.restoreLags = None
         self._shownOnce = False
         self.uiSearch = None
 
@@ -634,17 +705,22 @@ class uiPlotter(QMainWindow):
             if bucket and self.winMain is not None:
                 panel = self.winMain.ensurePlotterPanel()
                 seed = self.restoreLag
+                seeds = self.restoreLags
                 self.restoreLag = None
-                if seed is None and kind == "timeLag":
+                self.restoreLags = None
+                if kind == "timeLag" and seeds is None and seed is None:
                     info = getattr(panel, "lastLagInfo", None)
-                    if isinstance(info, dict) and info.get("slider") is not None:
+                    if isinstance(info, dict):
+                        seeds = info.get("sliderLags")
                         seed = info.get("slider")
                 if kind == "line":
                     ok, message = panel.showLine(bucket[0])
                 elif kind == "scatter":
                     ok, message = panel.showScatter(bucket[0])
                 else:
-                    ok, message = panel.showTimeLag(bucket[0], restoreLag=seed)
+                    ok, message = panel.showTimeLag(
+                        bucket[0], restoreLag=seed, restoreLags=seeds,
+                    )
                 if not ok:
                     QMessageBox.warning(host, "Plotter", message or "Could not build the plot.")
                 else:
@@ -1063,6 +1139,8 @@ class uiPlotter(QMainWindow):
                 extra["recommendedLag"] = info.get("recommended")
             if info.get("slider") is not None:
                 extra["sliderLag"] = info.get("slider")
+            if info.get("sliderLags"):
+                extra["sliderLags"] = list(info.get("sliderLags"))
         return extra
 
     def btnSaveQuickLookPressed(self):
@@ -1138,7 +1216,12 @@ class uiPlotter(QMainWindow):
             return
         self.applyPlotType(meta.get("plotType") or "line")
         self.quickLookDateRule = meta.get("dateRule") if isinstance(meta.get("dateRule"), dict) else None
-        self.restoreLag = meta.get("sliderLag") if meta.get("plotType") == "timeLag" else None
+        if meta.get("plotType") == "timeLag":
+            self.restoreLags = meta.get("sliderLags")
+            self.restoreLag = meta.get("sliderLag")
+        else:
+            self.restoreLags = None
+            self.restoreLag = None
         self.refreshRelativeQueryTimes()
         name = self.cbQuickLook.currentText() if self.cbQuickLook is not None else ""
         self.rememberQuickLook(name)

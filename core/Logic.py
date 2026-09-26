@@ -1253,6 +1253,16 @@ def saveQuickLook(
                 payload[key] = int(extra.get(key))
             except (TypeError, ValueError):
                 pass
+        rawLags = extra.get('sliderLags')
+        if isinstance(rawLags, (list, tuple)):
+            cleaned = []
+            for item in rawLags:
+                try:
+                    cleaned.append(int(item))
+                except (TypeError, ValueError):
+                    continue
+            if cleaned:
+                payload['sliderLags'] = cleaned
     quicklookPath = os.path.join(directory or Utils.getQuickLookDir(), f'{name}.json')
     os.makedirs(os.path.dirname(quicklookPath), exist_ok=True)
 
@@ -1313,6 +1323,7 @@ def _parseQuickLookPayload(data):
         'plotType': None,
         'recommendedLag': None,
         'sliderLag': None,
+        'sliderLags': None,
     }
     if isinstance(data, dict):
         queries = data.get('queries')
@@ -1355,6 +1366,16 @@ def _parseQuickLookPayload(data):
                 meta[key] = int(rawLag)
             except (TypeError, ValueError):
                 pass
+        rawLags = data.get('sliderLags')
+        if isinstance(rawLags, list):
+            cleaned = []
+            for item in rawLags:
+                try:
+                    cleaned.append(int(item))
+                except (TypeError, ValueError):
+                    continue
+            if cleaned:
+                meta['sliderLags'] = cleaned
         return queries, meta
     if isinstance(data, list):
         # Legacy plain array — no metadata stored → checkboxes off

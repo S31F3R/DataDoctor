@@ -27,6 +27,8 @@ from PyQt6.QtWidgets import (
 
 from core import Config, Logic, QueryUtils, Utils
 from core.Formula import colToLetters
+from core.plotLag import viewPairScores
+from core.regression.equation import formatClock, formatNumber, formatSteps
 from core.regression.fitRegression import SeriesColumn, fitColumns
 from ui.uiGraph import (
     _LEGEND_OFF,
@@ -307,7 +309,10 @@ def _makeToolbarClass():
                 fig = self.canvas.figure
                 panel = self.parent()
                 result = getattr(panel, "_result", None) if panel is not None else None
-                label = (result.labelText if result is not None else "") or ""
+                if panel is not None and hasattr(panel, "currentLabelText"):
+                    label = panel.currentLabelText() or ""
+                else:
+                    label = (result.labelText if result is not None else "") or ""
                 footerAx = None
                 oldBottom = fig.subplotpars.bottom
                 if label:
@@ -464,7 +469,7 @@ class RegressionPanel(QWidget):
         self._annotate(ax, theme)
         self._buildLegend(theme)
         self._styleEquation()
-        self._equation.setText(result.labelText or "")
+        self._equation.setText(self.currentLabelText())
         self._equation.show()
         try:
             ax.ticklabel_format(axis="y", useOffset=False)
@@ -548,8 +553,69 @@ class RegressionPanel(QWidget):
         else:
             ax.grid(True, alpha=0.3)
 
+    def currentLabelText(self):
+        """Relationship keeps the fit. Aligned scores the shifted hydrographs, including NSE."""
+        result = self._result
+        if result is None:
+            return ""
+        if self._view != "aligned":
+            return result.labelText or ""
+        lines = []
+        if result.equationText:
+            lines.append(result.equationText)
+        bits = []
+        for pred in result.predictors or []:
+            clock = formatClock(float(pred.lagSteps) * float(result.stepSeconds or 0))
+            bits.append(f"lag {pred.key} = {formatSteps(pred.lagSteps)} ({clock})")
+        if bits:
+            lines.append("   ".join(bits))
+        lines.extend(self._alignedScoreLines())
+        if result.stepLabel:
+            lines.append(f"dt = {result.stepLabel}")
+        for warning in result.warnings or []:
+            text = str(warning).strip()
+            if text:
+                lines.append(f"Warning: {text}")
+        return "\n".join(lines)
+
+    def _alignedScoreLines(self):
+        result = self._result
+        series = list(result.aligned or []) if result is not None else []
+        if len(series) < 2:
+            return ["Not enough overlap"]
+        target = np.asarray(series[0].values, dtype=float)
+        x = np.arange(target.size, dtype=float)
+        lines = []
+        for i, pred in enumerate(series[1:], start=1):
+            if i < len(self._visible) and not self._visible[i]:
+                continue
+            scores = viewPairScores(
+                x, target, np.asarray(pred.values, dtype=float), -1.0, float(target.size) + 1.0,
+            )
+            name = pred.key or pred.label or "Series"
+            lines.append(self._alignedStatLine(name, scores))
+        if not lines:
+            return ["No shifted series is shown"]
+        return lines
+
+    def _alignedStatLine(self, name, scores):
+        count = int((scores or {}).get("n") or 0)
+        if count < 3:
+            return f"{name}: not enough overlap"
+        def piece(label, key):
+            value = scores.get(key)
+            shown = "—" if value is None else formatNumber(value)
+            return f"{label} = {shown}"
+        return (
+            f"{name}: {piece('r²', 'r2')}   {piece('NSE', 'nse')}   "
+            f"{piece('ME', 'me')}   {piece('RMSE', 'rmse')}   N = {count}"
+        )
+
     def _annotate(self, ax, theme):
-        text = (self._result.figureText if self._result is not None else "") or ""
+        if self._view == "aligned":
+            text = "\n".join(self._alignedScoreLines())
+        else:
+            text = (self._result.figureText if self._result is not None else "") or ""
         if not text:
             return
         if theme == "retro":
