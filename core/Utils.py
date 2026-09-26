@@ -103,6 +103,9 @@ retroAlwaysLayouts = {
     'btnUpload': (124, 8, 32, 32),
     'btnIntervalInfo': (164, 76, 31, 20),
     'btnQueryOptionsInfo': (170, 401, 31, 20),
+    # Plot Types is shorter than Query Options. Same gap past the label as
+    # Data Interval (Silkscreen 12pt): text ends at 130, button at 132.
+    'btnPlotTypesInfo': (132, 401, 31, 20),
 }
 
 # Absolute Noto geometries. Retro overlays retroAlwaysLayouts on top.
@@ -118,6 +121,8 @@ controlLayouts = {
     'btnDataIdInfo': (376, 5, 31, 20),
     'btnIntervalInfo': (100, 76, 31, 20),
     'btnQueryOptionsInfo': (110, 401, 31, 20),
+    # Noto 10pt "Plot Types" ends at 82. Same 1px gap as Data Interval.
+    'btnPlotTypesInfo': (83, 401, 31, 20),
     'chkbOverlay': (150, 424, 131, 22),         # .ui
     'chkbQAQC': (150, 448, 131, 22),
 }
@@ -773,6 +778,96 @@ def sizeVerticalHeader(table):
     vHeader.setFixedWidth(w)
 
 
+def columnHeaderKey(table, col):
+    """First header line, used to remember a column width by name."""
+    item = table.horizontalHeaderItem(col) if table is not None else None
+    text = item.text() if item is not None else ""
+    line = str(text).split("\n", 1)[0].strip()
+    return line or str(col)
+
+
+def applySavedColumnWidths(table, configKey):
+    """
+    Restore widths the user set. Returns True when at least one column matched.
+    """
+    if table is None or not configKey:
+        return False
+    saved = loadConfig().get(configKey)
+    if not isinstance(saved, dict) or not saved:
+        return False
+    matched = False
+    for col in range(table.columnCount()):
+        width = saved.get(columnHeaderKey(table, col))
+        try:
+            width = int(width)
+        except (TypeError, ValueError):
+            continue
+        if width > 0:
+            table.setColumnWidth(col, width)
+            matched = True
+    return matched
+
+
+def installColumnWidthMemory(table, configKey):
+    """Remember every column width after the user drags a header edge."""
+    if table is None or getattr(table, "_ddWidthHooked", False):
+        return
+    table._ddWidthKey = configKey
+    table._ddApplyingWidths = False
+    timer = QTimer(table)
+    timer.setSingleShot(True)
+
+    def writeWidths():
+        if getattr(table, "_ddApplyingWidths", False):
+            return
+        key = getattr(table, "_ddWidthKey", None)
+        if not key:
+            return
+        widths = {}
+        for col in range(table.columnCount()):
+            widths[columnHeaderKey(table, col)] = int(table.columnWidth(col))
+        try:
+            config = loadConfig()
+            if not isinstance(config, dict):
+                config = {}
+            config[key] = widths
+            with open(getConfigPath(), "w", encoding="utf-8") as handle:
+                json.dump(config, handle, indent=2)
+        except Exception as e:
+            Logic.logException(f"save column widths {key} failed", e)
+
+    timer.timeout.connect(writeWidths)
+    table._ddWidthTimer = timer
+
+    def onResized(*_args):
+        if getattr(table, "_ddApplyingWidths", False):
+            return
+        timer.start(400)
+
+    table.horizontalHeader().sectionResized.connect(onResized)
+    table._ddWidthHooked = True
+
+
+def sizeColumnsRemembering(table, configKey, scanAll=False, after=None):
+    """
+    Auto-size until the user changes a width. After that, reopen with the
+    saved width of every column. `after` runs before the guard drops so a
+    filter-icon pad is not stored as a user resize.
+    """
+    if table is None:
+        return
+    installColumnWidthMemory(table, configKey)
+    table._ddWidthKey = configKey
+    table._ddApplyingWidths = True
+    try:
+        if not applySavedColumnWidths(table, configKey):
+            autoSizeTableColumns(table, scanAll=scanAll)
+        if after is not None:
+            after()
+    finally:
+        table._ddApplyingWidths = False
+
+
 def autoSizeTableColumns(table, sampleRows=100, scanAll=False):
     """
     Size columns from final header labels + a sample of displayed cell text.
@@ -962,12 +1057,16 @@ def applyModeControlLayouts(app=None, root=None):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"applyModeControlLayouts {name}: {e}")
 
-    if root is not None and type(root).__name__ in ("uiQuery", "winInternalQuery"):
+    queryWindows = ("uiQuery", "winInternalQuery", "uiPlotter")
+    if root is not None and type(root).__name__ in queryWindows:
         applyRetroQueryWindow(root)
     elif app is not None:
         try:
             for w in app.topLevelWidgets():
-                if type(w).__name__ in ("uiQuery", "winInternalQuery") or w.objectName() == "winInternalQuery":
+                if (
+                    type(w).__name__ in queryWindows
+                    or w.objectName() in ("winInternalQuery", "winPlotter")
+                ):
                     applyRetroQueryWindow(w)
         except Exception:
             pass

@@ -403,10 +403,10 @@
      <string>Plot Types</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="btnQueryOptionsInfo">
+   <widget class="QPushButton" name="btnPlotTypesInfo">
     <property name="geometry">
      <rect>
-      <x>110</x>
+      <x>83</x>
       <y>403</y>
       <width>31</width>
       <height>20</height>
@@ -772,7 +772,7 @@
    <zorder>label_8</zorder>
    <zorder>label_6</zorder>
    <zorder>label_9</zorder>
-   <zorder>btnQueryOptionsInfo</zorder>
+   <zorder>btnPlotTypesInfo</zorder>
    <zorder>btnUpMax</zorder>
    <zorder>btnUp15</zorder>
    <zorder>btnUp5</zorder>

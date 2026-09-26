@@ -425,14 +425,19 @@ class uiDataDictionary(QMainWindow):
         super().showEvent(event)
 
     def sizeDictionaryColumns(self):
-        """Auto-size every column from header + cell text after the window is shown."""
+        """Auto-size until the user drags a column. Then keep every column width."""
         if self.mainTable is None:
             return
-        Utils.autoSizeTableColumns(self.mainTable, scanAll=True)
-        self.sizeComboColumns()
-        filt = getattr(self, "_headerFilters", None)
-        if filt is not None:
-            filt.padColumns()
+
+        def after():
+            self.sizeComboColumns()
+            filt = getattr(self, "_headerFilters", None)
+            if filt is not None:
+                filt.padColumns()
+
+        Utils.sizeColumnsRemembering(
+            self.mainTable, "dataDictionaryColumnWidths", scanAll=True, after=after,
+        )
 
     def _ensureHeaderFilters(self):
         if self.mainTable is None or self._headerFilters is not None:

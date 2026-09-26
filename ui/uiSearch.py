@@ -62,8 +62,23 @@ class uiSearch(QMainWindow):
 
     def showEvent(self, event):
         self._ensureHeaderFilters()
+        self.sizeSearchColumns()
         Utils.centerWindowToParent(self)
         super().showEvent(event)
+
+    def sizeSearchColumns(self):
+        """Auto-size until the user drags a column. Then keep every column width."""
+        if self.searchTable is None:
+            return
+
+        def after():
+            filt = getattr(self, "_headerFilters", None)
+            if filt is not None:
+                filt.padColumns()
+
+        Utils.sizeColumnsRemembering(
+            self.searchTable, "searchColumnWidths", scanAll=True, after=after,
+        )
 
     def _ensureHeaderFilters(self):
         if self.searchTable is None or self._headerFilters is not None:
@@ -85,6 +100,7 @@ class uiSearch(QMainWindow):
         Logic.buildDataDictionary(table, columns=columns, whereClause=whereClause)
         if self._headerFilters is not None:
             self._headerFilters.rebuild()
+        self.sizeSearchColumns()
         self.applyFilter()
 
     def startDebounce(self, text):

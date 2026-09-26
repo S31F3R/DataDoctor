@@ -494,7 +494,7 @@ class uiPlotter(QMainWindow):
         self.btnClearQuery = self.findChild(QPushButton, "btnClearQuery")
         self.btnDataIdInfo = self.findChild(QPushButton, "btnDataIdInfo")
         self.btnIntervalInfo = self.findChild(QPushButton, "btnIntervalInfo")
-        self.btnQueryOptionsInfo = self.findChild(QPushButton, "btnQueryOptionsInfo")
+        self.btnPlotTypesInfo = self.findChild(QPushButton, "btnPlotTypesInfo")
         self.btnSearch = self.findChild(QPushButton, "btnSearch")
         self.rbCustomDateTime = self.findChild(QRadioButton, "rbCustomDateTime")
         self.rbPrevDayToCurrent = self.findChild(QRadioButton, "rbPrevDayToCurrent")
@@ -529,7 +529,7 @@ class uiPlotter(QMainWindow):
         buttonIcons = [
             (self.btnDataIdInfo, "Info", 24),
             (self.btnIntervalInfo, "Info", 24),
-            (self.btnQueryOptionsInfo, "Info", 24),
+            (self.btnPlotTypesInfo, "Info", 24),
             (self.btnUpMax, "Up-MAX", 24),
             (self.btnUp15, "Up-15", 24),
             (self.btnUp5, "Up-5", 24),
@@ -556,7 +556,7 @@ class uiPlotter(QMainWindow):
         self.btnClearQuery.clicked.connect(self.btnClearQueryPressed)
         self.btnDataIdInfo.clicked.connect(self.btnDataIdInfoPressed)
         self.btnIntervalInfo.clicked.connect(self.btnIntervalInfoPressed)
-        self.btnQueryOptionsInfo.clicked.connect(self.btnPlotTypesInfoPressed)
+        self.btnPlotTypesInfo.clicked.connect(self.btnPlotTypesInfoPressed)
         self.dateRadios.buttonClicked.connect(self.onDateRadioClicked)
         self.cbDatabase.currentTextChanged.connect(self.onDatabaseChanged)
         if self.btnSearch is not None:
@@ -1305,7 +1305,7 @@ class uiPlotter(QMainWindow):
                 "The correlation uses the time window currently on screen.",
             )
         finally:
-            Utils.resetStyledButtonHover(self.sender() or self.btnQueryOptionsInfo)
+            Utils.resetStyledButtonHover(self.sender() or self.btnPlotTypesInfo)
 
     def showSearch(self):
         if self.uiSearch is None:
