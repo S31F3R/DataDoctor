@@ -11,12 +11,22 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] Large 1-minute query keeps moving past 90%
+[ ] Passive update check notices a new beta
    Steps:
-     a. Query 1-minute data across a long range (a year is enough).
-     b. At Building table, the label moves through Preparing timestamps
-        and then Building table (row counts). It does not sit on 90%
-        with a frozen label.
+     a. Options: Beta updates is on. Leave Data Doctor open.
+     b. Publish a newer rc or beta.
+     c. Within about 15 minutes the update window appears. It does not wait
+        hours. If you already clicked Later on an older build, the newer one
+        still appears.
+
+[ ] Linux bunker merge answers
+   Steps:
+     a. AppImage: when the packaged dictionary differs, two questions appear
+        after the window opens (Common Names, then Data Types). No defaults
+        to Yes.
+     b. Linux update apply (no console): the log says it is answering N to
+        both. Existing common names and data types stay. New rows still
+        get the packaged names and types.
 
 [ ] Mac package script
    Steps:
@@ -29,6 +39,7 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+Large 1-minute query keeps moving past 90%
 Dictionary and search column widths stick
 Plotter info button sits next to Plot Types
 Time Lag stats are per slider and colored
