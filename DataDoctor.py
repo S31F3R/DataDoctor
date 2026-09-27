@@ -2380,8 +2380,12 @@ if __name__ == '__main__':
         Utils.applyColorTheme()
 
         # Load data dictionary and quick looks (best-effort; do not block startup)
-        # AppImage: copy/merge packaged bunker into the writable config copy first.
+        # AppImage: show the window first so the Common Name / Data Type
+        # questions are visible, then merge the packaged bunker.
         try:
+            if Logic.isAppImageInstall():
+                winMain.show()
+                app.processEvents()
             Logic.ensureLiveBunker(parent=winMain)
         except Exception as e:
             Logic.logException("Startup: ensureLiveBunker failed", e)

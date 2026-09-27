@@ -906,6 +906,15 @@ def runBunkerMerge(py: str, projectFiles: Path, packagedBunker: Path) -> int:
         "--packaged", str(packagedBunker),
         "--user", str(live),
     ]
+    # Linux apply has no console, so the two y/n prompts cannot be answered.
+    # Leave existing common names and data types alone (same as answering N).
+    # New rows still take the packaged names and types.
+    if sys.platform.startswith("linux"):
+        cmd.extend(["--no-update-common-names", "--no-update-datatypes"])
+        print(
+            "Linux update has no console for the dictionary questions — "
+            "answering N to Common Names and Data Types on existing rows."
+        )
     print("+", " ".join(cmd))
     return subprocess.call(cmd)
 

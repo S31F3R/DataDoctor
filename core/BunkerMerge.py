@@ -46,10 +46,11 @@ def col(lowerMap, *candidates):
 
 
 def askYesNo(prompt: str, default: bool = False) -> bool:
-    """Terminal y/n. Empty / EOF / no TTY uses default (n unless default True)."""
+    """Terminal y/n. Empty / EOF / no TTY uses default (N unless default is True)."""
     suffix = " [Y/n] " if default else " [y/N] "
     if not sys.stdin.isatty():
-        print(f"{prompt} (no console — default {'Y' if default else 'N'})")
+        answer = "Y" if default else "N"
+        print(f"{prompt} (no console — answering {answer})")
         return default
     try:
         raw = input(prompt + suffix).strip().lower()
