@@ -27,19 +27,23 @@ DB_SITE_CODE map:
 
 Usage (from project root):
   python scripts/updateBunkerFromCsv.py "path/to/export.csv"
-  python scripts/updateBunkerFromCsv.py "*.csv" --db "core/bunker.db" --dry-run
+  python scripts/updateBunkerFromCsv.py "C:\\Temp\\Exports"
+  python scripts/updateBunkerFromCsv.py "C:\\Temp\\Exports\\*.csv" --db "core/bunker.db" --dry-run
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import os
 import sqlite3
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+CSV_THREADS = 6
 
 DB_SITE_CODE_MAP = {
     "YAO": "USBR-YAOHDB",
@@ -183,6 +187,65 @@ def readCsvRows(path: Path) -> list[dict]:
         return rows
 
 
+def expandCsvPaths(items) -> list[Path]:
+    """
+    Accept a csv file, a folder of csv files, or a *.csv pattern.
+
+    The shell does not expand a quoted glob, so "*.csv" arrives here as text.
+    """
+    found = []
+    seen = set()
+
+    def add(path: Path) -> None:
+        try:
+            key = os.path.normcase(str(path.resolve()))
+        except OSError:
+            key = os.path.normcase(str(path))
+        if key in seen:
+            return
+        seen.add(key)
+        found.append(path)
+
+    for raw in items:
+        text = str(raw)
+        path = Path(text)
+        if any(ch in text for ch in "*?["):
+            parent = path.parent
+            name = path.name
+            if str(parent) in ("", "."):
+                parent = Path(".")
+            matches = sorted(
+                p for p in parent.glob(name)
+                if p.is_file() and p.suffix.lower() == ".csv"
+            )
+            if not matches:
+                die(f"CSV not found: {text}")
+            for match in matches:
+                add(match)
+            continue
+        if path.is_dir():
+            matches = sorted(p for p in path.glob("*.csv") if p.is_file())
+            if not matches:
+                die(f"No CSV files in {path}")
+            for match in matches:
+                add(match)
+            continue
+        if not path.is_file():
+            die(f"CSV not found: {path}")
+        add(path)
+    return found
+
+
+def loadCsvRows(csvPaths: list[Path]) -> list[tuple[Path, list]]:
+    """Read CSV files on several threads. sqlite writes stay on one connection."""
+    if len(csvPaths) <= 1:
+        return [(csvPaths[0], readCsvRows(csvPaths[0]))] if csvPaths else []
+    workers = min(CSV_THREADS, len(csvPaths))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        loaded = list(pool.map(readCsvRows, csvPaths))
+    return list(zip(csvPaths, loaded))
+
+
 def mergeCsv(
     dbPath: Path,
     csvPaths: list[Path],
@@ -192,11 +255,9 @@ def mergeCsv(
 ) -> int:
     if not dbPath.is_file():
         die(f"bunker.db not found: {dbPath}")
+    csvPaths = expandCsvPaths(csvPaths)
     allRows = []
-    for p in csvPaths:
-        if not p.is_file():
-            die(f"CSV not found: {p}")
-        chunk = readCsvRows(p)
+    for p, chunk in loadCsvRows(csvPaths):
         print(f"{p.name}: {len(chunk)} USBR row(s)")
         allRows.extend(chunk)
     if not allRows:
@@ -290,7 +351,11 @@ def mergeCsv(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update bunker.db from USBR CSV exports")
-    parser.add_argument("csv", nargs="+", type=Path, help="CSV file(s)")
+    parser.add_argument(
+        "csv",
+        nargs="+",
+        help="CSV file, folder, or a *.csv pattern (quote the pattern)",
+    )
     parser.add_argument(
         "--db",
         type=Path,
