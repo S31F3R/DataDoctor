@@ -998,22 +998,25 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
         def _go():
             pending = pendingAppImagePath()
             if pending is not None:
-                from PyQt6.QtWidgets import QMessageBox
-                box = QMessageBox(parent)
-                box.setWindowTitle("Update ready")
-                box.setText(
-                    "Hit Restart to update, or close this window to restart later."
-                )
-                restartBtn = box.addButton(
-                    "Restart", QMessageBox.ButtonRole.AcceptRole
-                )
-                laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
-                box.setDefaultButton(restartBtn)
-                box.exec()
-                if box.clickedButton() is restartBtn:
-                    spawnAppImageReplaceAndExit(pending, parent)
-                elif box.clickedButton() is laterBtn:
-                    noteDeferredUpdate()
+                def _showReady():
+                    from PyQt6.QtWidgets import QMessageBox
+                    box = QMessageBox(parent)
+                    box.setWindowTitle("Update ready")
+                    box.setText(
+                        "Hit Restart to update, or close this window to restart later."
+                    )
+                    restartBtn = box.addButton(
+                        "Restart", QMessageBox.ButtonRole.AcceptRole
+                    )
+                    laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+                    box.setDefaultButton(restartBtn)
+                    box.exec()
+                    if box.clickedButton() is restartBtn:
+                        spawnAppImageReplaceAndExit(pending, parent)
+                    elif box.clickedButton() is laterBtn:
+                        noteDeferredUpdate()
+
+                _holdUpdatePrompt(_showReady)
                 return
             if windowsNeedsLauncherRefresh():
                 runWindowsLauncherRefreshUi(parent)
@@ -1030,6 +1033,34 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
             app._dataDoctorUpdateTimer = t
     except Exception as e:
         Logic.logMessage("DEBUG", f"scheduleStartupUpdateCheck: {e}")
+
+
+# QMessageBox.exec() still delivers the 15-minute timer. A second check
+# would stack another Update available window on the one already open.
+_updatePromptOpen = False
+
+
+def updatePromptOpen() -> bool:
+    return _updatePromptOpen
+
+
+def shouldShowUpdatePrompt(info) -> bool:
+    """False when an update window is already open, or Later deferred this release."""
+    if _updatePromptOpen:
+        return False
+    return not updatePromptDeferred(info)
+
+
+def _holdUpdatePrompt(show):
+    """Run show() and keep other checks from opening another update window."""
+    global _updatePromptOpen
+    if _updatePromptOpen:
+        return None
+    _updatePromptOpen = True
+    try:
+        return show()
+    finally:
+        _updatePromptOpen = False
 
 
 def noteDeferredUpdate(version=None) -> None:
@@ -1055,6 +1086,8 @@ def updatePromptDeferred(info) -> bool:
 
 
 def _backgroundUpdateTick(parent=None) -> None:
+    if updatePromptOpen():
+        return
     runUpdateCheckUi(parent, silentIfNone=True, silentIfUnreachable=True)
 
 
@@ -1090,41 +1123,47 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
             self.signals.done.emit(info)
 
     def onDone(info):
-        if isinstance(info, dict) and info.get("_unreachable"):
-            _showGithubUnreachable(parent, info.get("message"))
-            return
-        if info is None or not info.get("asset_url"):
-            QMessageBox.information(
-                parent,
-                "Launcher update",
+        def _show():
+            if isinstance(info, dict) and info.get("_unreachable"):
+                _showGithubUnreachable(parent, info.get("message"))
+                return
+            if info is None or not info.get("asset_url"):
+                QMessageBox.information(
+                    parent,
+                    "Launcher update",
+                    "This Windows install still uses a system Python (.venv).\n\n"
+                    "3.1+ needs the Windows package (DataDoctor-Windows-*.zip), which\n"
+                    "replaces Data Doctor.exe and installs Python 3.14 under\n"
+                    "pythonFiles\\python-embed\\.\n\n"
+                    "Download that zip from GitHub Releases into updates\\, then\n"
+                    "restart Data Doctor. The launcher runs applyUpdate.cmd and exits\n"
+                    "so the .exe can be replaced; applyUpdate starts the app afterward.",
+                )
+                return
+            ver = info.get("version") or "?"
+            box = QMessageBox(parent)
+            box.setWindowTitle("Launcher update")
+            box.setText(
                 "This Windows install still uses a system Python (.venv).\n\n"
-                "3.1+ needs the Windows package (DataDoctor-Windows-*.zip), which\n"
-                "replaces Data Doctor.exe and installs Python 3.14 under\n"
-                "pythonFiles\\python-embed\\.\n\n"
-                "Download that zip from GitHub Releases into updates\\, then\n"
-                "restart Data Doctor. The launcher runs applyUpdate.cmd and exits\n"
-                "so the .exe can be replaced; applyUpdate starts the app afterward.",
+                f"Available:  {ver}\n\n"
+                "Download the Windows package, then hit Restart to apply."
             )
-            return
-        ver = info.get("version") or "?"
-        box = QMessageBox(parent)
-        box.setWindowTitle("Launcher update")
-        box.setText(
-            "This Windows install still uses a system Python (.venv).\n\n"
-            f"Available:  {ver}\n\n"
-            "Download the Windows package, then hit Restart to apply."
-        )
-        downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
-        laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
-        box.setDefaultButton(downloadBtn)
-        box.exec()
-        clicked = box.clickedButton()
-        box.hide()
-        box.close()
-        if clicked is downloadBtn:
-            _downloadAndOfferApply(parent, info)
-        elif clicked is laterBtn:
-            noteDeferredUpdate(ver)
+            downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
+            laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(downloadBtn)
+            box.exec()
+            clicked = box.clickedButton()
+            box.hide()
+            box.close()
+            if clicked is downloadBtn:
+                return info
+            if clicked is laterBtn:
+                noteDeferredUpdate(ver)
+            return None
+
+        picked = _holdUpdatePrompt(_show)
+        if picked:
+            _downloadAndOfferApply(parent, picked)
 
     signals = _Signals()
     app = QApplication.instance()
@@ -1171,44 +1210,50 @@ def runRevertToPublishedUi(parent=None) -> None:
             self.signals.done.emit(info)
 
     def onDone(info):
-        local = Version.displayVersion()
-        if isinstance(info, dict) and info.get("_unreachable"):
-            _showGithubUnreachable(parent, info.get("message"))
-            return
-        if info is None:
-            QMessageBox.information(
-                parent,
-                "Updates",
-                "No published (non-beta / non-RC) GitHub release was found.\n\n"
-                "Stay on this build, or publish a stable tag to revert to.",
+        def _show():
+            local = Version.displayVersion()
+            if isinstance(info, dict) and info.get("_unreachable"):
+                _showGithubUnreachable(parent, info.get("message"))
+                return
+            if info is None:
+                QMessageBox.information(
+                    parent,
+                    "Updates",
+                    "No published (non-beta / non-RC) GitHub release was found.\n\n"
+                    "Stay on this build, or publish a stable tag to revert to.",
+                )
+                return
+            ver = info.get("version") or "?"
+            if Version.compareVersions(ver, Version.VERSION) == 0:
+                Logic.logMessage(
+                    "INFO",
+                    f"Revert-to-published: already on published {ver}",
+                )
+                return
+            box = QMessageBox(parent)
+            box.setWindowTitle("Revert to published")
+            box.setText(
+                "Beta updates were turned off.\n\n"
+                f"Installed:  {local}\n"
+                f"Published:  {ver}\n\n"
+                "Download the published build and restart to leave the beta/RC channel?"
             )
-            return
-        ver = info.get("version") or "?"
-        if Version.compareVersions(ver, Version.VERSION) == 0:
-            Logic.logMessage(
-                "INFO",
-                f"Revert-to-published: already on published {ver}",
-            )
-            return
-        box = QMessageBox(parent)
-        box.setWindowTitle("Revert to published")
-        box.setText(
-            "Beta updates were turned off.\n\n"
-            f"Installed:  {local}\n"
-            f"Published:  {ver}\n\n"
-            "Download the published build and restart to leave the beta/RC channel?"
-        )
-        downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
-        laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
-        box.setDefaultButton(downloadBtn)
-        box.exec()
-        clicked = box.clickedButton()
-        box.hide()
-        box.close()
-        if clicked is downloadBtn:
-            _downloadAndOfferApply(parent, info)
-        elif clicked is laterBtn:
-            noteDeferredUpdate(ver)
+            downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
+            laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+            box.setDefaultButton(downloadBtn)
+            box.exec()
+            clicked = box.clickedButton()
+            box.hide()
+            box.close()
+            if clicked is downloadBtn:
+                return info
+            if clicked is laterBtn:
+                noteDeferredUpdate(ver)
+            return None
+
+        picked = _holdUpdatePrompt(_show)
+        if picked:
+            _downloadAndOfferApply(parent, picked)
 
     signals = _Signals()
     app = QApplication.instance()
@@ -1224,7 +1269,10 @@ def runUpdateCheckUi(parent=None, silentIfNone: bool = True, silentIfUnreachable
     Background-fetch latest release; if newer, prompt the user.
     silentIfNone: no popup when already current / no releases.
     silentIfUnreachable: no popup when GitHub cannot be reached (periodic checks).
+    An update window that is already open stays the only one.
     """
+    if updatePromptOpen():
+        return
     from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
     from PyQt6.QtWidgets import QApplication, QMessageBox
 
@@ -1248,20 +1296,24 @@ def runUpdateCheckUi(parent=None, silentIfNone: bool = True, silentIfUnreachable
             self.signals.done.emit(info)
 
     def onDone(info):
-        if updatePromptDeferred(info):
+        if not shouldShowUpdatePrompt(info):
             return
         if isinstance(info, dict) and info.get("_unreachable"):
             if not silentIfUnreachable:
-                _showGithubUnreachable(parent, info.get("message"))
+                _holdUpdatePrompt(
+                    lambda: _showGithubUnreachable(parent, info.get("message"))
+                )
             return
         if info is None:
             if not silentIfNone and parent is not None:
-                QMessageBox.information(
-                    parent,
-                    "Updates",
-                    f"You're on the latest version ({Version.displayVersion()}).\n\n"
-                    "If nothing is published on GitHub Releases yet, that is expected.",
-                )
+                def _showLatest():
+                    QMessageBox.information(
+                        parent,
+                        "Updates",
+                        f"You're on the latest version ({Version.displayVersion()}).\n\n"
+                        "If nothing is published on GitHub Releases yet, that is expected.",
+                    )
+                _holdUpdatePrompt(_showLatest)
             return
         _promptUpdate(parent, info)
 
@@ -1288,6 +1340,9 @@ def _showGithubUnreachable(parent, message=None) -> None:
 def _promptUpdate(parent, info: dict) -> None:
     from PyQt6.QtWidgets import QApplication, QMessageBox
 
+    if updatePromptOpen():
+        return
+
     ver = info.get("version") or "?"
     local = Version.displayVersion()
     pre = " (pre-release / beta)" if info.get("prerelease") else ""
@@ -1309,45 +1364,52 @@ def _promptUpdate(parent, info: dict) -> None:
             "No downloadable package for this install type was attached to the "
             "release yet. Open the release page to download manually."
         )
-        QMessageBox.information(parent, "Update available", "\n".join(lines))
-        return
-
-    needsWindowsZip = (info.get("assetKind") == "windows") or windowsNeedsLauncherRefresh()
-    if kind == "appimage":
-        lines.append("")
-        lines.append("Download, then hit Restart to apply.")
-    elif kind == "launcher":
-        lines.append("")
-        if needsWindowsZip:
-            lines.append(
-                "This version also updates the Windows launcher. "
-                "Download, then hit Restart to apply."
-            )
-        else:
-            lines.append("Download, then hit Restart to apply.")
     else:
-        lines.append("")
-        lines.append("The package will download into updates/ under the project root.")
+        needsWindowsZip = (info.get("assetKind") == "windows") or windowsNeedsLauncherRefresh()
+        if kind == "appimage":
+            lines.append("")
+            lines.append("Download, then hit Restart to apply.")
+        elif kind == "launcher":
+            lines.append("")
+            if needsWindowsZip:
+                lines.append(
+                    "This version also updates the Windows launcher. "
+                    "Download, then hit Restart to apply."
+                )
+            else:
+                lines.append("Download, then hit Restart to apply.")
+        else:
+            lines.append("")
+            lines.append("The package will download into updates/ under the project root.")
 
-    box = QMessageBox(parent)
-    box.setWindowTitle("Update available")
-    box.setText("\n".join(lines))
-    downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
-    laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
-    box.setDefaultButton(downloadBtn)
-    box.exec()
-    clicked = box.clickedButton()
-    box.hide()
-    box.close()
-    app = QApplication.instance()
-    if app is not None:
-        app.processEvents()
-    if clicked is not downloadBtn:
+    def _show():
+        if not hasAsset:
+            QMessageBox.information(parent, "Update available", "\n".join(lines))
+            return None
+
+        box = QMessageBox(parent)
+        box.setWindowTitle("Update available")
+        box.setText("\n".join(lines))
+        downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
+        laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(downloadBtn)
+        box.exec()
+        clicked = box.clickedButton()
+        box.hide()
+        box.close()
+        app = QApplication.instance()
+        if app is not None:
+            app.processEvents()
         if clicked is laterBtn:
             noteDeferredUpdate(ver)
-        return
+            return None
+        if clicked is downloadBtn:
+            return info
+        return None
 
-    _downloadAndOfferApply(parent, info)
+    picked = _holdUpdatePrompt(_show)
+    if picked:
+        _downloadAndOfferApply(parent, picked)
 
 
 def _downloadAndOfferApply(parent, info: dict) -> None:
@@ -1357,6 +1419,17 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
         QApplication, QMessageBox, QDialog, QVBoxLayout, QLabel,
         QProgressBar, QPushButton,
     )
+
+    global _updatePromptOpen
+    _updatePromptOpen = True
+    released = {"done": False}
+
+    def _releasePrompt():
+        global _updatePromptOpen
+        if released["done"]:
+            return
+        released["done"] = True
+        _updatePromptOpen = False
 
     progress = QDialog(parent)
     progress.setWindowTitle("Update")
@@ -1388,7 +1461,6 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
     holder = parent or app
     if holder is not None:
         holder._updateDownloadProgress = progress  # type: ignore[attr-defined]
-    progress.show()
 
     class _Signals(QObject):
         done = pyqtSignal(object)  # Path or None
@@ -1424,6 +1496,12 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
             self.signals.done.emit(path)
 
     def onDone(path):
+        try:
+            _finishDownload(path)
+        finally:
+            _releasePrompt()
+
+    def _finishDownload(path):
         progress.hide()
         progress.close()
         if path is False:
@@ -1496,4 +1574,11 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
     if holder is not None:
         holder._updateDownloadSignals = signals  # type: ignore[attr-defined]
     signals.done.connect(onDone)
-    QThreadPool.globalInstance().start(_Worker(signals, info))
+    try:
+        progress.show()
+        QThreadPool.globalInstance().start(_Worker(signals, info))
+    except Exception:
+        progress.hide()
+        progress.close()
+        _releasePrompt()
+        raise

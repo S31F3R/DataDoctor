@@ -11,7 +11,8 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from core import Config
-from core.Update import noteDeferredUpdate, updatePromptDeferred
+import core.Update as Update
+from core.Update import noteDeferredUpdate, shouldShowUpdatePrompt, updatePromptDeferred
 from core.Version import compareVersions
 
 
@@ -37,6 +38,46 @@ def main():
         errors += fail("newer beta", "a newer rc should still prompt")
     if not updatePromptDeferred(None):
         errors += fail("none", "no release should stay quiet after Later")
+
+    newer = {"version": "3.4.0-rc.1.1", "prerelease": True}
+    if not shouldShowUpdatePrompt(newer):
+        errors += fail("show newer", "newer than Later should still show")
+    Update._updatePromptOpen = True
+    try:
+        if shouldShowUpdatePrompt(newer):
+            errors += fail("open window", "an open update window should block another prompt")
+        calls = {"n": 0}
+
+        def _count(*_a, **_k):
+            calls["n"] += 1
+
+        original = Update.runUpdateCheckUi
+        Update.runUpdateCheckUi = _count
+        try:
+            Update._backgroundUpdateTick()
+            if calls["n"]:
+                errors += fail("tick while open", "background check should wait")
+        finally:
+            Update.runUpdateCheckUi = original
+    finally:
+        Update._updatePromptOpen = False
+    if Update.updatePromptOpen():
+        errors += fail("flag clear", "window flag should be clear after the prompt closes")
+    if not shouldShowUpdatePrompt(newer):
+        errors += fail("after close", "closing the window should allow a newer release")
+
+    nested = {"ran": 0, "inner": 0}
+
+    def _outer():
+        nested["ran"] += 1
+        if Update._holdUpdatePrompt(lambda: nested.__setitem__("inner", 1)) is not None:
+            nested["inner"] = -1
+
+    Update._holdUpdatePrompt(_outer)
+    if nested["ran"] != 1 or nested["inner"]:
+        errors += fail("second window", "a prompt already open should not open another")
+    if Update.updatePromptOpen():
+        errors += fail("flag leak", "the window flag should clear when the prompt closes")
 
     if errors:
         print(f"{errors} failed")
