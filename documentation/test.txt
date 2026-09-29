@@ -31,57 +31,45 @@ Current Tests
      c. USBR-PNHYD, USBR-GPHYD, USGS, and Aquarius stay on the API.
         A series the public API returns with no points is not read from SQL.
 
-[x] Linked HDB queries run together
+[ ] About stars scroll behind the title
    Steps:
-     a. Internal query with series from at least two of LCHDB, UCHDB2, and
-        YAOHDB in the same run.
-     b. The log says each of those databases is on its own thread and opens
-        its own session. Values come back for each series.
-     c. A query with only one of those databases still returns values.
-     d. KBO, CU, LBO, and ECO still connect directly.
+     a. Open About. The stars scroll sideways. The green DATA DOCTOR title
+        stays put. The stars look like the ones on the About picture.
+     b. Leave it open for about 15 seconds. The stars come back around
+        in a loop.
+     c. Resize the window. The stars keep scrolling and the title stays
+        readable.
+     d. Close About and open it again. The stars scroll again.
 
-[ ] About stars drift behind the title
+[ ] Windows update keeps Python and finishes the launcher
    Steps:
-     a. Open About. The stars drift. The green DATA DOCTOR title stays put.
-     b. Resize the window. The stars keep moving and the title stays readable.
-     c. Close About and open it again. The stars move again.
-     RESPONSE: The animation changes the stars look. How about this, instead of it looking like we're moving forward, lets have the stars side scroll. Create enough for about a 15 second loop or so. That way it looks a little more natural and arcade feel. Make sure that animation uses the same type of stars as the background image had
-
-[ ] Windows update uses the Windows package
-   Steps:
-     a. On a Windows install that already has python-embed, check for updates.
-     b. The downloaded file name contains Windows (DataDoctor-Windows-*.zip).
-     c. After Restart, Data Doctor.exe and Data Doctor.ico match that package.
-     RESPONSE: I used the same test I was using before. I copied the new windows zip, then ran the applyUpdate.cmd. 
-               The newer scripts recgonized I was running the old .cmd so it created a applyUpdate.cmd.new. It then redownloaded all the python embed stuff, 
-               which I don't know why cause this was just supposed to be an update. After it was done updating, it closed that CMD window then opened up another 
-               that says find "37344" and now it's just sitting there. I think we need to add a piece into the program on launch. If it's running the windows version
-               and it sees a cmd.new. We need to prompt the user for another restart to update the launcher. When they hit Restart (also have the later button) remove 
-               the old .cmd, rename the .cmd.new to .cmd, then run it. At this point, most of the patch should have finished. Find some way to detect what was done
-               and what was left. There will be some left because the new .cmd was never used. Just tried to close that window. It does a ping, opens and closes 1-2 more 
-               CMD windows, then opens one back to find "37344".
-
-[x] Windows apply does not replace the running Python
-   Steps:
-     a. Close Data Doctor. Put a DataDoctor-Windows zip in updates and run
-        applyUpdate.cmd.
-     b. It finishes without "Access is denied" on python.exe, and without
-        the '" (' is not recognized message.
-     c. Data Doctor starts when the updater exits. The exe and icon are new.
-     d. pythonFiles\scripts\applyUpdate.py is the script. There is no
-        applyUpdate.py in the install root, and no python-standalone folder.
+     a. On a Windows install that already has python-embed, close any
+        command window left from the last update, then open Data Doctor.
+        If it asks to finish the launcher update, click Later once so you
+        can run the updater yourself.
+     b. Copy a DataDoctor-Windows zip into updates and run applyUpdate.cmd
+        from this build (pythonFiles\scripts\applyUpdate.py).
+     c. It does not copy python-embed again when that Python is already
+        installed. Data Doctor.exe and Data Doctor.ico still update.
+        No command window stays open searching for a process.
+     d. Data Doctor opens. If applyUpdate.cmd.new is present, a window
+        lists what is left and offers Restart and Later.
+     e. Later leaves those files and does not ask again until the next
+        launch. Restart closes Data Doctor, replaces applyUpdate.cmd with
+        the new command, finishes whatever is still staged, and opens
+        Data Doctor again.
 
 [ ] Query and plotter tabs show icons
    Steps:
      a. A public Data Query tab shows the public icon. An internal query
         switches that tab to the internal icon.
      b. SQL Query Builder shows the SQL icon.
-     c. Plotter Line shows the plotter icon. Scatter shows the scatter icon.
-        Time Lag shows the time lag icon. Changing the plot type changes
-        the icon. Graph shows the plotter icon.
+     c. Plotter Line, Scatter, and Time Lag use the same size chart frame.
+        Scatter is dots on its own background color. Time Lag is its own
+        marks and background color. Changing the plot type changes the
+        icon. Graph shows the plotter icon.
      d. Detach a plotter. The floating window keeps the normal Data Doctor
         icon and its Data Doctor title. The special icon is only on the tab.
-        RESPONSE: A, B, and D work. C works for line but the others the icon seems to change size, or at least the graph background does in the icon. It's also hard to tell the icon is changing. If it wasn't for the size, I would have said it was the same icon. For the different icons, lets change the lines on the icon, meaning the scatter dots and whatever lines you created to represent the time lag. Could even change the actual colors of the graph background of the icon, just keep it hand drawn style
 
 [ ] Dictionary merge keeps QAQC values you set
    Steps:
@@ -138,4 +126,6 @@ Public overlay does not re-pair when Aquarius is skipped
 Quick Look date dialog buttons sit under the list
 Regression tab from a right-click
 Quick Look date dialog stays on the Query window
+Linked HDB queries run together
+Windows apply does not replace the running Python
 
