@@ -11,25 +11,16 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[x] New app icon is easier to see
+[ ] Update available does not stack
    Steps:
-     a. Start Data Doctor. The window icon is the wizard with a black outline
-        and a yellow glow, so it reads on a light bar and a dark bar.
-     b. That icon is ui/icons/DataDoctor.png and ui/icons/Data Doctor.ico.
-        The same ico is in launcher/ and launcher/src/.
-     c. Rebuild Data Doctor.exe on Windows for the Explorer icon.
-        The About window still uses the starfield title.
-
-[ ] Plotter legend uses the dictionary name
-   Steps:
-     a. Data Dictionary has a common name for a Data ID you will plot.
-        Options: Add Data Type to Labels is on for that source
-        (USBR, USGS, or Aquarius — each source has its own checkbox).
-     b. Plot Line, Scatter, or Time Lag that includes that Data ID.
-     c. The legend is commonName-datatype. Turn that source's checkbox off,
-        plot again, and the legend is the common name only.
-     d. A Data ID that is not in the dictionary still uses the site name
-        or the Data ID.
+     a. Leave Data Doctor open until Update available appears. Do not click
+        Download or Later.
+     b. Leave that window up through another background check (about 15 minutes).
+        Saving Options so it checks again, while the window is still open,
+        counts too.
+     c. A second Update available window does not appear. Download and the
+        Restart window that follows also stay one window.
+     d. Click Later, or close the window. A newer release can still prompt.
 
 [ ] Plotter HDB uses SQL when the API misses
    Steps:
@@ -39,23 +30,6 @@ Current Tests
      b. The series still plots. The log says it is trying the Oracle connection.
      c. USBR-PNHYD, USBR-GPHYD, USGS, and Aquarius stay on the API.
         A series the public API returns with no points is not read from SQL.
-
-[ ] Passive update check notices a new beta
-   Steps:
-     a. Options: Beta updates is on. Leave Data Doctor open.
-     b. Publish a newer rc or beta.
-     c. Within about 15 minutes the update window appears. It does not wait
-        hours. If you already clicked Later on an older build, the newer one
-        still appears.
-
-[ ] Linux bunker merge answers
-   Steps:
-     a. AppImage: when the packaged dictionary differs, two questions appear
-        after the window opens (Common Names, then Data Types). No defaults
-        to Yes.
-     b. Linux update apply (no console): the log says it is answering N to
-        both. Existing common names and data types stay. New rows still
-        get the packaged names and types.
 
 [ ] Mac package script
    Steps:
@@ -68,6 +42,10 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+New app icon is easier to see
+Plotter legend uses the dictionary name
+Passive update check notices a new beta
+Linux bunker merge answers
 Large 1-minute query keeps moving past 90%
 Dictionary and search column widths stick
 Plotter info button sits next to Plot Types

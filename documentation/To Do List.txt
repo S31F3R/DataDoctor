@@ -1,7 +1,6 @@
 ####### CURRENT TASKS #######
 
 ####### CURRENT BUGS #######
--If a "update available" pops up but not clicked on, they KEEP popping up. Don't have another pop up if the user  has the window open
 
 ####### 3.5.0 FEATURES #######
 -Create a plot tool that allows users to build different data plots and save that plot config as a quick look
