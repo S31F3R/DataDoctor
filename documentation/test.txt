@@ -11,7 +11,7 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] New app icon is easier to see
+[x] New app icon is easier to see
    Steps:
      a. Start Data Doctor. The window icon is the wizard with a black outline
         and a yellow glow, so it reads on a light bar and a dark bar.
