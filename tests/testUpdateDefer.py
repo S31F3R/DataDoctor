@@ -1,5 +1,5 @@
 # Later on an update stays quiet for that release. A newer beta still prompts.
-# Run from the repo root: python tests/test_updateDefer.py
+# Run from the repo root: python tests/testUpdateDefer.py
 
 from __future__ import annotations
 

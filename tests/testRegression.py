@@ -1,5 +1,5 @@
 # Engine checks for lagged regression. No Qt.
-# Run from the repo root: python tests/test_regression.py
+# Run from the repo root: python tests/testRegression.py
 
 from __future__ import annotations
 
@@ -25,12 +25,12 @@ def column(key, label, col, values, step=900, start=None):
     return SeriesColumn(key, label, col, times, values)
 
 
-def _fail(name, detail):
+def fail(name, detail):
     print(f"FAIL {name}: {detail}")
     return 1
 
 
-def test_two_predictor():
+def testTwoPredictor():
     rng = np.random.default_rng(0)
     n = 960  # 10 days of 15-minute data
     a = rng.normal(size=n)
@@ -50,41 +50,41 @@ def test_two_predictor():
     ]
     result, err = fitColumns(cols, 3)
     if err:
-        return _fail("two_predictor", err)
+        return fail("twoPredictor", err)
     keys = [p.key for p in result.predictors]
     if keys != ["A", "D"]:
-        return _fail("two_predictor", f"predictors {keys}")
+        return fail("twoPredictor", f"predictors {keys}")
     byKey = {p.key: p for p in result.predictors}
     if byKey["A"].lagSteps != -3 or byKey["D"].lagSteps != 2:
-        return _fail("two_predictor", f"lags {byKey['A'].lagSteps} {byKey['D'].lagSteps}")
+        return fail("twoPredictor", f"lags {byKey['A'].lagSteps} {byKey['D'].lagSteps}")
     if abs(byKey["A"].coef - 1.037) > 1e-6 or abs(byKey["D"].coef - 0.214) > 1e-6:
-        return _fail("two_predictor", f"coefs {byKey['A'].coef} {byKey['D'].coef}")
+        return fail("twoPredictor", f"coefs {byKey['A'].coef} {byKey['D'].coef}")
     if abs(result.intercept - 8.6) > 1e-6:
-        return _fail("two_predictor", f"intercept {result.intercept}")
+        return fail("twoPredictor", f"intercept {result.intercept}")
     if "1.037*A" not in result.equationText or "0.214*D" not in result.equationText:
-        return _fail("two_predictor", result.equationText)
+        return fail("twoPredictor", result.equationText)
     if "[t" in result.equationText or result.copyText != result.equationText:
-        return _fail("two_predictor", result.copyText)
+        return fail("twoPredictor", result.copyText)
     if "copy:" in result.labelText:
-        return _fail("two_predictor", result.labelText)
+        return fail("twoPredictor", result.labelText)
     if "E" in result.copyText:
-        return _fail("two_predictor", "noise column kept")
+        return fail("twoPredictor", "noise column kept")
     if result.warnings:
-        return _fail("two_predictor", result.warnings)
+        return fail("twoPredictor", result.warnings)
     if "-3 steps" not in result.labelText or "-45 min" not in result.labelText:
-        return _fail("two_predictor", result.labelText)
+        return fail("twoPredictor", result.labelText)
     if "+2 steps" not in result.labelText or "+30 min" not in result.labelText:
-        return _fail("two_predictor", result.labelText)
+        return fail("twoPredictor", result.labelText)
     # Aligned: value drawn at t equals source at t+lag.
     aligned = {s.key: s for s in result.aligned}
     shown = aligned["A"].values
     if not np.isclose(shown[10], a[10 - 3]):
-        return _fail("two_predictor", f"aligned A[10]={shown[10]} src={a[7]}")
-    print("ok two_predictor")
+        return fail("twoPredictor", f"aligned A[10]={shown[10]} src={a[7]}")
+    print("ok twoPredictor")
     return 0
 
 
-def test_single_positive_lag():
+def testSinglePositiveLag():
     rng = np.random.default_rng(1)
     n = 800
     x = rng.normal(size=n)
@@ -98,21 +98,21 @@ def test_single_positive_lag():
         1,
     )
     if err:
-        return _fail("positive_lag", err)
+        return fail("positiveLag", err)
     pred = result.predictors[0]
     if pred.lagSteps != 4 or abs(pred.coef - 2.0) > 1e-6 or abs(result.intercept + 5.0) > 1e-6:
-        return _fail("positive_lag", f"lag {pred.lagSteps} coef {pred.coef} b {result.intercept}")
+        return fail("positiveLag", f"lag {pred.lagSteps} coef {pred.coef} b {result.intercept}")
     if result.scatterMode != "lagged":
-        return _fail("positive_lag", result.scatterMode)
+        return fail("positiveLag", result.scatterMode)
     if "*B" not in result.equationText or "[t" in result.equationText:
-        return _fail("positive_lag", result.equationText)
+        return fail("positiveLag", result.equationText)
     if result.copyText != result.equationText:
-        return _fail("positive_lag", result.copyText)
-    print("ok positive_lag")
+        return fail("positiveLag", result.copyText)
+    print("ok positiveLag")
     return 0
 
 
-def test_gaps():
+def testGaps():
     rng = np.random.default_rng(2)
     n = 700
     x = rng.normal(size=n)
@@ -126,15 +126,15 @@ def test_gaps():
         1,
     )
     if err:
-        return _fail("gaps", err)
+        return fail("gaps", err)
     pred = result.predictors[0]
     if pred.lagSteps != -3 or abs(pred.coef - 1.5) > 1e-6:
-        return _fail("gaps", f"lag {pred.lagSteps} coef {pred.coef}")
+        return fail("gaps", f"lag {pred.lagSteps} coef {pred.coef}")
     print("ok gaps")
     return 0
 
 
-def test_zero_lag():
+def testZeroLag():
     rng = np.random.default_rng(3)
     n = 400
     x = rng.normal(size=n)
@@ -144,18 +144,18 @@ def test_zero_lag():
         1,
     )
     if err:
-        return _fail("zero_lag", err)
+        return fail("zeroLag", err)
     if result.predictors[0].lagSteps != 0:
-        return _fail("zero_lag", result.predictors[0].lagSteps)
+        return fail("zeroLag", result.predictors[0].lagSteps)
     if "[t" in result.equationText:
-        return _fail("zero_lag", result.equationText)
+        return fail("zeroLag", result.equationText)
     if result.copyText != result.equationText or result.equationText != "Y = 0.5*A + 4":
-        return _fail("zero_lag", result.copyText)
-    print("ok zero_lag")
+        return fail("zeroLag", result.copyText)
+    print("ok zeroLag")
     return 0
 
 
-def test_unrelated_refuses():
+def testUnrelatedRefuses():
     rng = np.random.default_rng(4)
     n = 500
     x = rng.normal(size=n)
@@ -165,12 +165,12 @@ def test_unrelated_refuses():
         1,
     )
     if result is not None or not err:
-        return _fail("unrelated", "expected refusal")
+        return fail("unrelated", "expected refusal")
     print("ok unrelated")
     return 0
 
 
-def test_too_few_rows():
+def testTooFewRows():
     rng = np.random.default_rng(5)
     n = 12
     x = rng.normal(size=n)
@@ -182,12 +182,12 @@ def test_too_few_rows():
         1,
     )
     if result is not None or not err or "Not enough overlapping rows" not in err:
-        return _fail("too_few", err)
-    print("ok too_few")
+        return fail("tooFew", err)
+    print("ok tooFew")
     return 0
 
 
-def test_weekly_refuses():
+def testWeeklyRefuses():
     rng = np.random.default_rng(6)
     n = 40
     x = rng.normal(size=n)
@@ -198,12 +198,12 @@ def test_weekly_refuses():
         1,
     )
     if result is not None or not err or "1 minute" not in err:
-        return _fail("weekly", err)
+        return fail("weekly", err)
     print("ok weekly")
     return 0
 
 
-def test_daily_short_warns():
+def testDailyShortWarns():
     rng = np.random.default_rng(7)
     n = 25
     x = rng.normal(size=n)
@@ -215,17 +215,17 @@ def test_daily_short_warns():
         1,
     )
     if err:
-        return _fail("daily", err)
+        return fail("daily", err)
     text = " ".join(result.warnings)
     if "30 days" not in text:
-        return _fail("daily", result.warnings)
+        return fail("daily", result.warnings)
     if result.predictors[0].lagSteps != -1:
-        return _fail("daily", result.predictors[0].lagSteps)
+        return fail("daily", result.predictors[0].lagSteps)
     print("ok daily")
     return 0
 
 
-def test_edge_lag_warns():
+def testEdgeLagWarns():
     rng = np.random.default_rng(8)
     # 15-minute step, window edge is 12 hours = 48 steps.
     n = 960
@@ -239,16 +239,16 @@ def test_edge_lag_warns():
         1,
     )
     if err:
-        return _fail("edge", err)
+        return fail("edge", err)
     if result.predictors[0].lagSteps != -lag:
-        return _fail("edge", result.predictors[0].lagSteps)
+        return fail("edge", result.predictors[0].lagSteps)
     if not any("window edge" in w for w in result.warnings):
-        return _fail("edge", result.warnings)
+        return fail("edge", result.warnings)
     print("ok edge")
     return 0
 
 
-def test_split_half():
+def testSplitHalf():
     rng = np.random.default_rng(9)
     n = 800
     x = rng.normal(size=n)
@@ -264,16 +264,16 @@ def test_split_half():
         1,
     )
     if err:
-        return _fail("split", err)
+        return fail("split", err)
     if result.predictors[0].agrees:
-        return _fail("split", "expected split-half disagreement")
+        return fail("split", "expected split-half disagreement")
     if not any("Split-half" in w for w in result.warnings):
-        return _fail("split", result.warnings)
+        return fail("split", result.warnings)
     print("ok split")
     return 0
 
 
-def test_collinear_sandwich():
+def testCollinearSandwich():
     """Upstream and downstream of the same wave both stay in the equation."""
     rng = np.random.default_rng(11)
     n = 500
@@ -298,75 +298,75 @@ def test_collinear_sandwich():
         1,
     )
     if err:
-        return _fail("sandwich", err)
+        return fail("sandwich", err)
     keys = [p.key for p in result.predictors]
     if keys != ["A", "C"]:
-        return _fail("sandwich", f"{keys} {result.equationText}")
+        return fail("sandwich", f"{keys} {result.equationText}")
     print("ok sandwich", result.equationText)
     return 0
 
 
-def test_column_letters_follow_insert_and_move():
+def testColumnLettersFollowInsertAndMove():
     from core.Formula import remapFormulaColumns, shiftFormulaColumns
     inserted = shiftFormulaColumns("=0.5*D1+A1", 3, 1)
     if inserted != "=0.5*E1+A1":
-        return _fail("letters", inserted)
+        return fail("letters", inserted)
     # D (index 3) moves one slot right; A stays.
     moved = remapFormulaColumns("=0.5*D1+A1", {0: 0, 1: 1, 2: 2, 3: 4, 4: 3})
     if moved != "=0.5*E1+A1":
-        return _fail("letters", moved)
+        return fail("letters", moved)
     print("ok letters")
     return 0
 
 
-def test_saved_anchor_row_is_row_4():
+def testSavedAnchorRowIsRow4():
     """Quick Look anchorRow 3 keeps A1 and D10 on row 4, not row 1."""
     from core.Formula import formulaShifted
     formula = "= 0.5412*A1 + 0.4521*D10 + 32.291"
     anchor = 3
     n = 305
     if formulaShifted(formula, 0, 0 - anchor, rowCount=n) is not None:
-        return _fail("anchor", "row 1 should stay blank")
+        return fail("anchor", "row 1 should stay blank")
     kept = formulaShifted(formula, 0, anchor - anchor, rowCount=n)
     if kept != formula:
-        return _fail("anchor", kept)
+        return fail("anchor", kept)
     nxt = formulaShifted(formula, 0, 1, rowCount=n)
     if nxt is None or "A2" not in nxt or "D11" not in nxt:
-        return _fail("anchor", nxt)
+        return fail("anchor", nxt)
     print("ok anchor")
     return 0
 
 
-def test_lag_fill_starts_on_row_4():
+def testLagFillStartsOnRow4():
     """A lag -3 and C lag +6, written on row 4 as A1 and C10."""
     from core.Formula import formulaShifted
     formula = "=0.532*A1+0.466*C10+3.516"
     anchor = 3  # row 4, 0-based
     n = 20
     if formulaShifted(formula, 0, 0 - anchor, rowCount=n) is not None:
-        return _fail("lagfill", "row 1 should stay blank")
+        return fail("lagfill", "row 1 should stay blank")
     if formulaShifted(formula, 0, anchor - anchor, rowCount=n) != formula:
-        return _fail("lagfill", formulaShifted(formula, 0, 0, rowCount=n))
+        return fail("lagfill", formulaShifted(formula, 0, 0, rowCount=n))
     nxt = formulaShifted(formula, 0, 4 - anchor, rowCount=n)
     if nxt != "=0.532*A2+0.466*C11+3.516":
-        return _fail("lagfill", nxt)
+        return fail("lagfill", nxt)
     if formulaShifted(formula, 0, 14 - anchor, rowCount=n) is not None:
-        return _fail("lagfill", "row past C should stay blank")
+        return fail("lagfill", "row past C should stay blank")
     print("ok lagfill")
     return 0
 
 
-def test_formula_keeps_a1():
+def testFormulaKeepsA1():
     from core.Formula import templateAtRowZero
     if templateAtRowZero("=1.037*B1+0.214*D1+8.6", 8) != "=1.037*B1+0.214*D1+8.6":
-        return _fail("formula", templateAtRowZero("=1.037*B1+0.214*D1+8.6", 8))
+        return fail("formula", templateAtRowZero("=1.037*B1+0.214*D1+8.6", 8))
     if templateAtRowZero("=A6+B12", 5) != "=A1+B7":
-        return _fail("formula", templateAtRowZero("=A6+B12", 5))
+        return fail("formula", templateAtRowZero("=A6+B12", 5))
     print("ok formula")
     return 0
 
 
-def test_cli():
+def testCli():
     rng = np.random.default_rng(10)
     n = 400
     x = rng.normal(size=n)
@@ -389,10 +389,10 @@ def test_cli():
         with redirect_stdout(buf):
             code = cliMain([path, "--target", "Y"])
         if code != 0:
-            return _fail("cli", f"exit {code}: {buf.getvalue()}")
+            return fail("cli", f"exit {code}: {buf.getvalue()}")
         text = buf.getvalue()
         if "Y = 1.25*B + 2" not in text or "[t" in text.splitlines()[0]:
-            return _fail("cli", text)
+            return fail("cli", text)
     print("ok cli")
     return 0
 
@@ -400,22 +400,22 @@ def test_cli():
 def main():
     failed = 0
     for fn in (
-        test_two_predictor,
-        test_single_positive_lag,
-        test_gaps,
-        test_zero_lag,
-        test_unrelated_refuses,
-        test_too_few_rows,
-        test_weekly_refuses,
-        test_daily_short_warns,
-        test_edge_lag_warns,
-        test_split_half,
-        test_collinear_sandwich,
-        test_column_letters_follow_insert_and_move,
-        test_saved_anchor_row_is_row_4,
-        test_lag_fill_starts_on_row_4,
-        test_formula_keeps_a1,
-        test_cli,
+        testTwoPredictor,
+        testSinglePositiveLag,
+        testGaps,
+        testZeroLag,
+        testUnrelatedRefuses,
+        testTooFewRows,
+        testWeeklyRefuses,
+        testDailyShortWarns,
+        testEdgeLagWarns,
+        testSplitHalf,
+        testCollinearSandwich,
+        testColumnLettersFollowInsertAndMove,
+        testSavedAnchorRowIsRow4,
+        testLagFillStartsOnRow4,
+        testFormulaKeepsA1,
+        testCli,
     ):
         failed += fn()
     if failed:

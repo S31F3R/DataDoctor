@@ -1,5 +1,5 @@
 # Change-agent lookup collision retry. No database.
-# Run from the repo root: python tests/test_uploadRetry.py
+# Run from the repo root: python tests/testUploadRetry.py
 
 from __future__ import annotations
 

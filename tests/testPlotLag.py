@@ -1,5 +1,5 @@
 # Time Lag math for the Plotter. No Qt.
-# Run from the repo root: python tests/test_plotLag.py
+# Run from the repo root: python tests/testPlotLag.py
 
 from __future__ import annotations
 

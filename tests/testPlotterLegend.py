@@ -1,5 +1,5 @@
 # Plotter dictionary legends and HDB SQL fallback selection. No network.
-# Run from the repo root: .venv/bin/python tests/test_plotterLegend.py
+# Run from the repo root: .venv/bin/python tests/testPlotterLegend.py
 
 from __future__ import annotations
 
