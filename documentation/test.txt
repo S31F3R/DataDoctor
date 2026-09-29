@@ -11,17 +11,6 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[x] Test scripts use camel case
-   Steps:
-     a. tests/ has testPlotLag.py, testPlotterLegend.py, testRegression.py,
-        testUpdateDefer.py, and testUploadRetry.py. No test_ names.
-     b. From the project root, each of these finishes without a failure:
-        python tests/testPlotLag.py
-        python tests/testPlotterLegend.py
-        python tests/testRegression.py
-        python tests/testUpdateDefer.py
-        python tests/testUploadRetry.py
-
 [ ] Update available does not stack
    Steps:
      a. Leave Data Doctor open until Update available appears. Do not click
@@ -42,6 +31,64 @@ Current Tests
      c. USBR-PNHYD, USBR-GPHYD, USGS, and Aquarius stay on the API.
         A series the public API returns with no points is not read from SQL.
 
+[ ] Linked HDB queries run together
+   Steps:
+     a. Internal query with series from at least two of LCHDB, UCHDB2, and
+        YAOHDB in the same run.
+     b. The log says each of those databases is on its own thread and opens
+        its own session. Values come back for each series.
+     c. A query with only one of those databases still returns values.
+     d. KBO, CU, LBO, and ECO still connect directly.
+
+[ ] About stars drift behind the title
+   Steps:
+     a. Open About. The stars drift. The green DATA DOCTOR title stays put.
+     b. Resize the window. The stars keep moving and the title stays readable.
+     c. Close About and open it again. The stars move again.
+
+[ ] Windows update uses the Windows package
+   Steps:
+     a. On a Windows install that already has python-embed, check for updates.
+     b. The downloaded file name contains Windows (DataDoctor-Windows-*.zip).
+     c. After Restart, Data Doctor.exe and Data Doctor.ico match that package.
+
+[ ] Windows apply does not replace the running Python
+   Steps:
+     a. Close Data Doctor. Put a DataDoctor-Windows zip in updates and run
+        applyUpdate.cmd.
+     b. It finishes without "Access is denied" on python.exe, and without
+        the '" (' is not recognized message.
+     c. Data Doctor starts when the updater exits. The exe and icon are new.
+     d. pythonFiles\scripts\applyUpdate.py is the script. There is no
+        applyUpdate.py in the install root, and no python-standalone folder.
+
+[ ] Query and plotter tabs show icons
+   Steps:
+     a. A public Data Query tab shows the public icon. An internal query
+        switches that tab to the internal icon.
+     b. SQL Query Builder shows the SQL icon.
+     c. Plotter Line shows the plotter icon. Scatter shows the scatter icon.
+        Time Lag shows the time lag icon. Changing the plot type changes
+        the icon. Graph shows the plotter icon.
+     d. Detach a plotter. The floating window keeps the normal Data Doctor
+        icon and its Data Doctor title. The special icon is only on the tab.
+
+[ ] Dictionary merge keeps QAQC values you set
+   Steps:
+     a. Set precisionOverride, expectedMin, and expectedMax on a dictionary
+        row. Leave those fields blank on a different row.
+     b. Apply an update so the packaged bunker.db merges.
+     c. The values you set are unchanged, including a value of 0.
+        The blank fields fill from the packaged dictionary.
+
+[ ] CSV bunker update accepts a folder or *.csv
+   Steps:
+     a. From the project root, run updateBunkerFromCsv.py with a folder of
+        CSV files, or with a quoted pattern such as "C:\Temp\Exports\*.csv".
+     b. It reads every csv. It does not stop with "CSV not found" for the
+        pattern itself.
+     c. It asks about common names and data types before the merge starts.
+
 [ ] Mac package script
    Steps:
      a. From project root: python scripts/packageMac.py --skip-venv
@@ -53,6 +100,7 @@ Current Tests
 
 Confirmed
 --------------------------------------------------------------------------------
+Test scripts use camel case
 New app icon is easier to see
 Plotter legend uses the dictionary name
 Passive update check notices a new beta
