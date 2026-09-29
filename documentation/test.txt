@@ -11,7 +11,7 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] Update available does not stack
+[x] Update available does not stack
    Steps:
      a. Leave Data Doctor open until Update available appears. Do not click
         Download or Later.
@@ -31,7 +31,7 @@ Current Tests
      c. USBR-PNHYD, USBR-GPHYD, USGS, and Aquarius stay on the API.
         A series the public API returns with no points is not read from SQL.
 
-[ ] About stars scroll behind the title
+[x] About stars scroll behind the title
    Steps:
      a. Open About. The stars scroll sideways. The green DATA DOCTOR title
         stays put. The stars look like the ones on the About picture.
@@ -58,8 +58,11 @@ Current Tests
         launch. Restart closes Data Doctor, replaces applyUpdate.cmd with
         the new command, finishes whatever is still staged, and opens
         Data Doctor again.
+        RESPONSE: Got stuck on a CMD window again that is titled find "31700". Doesn't seem to be doing anything.
+        If hit hit ctrl+c a few times, it starts to work. A normal close just did the IP thing to local host, then back to the find "31700", but the ctrl+c 
+        allowed to close right away, then it started up like normal and updated the .cmd
 
-[ ] Query and plotter tabs show icons
+[x] Query and plotter tabs show icons
    Steps:
      a. A public Data Query tab shows the public icon. An internal query
         switches that tab to the internal icon.
@@ -71,7 +74,7 @@ Current Tests
      d. Detach a plotter. The floating window keeps the normal Data Doctor
         icon and its Data Doctor title. The special icon is only on the tab.
 
-[ ] Dictionary merge keeps QAQC values you set
+[x] Dictionary merge keeps QAQC values you set
    Steps:
      a. Set precisionOverride, expectedMin, and expectedMax on a dictionary
         row. Leave those fields blank on a different row.
@@ -86,6 +89,7 @@ Current Tests
      b. It reads every csv. It does not stop with "CSV not found" for the
         pattern itself.
      c. It asks about common names and data types before the merge starts.
+     RESPONSE: This works with all the files and it looks like it's doing all the files at the same time, but this is still horribly slow. The bunker merge script works in seconds, how come this can't?
 
 [ ] Mac package script
    Steps:
