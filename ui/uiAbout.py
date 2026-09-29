@@ -46,13 +46,19 @@ def _pygameMixer():
         return None
 
 
+# 40ms ticks. 375 frames is 15 seconds, then the star field repeats.
+aboutStarTickMs = 40
+aboutStarLoopFrames = 375
+
+
 def splitAboutArt(rgba: bytes, width: int, height: int):
     """
-    Split the About poster into a still title and moving stars.
+    Split the About poster into a still title and the original star pixels.
 
     Green title pixels stay in the text image. Near-gray pixels bright enough
-    to be stars are returned as normalized (x, y, brightness) points.
-    Returns (textRgba, stars, vanish) where vanish is the title center.
+    to be stars stay in the star image with their poster colors.
+    Returns (textRgba, stars, vanish, starRgba). stars is a short list of
+    normalized (x, y, brightness) points. vanish is the title center.
     """
     import numpy as np
 
@@ -67,6 +73,8 @@ def splitAboutArt(rgba: bytes, width: int, height: int):
     star = (alpha >= 20) & ~green & (hi >= 48) & ((hi - lo) <= 36)
     text = np.zeros_like(pixels)
     text[green] = pixels[green]
+    starImage = np.zeros_like(pixels)
+    starImage[star] = pixels[star]
     ys, xs = np.nonzero(star)
     bright = ((red[ys, xs].astype(np.int32) + greenCh[ys, xs] + blue[ys, xs]) // 3)
     if xs.size > 2000:
@@ -81,30 +89,19 @@ def splitAboutArt(rgba: bytes, width: int, height: int):
         vanish = (float(gxs.mean()) / width, float(gys.mean()) / height)
     else:
         vanish = (0.5, 0.45)
-    return text.tobytes(), stars, vanish
+    return text.tobytes(), stars, vanish, starImage.tobytes()
 
 
-def aboutStarState(stars, vanish):
-    """Turn poster star positions into angle, radius, speed, brightness."""
-    vx, vy = vanish
-    state = []
-    for x, y, bright in stars:
-        dx = x - vx
-        dy = y - vy
-        radius = math.hypot(dx, dy)
-        angle = math.atan2(dy, dx)
-        speed = 0.0015 + (bright / 255.0) * 0.0035
-        state.append([angle, max(radius, 0.012), speed, bright])
-    return state
+def stepAboutFrame(frame: int) -> int:
+    """Next frame in the side-scroll loop."""
+    return (int(frame) + 1) % aboutStarLoopFrames
 
 
-def stepAboutStars(state, limit=1.25):
-    """Move stars outward. A star that leaves the poster restarts near the title."""
-    for star in state:
-        star[1] += star[2]
-        if star[1] > limit:
-            star[1] = 0.015
-    return state
+def aboutStarShift(frame: int, width: int) -> float:
+    """Horizontal offset for this frame. One loop moves exactly one width."""
+    if width <= 0:
+        return 0.0
+    return (float(width) * (int(frame) % aboutStarLoopFrames)) / aboutStarLoopFrames
 
 
 # user.config optional map (refMarks) — short keys, integer values
@@ -213,7 +210,10 @@ class uiAbout(QDialog):
         self._aboutLaidSize = None
         self._closing = False
         self.aboutStarTimer = None
-        self.aboutStarState = None
+        self.aboutStarFrame = 0
+        self.aboutStarImage = None
+        self.aboutStarCache = None
+        self.aboutStarCacheSize = None
         self.aboutTextImage = None
         self.aboutTextCache = None
         self.aboutTextCacheSize = None
@@ -847,8 +847,8 @@ class uiAbout(QDialog):
             self.startAboutStars()
 
     def prepareAboutStars(self):
-        """Scan the About poster once. Title stays still; stars are the moving layer."""
-        if self.aboutStarState is not None and self.aboutTextImage is not None:
+        """Scan the About poster once. Title stays still; stars scroll sideways."""
+        if self.aboutStarImage is not None and self.aboutTextImage is not None:
             return True
         path = Logic.resourcePath('ui/DataDoctor.png')
         image = QImage(path)
@@ -869,31 +869,44 @@ class uiAbout(QDialog):
                 start = y * bpl
                 packed.extend(raw[start:start + rowBytes])
             raw = bytes(packed)
-        textRgba, stars, vanish = splitAboutArt(raw, width, height)
+        textRgba, stars, vanish, starRgba = splitAboutArt(raw, width, height)
         if not stars:
             return False
-        textImage = QImage(textRgba, width, height, QImage.Format.Format_RGBA8888).copy()
-        self.aboutTextImage = textImage
+        self.aboutTextImage = QImage(textRgba, width, height, QImage.Format.Format_RGBA8888).copy()
+        self.aboutStarImage = QImage(starRgba, width, height, QImage.Format.Format_RGBA8888).copy()
         self.aboutVanish = vanish
-        self.aboutStarState = aboutStarState(stars, vanish)
+        self.aboutStarFrame = 0
         self.aboutTextCache = None
         self.aboutTextCacheSize = None
+        self.aboutStarCache = None
+        self.aboutStarCacheSize = None
         return True
 
-    def aboutTextForSize(self, fw, fh):
+    def _scaledAboutLayer(self, source, cacheName, sizeName, fw, fh):
         key = (fw, fh)
-        if self.aboutTextCache is not None and self.aboutTextCacheSize == key:
-            return self.aboutTextCache
-        if self.aboutTextImage is None or self.aboutTextImage.isNull():
+        cached = getattr(self, cacheName)
+        if cached is not None and getattr(self, sizeName) == key:
+            return cached
+        if source is None or source.isNull():
             return None
-        scaled = self.aboutTextImage.scaled(
+        scaled = source.scaled(
             fw, fh,
             Qt.AspectRatioMode.IgnoreAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
-        self.aboutTextCache = scaled
-        self.aboutTextCacheSize = key
+        setattr(self, cacheName, scaled)
+        setattr(self, sizeName, key)
         return scaled
+
+    def aboutTextForSize(self, fw, fh):
+        return self._scaledAboutLayer(
+            self.aboutTextImage, "aboutTextCache", "aboutTextCacheSize", fw, fh,
+        )
+
+    def aboutStarsForSize(self, fw, fh):
+        return self._scaledAboutLayer(
+            self.aboutStarImage, "aboutStarCache", "aboutStarCacheSize", fw, fh,
+        )
 
     def aboutStarsRunning(self):
         timer = self.aboutStarTimer
@@ -901,8 +914,8 @@ class uiAbout(QDialog):
 
     def paintAboutStars(self):
         label = self.backgroundLabel
-        state = self.aboutStarState
-        if label is None or not state:
+        starImage = self.aboutStarImage
+        if label is None or starImage is None or starImage.isNull():
             return
         fw = max(1, label.width())
         fh = max(1, label.height())
@@ -910,24 +923,12 @@ class uiAbout(QDialog):
         image.fill(QColor(0, 0, 0))
         painter = QPainter(image)
         try:
-            vx, vy = self.aboutVanish
-            dim = []
-            bright = []
-            for angle, radius, _speed, level in state:
-                x = int((vx + math.cos(angle) * radius) * fw)
-                y = int((vy + math.sin(angle) * radius) * fh)
-                if x < 0 or y < 0 or x >= fw or y >= fh:
-                    continue
-                if level >= 180:
-                    bright.append((x, y))
-                else:
-                    dim.append((x, y))
-            painter.setPen(QColor(170, 170, 170))
-            for x, y in dim:
-                painter.drawPoint(x, y)
-            painter.setPen(QColor(255, 255, 255))
-            for x, y in bright:
-                painter.drawPoint(x, y)
+            stars = self.aboutStarsForSize(fw, fh)
+            if stars is not None:
+                srcW = max(1, starImage.width())
+                shift = int(aboutStarShift(self.aboutStarFrame, srcW) / srcW * fw) % fw
+                painter.drawImage(-shift, 0, stars)
+                painter.drawImage(fw - shift, 0, stars)
             text = self.aboutTextForSize(fw, fh)
             if text is not None:
                 painter.drawImage(0, 0, text)
@@ -947,7 +948,7 @@ class uiAbout(QDialog):
         ):
             self.stopAboutStars()
             return
-        stepAboutStars(self.aboutStarState or [])
+        self.aboutStarFrame = stepAboutFrame(self.aboutStarFrame)
         self.paintAboutStars()
 
     def startAboutStars(self):
@@ -961,7 +962,7 @@ class uiAbout(QDialog):
             self.aboutStarTimer = QTimer(self)
             self.aboutStarTimer.timeout.connect(self.tickAboutStars)
         if not self.aboutStarTimer.isActive():
-            self.aboutStarTimer.start(40)
+            self.aboutStarTimer.start(aboutStarTickMs)
         self.paintAboutStars()
 
     def stopAboutStars(self):
