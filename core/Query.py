@@ -3,6 +3,7 @@
 import queue
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThreadPool, QRunnable, pyqtSignal, QObject, QCoreApplication, QTimer
 from PyQt6.QtGui import QColor, QBrush, QFontMetrics
@@ -197,6 +198,123 @@ class queryWorker(QRunnable):
         self.timestamps = timestamps
         self.defaultBlanks = defaultBlanks
 
+    def readGroup(self, db, itemDb, interval, mrid, items, workerCap=None):
+        """Fetch one database/interval. Opens its own Oracle sessions when this is SQL."""
+        SDIDs = [item[2] for item in items]
+        result = {}
+        if db.startswith('USBR'):
+            try:
+                svr = itemDb.split('-')[1].lower() if '-' in itemDb else 'lchdb'
+                table = 'M' if mrid != '0' else 'R'
+                apiInterval = interval
+
+                # Internal HDB uses Oracle. Plotter tries the public API
+                # first, then SQL for Oracle HDBs the API did not return.
+                if self.isInternal and not self.apiOnly:
+                    result = USBR.sqlRead(
+                        svr, SDIDs, self.startDate, self.endDate,
+                        apiInterval, mrid, table, workerCap=workerCap,
+                    )
+                else:
+                    result = {}
+                    try:
+                        result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table) or {}
+                    except Exception as e:
+                        Logic.logException(f"queryWorker: USBR apiRead failed for SDIDs {SDIDs}", e)
+                        result = {}
+                    if self.apiOnly:
+                        missing = plotterSqlFallbackIds(itemDb, SDIDs, result)
+                        if missing:
+                            Logic.logMessage(
+                                "WARN",
+                                "Plotter public API did not return "
+                                f"{', '.join(str(s) for s in missing)} from {itemDb}. "
+                                "Trying the Oracle connection.",
+                            )
+                            try:
+                                sqlResult = USBR.sqlRead(
+                                    svr, missing, self.startDate, self.endDate,
+                                    apiInterval, mrid, table,
+                                )
+                                result = mergeUsbrApiAndSql(result, sqlResult, missing)
+                            except Exception as e:
+                                Logic.logException(
+                                    f"queryWorker: Plotter SQL fallback failed for {missing}",
+                                    e,
+                                )
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"queryWorker: USBR result for SDIDs {SDIDs}: {result}")
+            except Exception as e:
+                Logic.logException(f"queryWorker: USBR read failed for SDIDs {SDIDs}", e)
+                result = {}
+        elif db == 'AQUARIUS' and (self.isInternal or self.apiOnly):
+            try:
+                result = Aquarius.apiRead(SDIDs, self.startDate, self.endDate, interval)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"queryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
+            except Exception as e:
+                Logic.logException(f"queryWorker: Aquarius apiRead failed for SDIDs {SDIDs}", e)
+                result = {}
+        elif db == 'USGS-NWIS':
+            try:
+                result = USGS.apiRead(SDIDs, interval, self.startDate, self.endDate)
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"queryWorker: USGS result for SDIDs {SDIDs}: {result}")
+            except Exception as e:
+                Logic.logException(f"queryWorker: USGS apiRead failed for SDIDs {SDIDs}", e)
+                result = {}
+        else:
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"queryWorker: Unknown db skipped: {db}")
+            return None
+        return result
+
+    def storeGroup(self, db, items, interval, result, groupResult, groupLabels, groupRawResponses):
+        for idx, (origIndex, dataID, SDID) in enumerate(items):
+            if SDID in result and result[SDID]:
+                res = result[SDID]
+
+                if isinstance(res, dict):
+                    outputData = res.get('data', [])
+                    if 'rawResponse' in res:
+                        groupRawResponses[dataID] = res['rawResponse']
+                else:
+                    outputData = res
+                    groupRawResponses[dataID] = res # Use full dataID as key for USBR
+                if db == 'AQUARIUS' and groupLabels is not None:
+                    groupLabels[dataID] = result.get(SDID, {}).get('label', dataID)
+
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", f"queryWorker: Aquarius label for {dataID}: {groupLabels[dataID]}")
+                elif db == 'USGS-NWIS' and groupLabels is not None:
+                    # Site Name from OGC series/location meta (public + internal)
+                    raw = res.get('rawResponse') if isinstance(res, dict) else None
+                    siteName = ''
+                    if isinstance(raw, dict):
+                        siteName = (raw.get('seriesMeta') or {}).get('Site Name') or ''
+                    groupLabels[dataID] = siteName.strip() if siteName else ''
+
+                    if Config.debug:
+                        Logic.logMessage("DEBUG", f"queryWorker: USGS Site Name for {dataID}: {groupLabels[dataID]!r}")
+                    # Dual-key OGC meta by bare time_series_id so Show details
+                    # still resolves when dictionary / column lookup uses tsid only.
+                    if isinstance(raw, dict) and (raw.get('kind') or '').lower() == 'ogc':
+                        tsidKey = dictionaryLookupKey(dataID, 'USGS-NWIS')
+                        if tsidKey and tsidKey != dataID and tsidKey not in groupRawResponses:
+                            groupRawResponses[tsidKey] = raw
+                alignedData = gapCheck(
+                    self.timestamps, outputData, dataID, interval=interval
+                )
+                values = [line.split(',')[1] if line else '' for line in alignedData]
+                groupResult[dataID] = values
+            else:
+                groupResult[dataID] = self.defaultBlanks
+
+                if groupLabels is not None:
+                    groupLabels[dataID] = dataID if db == 'AQUARIUS' else ''
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"queryWorker: No data for SDID {SDID} in {db}")
+
     def run(self):
         db, _, _ = self.groupKey
         groupResult = {}
@@ -208,119 +326,48 @@ class queryWorker(QRunnable):
         try:
             for origIndex, dataID, SDID, itemDb, interval, mrid in self.groupItems:
                 usbrGroups[(itemDb, interval, mrid)].append((origIndex, dataID, SDID))
-            for (itemDb, interval, mrid), items in usbrGroups.items():
-                SDIDs = [item[2] for item in items]
-                result = {} # Initialize result here to avoid UnboundLocalError
-
-                if db.startswith('USBR'):
-                    try:
-                        svr = itemDb.split('-')[1].lower() if '-' in itemDb else 'lchdb'
-                        table = 'M' if mrid != '0' else 'R'
-                        apiInterval = interval
-
-                        # Internal HDB uses Oracle. Plotter tries the public API
-                        # first, then SQL for Oracle HDBs the API did not return.
-                        if self.isInternal and not self.apiOnly:
-                            result = USBR.sqlRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
-                        else:
-                            result = {}
-                            try:
-                                result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table) or {}
-                            except Exception as e:
-                                Logic.logException(f"queryWorker: USBR apiRead failed for SDIDs {SDIDs}", e)
-                                result = {}
-                            if self.apiOnly:
-                                missing = plotterSqlFallbackIds(itemDb, SDIDs, result)
-                                if missing:
-                                    Logic.logMessage(
-                                        "WARN",
-                                        "Plotter public API did not return "
-                                        f"{', '.join(str(s) for s in missing)} from {itemDb}. "
-                                        "Trying the Oracle connection.",
-                                    )
-                                    try:
-                                        sqlResult = USBR.sqlRead(
-                                            svr, missing, self.startDate, self.endDate,
-                                            apiInterval, mrid, table,
-                                        )
-                                        result = mergeUsbrApiAndSql(result, sqlResult, missing)
-                                    except Exception as e:
-                                        Logic.logException(
-                                            f"queryWorker: Plotter SQL fallback failed for {missing}",
-                                            e,
-                                        )
-                        
-                        if Config.debug:
-                            Logic.logMessage("DEBUG", f"queryWorker: USBR result for SDIDs {SDIDs}: {result}")
-                    except Exception as e:
-                        Logic.logException(f"queryWorker: USBR read failed for SDIDs {SDIDs}", e)
-                        result = {}
-                elif db == 'AQUARIUS' and (self.isInternal or self.apiOnly):
-                    try:
-                        result = Aquarius.apiRead(SDIDs, self.startDate, self.endDate, interval)
-                        
-                        if Config.debug:
-                            Logic.logMessage("DEBUG", f"queryWorker: Aquarius result for SDIDs {SDIDs}: {result}")
-                    except Exception as e:
-                        Logic.logException(f"queryWorker: Aquarius apiRead failed for SDIDs {SDIDs}", e)
-                        result = {}
-                elif db == 'USGS-NWIS':
-                    try:
-                        result = USGS.apiRead(SDIDs, interval, self.startDate, self.endDate)
-
-                        if Config.debug:
-                            Logic.logMessage("DEBUG", f"queryWorker: USGS result for SDIDs {SDIDs}: {result}")
-                    except Exception as e:
-                        Logic.logException(f"queryWorker: USGS apiRead failed for SDIDs {SDIDs}", e)
-                        result = {}
-                else:
-                    if Config.debug:
-                        Logic.logMessage("DEBUG", f"queryWorker: Unknown db skipped: {db}")
-                    continue
-                for idx, (origIndex, dataID, SDID) in enumerate(items):
-                    if SDID in result and result[SDID]:
-                        res = result[SDID]
-
-                        if isinstance(res, dict):
-                            outputData = res.get('data', [])
-                            if 'rawResponse' in res:
-                                groupRawResponses[dataID] = res['rawResponse']
-                        else:
-                            outputData = res
-                            groupRawResponses[dataID] = res # Use full dataID as key for USBR
-                        if db == 'AQUARIUS' and groupLabels is not None:
-                            groupLabels[dataID] = result.get(SDID, {}).get('label', dataID)
-
-                            if Config.debug:
-                                Logic.logMessage("DEBUG", f"queryWorker: Aquarius label for {dataID}: {groupLabels[dataID]}")
-                        elif db == 'USGS-NWIS' and groupLabels is not None:
-                            # Site Name from OGC series/location meta (public + internal)
-                            raw = res.get('rawResponse') if isinstance(res, dict) else None
-                            siteName = ''
-                            if isinstance(raw, dict):
-                                siteName = (raw.get('seriesMeta') or {}).get('Site Name') or ''
-                            groupLabels[dataID] = siteName.strip() if siteName else ''
-
-                            if Config.debug:
-                                Logic.logMessage("DEBUG", f"queryWorker: USGS Site Name for {dataID}: {groupLabels[dataID]!r}")
-                            # Dual-key OGC meta by bare time_series_id so Show details
-                            # still resolves when dictionary / column lookup uses tsid only.
-                            if isinstance(raw, dict) and (raw.get('kind') or '').lower() == 'ogc':
-                                tsidKey = dictionaryLookupKey(dataID, 'USGS-NWIS')
-                                if tsidKey and tsidKey != dataID and tsidKey not in groupRawResponses:
-                                    groupRawResponses[tsidKey] = raw
-                        alignedData = gapCheck(
-                            self.timestamps, outputData, dataID, interval=interval
+            jobs = list(usbrGroups.items())
+            # Linked HDBs share this worker. Each database gets its own thread
+            # and its own sessions on the anchor connection (Oracle sessions
+            # cannot be shared). Public / API reads stay one-at-a-time.
+            parallelSql = (
+                db.startswith('USBR')
+                and self.isInternal
+                and not self.apiOnly
+                and len(jobs) >= 2
+            )
+            workerCap = USBR.parallelSessionCap(len(jobs)) if parallelSql else None
+            if parallelSql:
+                servers = []
+                for _orig, _dataID, _sdid, itemDb, _interval, _mrid in self.groupItems:
+                    svr = itemDb.split('-')[1].lower() if '-' in itemDb else 'lchdb'
+                    if svr not in servers:
+                        servers.append(svr)
+                USBR.prepareLinkedAnchor(servers)
+                pending = []
+                with ThreadPoolExecutor(max_workers=min(4, len(jobs))) as pool:
+                    for (itemDb, interval, mrid), items in jobs:
+                        pending.append((
+                            items,
+                            interval,
+                            pool.submit(
+                                self.readGroup, db, itemDb, interval, mrid, items, workerCap,
+                            ),
+                        ))
+                    for items, interval, fut in pending:
+                        self.storeGroup(
+                            db, items, interval, fut.result(),
+                            groupResult, groupLabels, groupRawResponses,
                         )
-                        values = [line.split(',')[1] if line else '' for line in alignedData]
-                        groupResult[dataID] = values
-                    else:
-                        groupResult[dataID] = self.defaultBlanks
-
-                        if groupLabels is not None:
-                            groupLabels[dataID] = dataID if db == 'AQUARIUS' else ''
-                        if Config.debug:
-                            Logic.logMessage("DEBUG", f"queryWorker: No data for SDID {SDID} in {db}")
+            else:
+                for (itemDb, interval, mrid), items in jobs:
+                    result = self.readGroup(db, itemDb, interval, mrid, items)
+                    if result is None:
+                        continue
+                    self.storeGroup(
+                        db, items, interval, result,
+                        groupResult, groupLabels, groupRawResponses,
+                    )
             if Config.debug:
                 Logic.logMessage("DEBUG", f"queryWorker: Completed group {self.groupKey} with {len(groupResult)} items")
         except Exception as e:
@@ -1980,6 +2027,9 @@ def executeQuery(
             if Config.debug:
                 Logic.logMessage("DEBUG", f"Moved tabMain to index 0 after query")
         mainWindow.tabWidget.setCurrentIndex(index)
+        paintIcon = getattr(mainWindow, "paintMainTabIcon", None)
+        if paintIcon is not None:
+            paintIcon(mainWindow.tabMain)
         QCoreApplication.processEvents()
 
     except Exception as e:

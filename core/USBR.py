@@ -13,6 +13,7 @@ from collections import defaultdict
 primaryDsn = None
 queryLimit = 500
 maxThreads = 15
+_primaryLock = threading.Lock()
 
 # Internal queries may use @dblink among these (verified UC/LC/YAO family).
 _LINKED_HDB_ALIASES = frozenset({"lchdb", "yaohdb", "uchdb2", "uchdb"})
@@ -54,6 +55,41 @@ def hdbIsolatedDirect(svr) -> bool:
     if not alias:
         return False
     return alias not in _LINKED_HDB_ALIASES
+
+
+def prepareLinkedAnchor(servers):
+    """
+    Pick the first linked HDB as primaryDsn before parallel reads.
+
+    Each sqlRead then opens its own sessions to that anchor. The SQL for the
+    other linked databases still uses @link. Call this before those threads
+    start so they do not each become the primary and connect direct.
+    """
+    global primaryDsn
+    with _primaryLock:
+        if primaryDsn:
+            return primaryDsn
+        for svr in servers or []:
+            alias = hdbAlias(svr)
+            if not alias or hdbIsolatedDirect(alias):
+                continue
+            try:
+                alias = safeHdbIdent(alias, "database")
+            except ValueError:
+                continue
+            primaryDsn = alias
+            if Config.debug:
+                Logic.logMessage("DEBUG", f"Set primaryDsn to first linked svr: {primaryDsn}")
+            return primaryDsn
+        return primaryDsn
+
+
+def parallelSessionCap(jobCount: int) -> int:
+    """Keep Oracle sessions near maxThreads when several databases run at once."""
+    jobs = max(1, int(jobCount or 1))
+    if jobs < 2:
+        return maxThreads
+    return max(4, maxThreads // jobs)
 
 def qualifyHdbObject(name, schema='', link=''):
     """
@@ -322,7 +358,7 @@ def isDbLinkError(exc):
     return False
 
 
-def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', forceDirect=False):
+def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', forceDirect=False, workerCap=None):
     """
     Read HDB data. When querying a non-primary DB, uses database link @dsn
     from the primary connection. If the link fails, retries with a direct
@@ -349,10 +385,11 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
     # the primary (that used to make later UC/LC/YAO queries go through @link
     # from KBO/CU/LBO/ECO).
     if primaryDsn is None and not isolated:
-        primaryDsn = svr
-
-        if Config.debug:
-            Logic.logMessage("DEBUG", f"Set primaryDsn to first svr: {primaryDsn}")
+        with _primaryLock:
+            if primaryDsn is None and not isolated:
+                primaryDsn = svr
+                if Config.debug:
+                    Logic.logMessage("DEBUG", f"Set primaryDsn to first svr: {primaryDsn}")
 
     # Schema from Config.hdbOracleDatabases (|SCHEMA) when present; else legacy derivation
     from core.Utils import hdbSchemaForDatabase
@@ -403,6 +440,12 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
         Logic.logMessage(
             "DEBUG",
             f"sqlRead: dsn={dsn} direct={useDirect} FROM {dataTable} / {baseTable}",
+        )
+    if workerCap:
+        via = f" via {link}" if link else ""
+        Logic.logMessage(
+            "INFO",
+            f"USBR: {svr} on its own thread, own session to {dsn}{via}",
         )
 
     # Parse dates with offset handling
@@ -547,6 +590,8 @@ def sqlRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R', force
     tasks = [(SDID, subStartStr, subEndStr) for SDID in SDIDs for subStartStr, subEndStr in subRanges]
     numTasks = len(tasks)
     numThreads = min(maxThreads, numTasks)
+    if workerCap:
+        numThreads = min(numThreads, max(1, int(workerCap)))
 
     if Config.debug:
         Logic.logMessage("DEBUG", f"Created {numTasks} tasks for {len(SDIDs)} SDIDs across {len(subRanges)} sub-ranges, using {numThreads} threads")
