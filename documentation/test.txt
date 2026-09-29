@@ -11,14 +11,14 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] New app icon
+[ ] New app icon is easier to see
    Steps:
-     a. Start Data Doctor. The window icon is the wizard with the blue hat,
-        staff, and book. The area around the figure is clear, not a gray box.
+     a. Start Data Doctor. The window icon is the wizard with a black outline
+        and a yellow glow, so it reads on a light bar and a dark bar.
      b. That icon is ui/icons/DataDoctor.png and ui/icons/Data Doctor.ico.
-        The same ico is in launcher/ and launcher/src/ for the Windows build.
-     c. Data Doctor.exe in Explorer keeps the previous icon until the launcher
-        is rebuilt on Windows. The About window still uses the starfield title.
+        The same ico is in launcher/ and launcher/src/.
+     c. Rebuild Data Doctor.exe on Windows for the Explorer icon.
+        The About window still uses the starfield title.
 
 [ ] Plotter legend uses the dictionary name
    Steps:
