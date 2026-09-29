@@ -31,7 +31,7 @@ Current Tests
      c. USBR-PNHYD, USBR-GPHYD, USGS, and Aquarius stay on the API.
         A series the public API returns with no points is not read from SQL.
 
-[ ] Linked HDB queries run together
+[x] Linked HDB queries run together
    Steps:
      a. Internal query with series from at least two of LCHDB, UCHDB2, and
         YAOHDB in the same run.
@@ -45,14 +45,23 @@ Current Tests
      a. Open About. The stars drift. The green DATA DOCTOR title stays put.
      b. Resize the window. The stars keep moving and the title stays readable.
      c. Close About and open it again. The stars move again.
+     RESPONSE: The animation changes the stars look. How about this, instead of it looking like we're moving forward, lets have the stars side scroll. Create enough for about a 15 second loop or so. That way it looks a little more natural and arcade feel. Make sure that animation uses the same type of stars as the background image had
 
 [ ] Windows update uses the Windows package
    Steps:
      a. On a Windows install that already has python-embed, check for updates.
      b. The downloaded file name contains Windows (DataDoctor-Windows-*.zip).
      c. After Restart, Data Doctor.exe and Data Doctor.ico match that package.
+     RESPONSE: I used the same test I was using before. I copied the new windows zip, then ran the applyUpdate.cmd. 
+               The newer scripts recgonized I was running the old .cmd so it created a applyUpdate.cmd.new. It then redownloaded all the python embed stuff, 
+               which I don't know why cause this was just supposed to be an update. After it was done updating, it closed that CMD window then opened up another 
+               that says find "37344" and now it's just sitting there. I think we need to add a piece into the program on launch. If it's running the windows version
+               and it sees a cmd.new. We need to prompt the user for another restart to update the launcher. When they hit Restart (also have the later button) remove 
+               the old .cmd, rename the .cmd.new to .cmd, then run it. At this point, most of the patch should have finished. Find some way to detect what was done
+               and what was left. There will be some left because the new .cmd was never used. Just tried to close that window. It does a ping, opens and closes 1-2 more 
+               CMD windows, then opens one back to find "37344".
 
-[ ] Windows apply does not replace the running Python
+[x] Windows apply does not replace the running Python
    Steps:
      a. Close Data Doctor. Put a DataDoctor-Windows zip in updates and run
         applyUpdate.cmd.
@@ -72,6 +81,7 @@ Current Tests
         the icon. Graph shows the plotter icon.
      d. Detach a plotter. The floating window keeps the normal Data Doctor
         icon and its Data Doctor title. The special icon is only on the tab.
+        RESPONSE: A, B, and D work. C works for line but the others the icon seems to change size, or at least the graph background does in the icon. It's also hard to tell the icon is changing. If it wasn't for the size, I would have said it was the same icon. For the different icons, lets change the lines on the icon, meaning the scatter dots and whatever lines you created to represent the time lag. Could even change the actual colors of the graph background of the icon, just keep it hand drawn style
 
 [ ] Dictionary merge keeps QAQC values you set
    Steps:
