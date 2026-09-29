@@ -18,11 +18,15 @@ Expected install layout (Windows launcher package):
     Project Files/          ← 3.0.x leftover; still accepted for migrate
 
 What this does:
-  1) Pick a zip in updates/ (Windows zip if python-embed is missing, else Python zip)
+  1) Pick a zip in updates/ (Windows zip when Data Doctor.exe is installed)
   2) Extract to a temp dir under updates/
   3) Copy DataDoctor.py as app.pyw on Windows (pythonFiles/),
      plus ui/, core/* (except bunker.db), quickLook/, requirements
-  4) Windows zip also replaces Data Doctor.exe and installs python-embed
+  4) Windows zip also replaces Data Doctor.exe and the icon.
+     python-embed is staged as python-embed.next when this process is
+     running from python-embed, then swapped after this process exits.
+     applyUpdate.cmd is staged the same way so cmd.exe is not rewritten
+     while it is running.
   5) If packaged bunker.db present: copy when live is missing (no prompts);
      otherwise merge via updateBunker.py
   6) pip install -r requirements.txt into python-embed (Windows) or .venv
@@ -240,9 +244,10 @@ def maybeDownloadWindowsZip(installRoot: Path) -> Path | None:
 
 def pickUpdateZip(installRoot: Path, projectFiles: Path) -> Path | None:
     """
-    Prefer DataDoctor-Windows-*.zip when python-embed is missing (3.0.x hop).
-    Otherwise prefer DataDoctor-Python-*.zip so a leftover Windows zip is not
-    re-applied on every code update.
+    A Windows launcher (Data Doctor.exe) applies DataDoctor-Windows-*.zip when
+    one is waiting, so the exe and icon update with the code.
+    A 3.0.x install that still has no python-embed does the same.
+    Otherwise prefer DataDoctor-Python-*.zip.
     """
     zips: list[Path] = []
     for d in allUpdatesDirs(installRoot):
@@ -251,9 +256,10 @@ def pickUpdateZip(installRoot: Path, projectFiles: Path) -> Path | None:
         return None
     newest = lambda xs: max(xs, key=lambda p: p.stat().st_mtime)
     embedOk = (projectFiles / "python-embed" / "pythonw.exe").is_file()
+    windowsExe = (installRoot / "Data Doctor.exe").is_file()
     windowsZips = [p for p in zips if "windows" in p.name.lower()]
     pythonZips = [p for p in zips if "python" in p.name.lower()]
-    if not embedOk and windowsZips:
+    if (windowsExe or not embedOk) and windowsZips:
         return newest(windowsZips)
     if pythonZips:
         return newest(pythonZips)
@@ -264,6 +270,185 @@ def pathIsInside(dest: Path, target: Path) -> bool:
     destReal = os.path.normcase(str(dest.resolve())) + os.sep
     t = os.path.normcase(str(target.resolve()))
     return t == destReal[:-1] or t.startswith(destReal)
+
+
+def interpreterInside(folder: Path, exe: str | None = None) -> bool:
+    """True when this process's Python lives inside folder."""
+    if exe is None:
+        exe = sys.executable or ""
+    if not exe or not folder.exists():
+        return False
+    try:
+        return pathIsInside(folder, Path(exe))
+    except Exception:
+        return False
+
+
+def stagePythonEmbed(srcEmbed: Path, destEmbed: Path, inUse: bool | None = None) -> Path:
+    """
+    Copy bundled python-embed into place.
+
+    When this updater is running from destEmbed, copy to python-embed.next
+    instead of deleting the live tree. A helper cmd swaps them after exit.
+    """
+    if inUse is None:
+        inUse = interpreterInside(destEmbed)
+    destEmbed.parent.mkdir(parents=True, exist_ok=True)
+    target = destEmbed.with_name("python-embed.next") if inUse else destEmbed
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(srcEmbed, target)
+    enableEmbedSite(target)
+    if inUse:
+        print(f"Staged {target.parent.name}/{target.name}/ (live python-embed is in use)")
+    else:
+        print(f"Installed {destEmbed.parent.name}/python-embed/")
+    return target
+
+
+def cmdWriteTarget(installRoot: Path, stageBesideLive: bool | None = None) -> Path:
+    """Write applyUpdate.cmd.new while cmd.exe is still running the live cmd."""
+    live = installRoot / "applyUpdate.cmd"
+    if stageBesideLive is None:
+        stageBesideLive = sys.platform.startswith("win")
+    if live.is_file() and stageBesideLive:
+        return live.with_name("applyUpdate.cmd.new")
+    return live
+
+
+def embedSwapPending(projectFiles: Path) -> bool:
+    nxt = projectFiles / "python-embed.next" / "python.exe"
+    live = projectFiles / "python-embed"
+    return nxt.is_file() and interpreterInside(live)
+
+
+def removeAbandonedEmbedNext(projectFiles: Path) -> None:
+    """Drop python-embed.next left by an update that did not finish swapping."""
+    nxt = projectFiles / "python-embed.next"
+    live = projectFiles / "python-embed"
+    if not nxt.is_dir() or interpreterInside(live):
+        return
+    try:
+        shutil.rmtree(nxt)
+        print("Removed leftover python-embed.next/")
+    except Exception as e:
+        print(f"WARN: could not remove python-embed.next/: {e}", file=sys.stderr)
+
+
+def cleanupPackagedLeftovers(installRoot: Path) -> None:
+    """
+    Remove files a package used to drop in the wrong place.
+
+    python-standalone is a Mac packaging cache and does not belong in a
+    Windows install. applyUpdate.py belongs in pythonFiles/scripts/.
+    The Mac cache under launcher/python-standalone is a different folder
+    and is not touched.
+    """
+    rootApply = installRoot / "applyUpdate.py"
+    scriptsApply = installRoot / WIN_CODE_DIR / "scripts" / "applyUpdate.py"
+    legacyApply = installRoot / LEGACY_CODE_DIR / "scripts" / "applyUpdate.py"
+    if rootApply.is_file() and (scriptsApply.is_file() or legacyApply.is_file()):
+        try:
+            if rootApply.resolve() == Path(__file__).resolve():
+                print("Root applyUpdate.py is running — it will be removed after this process exits")
+            else:
+                rootApply.unlink()
+                print("Removed leftover applyUpdate.py from the install root")
+        except Exception as e:
+            print(f"WARN: could not remove root applyUpdate.py: {e}", file=sys.stderr)
+    standalone = installRoot / "python-standalone"
+    if standalone.is_dir():
+        try:
+            shutil.rmtree(standalone)
+            print("Removed leftover python-standalone/")
+        except Exception as e:
+            print(f"WARN: could not remove python-standalone/: {e}", file=sys.stderr)
+    for leftover in installRoot.glob("python-*-embed-*.zip"):
+        try:
+            if leftover.is_file():
+                leftover.unlink()
+                print(f"Removed leftover {leftover.name}")
+        except Exception as e:
+            print(f"WARN: could not remove {leftover.name}: {e}", file=sys.stderr)
+
+
+def writeFinishEmbedSwapCmd(installRoot: Path) -> Path:
+    """Cmd that waits for this process, then swaps the staged Python and cmd."""
+    cmd = installRoot / "finishEmbedSwap.cmd"
+    body = "\r\n".join([
+        "@echo off",
+        "setlocal EnableDelayedExpansion",
+        'cd /d "%~dp0"',
+        'set "PID=%~1"',
+        'set "PARENT=%~2"',
+        ":waitpy",
+        "if not defined PID goto waitcmd",
+        'tasklist /FI "PID eq %PID%" /NH 2>nul | find "%PID%" >nul',
+        "if not errorlevel 1 (",
+        "  ping -n 2 127.0.0.1 >nul",
+        "  goto waitpy",
+        ")",
+        ":waitcmd",
+        "if not defined PARENT goto swapembed",
+        'tasklist /FI "PID eq %PARENT%" /NH 2>nul | find /I "cmd.exe" >nul',
+        "if not errorlevel 1 (",
+        "  ping -n 2 127.0.0.1 >nul",
+        "  goto waitcmd",
+        ")",
+        ":swapembed",
+        "set TRIES=0",
+        ":swaptry",
+        'if not exist "pythonFiles\\python-embed.next\\python.exe" goto swapcmd',
+        'rmdir /s /q "pythonFiles\\python-embed" 2>nul',
+        'ren "pythonFiles\\python-embed.next" "python-embed"',
+        'if exist "pythonFiles\\python-embed\\python.exe" goto swapcmd',
+        "set /a TRIES+=1",
+        "if !TRIES! LSS 8 (",
+        "  ping -n 2 127.0.0.1 >nul",
+        "  goto swaptry",
+        ")",
+        ":swapcmd",
+        'if exist "applyUpdate.cmd.new" move /y "applyUpdate.cmd.new" "applyUpdate.cmd" >nul',
+        'if exist "pythonFiles\\scripts\\applyUpdate.py" if exist "applyUpdate.py" del /f /q "applyUpdate.py"',
+        'if exist "python-standalone" rmdir /s /q "python-standalone"',
+        'del /f /q "python-*-embed-*.zip" 2>nul',
+        'if exist "Data Doctor.exe" start "" "Data Doctor.exe"',
+        "endlocal",
+        '(goto) 2>nul & del /f /q "%~f0"',
+        "",
+    ])
+    cmd.write_text(body, encoding="utf-8", newline="\r\n")
+    return cmd
+
+
+def spawnFinishEmbedSwap(installRoot: Path) -> None:
+    cmd = writeFinishEmbedSwapCmd(installRoot)
+    if not sys.platform.startswith("win"):
+        return
+    kwargs = {
+        "cwd": str(installRoot),
+        "close_fds": True,
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+        "creationflags": 0x00000008 | 0x00000200,  # DETACHED | NEW_GROUP
+    }
+    subprocess.Popen(
+        ["cmd.exe", "/c", str(cmd), str(os.getpid()), str(os.getppid())],
+        **kwargs,
+    )
+    print("Staged files replace the running Python after this updater exits")
+
+
+def scheduleEmbedSwap(installRoot: Path, projectFiles: Path) -> bool:
+    """Start the swap helper when python-embed or applyUpdate.cmd was staged."""
+    if not sys.platform.startswith("win"):
+        return False
+    stagedCmd = (installRoot / "applyUpdate.cmd.new").is_file()
+    if not embedSwapPending(projectFiles) and not stagedCmd:
+        return False
+    spawnFinishEmbedSwap(installRoot)
+    return True
 
 
 def zipMemberUnsafe(name: str) -> bool:
@@ -410,8 +595,9 @@ def enableEmbedSite(embedDir: Path) -> None:
     (embedDir / "sitecustomize.py").write_text(_EMBED_SITECUSTOMIZE, encoding="utf-8")
 
 
-def ensurePip(py: str, projectFiles: Path) -> None:
+def ensurePip(py: str, projectFiles: Path, embedDir: Path | None = None) -> None:
     """Bootstrap pip into python-embed if `python -m pip` is missing."""
+    embedDir = embedDir or (projectFiles / "python-embed")
     probe = subprocess.call(
         [py, "-m", "pip", "--version"],
         stdout=subprocess.DEVNULL,
@@ -419,7 +605,7 @@ def ensurePip(py: str, projectFiles: Path) -> None:
     )
     if probe == 0:
         return
-    getPip = projectFiles / "python-embed" / "get-pip.py"
+    getPip = embedDir / "get-pip.py"
     if not getPip.is_file():
         url = "https://bootstrap.pypa.io/get-pip.py"
         print(f"Downloading {url}")
@@ -442,12 +628,19 @@ def ensurePip(py: str, projectFiles: Path) -> None:
             return
     print("+", py, str(getPip))
     subprocess.call([py, str(getPip), "--no-warn-script-location"])
-    enableEmbedSite(projectFiles / "python-embed")
+    enableEmbedSite(embedDir)
 
 
 def ensurePython(projectFiles: Path) -> str:
     """Prefer bundled python-embed; fall back to .venv / this interpreter."""
-    embedDir = projectFiles / "python-embed"
+    nextDir = projectFiles / "python-embed.next"
+    liveDir = projectFiles / "python-embed"
+    if (nextDir / "python.exe").is_file() and interpreterInside(liveDir):
+        enableEmbedSite(nextDir)
+        py = str(nextDir / "python.exe")
+        ensurePip(py, projectFiles, nextDir)
+        return py
+    embedDir = liveDir
     embedPy = embedDir / "python.exe"
     if embedPy.is_file():
         enableEmbedSite(embedDir)
@@ -568,10 +761,13 @@ def pythonCanImport(py: str, module: str) -> bool:
         return False
 
 
-def applyWindowsLauncherBits(payload: Path, installRoot: Path) -> None:
-    """Replace Data Doctor.exe, applyUpdate.cmd, and python-embed from a Windows zip."""
+def applyWindowsLauncherBits(payload: Path, installRoot: Path) -> Path | None:
+    """Replace Data Doctor.exe, the icon, and python-embed from a Windows zip.
+
+    applyUpdate.cmd is written later (staged beside the live cmd). The live
+    python-embed is not deleted while this process is running from it.
+    """
     copyFileIfPresent(payload / "Data Doctor.exe", installRoot / "Data Doctor.exe")
-    copyFileIfPresent(payload / "applyUpdate.cmd", installRoot / "applyUpdate.cmd")
     copyFileIfPresent(payload / "README.txt", installRoot / "README.txt")
     copyFileIfPresent(payload / "UPDATE.txt", installRoot / "UPDATE.txt")
     copyFileIfPresent(payload / "Data Doctor.ico", installRoot / "Data Doctor.ico")
@@ -581,14 +777,10 @@ def applyWindowsLauncherBits(payload: Path, installRoot: Path) -> None:
         if cand.is_dir() and (cand / "pythonw.exe").is_file():
             srcEmbed = cand
             break
+    if srcEmbed is None:
+        return None
     destEmbed = installRoot / WIN_CODE_DIR / "python-embed"
-    if srcEmbed is not None:
-        destEmbed.parent.mkdir(parents=True, exist_ok=True)
-        if destEmbed.exists():
-            shutil.rmtree(destEmbed)
-        shutil.copytree(srcEmbed, destEmbed)
-        enableEmbedSite(destEmbed)
-        print(f"Installed {WIN_CODE_DIR}/python-embed/")
+    return stagePythonEmbed(srcEmbed, destEmbed)
 
 
 def migrateLegacyProjectFiles(installRoot: Path, dest: Path) -> None:
@@ -776,7 +968,7 @@ def launchDataDoctorIfIdle(installRoot: Path) -> None:
 
 def writeApplyUpdateCmd(installRoot: Path) -> None:
     """Keep applyUpdate.cmd pointing at python-embed when present."""
-    cmd = installRoot / "applyUpdate.cmd"
+    cmd = cmdWriteTarget(installRoot)
     body = "\r\n".join([
         "@echo off",
         "REM Apply newest zip in updates\\ (code + bunker merge + pip into python-embed)",
@@ -808,6 +1000,10 @@ def writeApplyUpdateCmd(installRoot: Path) -> None:
         "",
     ])
     cmd.write_text(body, encoding="utf-8", newline="\r\n")
+    if cmd.name.endswith(".new"):
+        print("Staged applyUpdate.cmd.new (live applyUpdate.cmd is still running)")
+    else:
+        print("Updated applyUpdate.cmd")
 
 
 def runPipInstall(py: str, requirements: Path) -> int:
@@ -927,6 +1123,14 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
 
     migrateLegacyUpdatesFolder(installRoot)
     cleanupStaleLegacyDirs(installRoot)
+    removeAbandonedEmbedNext(installRoot / WIN_CODE_DIR)
+    leftoverSwap = installRoot / "finishEmbedSwap.cmd"
+    if leftoverSwap.is_file():
+        try:
+            leftoverSwap.unlink()
+            print("Removed leftover finishEmbedSwap.cmd")
+        except Exception as e:
+            print(f"WARN: could not remove finishEmbedSwap.cmd: {e}", file=sys.stderr)
 
     updateDir = resolveUpdatesDir(installRoot, create=True)
     extractDir = Path(tempfile.mkdtemp(prefix="dd-update-", dir=str(updateDir)))
@@ -1092,7 +1296,11 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
                     appendAppLog("INFO", f"chaining Windows zip {nxt.name}")
                     return apply(nxt, installRoot, keepExtract=keepExtract)
 
-        launchDataDoctorIfIdle(installRoot)
+        cleanupPackagedLeftovers(installRoot)
+        if scheduleEmbedSwap(installRoot, projectFiles):
+            print("Update files are staged. Data Doctor starts after this updater exits.")
+        else:
+            launchDataDoctorIfIdle(installRoot)
         return 0
     finally:
         if not keepExtract and extractDir.exists():

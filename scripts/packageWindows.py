@@ -16,9 +16,11 @@ Zip layout (launcher is the zip root):
     ui/
     quickLook/
     oracle/
-    scripts/applyUpdate.py
+    scripts/applyUpdate.py   (not copied to the zip root)
     scripts/updateBunker.py  (called by applyUpdate; also usable alone)
     temp/bunker.db         (packaged dictionary for merge — do not overwrite live)
+
+python-standalone/ is the Mac packaging cache and is not shipped.
 
 The embed zip lives at launcher/python-*-embed-amd64.zip and is extracted at
 package time. Pip/site-packages are installed on the user's PC (first
@@ -350,6 +352,8 @@ def main():
         ignoreNames={
             '.git', 'src', 'obj', 'bin', '.vs', '__pycache__',
             'updateBunker.cmd', 'Project Files',
+            # Mac packaging cache — not part of the Windows install
+            'python-standalone',
             # Full CPython installer — replaced by python-embed
             'python-3.13.14-amd64.exe',
             # Renamed to Data Doctor.ico
@@ -424,8 +428,7 @@ def main():
     applyUpdateSrc = root / "scripts" / "applyUpdate.py"
     if applyUpdateSrc.is_file():
         shutil.copy2(applyUpdateSrc, scriptsDir / "applyUpdate.py")
-        # Zip-root copy so applyUpdate.cmd can run even if pythonFiles is missing
-        shutil.copy2(applyUpdateSrc, stage / "applyUpdate.py")
+        print("Packaged pythonFiles/scripts/applyUpdate.py")
     else:
         print("WARN: applyUpdate.py not found", file=sys.stderr)
 

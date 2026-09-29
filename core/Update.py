@@ -217,6 +217,45 @@ def windowsNeedsLauncherRefresh() -> bool:
     return not legacy.is_file()
 
 
+def windowsLauncherInstall() -> bool:
+    """True when Data Doctor.exe is installed, so the Windows zip can refresh it."""
+    root = installRoot()
+    if root is None:
+        return False
+    return (root / "Data Doctor.exe").is_file()
+
+
+def chooseAssetKind(installKind: str, windowsExe: bool) -> str:
+    """Launcher installs take the Windows zip so the exe and icon update with the code."""
+    if windowsExe:
+        return "windows"
+    if installKind == "appimage":
+        return "appimage"
+    return "launcher"
+
+
+def resolveReleaseAsset(assets, assetKind: str, installKind: str):
+    """
+    Pick the release file for this install.
+
+    A Windows launcher that has no DataDoctor-Windows zip falls back to the
+    Python zip. That package does not include Data Doctor.exe or the icon.
+    Returns (asset, assetKind, fellBackFromWindows).
+    """
+    asset = _pickAsset(assets, assetKind)
+    fellBack = False
+    if asset is None and assetKind == "windows":
+        fellBack = True
+        asset = _pickAsset(assets, "python")
+        if asset is not None:
+            assetKind = "launcher"
+    elif asset is None and installKind != "appimage":
+        asset = _pickAsset(assets, "python")
+        if asset is not None:
+            assetKind = "launcher"
+    return asset, assetKind, fellBack
+
+
 _APPLY_UPDATE_CMD = "\r\n".join([
     "@echo off",
     "REM Apply newest zip in updates\\ (code + bunker merge + pip into python-embed)",
@@ -506,21 +545,14 @@ def fetchLatestRelease(
 
     kind = detectInstallKind()
     if assetKind is None:
-        if windowsNeedsLauncherRefresh():
-            assetKind = "windows"
-        elif kind == "appimage":
-            assetKind = "appimage"
-        else:
-            assetKind = "launcher"
-    asset = _pickAsset(rel.get("assets") or [], assetKind)
-    if asset is None and assetKind == "windows":
+        assetKind = chooseAssetKind(kind, windowsLauncherInstall())
+    asset, assetKind, fellBack = resolveReleaseAsset(rel.get("assets") or [], assetKind, kind)
+    if fellBack and asset is not None:
         Logic.logMessage(
             "INFO",
-            f"Update {ver} found but no DataDoctor-Windows-*.zip on the release",
+            f"Update {ver} has no DataDoctor-Windows zip. Using the Python package. "
+            "Data Doctor.exe and Data Doctor.ico will not change.",
         )
-    elif asset is None and kind != "appimage":
-        asset = _pickAsset(rel.get("assets") or [], "python")
-        assetKind = "launcher" if asset else assetKind
     if asset is None:
         Logic.logMessage(
             "INFO",
