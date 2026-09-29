@@ -1,5 +1,6 @@
 # uiPlotter.py
-# Plotter window and tab. API-only fetch, then Line / Scatter / Time Lag.
+# Plotter window and tab. Public API first, then Line / Scatter / Time Lag.
+# An Oracle HDB is read with SQL only when that API call does not return the series.
 # The Data Query table and its right-click Graph are not used here.
 
 import json
@@ -699,12 +700,16 @@ class uiPlotter(QMainWindow):
             endDate = self.dteEndDate.dateTime().toString("yyyy-MM-dd hh:mm")
             bucket = []
             host = self.winMain if self.winMain is not None else self
+            dictTable = None
+            dictionary = getattr(self.winMain, "winDataDictionary", None) if self.winMain is not None else None
+            if dictionary is not None:
+                dictTable = getattr(dictionary, "mainTable", None)
             # Same as Query: hide this window, progress stays on the main window,
             # then close so Plot is not left sitting over the tab.
             self.hide()
             Query.executeQuery(
                 host, items, startDate, endDate,
-                False, None,
+                False, dictTable,
                 apiOnly=True, seriesSink=bucket,
             )
             if bucket and self.winMain is not None:

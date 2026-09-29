@@ -218,11 +218,37 @@ class queryWorker(QRunnable):
                         table = 'M' if mrid != '0' else 'R'
                         apiInterval = interval
 
-                        # Internal HDB uses Oracle. apiOnly (Plotter) stays on the public API.
+                        # Internal HDB uses Oracle. Plotter tries the public API
+                        # first, then SQL for Oracle HDBs the API did not return.
                         if self.isInternal and not self.apiOnly:
                             result = USBR.sqlRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
-                        else: # External use apiRead
-                            result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table)
+                        else:
+                            result = {}
+                            try:
+                                result = USBR.apiRead(svr, SDIDs, self.startDate, self.endDate, apiInterval, mrid, table) or {}
+                            except Exception as e:
+                                Logic.logException(f"queryWorker: USBR apiRead failed for SDIDs {SDIDs}", e)
+                                result = {}
+                            if self.apiOnly:
+                                missing = plotterSqlFallbackIds(itemDb, SDIDs, result)
+                                if missing:
+                                    Logic.logMessage(
+                                        "WARN",
+                                        "Plotter public API did not return "
+                                        f"{', '.join(str(s) for s in missing)} from {itemDb}. "
+                                        "Trying the Oracle connection.",
+                                    )
+                                    try:
+                                        sqlResult = USBR.sqlRead(
+                                            svr, missing, self.startDate, self.endDate,
+                                            apiInterval, mrid, table,
+                                        )
+                                        result = mergeUsbrApiAndSql(result, sqlResult, missing)
+                                    except Exception as e:
+                                        Logic.logException(
+                                            f"queryWorker: Plotter SQL fallback failed for {missing}",
+                                            e,
+                                        )
                         
                         if Config.debug:
                             Logic.logMessage("DEBUG", f"queryWorker: USBR result for SDIDs {SDIDs}: {result}")
@@ -513,6 +539,67 @@ def usgsDictionaryDataId(dataId):
     if len(parts) >= 2:
         return parts[1]
     return raw
+
+
+def plotterSqlFallbackIds(database, requestedIds, apiResult):
+    """SDIDs Plotter should read with SQL after the public API.
+
+    Only USBR Oracle databases. A key that is present, even with an empty
+    list, means the API answered. A missing key means the call failed or
+    the series was not in the response. PNHYD, GPHYD, USGS, and Aquarius
+    stay on the API.
+    """
+    if not Utils.usbrOracleDatabase(database):
+        return []
+    found = apiResult if isinstance(apiResult, dict) else {}
+    missing = []
+    for sid in requestedIds or []:
+        if sid not in found and str(sid) not in found:
+            missing.append(sid)
+    return missing
+
+
+def mergeUsbrApiAndSql(apiResult, sqlResult, missingIds):
+    """Keep API series and fill only the ids SQL was asked to read."""
+    merged = dict(apiResult) if isinstance(apiResult, dict) else {}
+    sqlResult = sqlResult if isinstance(sqlResult, dict) else {}
+    for sid in missingIds or []:
+        payload = sqlResult.get(sid)
+        if payload is None:
+            payload = sqlResult.get(str(sid))
+        if payload:
+            merged[sid] = payload
+    return merged
+
+
+def dictionaryLegendLabel(table, dataId, database, idIndex=None):
+    """Plot legend from the data dictionary.
+
+    commonName, or commonName-datatype when that source's Add Data Type
+    to Labels option is on. None when the id is missing or commonName is blank.
+    """
+    if table is None or not dataId:
+        return None
+    db = str(database or '').strip()
+    dictKey = dictionaryLookupKey(dataId, db)
+    row = getDataDictionaryItem(table, dictKey, idIndex=idIndex)
+    if row < 0 and db.upper().startswith('USGS'):
+        bare = usgsDictionaryDataId(dataId)
+        if bare and bare != dictKey:
+            row = getDataDictionaryItem(table, bare, idIndex=idIndex)
+    if row < 0:
+        return None
+    commonCol = getColByName(table, 'commonName')
+    commonItem = table.item(row, commonCol) if commonCol != -1 else None
+    common = commonItem.text().strip() if commonItem is not None and commonItem.text() else ''
+    if not common:
+        return None
+    typeCol = getColByName(table, 'dataType')
+    typeItem = table.item(row, typeCol) if typeCol != -1 else None
+    dataType = typeItem.text().strip() if typeItem is not None and typeItem.text() else ''
+    if dataType and Utils.includeDataTypeInLabel(db):
+        return f"{common}-{dataType}"
+    return common
 
 
 def dictionaryLookupKey(dataId, database):
@@ -1564,15 +1651,20 @@ def executeQuery(
         # Plotter: hand back aligned series and skip the Data Query table.
         if seriesSink is not None:
             series = []
+            dictIndex = buildDataDictionaryIndex(dataDictionaryTable)
             for item in queryItems:
                 dataID = item[0]
                 interval = item[1] if len(item) > 1 else firstInterval
                 db = item[2] if len(item) > 2 else ""
-                label = dataID
-                if labelsDict:
+                label = dictionaryLegendLabel(
+                    dataDictionaryTable, dataID, db, idIndex=dictIndex,
+                )
+                if not label and labelsDict:
                     site = labelsDict.get(dataID)
                     if site is not None and str(site).strip():
                         label = str(site).strip()
+                if not label:
+                    label = dataID
                 series.append({
                     "dataId": dataID,
                     "interval": interval,

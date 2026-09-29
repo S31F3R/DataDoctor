@@ -2746,6 +2746,20 @@ def hdbAccessDisplayNames():
     return names
 
 
+def usbrOracleDatabase(database):
+    """True for an HDB Oracle target (LCHDB, UCHDB2, …). Not PNHYD or GPHYD."""
+    label = str(database or '').strip().upper()
+    if not label:
+        return False
+    short = label.split('-', 1)[-1] if '-' in label else label
+    for name in hdbAccessDisplayNames():
+        upper = name.upper()
+        nameShort = upper.split('-', 1)[-1] if '-' in upper else upper
+        if upper == label or nameShort == short:
+            return True
+    return False
+
+
 def applyLiveAppearance(app=None):
     """
     Apply current Config.retroMode + colorTheme without restarting:

@@ -247,8 +247,10 @@ def apiRead(svr, SDIDs, startDate, endDate, interval, mrid='0', table='R'):
                     matchingSeries = series
                     break
             if not matchingSeries:
+                # Leave the key out. A missing key means this series was not
+                # returned (Plotter can try SQL). An empty list is reserved
+                # for a series the API did return with no points.
                 Logic.logMessage("WARN", f"No matching series for SDID '{SDID}'.")
-                resultDict[SDID] = []
                 continue
             dataPoints = matchingSeries['Data']
 
