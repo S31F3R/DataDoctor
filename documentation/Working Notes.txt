@@ -10,7 +10,3 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
-- About stars scroll sideways on a loop behind the title
-- Windows update keeps the installed Python and finishes the launcher command on a second restart
-- Scatter and Time Lag tab icons use their own chart color and marks
-
