@@ -101,6 +101,60 @@ def main():
         if applyUpdate.interpreterInside(install / "updates", str(exe)):
             errors += fail("outside", exe)
 
+        same = root / "same"
+        srcEmbed = same / "src"
+        destEmbed = same / "pythonFiles" / "python-embed"
+        writeFile(srcEmbed / "python.exe", "src")
+        writeFile(srcEmbed / "pythonw.exe", "src")
+        writeFile(srcEmbed / "python314.dll", "dll")
+        writeFile(destEmbed / "python.exe", "keep")
+        writeFile(destEmbed / "pythonw.exe", "keep")
+        writeFile(destEmbed / "python314.dll", "dll")
+        if not applyUpdate.embedAlreadyCurrent(srcEmbed, destEmbed):
+            errors += fail("same python", applyUpdate.embedAbiTag(destEmbed))
+        kept = applyUpdate.stageEmbedIfNeeded(srcEmbed, destEmbed, inUse=True)
+        if kept != destEmbed:
+            errors += fail("keep target", kept)
+        if (destEmbed / "python.exe").read_text(encoding="utf-8") != "keep":
+            errors += fail("kept embed", "live python was replaced")
+        if (destEmbed.with_name("python-embed.next")).exists():
+            errors += fail("same next", "staged a copy of the same Python")
+
+        writeFile(srcEmbed / "python315.dll", "newer")
+        (srcEmbed / "python314.dll").unlink()
+        if applyUpdate.embedAlreadyCurrent(srcEmbed, destEmbed):
+            errors += fail("newer python", "same tag")
+        staged = applyUpdate.stageEmbedIfNeeded(srcEmbed, destEmbed, inUse=True)
+        if staged.name != "python-embed.next":
+            errors += fail("newer stage", staged.name)
+        if (destEmbed / "python.exe").read_text(encoding="utf-8") != "keep":
+            errors += fail("newer live", "replaced the running Python")
+
+        finish = root / "finish"
+        writeFile(finish / "applyUpdate.cmd", "old")
+        writeFile(finish / "applyUpdate.cmd.new", "new")
+        writeFile(finish / "applyUpdate.py", "root")
+        writeFile(finish / "pythonFiles" / "scripts" / "applyUpdate.py", "scripts")
+        writeFile(finish / "pythonFiles" / "python-embed.next" / "python.exe", "staged")
+        writeFile(finish / "pythonFiles" / "python-embed" / "python.exe", "live")
+        writeFile(finish / "finishEmbedSwap.cmd", "old helper")
+        # This process is not inside the fake embed, so the swap can finish.
+        rc = applyUpdate.finishStaged(finish)
+        if rc != 0:
+            errors += fail("finish rc", rc)
+        if (finish / "applyUpdate.cmd.new").exists():
+            errors += fail("finish cmd.new", "still staged")
+        if (finish / "applyUpdate.cmd").read_text(encoding="utf-8") != "new":
+            errors += fail("finish cmd", "old command still in place")
+        if (finish / "pythonFiles" / "python-embed.next").exists():
+            errors += fail("finish next", "staged Python still waiting")
+        if (finish / "pythonFiles" / "python-embed" / "python.exe").read_text(encoding="utf-8") != "staged":
+            errors += fail("finish embed", "staged Python was not swapped")
+        if (finish / "applyUpdate.py").exists():
+            errors += fail("finish root", "root applyUpdate.py still present")
+        if (finish / "finishEmbedSwap.cmd").exists():
+            errors += fail("finish helper", "old helper still present")
+
     if errors:
         print(f"{errors} failed")
         return 1

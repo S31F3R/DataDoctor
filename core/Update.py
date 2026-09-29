@@ -225,6 +225,214 @@ def windowsLauncherInstall() -> bool:
     return (root / "Data Doctor.exe").is_file()
 
 
+def windowsLauncherLeftovers(root: Path) -> list[str]:
+    """
+    Files a Windows update could not replace while they were in use.
+
+    applyUpdate.cmd.new and python-embed.next need another restart.
+    The other names are leftovers the restart also removes.
+    """
+    items = []
+    if (root / "applyUpdate.cmd.new").is_file():
+        items.append("applyUpdate.cmd.new")
+    for folder in ("pythonFiles", "Project Files"):
+        if (root / folder / "python-embed.next" / "python.exe").is_file():
+            items.append("python-embed.next")
+            break
+    if (root / "finishEmbedSwap.cmd").is_file():
+        items.append("finishEmbedSwap.cmd")
+    rootApply = root / "applyUpdate.py"
+    scriptsApply = root / "pythonFiles" / "scripts" / "applyUpdate.py"
+    legacyApply = root / "Project Files" / "scripts" / "applyUpdate.py"
+    if rootApply.is_file() and (scriptsApply.is_file() or legacyApply.is_file()):
+        items.append("applyUpdate.py")
+    if (root / "python-standalone").is_dir():
+        items.append("python-standalone")
+    if any(root.glob("python-*-embed-*.zip")):
+        items.append("python embed zip")
+    return items
+
+
+def windowsLauncherRestartPending(root: Path | None = None) -> bool:
+    """True when this Windows install still has a staged launcher command or Python."""
+    if not sys.platform.startswith("win"):
+        return False
+    if root is None:
+        root = installRoot()
+    if root is None or not (root / "Data Doctor.exe").is_file():
+        return False
+    items = windowsLauncherLeftovers(root)
+    return "applyUpdate.cmd.new" in items or "python-embed.next" in items
+
+
+def windowsLauncherRestartText(items: list[str]) -> str:
+    labels = {
+        "applyUpdate.cmd.new": "the new launcher command (applyUpdate.cmd.new)",
+        "python-embed.next": "a staged Python folder (python-embed.next)",
+        "finishEmbedSwap.cmd": "an old swap script (finishEmbedSwap.cmd)",
+        "applyUpdate.py": "a leftover applyUpdate.py in the install folder",
+        "python-standalone": "a leftover python-standalone folder",
+        "python embed zip": "a leftover Python embed zip",
+    }
+    lines = "\n".join(f"- {labels.get(item, item)}" for item in items)
+    return (
+        "The Windows launcher still has a few files from the last update.\n\n"
+        f"{lines}\n\n"
+        "Restart closes Data Doctor, puts the new launcher command in place, "
+        "and finishes whatever is still staged. Later asks again the next time "
+        "Data Doctor opens."
+    )
+
+
+def launcherRestartScript() -> str:
+    """
+    Hidden cmd: wait until Data Doctor has exited, rename the staged command,
+    swap a staged Python if one is there, then finish without a zip.
+
+    No process listing. The retry stops after 8 tries.
+    """
+    lines = [
+        "@echo off",
+        "setlocal EnableDelayedExpansion",
+        'cd /d "%~dp0"',
+        '>"%TEMP%\\dd-launcher-wait.vbs" echo WScript.Sleep 1500',
+        "wscript //B //Nologo \"%TEMP%\\dd-launcher-wait.vbs\"",
+        "wscript //B //Nologo \"%TEMP%\\dd-launcher-wait.vbs\"",
+        "set TRIES=0",
+        ":swaptry",
+        'if not exist "pythonFiles\\python-embed.next\\python.exe" if not exist "Project Files\\python-embed.next\\python.exe" goto swapcmd',
+        'if exist "pythonFiles\\python-embed.next\\python.exe" (',
+        '  rmdir /s /q "pythonFiles\\python-embed" 2>nul',
+        '  ren "pythonFiles\\python-embed.next" "python-embed"',
+        ")",
+        'if exist "Project Files\\python-embed.next\\python.exe" (',
+        '  rmdir /s /q "Project Files\\python-embed" 2>nul',
+        '  ren "Project Files\\python-embed.next" "python-embed"',
+        ")",
+        'if exist "pythonFiles\\python-embed.next\\python.exe" goto swapwait',
+        'if exist "Project Files\\python-embed.next\\python.exe" goto swapwait',
+        "goto swapcmd",
+        ":swapwait",
+        "set /a TRIES+=1",
+        "if !TRIES! LSS 8 (",
+        "  wscript //B //Nologo \"%TEMP%\\dd-launcher-wait.vbs\"",
+        "  goto swaptry",
+        ")",
+        ":swapcmd",
+        'if exist "applyUpdate.cmd.new" (',
+        '  if exist "applyUpdate.cmd" del /f /q "applyUpdate.cmd"',
+        '  ren "applyUpdate.cmd.new" "applyUpdate.cmd"',
+        ")",
+        'if exist "finishEmbedSwap.cmd" del /f /q "finishEmbedSwap.cmd"',
+        'set "PY="',
+        'if exist "pythonFiles\\python-embed\\pythonw.exe" set "PY=pythonFiles\\python-embed\\pythonw.exe"',
+        'if not defined PY if exist "Project Files\\python-embed\\pythonw.exe" set "PY=Project Files\\python-embed\\pythonw.exe"',
+        'if not defined PY if exist "pythonFiles\\python-embed\\python.exe" set "PY=pythonFiles\\python-embed\\python.exe"',
+        'set "SCRIPT=pythonFiles\\scripts\\applyUpdate.py"',
+        'if not exist "%SCRIPT%" set "SCRIPT=Project Files\\scripts\\applyUpdate.py"',
+        'if defined PY if exist "%SCRIPT%" (',
+        '  start "" "%PY%" "%SCRIPT%" --finish-staged',
+        "  goto done",
+        ")",
+        'if exist "Data Doctor.exe" start "" "Data Doctor.exe"',
+        ":done",
+        'del /f /q "%TEMP%\\dd-launcher-wait.vbs"',
+        "endlocal",
+        '(goto) 2>nul & del /f /q "%~f0"',
+        "",
+    ]
+    return "\r\n".join(lines)
+
+
+_launcherRestartLater = False
+
+
+def launcherRestartLater() -> bool:
+    return _launcherRestartLater
+
+
+def noteLauncherRestartLater() -> None:
+    global _launcherRestartLater
+    _launcherRestartLater = True
+
+
+def spawnLauncherRestart(root: Path) -> bool:
+    """Start the hidden finisher and return. The caller closes Data Doctor."""
+    if not sys.platform.startswith("win"):
+        return False
+    cmd = root / "finishLauncherRestart.cmd"
+    try:
+        cmd.write_text(launcherRestartScript(), encoding="utf-8", newline="\r\n")
+    except Exception as e:
+        Logic.logException("could not write launcher restart script", e)
+        return False
+    import subprocess
+    try:
+        subprocess.Popen(
+            ["cmd.exe", "/c", str(cmd)],
+            cwd=str(root),
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=0x08000000 | 0x00000008 | 0x00000200,  # NO_WINDOW | DETACHED | NEW_GROUP
+        )
+    except Exception as e:
+        Logic.logException("could not start launcher restart", e)
+        return False
+    Logic.logMessage("INFO", "Launcher restart staged; closing Data Doctor")
+    return True
+
+
+def offerWindowsLauncherRestart(parent=None) -> bool:
+    """
+    Ask to finish a Windows update that staged applyUpdate.cmd.new.
+
+    Restart renames that command and finishes whatever is left.
+    Later waits until the next time Data Doctor opens.
+    Returns True when Data Doctor is closing to restart.
+    """
+    root = installRoot()
+    if root is None:
+        return False
+    items = windowsLauncherLeftovers(root)
+    if "applyUpdate.cmd.new" not in items and "python-embed.next" not in items:
+        return False
+
+    def _show():
+        from PyQt6.QtWidgets import QMessageBox
+        box = QMessageBox(parent)
+        box.setWindowTitle("Finish launcher update")
+        box.setText(windowsLauncherRestartText(items))
+        restartBtn = box.addButton("Restart", QMessageBox.ButtonRole.AcceptRole)
+        laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(restartBtn)
+        box.exec()
+        if box.clickedButton() is restartBtn:
+            return "restart"
+        noteLauncherRestartLater()
+        return "later"
+
+    choice = _holdUpdatePrompt(_show)
+    if choice != "restart":
+        return False
+    if not spawnLauncherRestart(root):
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.warning(
+            parent,
+            "Finish launcher update",
+            "Could not start the launcher update.",
+        )
+        return False
+    from PyQt6.QtWidgets import QApplication
+    app = QApplication.instance()
+    if parent is not None:
+        parent.close()
+    if app is not None:
+        app.quit()
+    return True
+
+
 def chooseAssetKind(installKind: str, windowsExe: bool) -> str:
     """Launcher installs take the Windows zip so the exe and icon update with the code."""
     if windowsExe:
@@ -1028,6 +1236,9 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
         from PyQt6.QtWidgets import QApplication
 
         def _go():
+            if windowsLauncherRestartPending() and not launcherRestartLater():
+                if offerWindowsLauncherRestart(parent):
+                    return
             pending = pendingAppImagePath()
             if pending is not None:
                 def _showReady():
