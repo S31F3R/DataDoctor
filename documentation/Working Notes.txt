@@ -6,6 +6,10 @@ the version is unknown until publish (rc.N, beta.N, or full vX.Y.Z).
 Write one bullet per change (bug fix, feature, or TASK). Include a
 GitHub issue number when there is one.
 
+- Plotter legends use the Data Dictionary common name, and commonName-datatype when Add Data Type to Labels is on for that source
+- Plotter reads an Oracle HDB with SQL when the public API does not return that series
+- App icon is the new wizard. The window icon comes from the ico and png. The Windows exe icon updates after the launcher is rebuilt
+
 publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.

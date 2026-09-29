@@ -11,6 +11,35 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
+[ ] New app icon
+   Steps:
+     a. Start Data Doctor. The window icon is the wizard with the blue hat,
+        staff, and book. The area around the figure is clear, not a gray box.
+     b. That icon is ui/icons/DataDoctor.png and ui/icons/Data Doctor.ico.
+        The same ico is in launcher/ and launcher/src/ for the Windows build.
+     c. Data Doctor.exe in Explorer keeps the previous icon until the launcher
+        is rebuilt on Windows. The About window still uses the starfield title.
+
+[ ] Plotter legend uses the dictionary name
+   Steps:
+     a. Data Dictionary has a common name for a Data ID you will plot.
+        Options: Add Data Type to Labels is on for that source
+        (USBR, USGS, or Aquarius — each source has its own checkbox).
+     b. Plot Line, Scatter, or Time Lag that includes that Data ID.
+     c. The legend is commonName-datatype. Turn that source's checkbox off,
+        plot again, and the legend is the common name only.
+     d. A Data ID that is not in the dictionary still uses the site name
+        or the Data ID.
+
+[ ] Plotter HDB uses SQL when the API misses
+   Steps:
+     a. Oracle credentials are saved. Plot a USBR Oracle series (LCHDB,
+        UCHDB2, YAOHDB, or another HDB) whose public API call fails or
+        does not include that SDID.
+     b. The series still plots. The log says it is trying the Oracle connection.
+     c. USBR-PNHYD, USBR-GPHYD, USGS, and Aquarius stay on the API.
+        A series the public API returns with no points is not read from SQL.
+
 [ ] Passive update check notices a new beta
    Steps:
      a. Options: Beta updates is on. Leave Data Doctor open.

@@ -1,7 +1,4 @@
 ####### CURRENT TASKS #######
--On Any of the Plotter graphs, lets do a Data Dictionary check for the dataID. If it exists in the Data Dictionary, use commonName for the legend in the graph. If they have add datat ypes to label selected, do commonName-datatype for the legend
-    -Remember adding datatypes to labels is an option per query database, like Aquarius, USGS, or USBR
--Have Plotter queries use SQL for HDB connections as a fallback if the API fails. USBR Oracle databases are the only ones that need this fallback
 
 ####### CURRENT BUGS #######
 
