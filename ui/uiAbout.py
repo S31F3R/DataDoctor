@@ -46,6 +46,67 @@ def _pygameMixer():
         return None
 
 
+def splitAboutArt(rgba: bytes, width: int, height: int):
+    """
+    Split the About poster into a still title and moving stars.
+
+    Green title pixels stay in the text image. Near-gray pixels bright enough
+    to be stars are returned as normalized (x, y, brightness) points.
+    Returns (textRgba, stars, vanish) where vanish is the title center.
+    """
+    import numpy as np
+
+    pixels = np.frombuffer(rgba, dtype=np.uint8).reshape((height, width, 4))
+    red = pixels[:, :, 0].astype(np.int16)
+    greenCh = pixels[:, :, 1].astype(np.int16)
+    blue = pixels[:, :, 2].astype(np.int16)
+    alpha = pixels[:, :, 3]
+    green = (alpha >= 20) & (greenCh > 50) & (greenCh >= red + 12) & (greenCh >= blue + 12)
+    hi = np.maximum(np.maximum(red, greenCh), blue)
+    lo = np.minimum(np.minimum(red, greenCh), blue)
+    star = (alpha >= 20) & ~green & (hi >= 48) & ((hi - lo) <= 36)
+    text = np.zeros_like(pixels)
+    text[green] = pixels[green]
+    ys, xs = np.nonzero(star)
+    bright = ((red[ys, xs].astype(np.int32) + greenCh[ys, xs] + blue[ys, xs]) // 3)
+    if xs.size > 2000:
+        step = xs.size / 2000.0
+        idx = (np.arange(2000) * step).astype(np.int64)
+        xs = xs[idx]
+        ys = ys[idx]
+        bright = bright[idx]
+    stars = list(zip((xs / width).tolist(), (ys / height).tolist(), bright.tolist()))
+    gys, gxs = np.nonzero(green)
+    if gxs.size:
+        vanish = (float(gxs.mean()) / width, float(gys.mean()) / height)
+    else:
+        vanish = (0.5, 0.45)
+    return text.tobytes(), stars, vanish
+
+
+def aboutStarState(stars, vanish):
+    """Turn poster star positions into angle, radius, speed, brightness."""
+    vx, vy = vanish
+    state = []
+    for x, y, bright in stars:
+        dx = x - vx
+        dy = y - vy
+        radius = math.hypot(dx, dy)
+        angle = math.atan2(dy, dx)
+        speed = 0.0015 + (bright / 255.0) * 0.0035
+        state.append([angle, max(radius, 0.012), speed, bright])
+    return state
+
+
+def stepAboutStars(state, limit=1.25):
+    """Move stars outward. A star that leaves the poster restarts near the title."""
+    for star in state:
+        star[1] += star[2]
+        if star[1] > limit:
+            star[1] = 0.015
+    return state
+
+
 # user.config optional map (refMarks) — short keys, integer values
 def _readMark(key):
     try:
@@ -151,6 +212,12 @@ class uiAbout(QDialog):
         self._aboutBgSize = None
         self._aboutLaidSize = None
         self._closing = False
+        self.aboutStarTimer = None
+        self.aboutStarState = None
+        self.aboutTextImage = None
+        self.aboutTextCache = None
+        self.aboutTextCacheSize = None
+        self.aboutVanish = (0.5, 0.45)
 
         self.backgroundLabel = self.findChild(QLabel, 'backgroundLabel')
         self.textInfo = self.findChild(QTextBrowser, 'textInfo')
@@ -335,15 +402,18 @@ class uiAbout(QDialog):
         oy = (h - fh) // 2
         if self.backgroundLabel is not None:
             self.backgroundLabel.setGeometry(ox, oy, fw, fh)
-            src = self._aboutBgSrc
-            key = (fw, fh)
-            if src is not None and not src.isNull() and self._aboutBgSize != key:
-                self.backgroundLabel.setPixmap(src.scaled(
-                    fw, fh,
-                    Qt.AspectRatioMode.IgnoreAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                ))
-                self._aboutBgSize = key
+            if self.aboutStarsRunning():
+                self.paintAboutStars()
+            else:
+                src = self._aboutBgSrc
+                key = (fw, fh)
+                if src is not None and not src.isNull() and self._aboutBgSize != key:
+                    self.backgroundLabel.setPixmap(src.scaled(
+                        fw, fh,
+                        Qt.AspectRatioMode.IgnoreAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    ))
+                    self._aboutBgSize = key
         if self.textInfo is not None and not self._cabinetActive():
             pt = max(self._retroPt, int(round(self._retroPt * min(fit, 2.4))))
             self.textInfo.setGeometry(
@@ -754,6 +824,7 @@ class uiAbout(QDialog):
         Reverts both when leaving cabinet mode entirely.
         """
         if active:
+            self.stopAboutStars()
             self.setWindowTitle(self._TITLE_CABINET)
             self._unlockCabinetSize()
             if self.backgroundLabel is not None:
@@ -773,6 +844,130 @@ class uiAbout(QDialog):
             if self.backgroundLabel is not None:
                 self.backgroundLabel.show()
                 self.backgroundLabel.lower()
+            self.startAboutStars()
+
+    def prepareAboutStars(self):
+        """Scan the About poster once. Title stays still; stars are the moving layer."""
+        if self.aboutStarState is not None and self.aboutTextImage is not None:
+            return True
+        path = Logic.resourcePath('ui/DataDoctor.png')
+        image = QImage(path)
+        if image.isNull():
+            return False
+        image = image.convertToFormat(QImage.Format.Format_RGBA8888)
+        width, height = image.width(), image.height()
+        if width < 2 or height < 2:
+            return False
+        ptr = image.bits()
+        ptr.setsize(image.sizeInBytes())
+        raw = bytes(ptr)
+        bpl = image.bytesPerLine()
+        rowBytes = width * 4
+        if bpl != rowBytes:
+            packed = bytearray()
+            for y in range(height):
+                start = y * bpl
+                packed.extend(raw[start:start + rowBytes])
+            raw = bytes(packed)
+        textRgba, stars, vanish = splitAboutArt(raw, width, height)
+        if not stars:
+            return False
+        textImage = QImage(textRgba, width, height, QImage.Format.Format_RGBA8888).copy()
+        self.aboutTextImage = textImage
+        self.aboutVanish = vanish
+        self.aboutStarState = aboutStarState(stars, vanish)
+        self.aboutTextCache = None
+        self.aboutTextCacheSize = None
+        return True
+
+    def aboutTextForSize(self, fw, fh):
+        key = (fw, fh)
+        if self.aboutTextCache is not None and self.aboutTextCacheSize == key:
+            return self.aboutTextCache
+        if self.aboutTextImage is None or self.aboutTextImage.isNull():
+            return None
+        scaled = self.aboutTextImage.scaled(
+            fw, fh,
+            Qt.AspectRatioMode.IgnoreAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self.aboutTextCache = scaled
+        self.aboutTextCacheSize = key
+        return scaled
+
+    def aboutStarsRunning(self):
+        timer = self.aboutStarTimer
+        return timer is not None and timer.isActive()
+
+    def paintAboutStars(self):
+        label = self.backgroundLabel
+        state = self.aboutStarState
+        if label is None or not state:
+            return
+        fw = max(1, label.width())
+        fh = max(1, label.height())
+        image = QImage(fw, fh, QImage.Format.Format_RGB32)
+        image.fill(QColor(0, 0, 0))
+        painter = QPainter(image)
+        try:
+            vx, vy = self.aboutVanish
+            dim = []
+            bright = []
+            for angle, radius, _speed, level in state:
+                x = int((vx + math.cos(angle) * radius) * fw)
+                y = int((vy + math.sin(angle) * radius) * fh)
+                if x < 0 or y < 0 or x >= fw or y >= fh:
+                    continue
+                if level >= 180:
+                    bright.append((x, y))
+                else:
+                    dim.append((x, y))
+            painter.setPen(QColor(170, 170, 170))
+            for x, y in dim:
+                painter.drawPoint(x, y)
+            painter.setPen(QColor(255, 255, 255))
+            for x, y in bright:
+                painter.drawPoint(x, y)
+            text = self.aboutTextForSize(fw, fh)
+            if text is not None:
+                painter.drawImage(0, 0, text)
+        finally:
+            painter.end()
+        label.setPixmap(QPixmap.fromImage(image))
+        self._aboutBgSize = (fw, fh)
+
+    def tickAboutStars(self):
+        if (
+            self._closing
+            or self._cabinetMode
+            or self._playMode
+            or self._splashMode
+            or self.backgroundLabel is None
+            or not self.backgroundLabel.isVisible()
+        ):
+            self.stopAboutStars()
+            return
+        stepAboutStars(self.aboutStarState or [])
+        self.paintAboutStars()
+
+    def startAboutStars(self):
+        if self._closing or self._cabinetMode or self._playMode or self._splashMode:
+            return
+        if self.backgroundLabel is None:
+            return
+        if not self.prepareAboutStars():
+            return
+        if self.aboutStarTimer is None:
+            self.aboutStarTimer = QTimer(self)
+            self.aboutStarTimer.timeout.connect(self.tickAboutStars)
+        if not self.aboutStarTimer.isActive():
+            self.aboutStarTimer.start(40)
+        self.paintAboutStars()
+
+    def stopAboutStars(self):
+        timer = self.aboutStarTimer
+        if timer is not None:
+            timer.stop()
 
     def _openCabinet(self):
         if self.textInfo is not None:
@@ -1111,14 +1306,18 @@ class uiAbout(QDialog):
 
     def closeEvent(self, event):
         self._closing = True
+        self.stopAboutStars()
         self.stopMusic()
         self._resetToDefaultAbout()
+        self.stopAboutStars()
         super().closeEvent(event)
 
     def reject(self):
         self._closing = True
+        self.stopAboutStars()
         self.stopMusic()
         self._resetToDefaultAbout()
+        self.stopAboutStars()
         super().reject()
 
     def showEvent(self, event):
@@ -1136,6 +1335,7 @@ class uiAbout(QDialog):
                 self.buttonSecret.show()
                 self.buttonSecret.raise_()
             self._layoutAboutChrome()
+            self.startAboutStars()
             self.startMusic()
         super().showEvent(event)
 
