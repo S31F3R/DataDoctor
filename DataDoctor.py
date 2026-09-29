@@ -1773,6 +1773,45 @@ class uiMain(QMainWindow):
             self.tabGraph.setObjectName('tabGraph')
         return self.tabGraph
 
+    def mainTabIconName(self, widget):
+        """Icon file for a main-window tab. Detached windows do not use these."""
+        if widget is None:
+            return ""
+        if widget is self.tabMain:
+            kind = (getattr(self, "currentQueryType", "") or "").lower()
+            if kind == "public":
+                return "PublicQuery.png"
+            if kind == "internal":
+                return "InternalQuery.png"
+            return ""
+        if widget is self.tabSQL:
+            return "SQL.png"
+        if widget is self.tabGraph:
+            return "Plotter.png"
+        if widget is self.tabPlotter:
+            title = getattr(self, "plotterTitle", "") or ""
+            if "Scatter" in title:
+                return "Scatter.png"
+            if "Time Lag" in title:
+                return "TimeLag.png"
+            return "Plotter.png"
+        return ""
+
+    def paintMainTabIcon(self, widget):
+        """Put the tab icon on the main tab bar. No icon when the tab is detached."""
+        if self.tabWidget is None or widget is None:
+            return
+        idx = self.tabWidget.indexOf(widget)
+        if idx < 0:
+            return
+        name = self.mainTabIconName(widget)
+        icon = QIcon()
+        if name:
+            path = Logic.resourcePath(f"ui/icons/{name}")
+            if os.path.isfile(path):
+                icon = QIcon(path)
+        self.tabWidget.setTabIcon(idx, icon)
+
     def showGraphInMainTabs(self, select=True):
         """Insert Graph tab at normal position if it is not detached and not already open."""
         if self.tabWidget is None: return -1
@@ -1787,6 +1826,8 @@ class uiMain(QMainWindow):
             return -1
         idx = self.tabWidget.indexOf(panel)        
         if idx == -1: idx = self.tabWidget.insertTab(self.graphInsertIndex(), panel, self.graphTitle)
+        if idx >= 0:
+            self.paintMainTabIcon(panel)
         if select and idx >= 0: self.tabWidget.setCurrentIndex(idx)
         return idx
 
@@ -1835,6 +1876,8 @@ class uiMain(QMainWindow):
             idx = self.tabWidget.insertTab(self.plotterInsertIndex(), panel, self.plotterTitle)
         else:
             self.tabWidget.setTabText(idx, self.plotterTitle)
+        if idx >= 0:
+            self.paintMainTabIcon(panel)
         if select and idx >= 0:
             self.tabWidget.setCurrentIndex(idx)
         return idx
@@ -1864,6 +1907,7 @@ class uiMain(QMainWindow):
             and self.tabWidget.indexOf(self.tabMain) == -1
         ):
             self.tabWidget.insertTab(0, self.tabMain, self.dataQueryTitle)
+            self.paintMainTabIcon(self.tabMain)
         panel = self.ensureGraphPanel()
         ok, message = panel.plotFromTable(
             self.mainTable,
@@ -2026,6 +2070,8 @@ class uiMain(QMainWindow):
         else:
             # Log always last
             idx = self.tabWidget.addTab(content, title)
+        if key in ("graph", "plotter", "sql"):
+            self.paintMainTabIcon(content)
         self.tabWidget.setCurrentIndex(idx)
         if key == 'log': self.populateLogViewer()
         if key == 'sql': self.refreshSqlTab()
@@ -2049,6 +2095,7 @@ class uiMain(QMainWindow):
         if idx == -1:
             insertIndex = self.sqlInsertIndex()
             self.tabWidget.insertTab(insertIndex, self.tabSQL, self.sqlTitle)
+            self.paintMainTabIcon(self.tabSQL)
             self.refreshSqlTab()
             idx = self.tabWidget.indexOf(self.tabSQL)
             self.tabWidget.setCurrentIndex(idx)
