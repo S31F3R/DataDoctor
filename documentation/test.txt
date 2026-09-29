@@ -11,7 +11,7 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] Test scripts use camel case
+[x] Test scripts use camel case
    Steps:
      a. tests/ has testPlotLag.py, testPlotterLegend.py, testRegression.py,
         testUpdateDefer.py, and testUploadRetry.py. No test_ names.

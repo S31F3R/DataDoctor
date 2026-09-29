@@ -1,11 +1,57 @@
 ####### CURRENT TASKS #######
+-SQL queries for LCHDB, UCHDB2, and YAOHDB all utilize database links. This works great, but I'm trying to figure out a way to make this faster. Using the same connection, is there a way to split these into their own thread? So if we're using LCHDB connection to link to the others, use that same connection but then run YAOHDB and UCHDB2 on another thread. If the query was UCHDB2 and YAOHDB, we'd use UCHDB2 connection, run its query on one thread and YAOHDB on another thread using UCHDB2 connection. Not sure if this is possible but would speed things up if it is
+-Would it be possible to animate the winAbout stars? I want them to move, like the entire text is moving through the galaxy. Just wanting to animate the stars, nothing else
+-Make sure update scripts clean up files that are created or packaged by the program. For example, windows zip comes with python-standalone. After this is used, remove that directory if it's no longer needed
+    -This goes for the whole project. I don't want old files sticking around that are no longer needed. A good example of a file in the wrong spot and will need to be moved and the old location of it deleted is the applyUpdate.py (down in bugs)
+-Is it possible to put an icon on the left side (before) the label on a tab? If so, I'd like to do the following:
+    -Data Query will have the public icon if it was a public query or internal icon if it was an internal query
+    -SQL Query builder will use same icon as the button
+    -All Plotters will need their own icon based on type
+        -Line can use base plotter icon
+        -Generate a hand drawn scatter icon for Scatter. No need for hoover and pressed, just standard hand drawn icon 256x256 for the tab
+        -Time lag will also need a hand drawn icon. No need for hoover and pressed, just standard hand drawn icon 256x256 for the tab
+    -Graph can use base plotter icon
+    -If for some reason I don't like the icons, I'll get them regenerated outside of this then update the .png with the new version. Just get me a baseline
+    -Icons will need to change each query, based on the new plot that was selected or when switching from public to internal or vise versa
+    -When "detached", no need to use these special icons. Currently the default Data Doctor icon is used, with a label Data Doctor--Plotter-Time Lag. Having a 2nd icon would make that too busy so keep detach as is. Icons are for tabs only
 
 ####### CURRENT BUGS #######
+-Windows update didn't get the new .ico or new .exe. This is making me think the windows update isn't grabbing the windows package but is grabbing the python package. Since the launcher can be updated, we need to make sure the windows version is grabbing the windows package so the python and launcher files get updated when needed
+    -Tried to manually place windows zip into updates then run applyUpdate.cmd, got an error:
+        Install root: C:\Program Files\Data Doctor
+        Update zip: C:\Program Files\Data Doctor\updates\DataDoctor-Windows-v3.4.0-rc.1.3.zip
+        Extracting DataDoctor-Windows-v3.4.0-rc.1.3.zip → C:\Program Files\Data Doctor\updates\dd-update-acmaynyx
+        Windows full package: replacing launcher + python-embed
+        Updated Data Doctor.exe
+        Updated applyUpdate.cmd
+        Updated README.txt
+        Updated UPDATE.txt
+        Updated Data Doctor.ico
+        Traceback (most recent call last):
+        File "C:\Program Files\Data Doctor\pythonFiles\scripts\applyUpdate.py", line 1152, in <module>
+            sys.exit(main())
+                    ~~~~^^
+        File "C:\Program Files\Data Doctor\pythonFiles\scripts\applyUpdate.py", line 1148, in main
+            return apply(zipPath, installRoot, keepExtract=args.keepExtract)
+        File "C:\Program Files\Data Doctor\pythonFiles\scripts\applyUpdate.py", line 956, in apply
+            applyWindowsLauncherBits(payload, installRoot)
+            ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+        File "C:\Program Files\Data Doctor\pythonFiles\scripts\applyUpdate.py", line 588, in applyWindowsLauncherBits
+            shutil.rmtree(destEmbed)
+            ~~~~~~~~~~~~~^^^^^^^^^^^
+        File "shutil.py", line 852, in rmtree
+        File "shutil.py", line 705, in _rmtree_unsafe
+        File "shutil.py", line 701, in _rmtree_unsafe
+        PermissionError: [WinError 5] Access is denied: 'C:\\Program Files\\Data Doctor\\pythonFiles\\python-embed\\python.exe'
+        '" (' is not recognized as an internal or external command,
+        operable program or batch file.
+        ERROR: script not found at pythonFiles\scripts\applyUpdate.py
+-In the windows zip, there is a applyUpdate.py. Shouldn't that be in scripts?
+-It looks like QAQC items in data dictionary are getting updated over a user change. This includes prectionsOverride, expectedMin, expectedMax, etc. The merge script should only fill, not change these values. If a value is missing, fill with the packaged bunker.db. If a value is there, don't update that value
+-updateBunkerFromCsv.py isn't running through all .csv. It errors unless I name a single csv. Here is the error: ERROR: CSV not found: C:\Temp\Exports\*.csv
+    -This process takes a while. Anyway we can multi thread this like we did with the bunker merge script?
 
 ####### 3.5.0 FEATURES #######
--Create a plot tool that allows users to build different data plots and save that plot config as a quick look
-    -This can be done with below parker/davis stretch also. Create a plot that finds travel times in a given stretch, based on user input. Below parker or davis would be saved as quick looks in this tool
-    -Add a plot that graphs delta pair and 4overlays delta as a seperate line
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)
 -Create a new tool called SQL Manager
     -Add SQL Developer type tree view once logged in. It needs to have the same options SQL Devloper does, showing the different users, different groups, right click options to unlock accounts, etc. This will be big and I'll document more features
