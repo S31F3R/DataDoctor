@@ -11,4 +11,5 @@ documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
 - Update available stays one window while it is open
+- Test scripts use camel case names
 

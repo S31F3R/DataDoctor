@@ -11,6 +11,17 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
+[ ] Test scripts use camel case
+   Steps:
+     a. tests/ has testPlotLag.py, testPlotterLegend.py, testRegression.py,
+        testUpdateDefer.py, and testUploadRetry.py. No test_ names.
+     b. From the project root, each of these finishes without a failure:
+        python tests/testPlotLag.py
+        python tests/testPlotterLegend.py
+        python tests/testRegression.py
+        python tests/testUpdateDefer.py
+        python tests/testUploadRetry.py
+
 [ ] Update available does not stack
    Steps:
      a. Leave Data Doctor open until Update available appears. Do not click
