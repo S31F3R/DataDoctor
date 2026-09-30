@@ -10,6 +10,3 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
-- Windows update runs the apply script shipped in the zip
-- CSV bunker update matches rows in memory
-
