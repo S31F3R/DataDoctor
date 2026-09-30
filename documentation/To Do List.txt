@@ -1,4 +1,7 @@
 ####### CURRENT TASKS #######
+-There was added text to the Windows update that says "This version also updates the Windows launcher." Remove this, it's not needed because at this point, the app doesn't know the launcher needs to be updated. That last part should just say "Download, then hit restart to apply"
+    -During the update, that's when the app should decide if a launcher update is needed. I don't know if that's possible but there will be random times when I need to update the launcher. We need a system in place that is ready to do what when needed
+    -The prompt for 2nd restart to update the launcher is GOOD. I just got to see that
 
 ####### CURRENT BUGS #######
 

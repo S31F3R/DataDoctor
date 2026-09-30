@@ -11,7 +11,7 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] Linux dictionary merge asks once and shows a progress bar
+[x] Linux dictionary merge asks once and shows a progress bar
    Steps:
      a. On a Linux AppImage whose packaged bunker.db differs from
         ~/.config/Data Doctor/bunker.db, start Data Doctor.
