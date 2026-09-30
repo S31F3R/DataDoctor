@@ -70,7 +70,7 @@ The raw Python zip ships `DataDoctor.py`. On Windows `applyUpdate` installs it a
 
 In-app update uses the same **Download** then **Restart** / **Later** prompts as Windows. Restart quits, replaces the launched AppImage (renames kept), relaunches, and deletes leftover updater files next to the binary. Downloads go to `~/.config/Data Doctor/updates/`. Apply progress is in `~/.config/Data Doctor/logs/applyUpdate.log`.
 
-The live data dictionary is **not** inside the AppImage (the image is read-only). It lives at `~/.config/Data Doctor/bunker.db`. On first run the packaged copy is installed there. After an update, if the packaged dictionary differs, you get the same Common Name / Data Type prompts as Windows `applyUpdate` — answering **N** still inserts **new** IDs with the packaged names/types. A progress bar stays up while that merge runs.
+The live data dictionary is **not** inside the AppImage (the image is read-only). It lives at `~/.config/Data Doctor/bunker.db`. On first run the packaged copy is installed there. After an update, if that packaged dictionary is new, you get the same Common Name / Data Type prompts as Windows `applyUpdate` — answering **N** still inserts **new** IDs with the packaged names/types. A progress bar stays up while that merge runs. Those questions are once for that packaged file. Later launches do not ask again just because the live file still has your common names. A newer packaged dictionary asks once more. `~/.config/Data Doctor/bunker.merged` remembers the packaged file that was already merged.
 
 ## Apply on macOS
 

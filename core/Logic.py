@@ -150,25 +150,54 @@ def ensureLiveBunker(parent=None):
     liveDir = os.path.dirname(live)
     if liveDir and not os.path.isdir(liveDir):
         os.makedirs(liveDir, exist_ok=True)
+    from core.BunkerMerge import (
+        MERGED_STAMP_NAME,
+        mergePromptDecision,
+        promptAndMergeGui,
+        stampMatchesPackaged,
+        writeMergedStamp,
+    )
+    from pathlib import Path
+    packagedPath = Path(packaged)
+    stampPath = Path(liveDir) / MERGED_STAMP_NAME if liveDir else None
+
+    def _rememberPackaged():
+        if stampPath is None:
+            return
+        try:
+            if not stampMatchesPackaged(packagedPath, stampPath):
+                writeMergedStamp(packagedPath, stampPath)
+        except OSError as e:
+            logMessage("WARN", f"ensureLiveBunker: could not record merge stamp: {e}")
+
     if not os.path.isfile(live):
         import shutil
         shutil.copy2(packaged, live)
+        _rememberPackaged()
         logMessage("INFO", f"ensureLiveBunker: installed packaged dictionary → {live}")
         return True
     try:
-        from core.BunkerMerge import filesIdentical, promptAndMergeGui
-        from pathlib import Path
-        if filesIdentical(Path(packaged), Path(live)):
+        decision = mergePromptDecision(packagedPath, Path(live), stampPath)
+        if decision == "identical":
+            _rememberPackaged()
             logMessage(
                 "INFO",
                 "ensureLiveBunker: live bunker matches packaged — skip merge "
                 "(no Common Name / Data Type prompts)",
             )
             return True
+        if decision == "already":
+            logMessage(
+                "INFO",
+                "ensureLiveBunker: this packaged dictionary was already merged — "
+                "skip Common Name / Data Type prompts",
+            )
+            return True
         code = promptAndMergeGui(parent, packaged, live)
         if code != 0:
             logMessage("WARN", f"ensureLiveBunker: merge returned {code}")
             return False
+        _rememberPackaged()
         return True
     except Exception as e:
         logException("ensureLiveBunker failed", e)

@@ -125,6 +125,21 @@ def _reporter(onProgress):
     return report
 
 
+# AppImage startup used to hash the live bunker against the packaged file.
+# A merge rewrites pages and keeps the user's common names, so those hashes
+# never match again and the questions came back on every launch. The stamp
+# is the packaged hash from the last completed merge.
+MERGED_STAMP_NAME = "bunker.merged"
+
+
+def fileSha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def filesIdentical(a: Path, b: Path) -> bool:
     try:
         if a.resolve() == b.resolve():
@@ -136,18 +151,45 @@ def filesIdentical(a: Path, b: Path) -> bool:
             return False
     except OSError:
         return False
-    h1 = hashlib.sha256()
-    h2 = hashlib.sha256()
     try:
-        with open(a, "rb") as f:
-            for chunk in iter(lambda: f.read(1 << 20), b""):
-                h1.update(chunk)
-        with open(b, "rb") as f:
-            for chunk in iter(lambda: f.read(1 << 20), b""):
-                h2.update(chunk)
+        return fileSha256(a) == fileSha256(b)
     except OSError:
         return False
-    return h1.digest() == h2.digest()
+
+
+def readMergedStamp(stampPath: Path) -> str:
+    try:
+        return Path(stampPath).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def stampMatchesPackaged(packagedPath: Path, stampPath: Path) -> bool:
+    stored = readMergedStamp(stampPath)
+    if not stored:
+        return False
+    try:
+        return stored == fileSha256(packagedPath)
+    except OSError:
+        return False
+
+
+def writeMergedStamp(packagedPath: Path, stampPath: Path) -> None:
+    digest = fileSha256(packagedPath)
+    stampPath = Path(stampPath)
+    stampPath.parent.mkdir(parents=True, exist_ok=True)
+    tmp = stampPath.with_name(stampPath.name + ".tmp")
+    tmp.write_text(digest + "\n", encoding="utf-8")
+    tmp.replace(stampPath)
+
+
+def mergePromptDecision(packagedPath: Path, userPath: Path, stampPath: Path) -> str:
+    """identical, already, or merge. already means this packaged file was merged."""
+    if filesIdentical(Path(packagedPath), Path(userPath)):
+        return "identical"
+    if stampPath is not None and stampMatchesPackaged(Path(packagedPath), Path(stampPath)):
+        return "already"
+    return "merge"
 
 
 def _rowKey(dataId, siteId):
