@@ -11,17 +11,6 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[x] Update available does not stack
-   Steps:
-     a. Leave Data Doctor open until Update available appears. Do not click
-        Download or Later.
-     b. Leave that window up through another background check (about 15 minutes).
-        Saving Options so it checks again, while the window is still open,
-        counts too.
-     c. A second Update available window does not appear. Download and the
-        Restart window that follows also stay one window.
-     d. Click Later, or close the window. A newer release can still prompt.
-
 [ ] Plotter HDB uses SQL when the API misses
    Steps:
      a. Oracle credentials are saved. Plot a USBR Oracle series (LCHDB,
@@ -31,56 +20,23 @@ Current Tests
      c. USBR-PNHYD, USBR-GPHYD, USGS, and Aquarius stay on the API.
         A series the public API returns with no points is not read from SQL.
 
-[x] About stars scroll behind the title
-   Steps:
-     a. Open About. The stars scroll sideways. The green DATA DOCTOR title
-        stays put. The stars look like the ones on the About picture.
-     b. Leave it open for about 15 seconds. The stars come back around
-        in a loop.
-     c. Resize the window. The stars keep scrolling and the title stays
-        readable.
-     d. Close About and open it again. The stars scroll again.
-
 [ ] Windows update keeps Python and finishes the launcher
    Steps:
-     a. On a Windows install that already has python-embed, close any
-        command window left from the last update, then open Data Doctor.
-        If it asks to finish the launcher update, click Later once so you
-        can run the updater yourself.
-     b. Copy a DataDoctor-Windows zip into updates and run applyUpdate.cmd
-        from this build (pythonFiles\scripts\applyUpdate.py).
-     c. It does not copy python-embed again when that Python is already
-        installed. Data Doctor.exe and Data Doctor.ico still update.
-        No command window stays open searching for a process.
-     d. Data Doctor opens. If applyUpdate.cmd.new is present, a window
+     a. If a command window from the last try is still open, press Ctrl+C
+        and close it before starting another update.
+     b. From the new DataDoctor-Windows zip, copy
+        pythonFiles\scripts\applyUpdate.py over the installed
+        pythonFiles\scripts\applyUpdate.py. Put that zip in updates and
+        run applyUpdate.cmd.
+     c. No command window stays open on find. python-embed is not copied
+        again when that Python is already installed. Data Doctor.exe and
+        Data Doctor.ico still update.
+     d. Data Doctor opens. If applyUpdate.cmd.new is present, the window
         lists what is left and offers Restart and Later.
      e. Later leaves those files and does not ask again until the next
         launch. Restart closes Data Doctor, replaces applyUpdate.cmd with
         the new command, finishes whatever is still staged, and opens
         Data Doctor again.
-        RESPONSE: Got stuck on a CMD window again that is titled find "31700". Doesn't seem to be doing anything.
-        If hit hit ctrl+c a few times, it starts to work. A normal close just did the IP thing to local host, then back to the find "31700", but the ctrl+c 
-        allowed to close right away, then it started up like normal and updated the .cmd
-
-[x] Query and plotter tabs show icons
-   Steps:
-     a. A public Data Query tab shows the public icon. An internal query
-        switches that tab to the internal icon.
-     b. SQL Query Builder shows the SQL icon.
-     c. Plotter Line, Scatter, and Time Lag use the same size chart frame.
-        Scatter is dots on its own background color. Time Lag is its own
-        marks and background color. Changing the plot type changes the
-        icon. Graph shows the plotter icon.
-     d. Detach a plotter. The floating window keeps the normal Data Doctor
-        icon and its Data Doctor title. The special icon is only on the tab.
-
-[x] Dictionary merge keeps QAQC values you set
-   Steps:
-     a. Set precisionOverride, expectedMin, and expectedMax on a dictionary
-        row. Leave those fields blank on a different row.
-     b. Apply an update so the packaged bunker.db merges.
-     c. The values you set are unchanged, including a value of 0.
-        The blank fields fill from the packaged dictionary.
 
 [ ] CSV bunker update accepts a folder or *.csv
    Steps:
@@ -89,7 +45,8 @@ Current Tests
      b. It reads every csv. It does not stop with "CSV not found" for the
         pattern itself.
      c. It asks about common names and data types before the merge starts.
-     RESPONSE: This works with all the files and it looks like it's doing all the files at the same time, but this is still horribly slow. The bunker merge script works in seconds, how come this can't?
+     d. The merge finishes in seconds, like the bunker merge, including a
+        folder of exports.
 
 [ ] Mac package script
    Steps:
@@ -132,4 +89,8 @@ Regression tab from a right-click
 Quick Look date dialog stays on the Query window
 Linked HDB queries run together
 Windows apply does not replace the running Python
+Update available does not stack
+About stars scroll behind the title
+Query and plotter tabs show icons
+Dictionary merge keeps QAQC values you set
 
