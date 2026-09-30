@@ -246,6 +246,24 @@ def loadCsvRows(csvPaths: list[Path]) -> list[tuple[Path, list]]:
     return list(zip(csvPaths, loaded))
 
 
+def rowKey(dataId, siteId):
+    def norm(val):
+        if val is None:
+            return None
+        text = str(val).strip()
+        return text or None
+    return (norm(dataId), norm(siteId))
+
+
+def loadDictionary(conn, dataIdCol, siteIdCol) -> dict:
+    """One read of dataDictionary. Later rows match in memory, not one query each."""
+    found = {}
+    for row in conn.execute("SELECT * FROM dataDictionary"):
+        item = dict(row)
+        found[rowKey(item.get(dataIdCol), item.get(siteIdCol))] = item
+    return found
+
+
 def mergeCsv(
     dbPath: Path,
     csvPaths: list[Path],
@@ -273,72 +291,93 @@ def mergeCsv(
         cSiteName = cols["sitename"]
         cCommon = cols["commonname"]
         cType = cols["datatype"]
+        byKey = loadDictionary(conn, cDataId, cSiteId)
 
         updated = 0
         inserted = 0
         skipped = 0
+        insertSql = (
+            f"INSERT INTO dataDictionary "
+            f"({cDataId}, {cSiteId}, {cDb}, {cSiteName}, {cCommon}, {cType}) "
+            f"VALUES (?, ?, ?, ?, ?, ?)"
+        )
+        inserts = []
+        updates = []
 
         for row in allRows:
-            existing = conn.execute(
-                f"SELECT * FROM dataDictionary WHERE {cDataId} = ? AND {cSiteId} = ?",
-                (row["dataID"], row["siteID"]),
-            ).fetchone()
+            key = rowKey(row["dataID"], row["siteID"])
+            existing = byKey.get(key)
             if existing is None:
-                if dryRun:
-                    inserted += 1
-                    continue
-                conn.execute(
-                    f"INSERT INTO dataDictionary "
-                    f"({cDataId}, {cSiteId}, {cDb}, {cSiteName}, {cCommon}, {cType}) "
-                    f"VALUES (?, ?, ?, ?, ?, ?)",
-                    (
+                inserted += 1
+                fresh = {
+                    cDataId: row["dataID"],
+                    cSiteId: row["siteID"],
+                    cDb: row["database"] or None,
+                    cSiteName: row["siteName"] or None,
+                    cCommon: row["commonName"] or None,
+                    cType: row["datatype"] or None,
+                }
+                byKey[key] = fresh
+                if not dryRun:
+                    inserts.append((
                         row["dataID"],
                         row["siteID"],
                         row["database"] or None,
                         row["siteName"] or None,
                         row["commonName"] or None,
                         row["datatype"] or None,
-                    ),
-                )
-                inserted += 1
+                    ))
                 continue
 
             sets = []
             params = []
-            if row["siteName"] and str(existing[cSiteName] or "") != row["siteName"]:
+            changed = {}
+            if row["siteName"] and str(existing.get(cSiteName) or "") != row["siteName"]:
                 sets.append(f"{cSiteName} = ?")
                 params.append(row["siteName"])
+                changed[cSiteName] = row["siteName"]
             if (
                 updateDatatypes
                 and row["datatype"]
-                and str(existing[cType] or "") != row["datatype"]
+                and str(existing.get(cType) or "") != row["datatype"]
             ):
                 sets.append(f"{cType} = ?")
                 params.append(row["datatype"])
-            if row["database"] and str(existing[cDb] or "") != row["database"]:
+                changed[cType] = row["datatype"]
+            if row["database"] and str(existing.get(cDb) or "") != row["database"]:
                 sets.append(f"{cDb} = ?")
                 params.append(row["database"])
+                changed[cDb] = row["database"]
             if row["commonName"]:
-                if empty(existing[cCommon]) or (
+                if empty(existing.get(cCommon)) or (
                     updateCommonNames
-                    and str(existing[cCommon] or "") != row["commonName"]
+                    and str(existing.get(cCommon) or "") != row["commonName"]
                 ):
                     sets.append(f"{cCommon} = ?")
                     params.append(row["commonName"])
+                    changed[cCommon] = row["commonName"]
 
             if not sets:
                 skipped += 1
                 continue
+            updated += 1
+            existing.update(changed)
             if not dryRun:
                 params.extend([row["dataID"], row["siteID"]])
-                conn.execute(
+                sql = (
                     f"UPDATE dataDictionary SET {', '.join(sets)} "
-                    f"WHERE {cDataId} = ? AND {cSiteId} = ?",
-                    params,
+                    f"WHERE {cDataId} = ? AND {cSiteId} = ?"
                 )
-            updated += 1
+                updates.append((sql, params))
 
         if not dryRun:
+            if inserts:
+                conn.executemany(insertSql, inserts)
+            grouped = {}
+            for sql, params in updates:
+                grouped.setdefault(sql, []).append(params)
+            for sql, batch in grouped.items():
+                conn.executemany(sql, batch)
             conn.commit()
         print(
             f"{'DRY-RUN ' if dryRun else ''}CSV merge: "
