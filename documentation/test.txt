@@ -11,6 +11,24 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
+[ ] Linux dictionary merge asks once and shows a progress bar
+   Steps:
+     a. On a Linux AppImage whose packaged bunker.db differs from
+        ~/.config/Data Doctor/bunker.db, start Data Doctor.
+        The first open of this build can still ask, because older
+        builds did not remember the merge.
+     b. Answer the Common Name and Data Type questions (No is fine).
+     c. A Data Dictionary progress dialog stays in front. The label and
+        bar move through backup, merge, and writing. The main window
+        does not sit frozen with no feedback, and the dialog has no Cancel.
+     d. When it finishes, Data Doctor opens and the dictionary includes
+        the merge (new IDs are present; existing common names stay if
+        you answered No). ~/.config/Data Doctor/bunker.merged is present.
+     e. Quit and start the same AppImage again. No Common Name or Data
+        Type questions, and no progress dialog.
+     f. A later AppImage whose packaged bunker.db changed asks once,
+        then stays quiet on the launch after that.
+
 [ ] Plotter HDB uses SQL when the API misses
    Steps:
      a. Oracle credentials are saved. Plot a USBR Oracle series (LCHDB,
@@ -19,34 +37,6 @@ Current Tests
      b. The series still plots. The log says it is trying the Oracle connection.
      c. USBR-PNHYD, USBR-GPHYD, USGS, and Aquarius stay on the API.
         A series the public API returns with no points is not read from SQL.
-
-[ ] Windows update keeps Python and finishes the launcher
-   Steps:
-     a. If a command window from the last try is still open, press Ctrl+C
-        and close it before starting another update.
-     b. From the new DataDoctor-Windows zip, copy
-        pythonFiles\scripts\applyUpdate.py over the installed
-        pythonFiles\scripts\applyUpdate.py. Put that zip in updates and
-        run applyUpdate.cmd.
-     c. No command window stays open on find. python-embed is not copied
-        again when that Python is already installed. Data Doctor.exe and
-        Data Doctor.ico still update.
-     d. Data Doctor opens. If applyUpdate.cmd.new is present, the window
-        lists what is left and offers Restart and Later.
-     e. Later leaves those files and does not ask again until the next
-        launch. Restart closes Data Doctor, replaces applyUpdate.cmd with
-        the new command, finishes whatever is still staged, and opens
-        Data Doctor again.
-
-[ ] CSV bunker update accepts a folder or *.csv
-   Steps:
-     a. From the project root, run updateBunkerFromCsv.py with a folder of
-        CSV files, or with a quoted pattern such as "C:\Temp\Exports\*.csv".
-     b. It reads every csv. It does not stop with "CSV not found" for the
-        pattern itself.
-     c. It asks about common names and data types before the merge starts.
-     d. The merge finishes in seconds, like the bunker merge, including a
-        folder of exports.
 
 [ ] Mac package script
    Steps:
@@ -93,4 +83,6 @@ Update available does not stack
 About stars scroll behind the title
 Query and plotter tabs show icons
 Dictionary merge keeps QAQC values you set
+Windows update keeps Python and finishes the launcher
+CSV bunker update accepts a folder or *.csv
 

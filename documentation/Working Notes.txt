@@ -10,3 +10,6 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Linux AppImage shows a progress bar after the Common Name and Data Type questions, and the Data Dictionary merge no longer hangs
+- Linux AppImage asks those Common Name and Data Type questions once per packaged dictionary, not on every launch
+
