@@ -12,6 +12,7 @@ import os
 import shutil
 import sqlite3
 import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -36,6 +37,10 @@ def resolveColumns(conn: sqlite3.Connection, table: str = "dataDictionary"):
     cols = [row[1] for row in cur.fetchall()]
     lowerMap = {c.lower(): c for c in cols}
     return cols, lowerMap
+
+
+def _quoteIdent(name):
+    return '"' + str(name).replace('"', '""') + '"'
 
 
 def col(lowerMap, *candidates):
@@ -70,6 +75,54 @@ def openDb(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _writeGroups(conn, statements, chunkSize=2000):
+    """Run planned statements in batches that share the same SQL."""
+    grouped = {}
+    order = []
+    for sql, params in statements:
+        bucket = grouped.get(sql)
+        if bucket is None:
+            bucket = []
+            grouped[sql] = bucket
+            order.append(sql)
+        bucket.append(tuple(params))
+    done = 0
+    total = len(statements)
+    for sql in order:
+        batch = grouped[sql]
+        for start in range(0, len(batch), chunkSize):
+            part = batch[start:start + chunkSize]
+            conn.executemany(sql, part)
+            done += len(part)
+            yield done, total
+
+
+def _reporter(onProgress):
+    """Return a 0–100 progress callback. Later ticks never move the bar backward."""
+    if onProgress is None:
+        return lambda percent, message: None
+    state = {"pct": -1}
+    lock = threading.Lock()
+
+    def report(percent, message):
+        try:
+            percent = max(0, min(100, int(percent)))
+        except (TypeError, ValueError):
+            return
+        with lock:
+            if percent < state["pct"]:
+                return
+            if percent == state["pct"] and percent != 100:
+                return
+            state["pct"] = percent
+        try:
+            onProgress(percent, message)
+        except Exception:
+            pass
+
+    return report
 
 
 def filesIdentical(a: Path, b: Path) -> bool:
@@ -136,11 +189,14 @@ def _planChunk(
     fillBlankLower,
     optionalFieldLower,
     optionalAllowed,
+    tick=None,
 ):
     updates = []
     inserts = []
     skipped = 0
     for row in rows:
+        if tick is not None:
+            tick()
         dataId = row.get(pkgDataId)
         siteId = row.get(pkgSiteId)
         if dataId is None and siteId is None:
@@ -202,6 +258,7 @@ def merge(
     updateCommonNames: bool = False,
     updateDatatypes: bool = False,
     log=print,
+    onProgress=None,
 ) -> int:
     packagedPath = Path(packagedPath)
     userPath = Path(userPath)
@@ -218,7 +275,10 @@ def merge(
         )
         return 1
 
+    report = _reporter(onProgress)
+
     if not dryRun:
+        report(1, "Backing up the Data Dictionary...")
         for old in userPath.parent.glob(userPath.name + ".bak*"):
             try:
                 old.unlink()
@@ -229,6 +289,7 @@ def merge(
         shutil.copy2(userPath, backup)
         log(f"Backup: {backup}")
 
+    report(8, "Reading the Data Dictionary...")
     log("Merging...")
 
     pkg = openDb(packagedPath)
@@ -268,44 +329,83 @@ def merge(
             d = dict(row)
             userByKey[_rowKey(d.get(usrDataId), d.get(usrSiteId))] = d
 
-        workers = min(MERGE_THREADS, max(1, len(pkgRows)))
+        planTotal = len(pkgRows)
+        planned = 0
+        planLock = threading.Lock()
+
+        def tickPlan():
+            nonlocal planned
+            with planLock:
+                planned += 1
+                done = planned
+            total = planTotal or 1
+            report(
+                15 + 30 * done / total,
+                f"Merging the Data Dictionary... ({done}/{planTotal})",
+            )
+
+        report(15, "Merging the Data Dictionary...")
+        workers = min(MERGE_THREADS, max(1, len(pkgRows))) if pkgRows else 1
         chunks = _splitRows(pkgRows, workers)
         updates = []
         inserts = []
         skipped = 0
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = [
-                pool.submit(
-                    _planChunk,
-                    chunk,
-                    userByKey,
-                    pkgCols,
-                    pkgDataId,
-                    pkgSiteId,
-                    usrDataId,
-                    usrSiteId,
-                    usrMap,
-                    mergeFieldNames,
-                    pkgFields,
-                    usrFields,
-                    fillBlankLower,
-                    optionalFieldLower,
-                    optionalAllowed,
-                )
-                for chunk in chunks
-            ]
-            for fut in as_completed(futures):
-                chunkUpdates, chunkInserts, chunkSkipped = fut.result()
-                updates.extend(chunkUpdates)
-                inserts.extend(chunkInserts)
-                skipped += chunkSkipped
+        tick = tickPlan if onProgress is not None else None
+        if chunks:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [
+                    pool.submit(
+                        _planChunk,
+                        chunk,
+                        userByKey,
+                        pkgCols,
+                        pkgDataId,
+                        pkgSiteId,
+                        usrDataId,
+                        usrSiteId,
+                        usrMap,
+                        mergeFieldNames,
+                        pkgFields,
+                        usrFields,
+                        fillBlankLower,
+                        optionalFieldLower,
+                        optionalAllowed,
+                        tick,
+                    )
+                    for chunk in chunks
+                ]
+                for fut in as_completed(futures):
+                    chunkUpdates, chunkInserts, chunkSkipped = fut.result()
+                    updates.extend(chunkUpdates)
+                    inserts.extend(chunkInserts)
+                    skipped += chunkSkipped
 
-        if not dryRun:
-            for sql, params in updates:
-                usr.execute(sql, params)
-            for sql, params in inserts:
-                usr.execute(sql, params)
-            usr.commit()
+        writeTotal = len(updates) + len(inserts)
+        if writeTotal:
+            report(45, f"Writing the Data Dictionary... (0/{writeTotal})")
+            if not dryRun:
+                # No key index: one UPDATE per row scans the whole table
+                # (~90s at 45k rows). Build the index for this write and drop
+                # it before commit so the live file keeps its original schema.
+                usr.execute(
+                    "CREATE INDEX IF NOT EXISTS bunkerMergeKey ON dataDictionary("
+                    f"{_quoteIdent(usrDataId)}, {_quoteIdent(usrSiteId)})"
+                )
+                try:
+                    for done, total in _writeGroups(usr, updates + inserts):
+                        report(
+                            45 + 55 * done / total,
+                            f"Writing the Data Dictionary... ({done}/{total})",
+                        )
+                    usr.execute("DROP INDEX IF EXISTS bunkerMergeKey")
+                    usr.commit()
+                except Exception:
+                    usr.rollback()
+                    raise
+            else:
+                report(99, f"Writing the Data Dictionary... ({writeTotal}/{writeTotal})")
+
+        report(100, "Finishing the Data Dictionary...")
 
         log(
             f"{'DRY-RUN ' if dryRun else ''}Merge complete: "
@@ -318,8 +418,9 @@ def merge(
 
 
 def promptAndMergeGui(parent, packagedPath, userPath) -> int:
-    """Qt y/n for AppImage startup merge. New rows still get packaged names/types."""
-    from PyQt6.QtWidgets import QMessageBox
+    """Qt y/n for AppImage startup merge, then a progress bar while it runs."""
+    from PyQt6.QtCore import QEventLoop, QObject, QRunnable, QThreadPool, Qt, pyqtSignal
+    from PyQt6.QtWidgets import QLabel, QMessageBox, QProgressDialog
 
     packagedPath = Path(packagedPath)
     userPath = Path(userPath)
@@ -356,11 +457,83 @@ def promptAndMergeGui(parent, packagedPath, userPath) -> int:
         except Exception:
             print(msg)
 
-    return merge(
-        packagedPath,
-        userPath,
-        dryRun=False,
-        updateCommonNames=updateCommon,
-        updateDatatypes=updateTypes,
-        log=_log,
+    dialog = QProgressDialog(
+        "Updating the Data Dictionary...",
+        "",
+        0,
+        100,
+        parent,
     )
+    dialog.setWindowTitle("Data Dictionary")
+    dialog.setMinimumDuration(0)
+    dialog.setAutoClose(False)
+    dialog.setAutoReset(False)
+    dialog.setCancelButton(None)
+    dialog.setFixedSize(520, 130)
+    dialog.setWindowFlags(
+        Qt.WindowType.Dialog
+        | Qt.WindowType.CustomizeWindowHint
+        | Qt.WindowType.WindowTitleHint
+        | Qt.WindowType.MSWindowsFixedSizeDialogHint
+    )
+    dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+    label = dialog.findChild(QLabel)
+    if label is not None:
+        label.setWordWrap(True)
+    dialog.setValue(0)
+    dialog.show()
+    dialog.raise_()
+    dialog.activateWindow()
+
+    class _Signals(QObject):
+        progressed = pyqtSignal(int, str)
+        finished = pyqtSignal(int)
+
+    class _Job(QRunnable):
+        def __init__(self, signals):
+            super().__init__()
+            self.signals = signals
+
+        def run(self):
+            code = 1
+            try:
+                def onProgress(percent, message):
+                    self.signals.progressed.emit(int(percent), message or "")
+
+                code = merge(
+                    packagedPath,
+                    userPath,
+                    dryRun=False,
+                    updateCommonNames=updateCommon,
+                    updateDatatypes=updateTypes,
+                    log=_log,
+                    onProgress=onProgress,
+                )
+            except Exception as e:
+                _log(f"ERROR: merge failed: {e}")
+                code = 1
+            try:
+                self.signals.finished.emit(int(code))
+            except Exception:
+                pass
+
+    signals = _Signals()
+    outcome = {"code": 1}
+    loop = QEventLoop()
+
+    def onProgressed(percent, message):
+        if message:
+            dialog.setLabelText(message)
+        dialog.setValue(percent)
+        dialog.repaint()
+
+    def onFinished(code):
+        outcome["code"] = code
+        loop.quit()
+
+    signals.progressed.connect(onProgressed, Qt.ConnectionType.QueuedConnection)
+    signals.finished.connect(onFinished, Qt.ConnectionType.QueuedConnection)
+    QThreadPool.globalInstance().start(_Job(signals))
+    loop.exec()
+    dialog.close()
+    return outcome["code"]

@@ -92,12 +92,29 @@ def main():
                 "precisionOverride": "", "expectedMin": None, "expectedMax": "",
             },
         ])
+        seen = []
+
+        def onProgress(percent, message):
+            seen.append((percent, message))
+
         rc = merge(
             packaged, user, dryRun=False,
             updateCommonNames=False, updateDatatypes=False, log=lambda *_a, **_k: None,
+            onProgress=onProgress,
         )
         if rc != 0:
             errors += fail("merge", f"exit {rc}")
+        if not seen or seen[-1][0] != 100:
+            errors += fail("progress end", seen[-1] if seen else "no ticks")
+        if any(seen[i][0] > seen[i + 1][0] for i in range(len(seen) - 1)):
+            errors += fail("progress order", seen)
+        if not any("Merging" in message or "Writing" in message for _pct, message in seen):
+            errors += fail("progress label", seen)
+        conn = sqlite3.connect(user)
+        indexes = conn.execute("PRAGMA index_list(dataDictionary)").fetchall()
+        conn.close()
+        if indexes:
+            errors += fail("merge index", indexes)
         kept = readRow(user, "10", "1")
         if kept["precisionOverride"] != "DEC(2)":
             errors += fail("precisionOverride", kept["precisionOverride"])
