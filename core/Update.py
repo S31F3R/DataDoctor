@@ -469,6 +469,7 @@ _APPLY_UPDATE_CMD = "\r\n".join([
     "REM Apply newest zip in updates\\ (code + bunker merge + pip into python-embed)",
     "setlocal",
     'cd /d "%~dp0"',
+    'if exist "finishEmbedSwap.cmd" del /f /q "finishEmbedSwap.cmd"',
     'set "PY="',
     'if exist "pythonFiles\\python-embed\\python.exe" set "PY=pythonFiles\\python-embed\\python.exe"',
     'if not defined PY if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',

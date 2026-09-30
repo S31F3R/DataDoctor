@@ -445,6 +445,77 @@ def cleanupPackagedLeftovers(installRoot: Path) -> None:
             print(f"WARN: could not remove {leftover.name}: {e}", file=sys.stderr)
 
 
+APPLY_REEXEC_ENV = "DD_APPLY_REEXEC"
+
+
+def bundledApplyScript(zipPath: Path) -> bytes | None:
+    """applyUpdate.py stored in a DataDoctor zip, if the zip has one."""
+    try:
+        with zipfile.ZipFile(zipPath) as zf:
+            scripts = []
+            plain = []
+            for info in zf.infolist():
+                name = info.filename.replace("\\", "/")
+                if info.is_dir() or zipMemberUnsafe(name):
+                    continue
+                if name.endswith("scripts/applyUpdate.py"):
+                    scripts.append(name)
+                elif name.endswith("applyUpdate.py"):
+                    plain.append(name)
+            picks = scripts or plain
+            if not picks:
+                return None
+            pick = sorted(picks, key=lambda n: (n.count("/"), len(n)))[0]
+            return zf.read(pick)
+    except Exception as e:
+        print(f"WARN: could not read applyUpdate.py from {zipPath.name}: {e}", file=sys.stderr)
+        return None
+
+
+def shouldReexecApplyScript(zipPath: Path, currentPath: Path | None = None) -> bool:
+    """
+    True when the zip ships a different applyUpdate.py than the one running.
+
+    applyUpdate.cmd starts the script already installed, so a new zip would
+    otherwise finish the run with the previous build.
+    """
+    if os.environ.get(APPLY_REEXEC_ENV) == "1":
+        return False
+    fresh = bundledApplyScript(zipPath)
+    if not fresh:
+        return False
+    path = Path(currentPath) if currentPath is not None else Path(__file__)
+    try:
+        current = path.read_bytes()
+    except Exception:
+        return True
+    return fresh != current
+
+
+def reexecZipApplyScript(zipPath: Path) -> None:
+    """Replace this process with the applyUpdate.py inside the zip."""
+    if not shouldReexecApplyScript(zipPath):
+        return
+    fresh = bundledApplyScript(zipPath)
+    if not fresh:
+        return
+    fd, name = tempfile.mkstemp(prefix="dd-apply-", suffix=".py")
+    os.close(fd)
+    path = Path(name)
+    path.write_bytes(fresh)
+    env = os.environ.copy()
+    env[APPLY_REEXEC_ENV] = "1"
+    print(f"Running applyUpdate.py from {zipPath.name}")
+    try:
+        rc = subprocess.call([sys.executable, str(path), *sys.argv[1:]], env=env)
+    finally:
+        try:
+            path.unlink()
+        except Exception:
+            pass
+    raise SystemExit(rc)
+
+
 def renameStagedCmd(installRoot: Path) -> bool:
     """Replace applyUpdate.cmd with applyUpdate.cmd.new when the new file is staged."""
     staged = installRoot / "applyUpdate.cmd.new"
@@ -1008,6 +1079,7 @@ def writeApplyUpdateCmd(installRoot: Path) -> None:
         "REM Apply newest zip in updates\\ (code + bunker merge + pip into python-embed)",
         "setlocal",
         'cd /d "%~dp0"',
+        'if exist "finishEmbedSwap.cmd" del /f /q "finishEmbedSwap.cmd"',
         'set "PY="',
         'if exist "pythonFiles\\python-embed\\python.exe" set "PY=pythonFiles\\python-embed\\python.exe"',
         'if not defined PY if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
@@ -1392,6 +1464,7 @@ def main() -> int:
             return 1
 
     print(f"Update zip: {zipPath}")
+    reexecZipApplyScript(zipPath)
     return apply(zipPath, installRoot, keepExtract=args.keepExtract)
 
 

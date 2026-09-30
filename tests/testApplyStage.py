@@ -7,6 +7,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import tempfile
+import zipfile
 from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -154,6 +155,33 @@ def main():
             errors += fail("finish root", "root applyUpdate.py still present")
         if (finish / "finishEmbedSwap.cmd").exists():
             errors += fail("finish helper", "old helper still present")
+
+        current = root / "running-apply.py"
+        current.write_bytes(b"print('installed')\n")
+        pack = root / "DataDoctor-Windows-test.zip"
+        with zipfile.ZipFile(pack, "w") as zf:
+            zf.writestr("pythonFiles/scripts/applyUpdate.py", b"print('from zip')\n")
+        if not applyUpdate.shouldReexecApplyScript(pack, current):
+            errors += fail("reexec zip", "installed script would keep running")
+        os.environ["DD_APPLY_REEXEC"] = "1"
+        try:
+            if applyUpdate.shouldReexecApplyScript(pack, current):
+                errors += fail("reexec guard", "would run the zip script twice")
+        finally:
+            os.environ.pop("DD_APPLY_REEXEC", None)
+        with zipfile.ZipFile(pack, "w") as zf:
+            zf.writestr("pythonFiles/scripts/applyUpdate.py", current.read_bytes())
+        if applyUpdate.shouldReexecApplyScript(pack, current):
+            errors += fail("reexec same", "identical script would restart")
+
+        cmdRoot = root / "cmdbody"
+        cmdRoot.mkdir()
+        applyUpdate.writeApplyUpdateCmd(cmdRoot)
+        body = (cmdRoot / "applyUpdate.cmd").read_text(encoding="utf-8")
+        if "find " in body or "tasklist" in body:
+            errors += fail("cmd find", "command still searches for a process")
+        if "finishEmbedSwap.cmd" not in body:
+            errors += fail("cmd cleanup", "does not remove the old helper")
 
     if errors:
         print(f"{errors} failed")

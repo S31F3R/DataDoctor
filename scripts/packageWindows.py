@@ -476,6 +476,7 @@ def main():
                 f"REM {banner}",
                 "setlocal",
                 'cd /d "%~dp0"',
+                'if exist "finishEmbedSwap.cmd" del /f /q "finishEmbedSwap.cmd"',
                 'set "PY="',
                 'if exist "pythonFiles\\python-embed\\python.exe" set "PY=pythonFiles\\python-embed\\python.exe"',
                 'if not defined PY if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
