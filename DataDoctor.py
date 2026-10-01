@@ -1788,6 +1788,8 @@ class uiMain(QMainWindow):
             return "SQL.png"
         if widget is self.tabGraph:
             return "Plotter.png"
+        if widget is self.tabRegression:
+            return "Regression.png"
         if widget is self.tabPlotter:
             title = getattr(self, "plotterTitle", "") or ""
             if "Scatter" in title:
@@ -1953,6 +1955,8 @@ class uiMain(QMainWindow):
             idx = self.tabWidget.insertTab(
                 self.regressionInsertIndex(), panel, self.regressionTitle,
             )
+        if idx >= 0:
+            self.paintMainTabIcon(panel)
         if select and idx >= 0: self.tabWidget.setCurrentIndex(idx)
         return idx
 

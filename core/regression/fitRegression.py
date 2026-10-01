@@ -156,24 +156,25 @@ def _fitOls(design, y):
 
 def _isDead(r2Full, r2Without, coef, xColumn, y, peakRho) -> bool:
     """
-    Drop a column only when it has no real weight.
+    Drop a column only when it has no real lag relationship.
 
-    Unique r² can be tiny when two gages carry the same wave (upstream and
-    downstream of the target). That is not "near zero" — the coefficient
-    still moves the target. A flat, unrelated column has a weak peak and
-    does not earn its term.
+    Unique r² can be tiny when two gages carry the same wave. That series
+    still belongs in the equation. A flat, unrelated column has a weak peak
+    and does not earn its term.
     """
     gained = float(r2Full) - float(r2Without)
     stdY = float(np.std(y))
     stdX = float(np.std(xColumn))
     if stdY <= 1e-12:
         return True
+    # Same wave: the second gage can add almost no unique r² and still belong.
+    if abs(float(peakRho)) >= 0.15:
+        return False
+    # Weak peak. Keep it only when it actually moves the fit.
+    if gained < 0.02:
+        return True
     contrib = abs(float(coef)) * stdX / stdY
-    if abs(float(peakRho)) < 0.15 and gained < 0.02:
-        return True
-    if gained < 0.01 and contrib < 0.05:
-        return True
-    return False
+    return contrib < 0.05
 
 
 def _lagCoverage(grid, targetKey, det) -> int:
@@ -193,7 +194,7 @@ def _lagCoverage(grid, targetKey, det) -> int:
     return count
 
 
-def _warnings(stepSeconds, spanSeconds, n, nEff, r2, cvR2, predictors):
+def _warnings(stepSeconds, spanSeconds, n, nEff, r2, cvR2, predictors, omitted=None):
     out = []
     if n < 50 or nEff < 20:
         out.append(
@@ -224,6 +225,8 @@ def _warnings(stepSeconds, spanSeconds, n, nEff, r2, cvR2, predictors):
         weakHoldout = float(r2) >= 0.4 and float(cvR2) < 0.4
         if muchWorse or weakHoldout:
             out.append("Cross-check r² is much weaker than the in-sample fit.")
+    for key, reason in omitted or []:
+        out.append(f"Left out {key}: {reason}.")
     return out
 
 
@@ -287,7 +290,7 @@ def fitColumns(columns, targetIndex: int):
         )
 
     detections = []
-    detectedCols = []
+    omitted = []
     for col in others:
         found = detectLag(
             grid.columns[target.key],
@@ -296,9 +299,9 @@ def fitColumns(columns, targetIndex: int):
             key=col.key,
         )
         if found is None or not found.usable:
+            omitted.append((col.key, "no usable lag"))
             continue
         detections.append(found)
-        detectedCols.append(col)
     if not detections:
         return _refuse("No usable lag between the target and the other columns.")
 
@@ -320,6 +323,7 @@ def fitColumns(columns, targetIndex: int):
         yhatReduced = A[:, colsKeep] @ reduced
         r2Reduced, _meR, _rmseR = regressionScores(y, yhatReduced)
         if _isDead(r2, r2Reduced, coef[i + 1], A[:, i + 1], y, det.peakRho):
+            omitted.append((det.key, "does not move the fit"))
             continue
         keep.append(i)
 
@@ -345,7 +349,9 @@ def fitColumns(columns, targetIndex: int):
         if n >= max(20, 10 * p):
             break
         covers = [_lagCoverage(grid, target.key, det) for det in detections]
-        detections.pop(int(np.argmin(covers)))
+        worst = int(np.argmin(covers))
+        omitted.append((detections[worst].key, "not enough overlapping rows"))
+        detections.pop(worst)
         built = _completeDesign(grid, target.key, detections)
         if built is None:
             return _refuse("No overlap left after lagging.")
@@ -381,7 +387,7 @@ def fitColumns(columns, targetIndex: int):
 
     nEff = effectiveN(y)
     cvR2 = blockedCvR2(A, y)
-    warnings = _warnings(step, span, n, nEff, r2, cvR2, predictors)
+    warnings = _warnings(step, span, n, nEff, r2, cvR2, predictors, omitted)
 
     terms = [(pred.key, pred.coef, pred.lagSteps) for pred in predictors]
     equationText, copyText = renderEquation(terms, float(coef[0]))

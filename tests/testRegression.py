@@ -69,7 +69,10 @@ def testTwoPredictor():
         return fail("twoPredictor", result.labelText)
     if "E" in result.copyText:
         return fail("twoPredictor", "noise column kept")
-    if result.warnings:
+    leftOut = [w for w in result.warnings if w.startswith("Left out")]
+    if not any(w.startswith("Left out E:") for w in leftOut):
+        return fail("twoPredictor", result.warnings)
+    if any("Left out A:" in w or "Left out D:" in w for w in result.warnings):
         return fail("twoPredictor", result.warnings)
     if "-3 steps" not in result.labelText or "-45 min" not in result.labelText:
         return fail("twoPredictor", result.labelText)
