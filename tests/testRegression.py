@@ -309,6 +309,54 @@ def testCollinearSandwich():
     return 0
 
 
+def testSeveralDownstream():
+    """Several trailing gages stay in one equation, same as upstream."""
+    rng = np.random.default_rng(12)
+    n = 900
+    a = rng.normal(size=n)
+    b = rng.normal(size=n)
+    c = rng.normal(size=n)
+    noise = rng.normal(size=n)
+    y = np.full(n, np.nan)
+    for t in range(n):
+        ta, tb, tc = t + 2, t + 5, t + 8
+        if tc < n:
+            y[t] = 0.4 * a[ta] + 0.3 * b[tb] + 0.2 * c[tc] + 1.5
+    result, err = fitColumns(
+        [
+            column("A", "down1", 0, a),
+            column("B", "down2", 1, b),
+            column("C", "down3", 2, c),
+            column("E", "noise", 4, noise),
+            column("D", "target", 3, y),
+        ],
+        4,
+    )
+    if err:
+        return fail("downstream", err)
+    keys = [p.key for p in result.predictors]
+    if keys != ["A", "B", "C"]:
+        return fail("downstream", f"predictors {keys} {result.warnings}")
+    byKey = {p.key: p for p in result.predictors}
+    if byKey["A"].lagSteps != 2 or byKey["B"].lagSteps != 5 or byKey["C"].lagSteps != 8:
+        return fail(
+            "downstream",
+            f"lags {byKey['A'].lagSteps} {byKey['B'].lagSteps} {byKey['C'].lagSteps}",
+        )
+    if (
+        abs(byKey["A"].coef - 0.4) > 1e-6
+        or abs(byKey["B"].coef - 0.3) > 1e-6
+        or abs(byKey["C"].coef - 0.2) > 1e-6
+    ):
+        return fail("downstream", result.equationText)
+    if any(f"Left out {key}:" in w for key in ("A", "B", "C") for w in result.warnings):
+        return fail("downstream", result.warnings)
+    if not any(w.startswith("Left out E:") for w in result.warnings):
+        return fail("downstream", result.warnings)
+    print("ok downstream")
+    return 0
+
+
 def testColumnLettersFollowInsertAndMove():
     from core.Formula import remapFormulaColumns, shiftFormulaColumns
     inserted = shiftFormulaColumns("=0.5*D1+A1", 3, 1)
@@ -414,6 +462,7 @@ def main():
         testEdgeLagWarns,
         testSplitHalf,
         testCollinearSandwich,
+        testSeveralDownstream,
         testColumnLettersFollowInsertAndMove,
         testSavedAnchorRowIsRow4,
         testLagFillStartsOnRow4,

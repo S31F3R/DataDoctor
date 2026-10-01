@@ -6,7 +6,7 @@ You need at least two numeric columns. The step has to fall between **1 minute a
 
 ## What the fit is
 
-For each other column, Regression estimates a single lag (how many steps that series leads or trails the one you are predicting), then fits one straight line with an intercept. Every selected series is tried. A series that cannot be used is left out, and the label under the stats names it and says why. Two upstream gages on the same wave both stay in the equation. There is one equation, not a list of runners-up.
+For each other column, Regression estimates a single lag (how many steps that series leads or trails the one you are predicting), then fits one straight line with an intercept. Every selected series is tried. A series that cannot be used is left out, and the label under the stats names it and says why. Several gages on the same wave all stay, upstream or downstream of the series you are predicting. There is one equation, not a list of runners-up.
 
 ## How the lag is chosen
 
@@ -16,10 +16,10 @@ The lag search is a pre-whitened cross-correlation, one lag per series.
 2. Pre-whiten the target and that series with the same φ: `y'[t] = y[t] − φ·y[t−1]`. The first point and any gap stay blank. This stops a slow rise (a storm climbing for hours) from looking like a travel time.
 3. At each candidate shift k, compute the correlation of the whitened target at t with the whitened series at t+k. The winning lag is the largest |correlation|. A tie goes to the smaller shift.
 
-The sign follows the table, not the river mile:
+The sign is which row lines up:
 
-- A **negative** lag means that series leads (typical of an upstream gage). The fit uses an earlier row of that column.
-- A **positive** lag means it trails.
+- A **negative** lag means that series leads. That is an upstream gage. The fit uses an earlier row of that column.
+- A **positive** lag means that series trails. That is a downstream gage. The fit uses a later row. Several downstream series can sit in the same equation, the same way several upstream series can.
 
 The search window depends on the step, so 1-minute data is not scanned across a week:
 
