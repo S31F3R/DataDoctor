@@ -6,11 +6,14 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 SCRIPT = os.path.join(ROOT, "scripts", "applyUpdate.py")
 spec = importlib.util.spec_from_file_location("applyUpdate", SCRIPT)
 applyUpdate = importlib.util.module_from_spec(spec)
@@ -177,11 +180,66 @@ def main():
         cmdRoot = root / "cmdbody"
         cmdRoot.mkdir()
         applyUpdate.writeApplyUpdateCmd(cmdRoot)
-        body = (cmdRoot / "applyUpdate.cmd").read_text(encoding="utf-8")
+        body = (cmdRoot / "applyUpdate.cmd").read_text(encoding="utf-8", newline="")
+        if body != applyUpdate.applyCmdBody():
+            errors += fail("cmd body", "writer drifted from applyCmdBody")
+        if b"\r\r\n" in body.encode("utf-8"):
+            errors += fail("cmd cr", "writer doubled the carriage return")
         if "find " in body or "tasklist" in body:
             errors += fail("cmd find", "command still searches for a process")
         if "finishEmbedSwap.cmd" not in body:
             errors += fail("cmd cleanup", "does not remove the old helper")
+        from core.Update import _APPLY_UPDATE_CMD, _cmdTextSame, windowsCmdNeedsBootstrapWrite
+        if _APPLY_UPDATE_CMD != applyUpdate.applyCmdBody():
+            errors += fail("cmd drift", "bootstrap text differs from applyCmdBody")
+        doubled = body.replace("\r\n", "\r\r\n")
+        if not applyUpdate.cmdTextSame(doubled, body) or not _cmdTextSame(doubled, body):
+            errors += fail("doubled cmd", "old writer looked like a command change")
+        if windowsCmdNeedsBootstrapWrite(doubled, None, body):
+            errors += fail("bootstrap same", "would rewrite a matching command")
+        if not windowsCmdNeedsBootstrapWrite("old launcher command", None, body):
+            errors += fail("bootstrap old", "3.0 command would be left in place")
+        if windowsCmdNeedsBootstrapWrite("old launcher command", body, body):
+            errors += fail("bootstrap staged", "would hide a real second restart")
+
+        sameCmd = root / "samecmd"
+        writeFile(sameCmd / "applyUpdate.cmd", body)
+        writeFile(sameCmd / "applyUpdate.cmd.new", body)
+        applyUpdate.writeApplyUpdateCmd(sameCmd, stageBesideLive=True)
+        if (sameCmd / "applyUpdate.cmd.new").exists():
+            errors += fail("same cmd", "staged a command that already matches")
+        if (sameCmd / "applyUpdate.cmd").read_text(encoding="utf-8", newline="") != body:
+            errors += fail("same cmd live", "rewrote the matching command")
+
+        oldWriter = root / "oldwriter"
+        (oldWriter / "applyUpdate.cmd").parent.mkdir(parents=True, exist_ok=True)
+        (oldWriter / "applyUpdate.cmd").write_bytes(doubled.encode("utf-8"))
+        (oldWriter / "applyUpdate.cmd.new").write_bytes(doubled.encode("utf-8"))
+        applyUpdate.writeApplyUpdateCmd(oldWriter, stageBesideLive=True)
+        if (oldWriter / "applyUpdate.cmd.new").exists():
+            errors += fail("old writer", "staged a command the old writer already installed")
+        if (oldWriter / "applyUpdate.cmd").read_bytes() != doubled.encode("utf-8"):
+            errors += fail("old writer live", "rewrote the matching command")
+
+        changed = root / "changecmd"
+        writeFile(changed / "applyUpdate.cmd", "old launcher command\r\n")
+        applyUpdate.writeApplyUpdateCmd(changed, stageBesideLive=True)
+        if (changed / "applyUpdate.cmd").read_text(encoding="utf-8", newline="") != "old launcher command\r\n":
+            errors += fail("changed live", "replaced the running command")
+        if (changed / "applyUpdate.cmd.new").read_text(encoding="utf-8", newline="") != body:
+            errors += fail("changed staged", "new command was not staged")
+
+        sameExe = root / "exe"
+        writeFile(sameExe / "Data Doctor.exe", "launcher-bytes")
+        if not applyUpdate.copyFileIfPresent(sameExe / "Data Doctor.exe", sameExe / "Data Doctor.exe"):
+            errors += fail("exe same", "identical file was not left in place")
+        srcExe = root / "new-exe"
+        writeFile(srcExe / "Data Doctor.exe", "newer-launcher")
+        destExe = root / "dest-exe" / "Data Doctor.exe"
+        writeFile(destExe, "launcher-bytes")
+        applyUpdate.copyFileIfPresent(srcExe / "Data Doctor.exe", destExe)
+        if destExe.read_text(encoding="utf-8") != "newer-launcher":
+            errors += fail("exe new", destExe.read_text(encoding="utf-8"))
 
     if errors:
         print(f"{errors} failed")

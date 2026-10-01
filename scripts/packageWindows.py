@@ -37,6 +37,7 @@ Run from project root:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
 import platform
 import shutil
@@ -468,49 +469,17 @@ def main():
     else:
         print("WARN: core/bunker.db missing — temp merge payload not packaged", file=sys.stderr)
 
-    def writeRootCmd(name: str, scriptRel: str, banner: str):
-        path = stage / name
-        path.write_text(
-            "\r\n".join([
-                "@echo off",
-                f"REM {banner}",
-                "setlocal",
-                'cd /d "%~dp0"',
-                'if exist "finishEmbedSwap.cmd" del /f /q "finishEmbedSwap.cmd"',
-                'set "PY="',
-                'if exist "pythonFiles\\python-embed\\python.exe" set "PY=pythonFiles\\python-embed\\python.exe"',
-                'if not defined PY if exist "Project Files\\python-embed\\python.exe" set "PY=Project Files\\python-embed\\python.exe"',
-                'if not defined PY if exist "pythonFiles\\.venv\\Scripts\\python.exe" set "PY=pythonFiles\\.venv\\Scripts\\python.exe"',
-                'if not defined PY if exist "Project Files\\.venv\\Scripts\\python.exe" set "PY=Project Files\\.venv\\Scripts\\python.exe"',
-                'if not defined PY if exist ".venv\\Scripts\\python.exe" set "PY=.venv\\Scripts\\python.exe"',
-                'if not defined PY set "PY=python"',
-                f'set "SCRIPT=%~dp0{scriptRel}"',
-                'if not exist "%SCRIPT%" set "SCRIPT=%~dp0Project Files\\scripts\\applyUpdate.py"',
-                'if not exist "%SCRIPT%" set "SCRIPT=%~dp0applyUpdate.py"',
-                'if not exist "%SCRIPT%" (',
-                f"  echo ERROR: script not found at {scriptRel}",
-                "  pause",
-                "  exit /b 1",
-                ")",
-                '"%PY%" "%SCRIPT%" %*',
-                "set ERR=%ERRORLEVEL%",
-                "if %ERR% neq 0 (",
-                "  echo.",
-                "  echo Command failed with exit code %ERR%",
-                "  pause",
-                ")",
-                "endlocal",
-                "exit /b %ERR%",
-                "",
-            ]),
-            encoding="utf-8",
-            newline="\r\n",
-        )
-
-    writeRootCmd(
-        "applyUpdate.cmd",
-        "pythonFiles\\scripts\\applyUpdate.py",
-        "Apply newest zip in updates\\ (code refresh + bunker merge + pip into python-embed)",
+    # Same text applyUpdate.py writes on an update, so a later release does
+    # not stage applyUpdate.cmd.new just because the package wording differed.
+    spec = importlib.util.spec_from_file_location(
+        "applyUpdate", root / "scripts" / "applyUpdate.py",
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("could not load scripts/applyUpdate.py")
+    applyMod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(applyMod)
+    (stage / "applyUpdate.cmd").write_text(
+        applyMod.applyCmdBody(), encoding="utf-8", newline="",
     )
 
     embedOk = installPythonEmbed(root, projectFiles / "python-embed")

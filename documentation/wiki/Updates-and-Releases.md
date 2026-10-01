@@ -42,17 +42,20 @@ Tags use `vMAJOR.MINOR.PATCH`. Release candidates and betas use `vX.Y.Z-rc.N` or
 
 That refreshes `pythonFiles` code (`app.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary, pip-installs into `python-embed`, and deletes the zip. `pythonFiles\certs\` is left alone so Aquarius certificates survive updates.
 
+`Data Doctor.exe`, the icon, and the readme are replaced in that same restart when the package bytes differ. They are left alone when they already match. A second restart is asked only when `applyUpdate.cmd` or the embedded Python actually changed and could not be replaced while this update was running. The same command and the same Python do not ask again.
+
 ### Coming from 3.0.x (system Python + `.venv`)
 
 The old zip needed Python on PATH. 3.1+ ships Python 3.14 next to the app and a launcher that starts `python-embed\pythonw.exe`.
 
-In-app update on this hop downloads **`DataDoctor-Windows-*.zip`**, not the Python zip.
+A 3.0 install's own updater downloads the **Python** zip. It does not know the Windows zip. That zip carries the new updater under `core\`. The next start moves it into `scripts\`, writes `applyUpdate.cmd` when the installed command differs, and then asks for **`DataDoctor-Windows-*.zip`** even if the version number already matches.
 
-1. Download from the update prompt (zip lands in `updates\`).
-2. Restart **Data Doctor.exe**. It starts `applyUpdate.cmd` and exits so the `.exe` is not locked.
-3. applyUpdate replaces the launcher, installs `pythonFiles\python-embed\` and `pythonFiles\app.pyw`, merges `bunker.db` (including from leftover `Project Files\`), pip-installs, then starts Data Doctor again.
+1. Take the in-app update. The first zip is `DataDoctor-Python-*.zip`. Restart.
+2. The app asks for the Windows package. Download it (zip lands in `updates\`).
+3. Restart **Data Doctor.exe**. It starts the new `applyUpdate.cmd` and exits so the `.exe` is not locked.
+4. applyUpdate replaces the launcher, installs `pythonFiles\python-embed\` and `pythonFiles\app.pyw`, merges `bunker.db` (including from leftover `Project Files\`), pip-installs, then starts Data Doctor again.
 
-Do **not** use only the Python zip for this hop — old `applyUpdate` cannot install the launcher or the embed. If you already applied a 3.1 Python zip (new code, still on `.venv`), the app will prompt for the Windows zip on the next start.
+The Python zip alone does not install the launcher or the embed. If that zip was already applied and the install is still on `.venv`, the next start asks for the Windows zip. A second restart after that Windows apply happens only when the command or the embedded Python could not be replaced while the update was running.
 
 If there is no live `bunker.db` yet (first install), applyUpdate copies the packaged dictionary and does **not** ask about Common Names or Data Types. The same skip happens when the live file is already identical to the packaged one. When a live dictionary already exists and differs, merge always updates `siteName` / `database` from the packaged copy. After the backup path prints, the console shows **Merging...** while the work runs (six threads plan the row updates, then they are written together). It asks **y/n** (in the applyUpdate console) whether to overwrite existing **Common Names** and **Data Types** (`commonName` / `datatype`). New dictionary rows always take the packaged values. `valuePrecision`, `precisionOverride`, `expectedMin`, `expectedMax`, `cuttoffMin`, `cutoffMax`, and `rateOfChange` fill blanks only and never overwrite a value you already set. No console (or answering **n**) leaves existing common names and data types alone.
 

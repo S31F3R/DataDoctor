@@ -85,6 +85,21 @@ def main():
         if "applyUpdate.cmd.new" not in text or "python-embed.next" not in text:
             errors += fail("prompt items", text)
 
+        same = root / "same"
+        same.mkdir()
+        (same / "applyUpdate.cmd").write_text("same\r\n", encoding="utf-8", newline="")
+        (same / "applyUpdate.cmd.new").write_text("same\r\n", encoding="utf-8", newline="")
+        items = windowsLauncherLeftovers(same)
+        if "applyUpdate.cmd.new" in items or (same / "applyUpdate.cmd.new").exists():
+            errors += fail("same leftover", items)
+        changed = root / "changed"
+        changed.mkdir()
+        (changed / "applyUpdate.cmd").write_text("old\r\n", encoding="utf-8", newline="")
+        (changed / "applyUpdate.cmd.new").write_text("new\r\n", encoding="utf-8", newline="")
+        items = windowsLauncherLeftovers(changed)
+        if "applyUpdate.cmd.new" not in items or not (changed / "applyUpdate.cmd.new").is_file():
+            errors += fail("changed leftover", items)
+
     if errors:
         print(f"{errors} failed")
         return 1

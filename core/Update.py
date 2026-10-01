@@ -225,13 +225,53 @@ def windowsLauncherInstall() -> bool:
     return (root / "Data Doctor.exe").is_file()
 
 
+def _cmdLines(text: str) -> str:
+    """Command lines, ignoring blank lines from the old doubled CR writer."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [line.strip() for line in text.split("\n")]
+    return "\n".join(line for line in lines if line)
+
+
+def _cmdTextSame(a: str, b: str) -> bool:
+    return _cmdLines(a) == _cmdLines(b)
+
+
+def windowsCmdNeedsBootstrapWrite(liveText, stagedText, body: str) -> bool:
+    """
+    True when startup should replace applyUpdate.cmd in place.
+
+    A staged command that already matches is left for the second restart.
+    A live command that already matches is left alone.
+    """
+    if stagedText is not None and _cmdTextSame(stagedText, body):
+        return False
+    if liveText is not None and _cmdTextSame(liveText, body):
+        return False
+    return True
+
+
+def discardMatchingStagedCmd(root: Path) -> None:
+    """Drop applyUpdate.cmd.new when it is the command already installed."""
+    staged = root / "applyUpdate.cmd.new"
+    live = root / "applyUpdate.cmd"
+    if not staged.is_file() or not live.is_file():
+        return
+    try:
+        if _cmdTextSame(staged.read_text(encoding="utf-8"), live.read_text(encoding="utf-8")):
+            staged.unlink()
+    except OSError:
+        pass
+
+
 def windowsLauncherLeftovers(root: Path) -> list[str]:
     """
     Files a Windows update could not replace while they were in use.
 
     applyUpdate.cmd.new and python-embed.next need another restart.
+    An unchanged staged command is removed here so that restart is not asked.
     The other names are leftovers the restart also removes.
     """
+    discardMatchingStagedCmd(root)
     items = []
     if (root / "applyUpdate.cmd.new").is_file():
         items.append("applyUpdate.cmd.new")
@@ -499,9 +539,13 @@ _APPLY_UPDATE_CMD = "\r\n".join([
 
 def bootstrapWindowsApplyTools() -> None:
     """
-    3.0.x applyUpdate copies core/* but not scripts/. The Python zip ships
-    core/applyUpdate.py so the first hop can install a Windows-zip-capable
-    updater, then the user runs applyUpdate.cmd for the launcher + embed.
+    3.0.x applyUpdate copies core/* but not scripts/, and it downloads the
+    Python zip (not the Windows zip). That zip ships core/applyUpdate.py.
+    The next launch copies it into scripts/ and writes this command when
+    the installed text differs and no staged command is already waiting.
+    That command is what then applies DataDoctor-Windows-*.zip. A staged
+    applyUpdate.cmd.new stays for the second-restart prompt. Later releases
+    stage a new command only when its text actually changed.
     """
     if sys.platform != "win32":
         return
@@ -519,18 +563,32 @@ def bootstrapWindowsApplyTools() -> None:
             except Exception:
                 pass
         root = projectFiles.parent
-        if (root / "Data Doctor.exe").is_file() or (root / "applyUpdate.cmd").is_file():
-            cmd = root / "applyUpdate.cmd"
-            cmd.write_text(_APPLY_UPDATE_CMD, encoding="utf-8", newline="\r\n")
+        body = _APPLY_UPDATE_CMD
         try:
             scriptsDir = projectFiles / "scripts"
             if str(scriptsDir) not in sys.path:
                 sys.path.insert(0, str(scriptsDir))
             import applyUpdate as _au
+            getter = getattr(_au, "applyCmdBody", None)
+            if callable(getter):
+                body = getter()
             _au.migrateLegacyUpdatesFolder(root)
             _au.cleanupStaleLegacyDirs(root)
         except Exception:
             pass
+        if (root / "Data Doctor.exe").is_file() or (root / "applyUpdate.cmd").is_file():
+            cmd = root / "applyUpdate.cmd"
+            staged = root / "applyUpdate.cmd.new"
+            try:
+                current = cmd.read_text(encoding="utf-8") if cmd.is_file() else None
+            except OSError:
+                current = None
+            try:
+                stagedText = staged.read_text(encoding="utf-8") if staged.is_file() else None
+            except OSError:
+                stagedText = None
+            if windowsCmdNeedsBootstrapWrite(current, stagedText, body):
+                cmd.write_text(body, encoding="utf-8", newline="")
     except Exception as e:
         Logic.logMessage("DEBUG", f"bootstrapWindowsApplyTools: {e}")
 
@@ -1609,19 +1667,12 @@ def _promptUpdate(parent, info: dict) -> None:
             "release yet. Open the release page to download manually."
         )
     else:
-        needsWindowsZip = (info.get("assetKind") == "windows") or windowsNeedsLauncherRefresh()
         if kind == "appimage":
             lines.append("")
             lines.append("Download, then hit Restart to apply.")
         elif kind == "launcher":
             lines.append("")
-            if needsWindowsZip:
-                lines.append(
-                    "This version also updates the Windows launcher. "
-                    "Download, then hit Restart to apply."
-                )
-            else:
-                lines.append("Download, then hit Restart to apply.")
+            lines.append("Download, then hit Restart to apply.")
         else:
             lines.append("")
             lines.append("The package will download into updates/ under the project root.")

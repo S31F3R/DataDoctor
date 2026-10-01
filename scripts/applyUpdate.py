@@ -789,9 +789,23 @@ def isWindowsFullPayload(payload: Path) -> bool:
     return False
 
 
+def sameFileBytes(src: Path, dest: Path) -> bool:
+    try:
+        if not src.is_file() or not dest.is_file():
+            return False
+        if src.stat().st_size != dest.stat().st_size:
+            return False
+        return src.read_bytes() == dest.read_bytes()
+    except OSError:
+        return False
+
+
 def copyFileIfPresent(src: Path, dest: Path) -> bool:
     if not src.is_file():
         return False
+    if dest.is_file() and sameFileBytes(src, dest):
+        print(f"{dest.name} already matches — leaving it")
+        return True
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         shutil.copy2(src, dest)
@@ -1071,10 +1085,9 @@ def launchDataDoctorIfIdle(installRoot: Path, assumeIdle: bool = False) -> None:
         appendAppLog("ERROR", f"could not start {target.name}: {e}")
 
 
-def writeApplyUpdateCmd(installRoot: Path) -> None:
-    """Keep applyUpdate.cmd pointing at python-embed when present."""
-    cmd = cmdWriteTarget(installRoot)
-    body = "\r\n".join([
+def applyCmdBody() -> str:
+    """The launcher command every Windows install should end up with."""
+    return "\r\n".join([
         "@echo off",
         "REM Apply newest zip in updates\\ (code + bunker merge + pip into python-embed)",
         "setlocal",
@@ -1105,7 +1118,52 @@ def writeApplyUpdateCmd(installRoot: Path) -> None:
         "exit /b %ERR%",
         "",
     ])
-    cmd.write_text(body, encoding="utf-8", newline="\r\n")
+
+
+def cmdTextSame(a: str, b: str) -> bool:
+    """
+    True when two command files are the same lines.
+
+    Older writers passed a CRLF string to write_text(newline='\\r\\n'),
+    which stored CR CR LF. Those blank lines are not a command change.
+    """
+    def lines(text):
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        kept = [line.strip() for line in text.split("\n")]
+        return [line for line in kept if line]
+    return lines(a) == lines(b)
+
+
+def writeApplyUpdateCmd(installRoot: Path, stageBesideLive: bool | None = None) -> None:
+    """
+    Point applyUpdate.cmd at python-embed when present.
+
+    A running cmd.exe cannot be rewritten, so a real change is staged as
+    applyUpdate.cmd.new and finished on the next restart. The same text is
+    left alone, including a staged copy of that same text.
+    """
+    body = applyCmdBody()
+    live = installRoot / "applyUpdate.cmd"
+    staged = installRoot / "applyUpdate.cmd.new"
+    if live.is_file():
+        try:
+            current = live.read_text(encoding="utf-8")
+        except OSError:
+            current = None
+        if current is not None and cmdTextSame(current, body):
+            if staged.is_file():
+                try:
+                    if cmdTextSame(staged.read_text(encoding="utf-8"), body):
+                        staged.unlink()
+                        print("Removed applyUpdate.cmd.new (launcher command already matches)")
+                except OSError as e:
+                    print(f"WARN: could not remove applyUpdate.cmd.new: {e}", file=sys.stderr)
+            print("applyUpdate.cmd already matches — leaving it")
+            return
+    cmd = cmdWriteTarget(installRoot, stageBesideLive=stageBesideLive)
+    # body already uses CRLF. newline="" keeps those bytes (newline="\\r\\n"
+    # would turn each CR LF into CR CR LF).
+    cmd.write_text(body, encoding="utf-8", newline="")
     if cmd.name.endswith(".new"):
         print("Staged applyUpdate.cmd.new (live applyUpdate.cmd is still running)")
     else:
