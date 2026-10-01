@@ -36,7 +36,7 @@ Tags use `vMAJOR.MINOR.PATCH`. Release candidates and betas use `vX.Y.Z-rc.N` or
 
 1. Close Data Doctor (or leave it closed), **or** hit **Restart** on the download-complete dialog.
 2. Put `DataDoctor-Python-*.zip` in the install’s `updates\` folder (next to `Data Doctor.exe`) if you chose Later.
-3. Restart **Data Doctor.exe**, or run `applyUpdate.cmd`. The exe starts the cmd and exits so launcher files can be replaced; the cmd starts the exe when it finishes.
+3. Restart **Data Doctor.exe**, or run `applyUpdate.cmd`. The exe starts the cmd and exits so launcher files can be replaced; the cmd starts the exe when it finishes. When the zip includes a newer `applyUpdate.py`, that copy runs next and still updates this install folder (the one that contains `Data Doctor.exe`). The temporary folder that copy was started from is not the install. An empty `updates` folder left there by a failed run is removed.
 
 **Restart** on the update dialog closes Data Doctor and opens `applyUpdate.cmd` in a console so you can answer the dictionary merge prompts. Closing the dialog without Restart leaves the zip in `updates\` for later.
 

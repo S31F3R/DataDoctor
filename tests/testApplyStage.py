@@ -241,6 +241,92 @@ def main():
         if destExe.read_text(encoding="utf-8") != "newer-launcher":
             errors += fail("exe new", destExe.read_text(encoding="utf-8"))
 
+        real = root / "realinstall"
+        writeFile(real / "pythonFiles" / "app.pyw", "app")
+        writeFile(real / "applyUpdate.cmd", "cmd")
+        # The fixture root already has pythonFiles. A reexec copy must sit
+        # outside that tree or the walk finds it and never looks like Temp.
+        previous = Path.cwd()
+        nest = Path(tempfile.mkdtemp(prefix="dd-temp-nest-"))
+        try:
+            tempScript = nest / "dd-apply-abc.py"
+            writeFile(tempScript, "from zip")
+            stray = tempScript.parent / "updates"
+            stray.mkdir()
+            walked = applyUpdate.findInstallRoot(tempScript.parent)
+            if walked != tempScript.parent.resolve():
+                errors += fail("temp walk", walked)
+            if applyUpdate.installRootConfirmed(tempScript.parent):
+                errors += fail("temp confirmed", tempScript.parent)
+            try:
+                os.chdir(real)
+                found = applyUpdate.locateInstallRoot(tempScript)
+                if found != real.resolve():
+                    errors += fail("reexec root", found)
+            finally:
+                os.chdir(previous)
+            applyUpdate.removeStrayTempUpdates(tempScript)
+            if stray.exists():
+                errors += fail("stray updates", "empty temp updates folder still present")
+            if not tempScript.is_file():
+                errors += fail("temp script", "removed the reexec copy")
+
+            occupiedScript = nest / "elsewhere" / "dd-apply-def.py"
+            writeFile(occupiedScript, "from zip")
+            occupiedZip = occupiedScript.parent / "updates" / "DataDoctor-Python-v1.zip"
+            writeFile(occupiedZip, "zip")
+            applyUpdate.removeStrayTempUpdates(occupiedScript)
+            if not occupiedZip.is_file():
+                errors += fail("keep zip", "removed a temp updates folder that had a zip")
+        finally:
+            import shutil
+            shutil.rmtree(nest, ignore_errors=True)
+
+        (real / "updates").mkdir()
+        namedLikeTemp = real / "dd-apply-nope.py"
+        writeFile(namedLikeTemp, "script")
+        applyUpdate.removeStrayTempUpdates(namedLikeTemp)
+        if not (real / "updates").is_dir():
+            errors += fail("real updates", "removed the install updates folder")
+
+        scriptIn = real / "pythonFiles" / "scripts" / "applyUpdate.py"
+        writeFile(scriptIn, "installed")
+        try:
+            os.chdir(root)
+            found = applyUpdate.locateInstallRoot(scriptIn)
+            if found != real.resolve():
+                errors += fail("script root", found)
+        finally:
+            os.chdir(previous)
+
+        other = root / "otherinstall"
+        writeFile(other / "Data Doctor.exe", "exe")
+        os.environ[applyUpdate.APPLY_ROOT_ENV] = str(other)
+        try:
+            os.chdir(real)
+            found = applyUpdate.locateInstallRoot(Path("dd-apply-unused.py"))
+            if found != other.resolve():
+                errors += fail("env root", found)
+        finally:
+            os.environ.pop(applyUpdate.APPLY_ROOT_ENV, None)
+            os.chdir(previous)
+
+        zipPath = real / "updates" / "DataDoctor-Python-v9.zip"
+        argv = applyUpdate.reexecArgv(["--keep-extract"], real, zipPath)
+        if argv[:1] != ["--keep-extract"] or "--install-root" not in argv or "--zip" not in argv:
+            errors += fail("reexec argv", argv)
+        if str(real) not in argv or str(zipPath) not in argv:
+            errors += fail("reexec paths", argv)
+        again = applyUpdate.reexecArgv(
+            ["--install-root", str(real), "--zip", "already.zip"],
+            other,
+            other / "x.zip",
+        )
+        if again.count("--install-root") != 1 or again.count("--zip") != 1:
+            errors += fail("reexec dup", again)
+        if "already.zip" not in again or str(other) in again:
+            errors += fail("reexec keep", again)
+
     if errors:
         print(f"{errors} failed")
         return 1

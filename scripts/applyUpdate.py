@@ -63,6 +63,7 @@ CODE_DIR_NAMES = (WIN_CODE_DIR, LEGACY_CODE_DIR)
 WIN_APP_ENTRY = "app.pyw"
 UPDATES_DIR = "updates"
 LEGACY_UPDATES_DIRS = ("Update", "Updates", "update", "UPDATES")
+APPLY_ROOT_ENV = "DD_APPLY_INSTALL_ROOT"
 
 
 def userLogDir() -> Path:
@@ -115,6 +116,88 @@ def findInstallRoot(start: Path) -> Path:
             break
         cur = cur.parent
     return start.resolve()
+
+
+def installRootConfirmed(root: Path) -> bool:
+    """True when root looks like a Data Doctor install, not a temp folder."""
+    try:
+        root = root.resolve()
+    except OSError:
+        return False
+    if any((root / name).is_dir() for name in CODE_DIR_NAMES):
+        return True
+    for name in (
+        "Data Doctor.exe",
+        "applyUpdate.cmd",
+        "Data Doctor.command",
+        "applyUpdate.sh",
+        "DataDoctor.py",
+    ):
+        if (root / name).is_file():
+            return True
+    return False
+
+
+def locateInstallRoot(scriptFile: Path | None = None) -> Path:
+    """
+    Install folder for this run.
+
+    The zip's applyUpdate.py is started from a temp file. That path is not
+    the install. The launcher's working directory is, and a parent that
+    already found the folder passes DD_APPLY_INSTALL_ROOT.
+    """
+    hinted = os.environ.get(APPLY_ROOT_ENV)
+    if hinted:
+        hintedPath = Path(hinted).expanduser()
+        if installRootConfirmed(hintedPath):
+            return hintedPath.resolve()
+    scriptFile = Path(scriptFile) if scriptFile is not None else Path(__file__)
+    try:
+        fromScript = findInstallRoot(scriptFile.resolve().parent)
+    except OSError:
+        fromScript = scriptFile.parent
+    if installRootConfirmed(fromScript):
+        return fromScript
+    try:
+        fromCwd = findInstallRoot(Path.cwd())
+    except OSError:
+        fromCwd = Path.cwd()
+    if installRootConfirmed(fromCwd):
+        return fromCwd
+    return fromScript
+
+
+def removeStrayTempUpdates(scriptFile: Path) -> None:
+    """
+    Delete an empty updates folder next to a temp reexec copy.
+
+    An older run treated that temp folder as the install and created
+    updates/ there before it noticed the zip was missing.
+    """
+    path = Path(scriptFile)
+    if not path.name.startswith("dd-apply-") or path.suffix.lower() != ".py":
+        return
+    try:
+        parent = path.resolve().parent
+    except OSError:
+        return
+    if installRootConfirmed(parent):
+        return
+    updates = parent / UPDATES_DIR
+    if not updates.is_dir():
+        return
+    try:
+        files = [p for p in updates.rglob("*") if p.is_file()]
+    except OSError:
+        return
+    if files:
+        print(f"WARN: left {updates} in place (not empty)")
+        return
+    try:
+        shutil.rmtree(updates)
+        print(f"Removed stray {updates}")
+    except OSError as e:
+        print(f"WARN: could not remove stray {updates}: {e}", file=sys.stderr)
 
 
 def isWindowsInstall(installRoot: Path) -> bool:
@@ -492,7 +575,24 @@ def shouldReexecApplyScript(zipPath: Path, currentPath: Path | None = None) -> b
     return fresh != current
 
 
-def reexecZipApplyScript(zipPath: Path) -> None:
+def _argPresent(argv: list[str], name: str) -> bool:
+    for item in argv:
+        if item == name or str(item).startswith(name + "="):
+            return True
+    return False
+
+
+def reexecArgv(argv: list[str], installRoot: Path, zipPath: Path) -> list[str]:
+    """Pass the folder and zip already chosen so the temp copy does not guess."""
+    extra = []
+    if not _argPresent(argv, "--install-root"):
+        extra.extend(["--install-root", str(installRoot)])
+    if not _argPresent(argv, "--zip"):
+        extra.extend(["--zip", str(zipPath)])
+    return [*argv, *extra]
+
+
+def reexecZipApplyScript(zipPath: Path, installRoot: Path) -> None:
     """Replace this process with the applyUpdate.py inside the zip."""
     if not shouldReexecApplyScript(zipPath):
         return
@@ -505,9 +605,11 @@ def reexecZipApplyScript(zipPath: Path) -> None:
     path.write_bytes(fresh)
     env = os.environ.copy()
     env[APPLY_REEXEC_ENV] = "1"
+    env[APPLY_ROOT_ENV] = str(installRoot)
+    forwarded = reexecArgv(list(sys.argv[1:]), installRoot, zipPath)
     print(f"Running applyUpdate.py from {zipPath.name}")
     try:
-        rc = subprocess.call([sys.executable, str(path), *sys.argv[1:]], env=env)
+        rc = subprocess.call([sys.executable, str(path), *forwarded], env=env)
     finally:
         try:
             path.unlink()
@@ -1498,11 +1600,20 @@ def main() -> int:
     if args.installRoot:
         installRoot = Path(args.installRoot).expanduser().resolve()
     else:
-        # Script may live at install root or pythonFiles/scripts/ (or Project Files/)
-        installRoot = findInstallRoot(Path(__file__).resolve().parent)
+        # Script may live at install root, pythonFiles/scripts/, or a temp reexec copy.
+        installRoot = locateInstallRoot(Path(__file__))
 
+    removeStrayTempUpdates(Path(__file__))
     print(f"Install root: {installRoot}")
     appendAppLog("INFO", f"install root {installRoot}")
+    if not args.installRoot and not installRootConfirmed(installRoot):
+        print(
+            f"ERROR: Data Doctor install was not found (got {installRoot}).\n"
+            "  Run applyUpdate.cmd from the install folder, or pass --install-root.",
+            file=sys.stderr,
+        )
+        appendAppLog("ERROR", f"install not found ({installRoot})")
+        return 1
     if args.finishStaged:
         return finishStaged(installRoot)
     updateDir = resolveUpdatesDir(installRoot, create=True)
@@ -1522,7 +1633,7 @@ def main() -> int:
             return 1
 
     print(f"Update zip: {zipPath}")
-    reexecZipApplyScript(zipPath)
+    reexecZipApplyScript(zipPath, installRoot)
     return apply(zipPath, installRoot, keepExtract=args.keepExtract)
 
 
