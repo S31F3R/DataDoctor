@@ -1,8 +1,4 @@
 ####### CURRENT TASKS #######
--Release 3.4.0-rc.3 is broken because of last bug. Instead of removing it completely, is there a way to tag it's broken? If not, then should I just remove it? Or 
- was it only broken because of a previous version? The fix made it sound like a previous versions mistake didn't clean up the files, which caused it to break.
- Just trying to figure out if it's safe to leave that version up or not
--In the quick look for inserted row, it's called ROW|label. Lets change this to ROW EQUATION|label and also change the insert column to COLUMN EQUATION|label
 
 ####### CURRENT BUGS #######
 

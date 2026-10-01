@@ -11,86 +11,34 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[x] Windows update stays in the install folder
-   Steps:
-     a. Use a Python zip built after this fix. The 3.4.0-rc.3 zip still
-        carries the updater that treats Temp as the install, so applying
-        that same zip fails the same way.
-     b. Put the newer DataDoctor-Python-*.zip in
-        C:\Program Files\Data Doctor\updates\ and run applyUpdate.cmd
-        (or Restart from the update dialog).
-     c. The console prints
-        Install root: C:\Program Files\Data Doctor
-        both before and after "Running applyUpdate.py from <zip>".
-        It does not print AppData\Local\Temp\2.
-     d. The update finishes. The empty updates folder under
-        C:\Users\rodneysmith\AppData\Local\Temp\2 is gone and is not
-        recreated. The applied zip is gone from
-        Program Files\Data Doctor\updates.
-
-[x] Windows update prompt does not mention the launcher
-   Steps:
-     a. On a Windows install, when a newer version is offered, the
-        Update available text ends with "Download, then hit Restart to apply."
-     b. It does not say the launcher will be updated. The app does not
-        know that yet. The second-restart prompt still appears later,
-        and only when a launcher file actually has to change.
-
-[x] Same launcher does not ask for a second restart
-   Steps:
-     a. Update a Windows install whose Data Doctor.exe and applyUpdate.cmd
-        are already the ones in the new package (RC 2.2 to 2.3 used the
-        same launcher).
-     b. After the first Restart, Data Doctor opens. There is no second
-        restart prompt.
-     c. applyUpdate.cmd.new is not left next to Data Doctor.exe.
-
-[x] A real launcher change still asks for the second restart
-   Steps:
-     a. When the new package's applyUpdate.cmd text differs, or the
-        embedded Python is a different build, the first apply leaves
-        applyUpdate.cmd.new and/or python-embed.next.
-     b. The next start still shows the second restart prompt.
-        Restart finishes those files.
-
 [ ] 3.0.0 reaches the current launcher command
    Steps:
      a. From a 3.0.0 install, take the in-app update. The first zip is
         the Python zip. That updater does not download the Windows zip.
-     b. Restart. The app comes up on the new code and asks for the
-        Windows package even if the version number already matches.
-        applyUpdate.cmd is the current command (python-embed, then
-        Project Files, then .venv).
-     c. Download and Restart. Data Doctor.exe is replaced and
-        pythonFiles\python-embed is installed. A second restart appears
-        only if the command or that Python could not be replaced while
-        they were in use.
-        RESPONSE: I just tried this and I don't like the 2nd message box. Since this is NEEDED for this version and the user already hit a the button to Download and
-        didn't hit later, lets change this second box for the python in use or launcher update scenario. After letting them know the python version is still using system, 
-        tell them the application will restart to finish the install process. The only button should be OK, no Download or Later buttons. Then run the download and proceed
-        with the install/update. No more prompts. No more confirmations, just do. Although, we already had the zip, so instead of downloading it again, wouldn't it have been 
-        smarter to keep the zip around until we confirm the update is done? How about we don't do the removal until the app opens and we're able to verify the update is 
-        complete. If it's complete, have the clean up process run on a different thread so it doesn't slow down the program, and add the info the log. 
+     b. Restart. The app says this install still uses system Python and
+        will restart to finish the install. The only button is OK.
+        Download and Later are not on that box.
+     c. Click OK. A DataDoctor-Windows zip already in updates\ is used
+        and is not downloaded again. Otherwise it downloads. There is
+        no second Restart / Later box. Data Doctor closes and
+        applyUpdate runs.
+     d. Data Doctor.exe is replaced and pythonFiles\python-embed is
+        installed. A second restart appears only if the command or that
+        Python could not be replaced while they were in use.
+     e. After the app opens and that install is finished, the zip is
+        removed on its own. app.log says it removed the applied update.
+        The zip is still in updates\ if the install is not finished.
 
-[x] Equation row from the date column
+[ ] Query list names row and column equations
    Steps:
-     a. Query a table. Right-click a date in the left column.
-        The menu is only Append New Row. Rename is not there.
-     b. Append New Row. A row named Equation appears at the bottom.
-        Right-click that name: Rename and Remove are there, along with
-        Append New Row. Rename it Total. Right-click a date again and
-        confirm Rename is still absent.
-     c. In one cell of Total, type a formula such as =SUM(A1:A24).
-        The other cells in that row stay empty. Type a plain number in
-        a different cell of Total. The query list shows ROW|Total at
-        the bottom.
-     d. Move that series column. The formula moves with the column and
-        the letters follow it. The number in the other cell is not part
-        of the saved equation.
-     e. Save the Quick Look and query a different date range. Total is
-        back at the bottom with the same name. The range covers every
-        timestamp above Total, and only the column you typed it in.
-        The plain number is gone.       
+     a. Append an equation row and rename it Total. The query list shows
+        ROW EQUATION|Total at the bottom.
+     b. Type a formula in a custom column named Stage. The query list
+        shows COLUMN EQUATION|Stage.
+     c. Save the Quick Look, clear the list, and load it. Both lines
+        come back with those names.
+     d. An older Quick Look that still says ROW|Total or EQUATION|Stage
+        still loads. Saving it writes the new names.
 
 [ ] Plotter HDB uses SQL when the API misses
    Steps:
@@ -151,4 +99,9 @@ CSV bunker update accepts a folder or *.csv
 Linux dictionary merge asks once and shows a progress bar
 Regression uses every usable series, upstream or downstream
 Regression tab shows the regression icon
+Windows update stays in the install folder
+Windows update prompt does not mention the launcher
+Same launcher does not ask for a second restart
+A real launcher change still asks for the second restart
+Equation row from the date column
 

@@ -10,3 +10,6 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- A 3.0.0 Windows install says it still uses system Python, then restarts to finish the Windows package after OK. A zip already in updates is kept until Data Doctor opens and the install is finished, then removed in the background.
+- Query list equation rows show ROW EQUATION|<name>, and a formula on an inserted column shows COLUMN EQUATION|<header>.
+
