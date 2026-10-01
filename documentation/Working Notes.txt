@@ -10,3 +10,9 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Windows update prompt says "Download, then hit Restart to apply." A second restart is asked only when the launcher command or the embedded Python actually changed. An already-current launcher is left in place.
+- A 3.0.0 install gets that command on the next start after the Python zip, then is asked for the Windows package.
+- Regression keeps every selected series that has a real lag, upstream or downstream, including several gages on the same wave, and names each series it leaves out under the stats.
+- Regression tab has a hand-drawn icon.
+- Wiki Regression page explains how the lag and the fit are chosen.
+

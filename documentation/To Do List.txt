@@ -1,23 +1,6 @@
 ####### CURRENT TASKS #######
--Some Windows users will be updating to the current version from a v3.0.0 version. With all the changes we're making to scripts to get the launcher to update,
- how will we ensure their version gets updated properly? We know they will have the proper files. Is what we have in place right now smart enough to update
- their version to the proper .cmd? If not, how do we set this up so any of the versions between 3.0.0 and now will get updated with no hiccups? 
--There was added text to the Windows update that says "This version also updates the Windows launcher." Remove this, it's not needed because at this point, 
- the app doesn't know the launcher needs to be updated. That last part should just say "Download, then hit restart to apply"
-    -During the update, that's when the app should decide if a launcher update is needed. I don't know if that's possible but there will be random times when I 
-     need to update the launcher. We need a system in place that is ready to do what when needed
-    -The prompt for 2nd restart to update the launcher is GOOD. I just got to see that
--Generate a new hand drawn icon for Regression, similar to all the plotter icons but make it specific to regression. Add that icon to its tab
--Need more information on the Wiki for Regression. Since this is science and math function, we should have more of an explanation on the methods it's using, how it works, etc
 
 ####### CURRENT BUGS #######
--I updated windows version this morning with an already up to date launcher, but then I had to do it again, even though the launcher version didn't change. This 
- is what I want to try and avoid. Going from RC-2.2 to 2.3 were using same launcher. I shouldn't have had to go through the second restart for a launcher/.cmd update
- when already on that version
--I selected 2 upstream parameters to try and predict a downstream, but the regresson only used 1 upstream. Shouldn't I be able to use multiple upstream to make the regression better?
-    -If this is possible, we need to use all combinations the user throws at the regression. Make the logic throw out stuff it can't use then maybe add it as a warning with reason short reason why?
-    -The goal is the best possible regression so if 6 are selected but the logic figured only 2 can be used, then only use the 2 with the WARN or whatever message to explain why
-        -The warning i'm talking about is normally below the stats on the bottom
 
 ####### 3.5.0 FEATURES #######
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)

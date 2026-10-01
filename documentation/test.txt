@@ -11,23 +11,63 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[x] Linux dictionary merge asks once and shows a progress bar
+[ ] Windows update prompt does not mention the launcher
    Steps:
-     a. On a Linux AppImage whose packaged bunker.db differs from
-        ~/.config/Data Doctor/bunker.db, start Data Doctor.
-        The first open of this build can still ask, because older
-        builds did not remember the merge.
-     b. Answer the Common Name and Data Type questions (No is fine).
-     c. A Data Dictionary progress dialog stays in front. The label and
-        bar move through backup, merge, and writing. The main window
-        does not sit frozen with no feedback, and the dialog has no Cancel.
-     d. When it finishes, Data Doctor opens and the dictionary includes
-        the merge (new IDs are present; existing common names stay if
-        you answered No). ~/.config/Data Doctor/bunker.merged is present.
-     e. Quit and start the same AppImage again. No Common Name or Data
-        Type questions, and no progress dialog.
-     f. A later AppImage whose packaged bunker.db changed asks once,
-        then stays quiet on the launch after that.
+     a. On a Windows install, when a newer version is offered, the
+        Update available text ends with "Download, then hit Restart to apply."
+     b. It does not say the launcher will be updated. The app does not
+        know that yet. The second-restart prompt still appears later,
+        and only when a launcher file actually has to change.
+
+[ ] Same launcher does not ask for a second restart
+   Steps:
+     a. Update a Windows install whose Data Doctor.exe and applyUpdate.cmd
+        are already the ones in the new package (RC 2.2 to 2.3 used the
+        same launcher).
+     b. After the first Restart, Data Doctor opens. There is no second
+        restart prompt.
+     c. applyUpdate.cmd.new is not left next to Data Doctor.exe.
+
+[ ] A real launcher change still asks for the second restart
+   Steps:
+     a. When the new package's applyUpdate.cmd text differs, or the
+        embedded Python is a different build, the first apply leaves
+        applyUpdate.cmd.new and/or python-embed.next.
+     b. The next start still shows the second restart prompt.
+        Restart finishes those files.
+
+[ ] 3.0.0 reaches the current launcher command
+   Steps:
+     a. From a 3.0.0 install, take the in-app update. The first zip is
+        the Python zip. That updater does not download the Windows zip.
+     b. Restart. The app comes up on the new code and asks for the
+        Windows package even if the version number already matches.
+        applyUpdate.cmd is the current command (python-embed, then
+        Project Files, then .venv).
+     c. Download and Restart. Data Doctor.exe is replaced and
+        pythonFiles\python-embed is installed. A second restart appears
+        only if the command or that Python could not be replaced while
+        they were in use.
+
+[ ] Regression uses every usable series, upstream or downstream
+   Steps:
+     a. Select two or more upstream series and the downstream you want
+        to predict. Right-click, Regression, predict the downstream.
+        The equation includes each upstream that moves with it, and the
+        label shows a lag for each. A negative lag means that series leads.
+     b. Select several downstream series and predict a gage above them
+        (or predict a middle gage from gages on both sides). Each
+        downstream that moves with the target stays in the equation.
+        Its lag is positive (it trails).
+     c. Add a series that does not belong (flat noise, or a column
+        with no overlap). It is left out. Under the stats, a warning
+        names it and says why (no usable lag, does not move the fit,
+        or not enough overlapping rows). The usable series stay.
+
+[ ] Regression tab shows the regression icon
+   Steps:
+     a. Open Regression from a query. The Regression tab icon is the
+        hand-drawn scatter with a fit line on a dusty rose tile.
 
 [ ] Plotter HDB uses SQL when the API misses
    Steps:
@@ -85,4 +125,5 @@ Query and plotter tabs show icons
 Dictionary merge keeps QAQC values you set
 Windows update keeps Python and finishes the launcher
 CSV bunker update accepts a folder or *.csv
+Linux dictionary merge asks once and shows a progress bar
 
