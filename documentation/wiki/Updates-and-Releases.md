@@ -40,7 +40,7 @@ Tags use `vMAJOR.MINOR.PATCH`. Release candidates and betas use `vX.Y.Z-rc.N` or
 
 **Restart** on the update dialog closes Data Doctor and opens `applyUpdate.cmd` in a console so you can answer the dictionary merge prompts. Closing the dialog without Restart leaves the zip in `updates\` for later.
 
-That refreshes `pythonFiles` code (`app.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary, pip-installs into `python-embed`, and deletes the zip. `pythonFiles\certs\` is left alone so Aquarius certificates survive updates.
+That refreshes `pythonFiles` code (`app.pyw`, `ui/`, `core/*` except the **live** `bunker.db`), merges the packaged dictionary, and pip-installs into `python-embed`. The zip stays in `updates\` until Data Doctor opens and the install is finished (bundled Python is in place, and no launcher file is still waiting). Cleanup then removes that zip on a background thread and records it in the log. `pythonFiles\certs\` is left alone so Aquarius certificates survive updates.
 
 `Data Doctor.exe`, the icon, and the readme are replaced in that same restart when the package bytes differ. They are left alone when they already match. A second restart is asked only when `applyUpdate.cmd` or the embedded Python actually changed and could not be replaced while this update was running. The same command and the same Python do not ask again.
 
@@ -48,14 +48,14 @@ That refreshes `pythonFiles` code (`app.pyw`, `ui/`, `core/*` except the **live*
 
 The old zip needed Python on PATH. 3.1+ ships Python 3.14 next to the app and a launcher that starts `python-embed\pythonw.exe`.
 
-A 3.0 install's own updater downloads the **Python** zip. It does not know the Windows zip. That zip carries the new updater under `core\`. The next start moves it into `scripts\`, writes `applyUpdate.cmd` when the installed command differs, and then asks for **`DataDoctor-Windows-*.zip`** even if the version number already matches.
+A 3.0 install's own updater downloads the **Python** zip. It does not know the Windows zip. That zip carries the new updater under `core\`. The next start moves it into `scripts\`, writes `applyUpdate.cmd` when the installed command differs, and then tells you the install still uses system Python, even if the version number already matches.
 
 1. Take the in-app update. The first zip is `DataDoctor-Python-*.zip`. Restart.
-2. The app asks for the Windows package. Download it (zip lands in `updates\`).
-3. Restart **Data Doctor.exe**. It starts the new `applyUpdate.cmd` and exits so the `.exe` is not locked.
+2. The app says it still uses system Python and will restart to finish the install. The only button is **OK**.
+3. **OK** uses a `DataDoctor-Windows-*.zip` already in `updates\` when one is there. Otherwise it downloads that package. There is no second Restart / Later choice. Data Doctor closes, `applyUpdate.cmd` runs, and the exe can be replaced.
 4. applyUpdate replaces the launcher, installs `pythonFiles\python-embed\` and `pythonFiles\app.pyw`, merges `bunker.db` (including from leftover `Project Files\`), pip-installs, then starts Data Doctor again.
 
-The Python zip alone does not install the launcher or the embed. If that zip was already applied and the install is still on `.venv`, the next start asks for the Windows zip. A second restart after that Windows apply happens only when the command or the embedded Python could not be replaced while the update was running.
+The Python zip alone does not install the launcher or the embed. If that zip was already applied and the install is still on `.venv`, the next start shows the same **OK** message. A second restart after that Windows apply happens only when the command or the embedded Python could not be replaced while the update was running. The zip is removed only after that install has finished and the app has opened.
 
 If there is no live `bunker.db` yet (first install), applyUpdate copies the packaged dictionary and does **not** ask about Common Names or Data Types. The same skip happens when the live file is already identical to the packaged one. When a live dictionary already exists and differs, merge always updates `siteName` / `database` from the packaged copy. After the backup path prints, the console shows **Merging...** while the work runs (six threads plan the row updates, then they are written together). It asks **y/n** (in the applyUpdate console) whether to overwrite existing **Common Names** and **Data Types** (`commonName` / `datatype`). New dictionary rows always take the packaged values. `valuePrecision`, `precisionOverride`, `expectedMin`, `expectedMax`, `cuttoffMin`, `cutoffMax`, and `rateOfChange` fill blanks only and never overwrite a value you already set. No console (or answering **n**) leaves existing common names and data types alone.
 

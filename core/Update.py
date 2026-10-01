@@ -871,20 +871,36 @@ def downloadReleaseAsset(info: dict, destDir: Path | None = None, cancelled=None
     destDir.mkdir(parents=True, exist_ok=True)
 
     target = destDir / name
-    Logic.logMessage("INFO", f"Downloading update {info.get('version')} → {target}")
-    try:
-        _httpDownload(url, target, cancelled=cancelled)
-    except Exception as e:
-        if cancelled and cancelled():
-            Logic.logMessage("INFO", "Update download cancelled")
-        else:
-            Logic.logException("Update download failed", e)
-        return None
-    if not _verifyDigest(target, info.get("asset_digest")):
-        return None
-
     kind = info.get("kind") or detectInstallKind()
     lower = name.lower()
+    already = (
+        target.is_file()
+        and target.stat().st_size > 0
+        and _verifyDigest(target, info.get("asset_digest"))
+    )
+    # A Windows zip can be applied as-is. An AppImage release zip still unpacks.
+    if already and not (kind == "appimage" and lower.endswith(".zip")):
+        Logic.logMessage("INFO", f"Update already downloaded: {target.name}")
+        if kind == "appimage" and lower.endswith(".appimage"):
+            try:
+                target.chmod(target.stat().st_mode | 0o111)
+            except Exception:
+                pass
+        return target
+    if already:
+        Logic.logMessage("INFO", f"Update already downloaded: {target.name}")
+    else:
+        Logic.logMessage("INFO", f"Downloading update {info.get('version')} → {target}")
+        try:
+            _httpDownload(url, target, cancelled=cancelled)
+        except Exception as e:
+            if cancelled and cancelled():
+                Logic.logMessage("INFO", "Update download cancelled")
+            else:
+                Logic.logException("Update download failed", e)
+            return None
+        if not _verifyDigest(target, info.get("asset_digest")):
+            return None
 
     if kind == "appimage":
         if lower.endswith(".appimage"):
@@ -1288,6 +1304,104 @@ def pendingAppImagePath() -> Path | None:
 BACKGROUND_UPDATE_INTERVAL_MS = 15 * 60 * 1000  # 15 minutes
 
 
+def localWindowsPackage(info=None, directory: Path | None = None) -> Path | None:
+    """Windows zip already in updates/, preferring the release's own file name."""
+    d = Path(directory) if directory is not None else updateDir()
+    if d is None or not d.is_dir():
+        return None
+    if isinstance(info, dict) and info.get("asset_name"):
+        named = d / _safeDownloadName(info.get("asset_name"))
+        if named.is_file() and named.stat().st_size > 0 and "windows" in named.name.lower():
+            return named
+    hits = [
+        p for p in d.glob("*.zip")
+        if p.is_file() and "windows" in p.name.lower() and p.stat().st_size > 0
+    ]
+    if not hits:
+        return None
+    return max(hits, key=lambda p: p.stat().st_mtime)
+
+
+def launcherRefreshPlan(info, localZip: Path | None = None) -> str:
+    """
+    How a 3.0 install finishes the Windows package.
+
+    local: a Windows zip is already on disk.
+    download: GitHub has the package and it is not on disk yet.
+    manual: nothing to apply.
+    """
+    if localZip is not None and Path(localZip).is_file():
+        return "local"
+    if isinstance(info, dict) and info.get("asset_url") and not info.get("_unreachable"):
+        return "download"
+    return "manual"
+
+
+def _appliedMarker(root: Path) -> Path | None:
+    for name in ("updates", "Update", "Updates", "update", "UPDATES"):
+        marker = root / name / "applied.json"
+        if marker.is_file():
+            return marker
+    return None
+
+
+def cleanupAppliedZips(root: Path | None = None, ready: bool | None = None) -> list[str]:
+    """
+    Delete zips recorded after a finished apply.
+
+    Not ready (still on system Python, or a launcher file is still staged)
+    leaves the files for the next try. Runs off the GUI thread at startup.
+    """
+    if root is None:
+        root = installRoot()
+    if root is None:
+        return []
+    marker = _appliedMarker(root)
+    if marker is None:
+        return []
+    if ready is None:
+        ready = not windowsNeedsLauncherRefresh() and not windowsLauncherRestartPending(root)
+    if not ready:
+        Logic.logMessage("INFO", "Update zip kept until the install finishes")
+        return []
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except Exception as e:
+        Logic.logMessage("WARN", f"Could not read applied update list: {e}")
+        return []
+    removed = []
+    kept = []
+    for raw in (data.get("zips") if isinstance(data, dict) else None) or []:
+        path = Path(str(raw))
+        if not path.is_file():
+            continue
+        try:
+            path.unlink()
+            removed.append(path.name)
+            Logic.logMessage("INFO", f"Removed applied update {path.name}")
+        except OSError as e:
+            kept.append(str(path))
+            Logic.logMessage("WARN", f"Could not remove applied update {path.name}: {e}")
+    try:
+        if kept:
+            marker.write_text(json.dumps({"zips": kept}, indent=2), encoding="utf-8")
+        else:
+            marker.unlink()
+    except OSError as e:
+        Logic.logMessage("WARN", f"Could not update applied update list: {e}")
+    return removed
+
+
+def startAppliedZipCleanup() -> None:
+    """Drop finished update zips without holding up the window."""
+    import threading
+    threading.Thread(
+        target=cleanupAppliedZips,
+        name="applied-zip-cleanup",
+        daemon=True,
+    ).start()
+
+
 def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
     """Fire a background update check after the main window is up, then poll."""
     try:
@@ -1295,6 +1409,7 @@ def scheduleStartupUpdateCheck(parent=None, delayMs: int = 2500) -> None:
         from PyQt6.QtWidgets import QApplication
 
         def _go():
+            startAppliedZipCleanup()
             if windowsLauncherRestartPending() and not launcherRestartLater():
                 if offerWindowsLauncherRestart(parent):
                     return
@@ -1426,10 +1541,12 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
 
     def onDone(info):
         def _show():
-            if isinstance(info, dict) and info.get("_unreachable"):
-                _showGithubUnreachable(parent, info.get("message"))
-                return
-            if info is None or not info.get("asset_url"):
+            localZip = localWindowsPackage(info if isinstance(info, dict) else None)
+            plan = launcherRefreshPlan(info, localZip)
+            if plan == "manual":
+                if isinstance(info, dict) and info.get("_unreachable"):
+                    _showGithubUnreachable(parent, info.get("message"))
+                    return None
                 QMessageBox.information(
                     parent,
                     "Launcher update",
@@ -1441,31 +1558,44 @@ def runWindowsLauncherRefreshUi(parent=None) -> None:
                     "restart Data Doctor. The launcher runs applyUpdate.cmd and exits\n"
                     "so the .exe can be replaced; applyUpdate starts the app afterward.",
                 )
-                return
-            ver = info.get("version") or "?"
+                return None
+            ver = info.get("version") if isinstance(info, dict) else ""
+            lines = ["This Windows install still uses a system Python (.venv).", ""]
+            if ver:
+                lines.extend([f"Available:  {ver}", ""])
+            lines.append("The application will restart to finish the install process.")
             box = QMessageBox(parent)
             box.setWindowTitle("Launcher update")
-            box.setText(
-                "This Windows install still uses a system Python (.venv).\n\n"
-                f"Available:  {ver}\n\n"
-                "Download the Windows package, then hit Restart to apply."
-            )
-            downloadBtn = box.addButton("Download", QMessageBox.ButtonRole.AcceptRole)
-            laterBtn = box.addButton("Later", QMessageBox.ButtonRole.RejectRole)
-            box.setDefaultButton(downloadBtn)
+            box.setText("\n".join(lines))
+            okBtn = box.addButton("OK", QMessageBox.ButtonRole.AcceptRole)
+            box.setDefaultButton(okBtn)
             box.exec()
             clicked = box.clickedButton()
             box.hide()
             box.close()
-            if clicked is downloadBtn:
-                return info
-            if clicked is laterBtn:
-                noteDeferredUpdate(ver)
-            return None
+            if clicked is not okBtn:
+                return None
+            if plan == "local":
+                return {"localZip": str(localZip)}
+            pickedInfo = dict(info)
+            pickedInfo["autoApply"] = True
+            return pickedInfo
 
         picked = _holdUpdatePrompt(_show)
-        if picked:
-            _downloadAndOfferApply(parent, picked)
+        if not picked:
+            return
+        local = picked.get("localZip") if isinstance(picked, dict) else None
+        if local:
+            Logic.logMessage("INFO", f"Using Windows package already in updates: {Path(local).name}")
+            if not spawnApplyAndExit(parent):
+                QMessageBox.warning(
+                    parent,
+                    "Launcher update",
+                    "Could not start applyUpdate.\n"
+                    "Close Data Doctor and run applyUpdate.cmd from the install folder.",
+                )
+            return
+        _downloadAndOfferApply(parent, picked)
 
     signals = _Signals()
     app = QApplication.instance()
@@ -1834,12 +1964,15 @@ def _downloadAndOfferApply(parent, info: dict) -> None:
                 noteDeferredUpdate(info.get("version"))
             return
 
-        assetName = (info.get("asset_name") or str(path) or "").lower()
-        needsWindowsZip = (
-            info.get("assetKind") == "windows"
-            or "windows" in assetName
-            or windowsNeedsLauncherRefresh()
-        )
+        if info.get("autoApply"):
+            if not spawnApplyAndExit(parent):
+                QMessageBox.warning(
+                    parent,
+                    "Update",
+                    "Could not start applyUpdate.\n"
+                    "Close Data Doctor and run applyUpdate.cmd from the install folder.",
+                )
+            return
         box = QMessageBox(parent)
         box.setWindowTitle("Download complete")
         box.setText(

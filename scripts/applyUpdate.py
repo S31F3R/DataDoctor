@@ -31,7 +31,8 @@ What this does:
   5) If packaged bunker.db present: copy when live is missing (no prompts);
      otherwise merge via updateBunker.py
   6) pip install -r requirements.txt into python-embed (Windows) or .venv
-  7) Remove the zip and extract tree
+  7) Keep the zip until Data Doctor opens and the install is finished.
+     Remove the extract tree now.
 
 Does NOT:
   - Touch user config / keyring / AppData
@@ -324,6 +325,37 @@ def maybeDownloadWindowsZip(installRoot: Path) -> Path | None:
                     return None
     appendAppLog("WARNING", "no DataDoctor-Windows-*.zip on recent GitHub releases")
     return None
+
+
+APPLIED_MARKER = "applied.json"
+
+
+def rememberAppliedZip(installRoot: Path, zipPath: Path) -> None:
+    """
+    Remember a zip that applied. Data Doctor deletes it after the install
+    is finished, so a failed open can try the same file again.
+    """
+    import json
+
+    updateDir = resolveUpdatesDir(installRoot, create=True)
+    marker = updateDir / APPLIED_MARKER
+    zips: list[str] = []
+    if marker.is_file():
+        try:
+            data = json.loads(marker.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                zips = [str(p) for p in data.get("zips") or [] if p]
+        except Exception:
+            zips = []
+    try:
+        text = str(zipPath.resolve())
+    except OSError:
+        text = str(zipPath)
+    if text not in zips:
+        zips.append(text)
+    marker.write_text(json.dumps({"zips": zips}, indent=2), encoding="utf-8")
+    print(f"Keeping {zipPath.name} until Data Doctor confirms the update")
+    appendAppLog("INFO", f"keeping {zipPath.name} until the app confirms the update")
 
 
 def pickUpdateZip(installRoot: Path, projectFiles: Path) -> Path | None:
@@ -1533,12 +1565,11 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
             appendAppLog("ERROR", "PyQt6 is not importable after pip; not starting")
             return 1
 
-        # Cleanup zip after successful extract/copy
+        # Leave the zip until the app opens and the install is finished.
         try:
-            zipPath.unlink()
-            print(f"Removed {zipPath.name}")
+            rememberAppliedZip(installRoot, zipPath)
         except Exception as e:
-            print(f"WARN: could not remove zip: {e}", file=sys.stderr)
+            print(f"WARN: could not record applied zip: {e}", file=sys.stderr)
 
         print("Update complete.")
         appendAppLog("INFO", f"update complete ({zipPath.name})")

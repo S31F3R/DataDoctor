@@ -327,6 +327,40 @@ def main():
         if "already.zip" not in again or str(other) in again:
             errors += fail("reexec keep", again)
 
+        keptZip = real / "updates" / "DataDoctor-Windows-v1.zip"
+        writeFile(keptZip, "windows-bytes")
+        applyUpdate.rememberAppliedZip(real, keptZip)
+        if not keptZip.is_file():
+            errors += fail("keep applied", "zip was deleted when it was applied")
+        marker = real / "updates" / "applied.json"
+        markerText = marker.read_text(encoding="utf-8") if marker.is_file() else ""
+        if str(keptZip.resolve()) not in markerText:
+            errors += fail("applied marker", markerText or "missing")
+        applyUpdate.rememberAppliedZip(real, keptZip)
+        if marker.read_text(encoding="utf-8").count(str(keptZip.resolve())) != 1:
+            errors += fail("applied once", marker.read_text(encoding="utf-8"))
+        from core.Update import cleanupAppliedZips, launcherRefreshPlan, localWindowsPackage
+        if cleanupAppliedZips(real, ready=False):
+            errors += fail("cleanup early", "removed a zip before the install finished")
+        if not keptZip.is_file():
+            errors += fail("cleanup early file", "zip was removed early")
+        removed = cleanupAppliedZips(real, ready=True)
+        if keptZip.name not in removed or keptZip.exists() or marker.exists():
+            errors += fail("cleanup done", (removed, keptZip.exists(), marker.exists()))
+
+        zipDir = root / "zipdir"
+        writeFile(zipDir / "DataDoctor-Windows-v9.zip", "w")
+        writeFile(zipDir / "DataDoctor-Python-v9.zip", "p")
+        found = localWindowsPackage({"asset_name": "DataDoctor-Windows-v9.zip"}, zipDir)
+        if found is None or found.name != "DataDoctor-Windows-v9.zip":
+            errors += fail("local windows", found)
+        if launcherRefreshPlan({"asset_url": "http://example"}, found) != "local":
+            errors += fail("plan local", launcherRefreshPlan({"asset_url": "http://example"}, found))
+        if launcherRefreshPlan({"asset_url": "http://example"}, None) != "download":
+            errors += fail("plan download", "")
+        if launcherRefreshPlan({"_unreachable": True}, None) != "manual":
+            errors += fail("plan manual", "")
+
     if errors:
         print(f"{errors} failed")
         return 1
