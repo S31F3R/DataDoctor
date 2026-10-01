@@ -11,6 +11,23 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
+[ ] Windows update stays in the install folder
+   Steps:
+     a. Use a Python zip built after this fix. The 3.4.0-rc.3 zip still
+        carries the updater that treats Temp as the install, so applying
+        that same zip fails the same way.
+     b. Put the newer DataDoctor-Python-*.zip in
+        C:\Program Files\Data Doctor\updates\ and run applyUpdate.cmd
+        (or Restart from the update dialog).
+     c. The console prints
+        Install root: C:\Program Files\Data Doctor
+        both before and after "Running applyUpdate.py from <zip>".
+        It does not print AppData\Local\Temp\2.
+     d. The update finishes. The empty updates folder under
+        C:\Users\rodneysmith\AppData\Local\Temp\2 is gone and is not
+        recreated. The applied zip is gone from
+        Program Files\Data Doctor\updates.
+
 [ ] Windows update prompt does not mention the launcher
    Steps:
      a. On a Windows install, when a newer version is offered, the
