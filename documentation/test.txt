@@ -11,7 +11,7 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] 3.0.0 reaches the current launcher command
+[x] 3.0.0 reaches the current launcher command
    Steps:
      a. From a 3.0.0 install, take the in-app update. The first zip is
         the Python zip. That updater does not download the Windows zip.
@@ -29,7 +29,7 @@ Current Tests
         removed on its own. app.log says it removed the applied update.
         The zip is still in updates\ if the install is not finished.
 
-[ ] Query list names row and column equations
+[x] Query list names row and column equations
    Steps:
      a. Append an equation row and rename it Total. The query list shows
         ROW EQUATION|Total at the bottom.
