@@ -11,7 +11,7 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] Windows update stays in the install folder
+[x] Windows update stays in the install folder
    Steps:
      a. Use a Python zip built after this fix. The 3.4.0-rc.3 zip still
         carries the updater that treats Temp as the install, so applying
@@ -28,7 +28,7 @@ Current Tests
         recreated. The applied zip is gone from
         Program Files\Data Doctor\updates.
 
-[ ] Windows update prompt does not mention the launcher
+[x] Windows update prompt does not mention the launcher
    Steps:
      a. On a Windows install, when a newer version is offered, the
         Update available text ends with "Download, then hit Restart to apply."
@@ -36,7 +36,7 @@ Current Tests
         know that yet. The second-restart prompt still appears later,
         and only when a launcher file actually has to change.
 
-[ ] Same launcher does not ask for a second restart
+[x] Same launcher does not ask for a second restart
    Steps:
      a. Update a Windows install whose Data Doctor.exe and applyUpdate.cmd
         are already the ones in the new package (RC 2.2 to 2.3 used the
@@ -45,7 +45,7 @@ Current Tests
         restart prompt.
      c. applyUpdate.cmd.new is not left next to Data Doctor.exe.
 
-[ ] A real launcher change still asks for the second restart
+[x] A real launcher change still asks for the second restart
    Steps:
      a. When the new package's applyUpdate.cmd text differs, or the
         embedded Python is a different build, the first apply leaves
@@ -65,8 +65,14 @@ Current Tests
         pythonFiles\python-embed is installed. A second restart appears
         only if the command or that Python could not be replaced while
         they were in use.
+        RESPONSE: I just tried this and I don't like the 2nd message box. Since this is NEEDED for this version and the user already hit a the button to Download and
+        didn't hit later, lets change this second box for the python in use or launcher update scenario. After letting them know the python version is still using system, 
+        tell them the application will restart to finish the install process. The only button should be OK, no Download or Later buttons. Then run the download and proceed
+        with the install/update. No more prompts. No more confirmations, just do. Although, we already had the zip, so instead of downloading it again, wouldn't it have been 
+        smarter to keep the zip around until we confirm the update is done? How about we don't do the removal until the app opens and we're able to verify the update is 
+        complete. If it's complete, have the clean up process run on a different thread so it doesn't slow down the program, and add the info the log. 
 
-[ ] Equation row from the date column
+[x] Equation row from the date column
    Steps:
      a. Query a table. Right-click a date in the left column.
         The menu is only Append New Row. Rename is not there.
@@ -84,7 +90,7 @@ Current Tests
      e. Save the Quick Look and query a different date range. Total is
         back at the bottom with the same name. The range covers every
         timestamp above Total, and only the column you typed it in.
-        The plain number is gone.
+        The plain number is gone.       
 
 [ ] Plotter HDB uses SQL when the API misses
    Steps:
