@@ -15,4 +15,5 @@ resets this file to this template.
 - Regression keeps every selected series that has a real lag, upstream or downstream, including several gages on the same wave, and names each series it leaves out under the stats.
 - Regression tab has a hand-drawn icon.
 - Wiki Regression page explains how the lag and the fit are chosen.
+- Append New Row on the date column adds a named equation row at the bottom of Data Query. It saves with the Quick Look, covers every timestamp above it on the next query, and follows the column it was typed in.
 

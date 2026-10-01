@@ -49,25 +49,25 @@ Current Tests
         only if the command or that Python could not be replaced while
         they were in use.
 
-[ ] Regression uses every usable series, upstream or downstream
+[ ] Equation row from the date column
    Steps:
-     a. Select two or more upstream series and the downstream you want
-        to predict. Right-click, Regression, predict the downstream.
-        The equation includes each upstream that moves with it, and the
-        label shows a lag for each. A negative lag means that series leads.
-     b. Select several downstream series and predict a gage above them
-        (or predict a middle gage from gages on both sides). Each
-        downstream that moves with the target stays in the equation.
-        Its lag is positive (it trails).
-     c. Add a series that does not belong (flat noise, or a column
-        with no overlap). It is left out. Under the stats, a warning
-        names it and says why (no usable lag, does not move the fit,
-        or not enough overlapping rows). The usable series stay.
-
-[ ] Regression tab shows the regression icon
-   Steps:
-     a. Open Regression from a query. The Regression tab icon is the
-        hand-drawn scatter with a fit line on a dusty rose tile.
+     a. Query a table. Right-click a date in the left column.
+        The menu is only Append New Row. Rename is not there.
+     b. Append New Row. A row named Equation appears at the bottom.
+        Right-click that name: Rename and Remove are there, along with
+        Append New Row. Rename it Total. Right-click a date again and
+        confirm Rename is still absent.
+     c. In one cell of Total, type a formula such as =SUM(A1:A24).
+        The other cells in that row stay empty. Type a plain number in
+        a different cell of Total. The query list shows ROW|Total at
+        the bottom.
+     d. Move that series column. The formula moves with the column and
+        the letters follow it. The number in the other cell is not part
+        of the saved equation.
+     e. Save the Quick Look and query a different date range. Total is
+        back at the bottom with the same name. The range covers every
+        timestamp above Total, and only the column you typed it in.
+        The plain number is gone.
 
 [ ] Plotter HDB uses SQL when the API misses
    Steps:
@@ -126,4 +126,6 @@ Dictionary merge keeps QAQC values you set
 Windows update keeps Python and finishes the launcher
 CSV bunker update accepts a folder or *.csv
 Linux dictionary merge asks once and shows a progress bar
+Regression uses every usable series, upstream or downstream
+Regression tab shows the regression icon
 
