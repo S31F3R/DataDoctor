@@ -46,9 +46,18 @@ def testCoverRowsAbove():
 
 
 def testParseRow():
-    parsed = parseListText("ROW|Total")
+    parsed = parseListText("ROW EQUATION|Total")
     if parsed is None or parsed[0] != KIND_EQUATION_ROW or parsed[3] != "Total":
         return fail("parse", parsed)
+    legacy = parseListText("ROW|Total")
+    if legacy is None or legacy[0] != KIND_EQUATION_ROW or legacy[3] != "Total":
+        return fail("legacyRow", legacy)
+    column = parseListText("COLUMN EQUATION|Stage")
+    if column is None or column[0] != "equation" or column[3] != "Stage":
+        return fail("column", column)
+    oldColumn = parseListText("EQUATION|Stage")
+    if oldColumn is None or oldColumn[0] != "equation" or oldColumn[3] != "Stage":
+        return fail("legacyColumn", oldColumn)
     saved = parseSavedEntry({
         "kind": KIND_EQUATION_ROW,
         "q": "ROW|Total",
@@ -62,8 +71,13 @@ def testParseRow():
     })
     if saved is None or saved.get("rowName") != "Total":
         return fail("savedName", saved)
+    if saved.get("text") != "ROW EQUATION|Total":
+        return fail("savedText", saved)
     if not saved.get("cells") or saved["cells"][0].get("formula") != "=SUM(A1:A3)":
         return fail("savedCells", saved)
+    oldSaved = parseSavedEntry("EQUATION|Stage")
+    if oldSaved is None or oldSaved.get("text") != "COLUMN EQUATION|Stage":
+        return fail("oldColumnText", oldSaved)
     if parseListText("111|HOUR|USGS-NWIS")[0] != "series":
         return fail("series", "row prefix ate a series")
     return 0
@@ -140,14 +154,14 @@ def testTable():
     if cells[0].get("columnId") != "aaa":
         return fail("specCol", cells[0])
     lst = host.winQuery.listQueryList
-    if lst.count() != 1 or lst.item(0).text() != "ROW|Total":
+    if lst.count() != 1 or lst.item(0).text() != "ROW EQUATION|Total":
         return fail("list", [lst.item(i).text() for i in range(lst.count())])
     item = makeListItem(
         "ROW|Total", kind=KIND_EQUATION_ROW,
         extra={"rowId": "row1", "rowName": "Total", "cells": cells, "id": "row1"},
     )
     packed = serializeItem(item)
-    if packed.get("kind") != KIND_EQUATION_ROW or packed.get("q") != "ROW|Total":
+    if packed.get("kind") != KIND_EQUATION_ROW or packed.get("q") != "ROW EQUATION|Total":
         return fail("serialize", packed)
     if not moveColumnSet(host, [0], 2):
         return fail("move", "column did not move")

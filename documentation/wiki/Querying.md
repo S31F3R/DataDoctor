@@ -65,6 +65,6 @@ Right-click a **cell** for value details (internal, plus USGS public “Show det
 
 Internal tables accept Excel-style **formulas** (`=A1+B1`, fill handle, `$` locks). A formula on a **custom** column is inserted into the query list and saved with the Quick Look; it fills the whole time range. Removing a referenced series breaks the equation (`#REF!`); moving or changing that series’ Data ID keeps it. See [Formulas](Formulas). Custom columns survive **Refresh** (formulas re-run).
 
-Right-click a **date** in the left column for **Append New Row**. That menu does not rename the date. The new row sits at the bottom for a formula, and its own right-click can **Rename** or **Remove** it. It is saved at the bottom of the query list and comes back with the Quick Look. A range in that row covers every timestamp above it on the next query, and it follows the column if you move that column.
+Right-click a **date** in the left column for **Append New Row**. That menu does not rename the date. The new row sits at the bottom for a formula, and its own right-click can **Rename** or **Remove** it. It is saved at the bottom of the query list as `ROW EQUATION|<name>` and comes back with the Quick Look. A custom-column formula is saved as `COLUMN EQUATION|<header>`. A range in that row covers every timestamp above it on the next query, and it follows the column if you move that column.
 
 See [Data Dictionary](Data-Dictionary) for how column titles are built.

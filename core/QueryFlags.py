@@ -28,6 +28,9 @@ KIND_EQUATION = "equation"
 KIND_EQUATION_ROW = "equationRow"
 EQUATION_INTERVAL = "EQUATION"
 ROW_INTERVAL = "ROW"
+# Visible query-list text. Older saves used ROW| and EQUATION| and still parse.
+ROW_LIST_PREFIX = "ROW EQUATION"
+COLUMN_LIST_PREFIX = "COLUMN EQUATION"
 # Legacy third field on old saves; new saves store the column header there.
 EQUATION_DATABASE = "custom"
 EQUATION_DEFAULT_HEADER = "Column"
@@ -117,9 +120,19 @@ def itemIdOf(item) -> str:
     return str(ensurePayload(item).get("id") or newItemId())
 
 
+def _listHead(text: str) -> tuple[list[str], str]:
+    parts = [p.strip() for p in (text or "").strip().split("|")]
+    head = parts[0].upper() if parts else ""
+    return parts, head
+
+
 def _textIsEquationRow(text: str) -> bool:
-    parts = (text or "").strip().split("|")
-    return len(parts) == 2 and parts[0].upper() == ROW_INTERVAL and bool(parts[1].strip())
+    parts, head = _listHead(text)
+    return (
+        len(parts) == 2
+        and head in (ROW_LIST_PREFIX, ROW_INTERVAL)
+        and bool(parts[1])
+    )
 
 
 def equationRowName(name) -> str:
@@ -131,7 +144,7 @@ def equationRowName(name) -> str:
 
 def equationRowListText(name) -> str:
     """Visible query-list text. Formulas stay in the payload."""
-    return f"{ROW_INTERVAL}|{equationRowName(name)}"
+    return f"{ROW_LIST_PREFIX}|{equationRowName(name)}"
 
 
 def equationRowIsBroken(payload) -> bool:
@@ -149,10 +162,10 @@ def _textIsEquation(text: str) -> bool:
     s = (text or "").strip()
     if s.startswith("="):
         return True
-    parts = s.split("|")
+    parts, head = _listHead(s)
     if not parts:
         return False
-    if parts[0].upper() == EQUATION_INTERVAL:
+    if head in (COLUMN_LIST_PREFIX, EQUATION_INTERVAL):
         return True
     return len(parts) >= 3 and parts[1].upper() == EQUATION_INTERVAL
 
@@ -168,8 +181,9 @@ def equationHeader(header) -> str:
 def parseListText(text: str):
     """
     Series: 'dataID|interval|database'.
-    Equation display: 'EQUATION|<header>'.
-    Legacy: '=<formula>|EQUATION|<header>' or '<formula>|EQUATION|<header>'.
+    Column equation: 'COLUMN EQUATION|<header>'. Legacy: 'EQUATION|<header>'.
+    Row equation: 'ROW EQUATION|<name>'. Legacy: 'ROW|<name>'.
+    Older formulas: '=<formula>|EQUATION|<header>' or '<formula>|EQUATION|<header>'.
     Returns (kind, dataId_or_formula, interval, database_or_header) or None.
     """
     s = (text or "").strip()
@@ -180,10 +194,10 @@ def parseListText(text: str):
         formula = parts[0]
         label = parts[2] if len(parts) > 2 else ""
         return (KIND_EQUATION, formula, EQUATION_INTERVAL, equationHeader(label))
-    parts = s.split("|")
-    if len(parts) == 2 and parts[0].upper() == ROW_INTERVAL:
+    parts, head = _listHead(s)
+    if len(parts) == 2 and head in (ROW_LIST_PREFIX, ROW_INTERVAL):
         return (KIND_EQUATION_ROW, "", ROW_INTERVAL, equationRowName(parts[1]))
-    if len(parts) == 2 and parts[0].upper() == EQUATION_INTERVAL:
+    if len(parts) == 2 and head in (COLUMN_LIST_PREFIX, EQUATION_INTERVAL):
         return (KIND_EQUATION, "", EQUATION_INTERVAL, equationHeader(parts[1]))
     if len(parts) != 3:
         return None
@@ -196,8 +210,8 @@ def parseListText(text: str):
 
 
 def equationListText(formula: str, header: str | None = None) -> str:
-    """Visible query-list / Quick Look text: EQUATION|<header> (formula is payload-only)."""
-    return f"{EQUATION_INTERVAL}|{equationHeader(header)}"
+    """Visible query-list / Quick Look text: COLUMN EQUATION|<header>."""
+    return f"{COLUMN_LIST_PREFIX}|{equationHeader(header)}"
 
 
 def formulaIsBroken(formula) -> bool:
