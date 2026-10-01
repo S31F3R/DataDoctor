@@ -1223,7 +1223,7 @@ def saveQuickLook(
       {
         "queries": [
           {"q": "dataID|interval|database", "overlay": bool, "delta": bool,
-           "raw": bool, "qaqc": bool, "kind": "series"|"equation", ...},
+           "raw": bool, "qaqc": bool, "kind": "series"|"equation"|"equationRow", ...},
           ...
         ],
         "displayDelta": true/false,   # default for new rows / checkbox
@@ -1505,6 +1505,12 @@ def loadQuickLook(
                 extra["refs"] = parsed["refs"]
             if parsed.get("anchorRow") is not None:
                 extra["anchorRow"] = parsed.get("anchorRow")
+            if parsed.get("rowName"):
+                extra["rowName"] = parsed.get("rowName")
+            if parsed.get("rowId"):
+                extra["rowId"] = parsed.get("rowId")
+            if parsed.get("cells") is not None:
+                extra["cells"] = parsed.get("cells")
             extra["id"] = parsed.get("id") or QueryFlags.newItemId()
             listQueryList.addItem(QueryFlags.makeListItem(
                 text,

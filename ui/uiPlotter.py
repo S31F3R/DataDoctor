@@ -752,6 +752,8 @@ class uiPlotter(QMainWindow):
                 Logic.logMessage("WARN", f"Plotter skipped invalid item: {text}")
                 continue
             kind, dataId, interval, database = parsed
+            if kind == QueryFlags.KIND_EQUATION_ROW:
+                continue
             if kind == QueryFlags.KIND_EQUATION:
                 QMessageBox.warning(self, "Plotter", "Plotter does not plot formula columns.")
                 return None

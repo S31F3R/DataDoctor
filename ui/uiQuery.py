@@ -320,6 +320,18 @@ class uiQuery(QMainWindow):
                 kind, dataId, interval, database = parsed
                 flags = QueryFlags.itemFlags(listItem)
                 itemId = QueryFlags.itemIdOf(listItem)
+                if kind == QueryFlags.KIND_EQUATION_ROW:
+                    payload = QueryFlags.itemPayload(listItem)
+                    queryItems.append({
+                        "kind": QueryFlags.KIND_EQUATION_ROW,
+                        "rowId": payload.get("rowId") or itemId,
+                        "rowName": payload.get("rowName") or database,
+                        "cells": payload.get("cells") or [],
+                        "id": payload.get("rowId") or itemId,
+                        "flags": QueryFlags.emptyFlags(),
+                        "index": i,
+                    })
+                    continue
                 if kind == QueryFlags.KIND_EQUATION:
                     payload = QueryFlags.itemPayload(listItem)
                     queryItems.append({
@@ -605,7 +617,9 @@ class uiQuery(QMainWindow):
         if item is None or self.listQueryList is None:
             return
         text = item.text().strip()
-        if QueryFlags.itemKind(item) == QueryFlags.KIND_EQUATION:
+        if QueryFlags.itemKind(item) in (
+            QueryFlags.KIND_EQUATION, QueryFlags.KIND_EQUATION_ROW,
+        ):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"onQueryListDoubleClicked: equation row {text!r}")
             return
@@ -661,8 +675,9 @@ class uiQuery(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", f"btnAddQueryPressed: Updated index {editIdx}: {itemText}")
         else:
-            self.listQueryList.addItem(self._makeQueryItem(itemText))
-            self.listQueryList.scrollToBottom()
+            insertAt = self._indexBeforeEquationRows()
+            self.listQueryList.insertItem(insertAt, self._makeQueryItem(itemText))
+            self.listQueryList.scrollToItem(self.listQueryList.item(insertAt))
             if Config.debug:
                 Logic.logMessage("DEBUG", f"btnAddQueryPressed: Added item: {itemText}")
         QueryFlags.recolorQueryList(self.listQueryList)
@@ -700,8 +715,23 @@ class uiQuery(QMainWindow):
             self.setQueryAddMode(False)
             if self.qleDataID:
                 self.qleDataID.clear()
+        equationRowIds = []
         for item in selectedItems:
-            self.listQueryList.takeItem(self.listQueryList.row(item))
+            if QueryFlags.itemKind(item) == QueryFlags.KIND_EQUATION_ROW:
+                payload = QueryFlags.itemPayload(item)
+                rowId = payload.get("rowId") or payload.get("id")
+                if rowId:
+                    equationRowIds.append(rowId)
+        if equationRowIds and getattr(self, "winMain", None) is not None:
+            from core import TableOps
+            TableOps.dropEquationRowsById(self.winMain, equationRowIds)
+        for item in selectedItems:
+            rowIndex = self.listQueryList.row(item)
+            if rowIndex >= 0:
+                self.listQueryList.takeItem(rowIndex)
+        if equationRowIds and getattr(self, "winMain", None) is not None:
+            from core import TableOps
+            TableOps.rememberEquationRows(self.winMain)
         # Adjust edit index if a row above it was removed
         if self.editingQueryIndex is not None:
             below = sum(1 for r in removedRows if r < self.editingQueryIndex)
@@ -958,7 +988,9 @@ class uiQuery(QMainWindow):
             actBelow.setToolTip("Enter a Data ID first")
         menu.addSeparator()
         flagActions = {}
-        seriesTargets = [t for t in targets if QueryFlags.itemKind(t) != QueryFlags.KIND_EQUATION]
+        seriesTargets = [
+            t for t in targets if QueryFlags.itemKind(t) == QueryFlags.KIND_SERIES
+        ]
         for key, label in QueryFlags.FLAG_LABELS.items():
             act = menu.addAction(label)
             act.setCheckable(True)
@@ -995,7 +1027,14 @@ class uiQuery(QMainWindow):
             if Config.debug:
                 Logic.logMessage("DEBUG", "insertQueryAt: no item text (empty DataID or cancel)")
             return
-        insertAt = anchorRow + 1 if below else anchorRow
+        limit = self._indexBeforeEquationRows()
+        anchorItem = self.listQueryList.item(anchorRow)
+        if QueryFlags.itemKind(anchorItem) == QueryFlags.KIND_EQUATION_ROW:
+            insertAt = limit
+        else:
+            insertAt = anchorRow + 1 if below else anchorRow
+            if insertAt > limit:
+                insertAt = limit
         insertAt = max(0, min(insertAt, self.listQueryList.count()))
         self.listQueryList.insertItem(insertAt, self._makeQueryItem(itemText))
         self.listQueryList.setCurrentRow(insertAt)
@@ -1184,7 +1223,7 @@ class uiQuery(QMainWindow):
         if key not in QueryFlags.FLAG_KEYS:
             return
         for item in items or []:
-            if QueryFlags.itemKind(item) == QueryFlags.KIND_EQUATION:
+            if QueryFlags.itemKind(item) != QueryFlags.KIND_SERIES:
                 continue
             flags = QueryFlags.itemFlags(item)
             flags[key] = bool(value)
@@ -1244,6 +1283,15 @@ class uiQuery(QMainWindow):
         self._tableDirtyQuickLook = False
         self._onLoadFingerprint = self._queryListFingerprint()
         return True
+
+    def _indexBeforeEquationRows(self):
+        """Series stay above equation rows in the query list."""
+        if self.listQueryList is None:
+            return 0
+        for i in range(self.listQueryList.count()):
+            if QueryFlags.itemKind(self.listQueryList.item(i)) == QueryFlags.KIND_EQUATION_ROW:
+                return i
+        return self.listQueryList.count()
 
     def syncEquationQueryItem(self, formula, col, header=None, refs=None, anchorRow=0):
         """Insert or update an equation row in the query list for a custom column."""

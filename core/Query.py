@@ -154,7 +154,10 @@ class sortWorker(QRunnable):
                     return float(text)
                 except (ValueError, TypeError, KeyError):
                     return 0
-            self.rows.sort(key=sortKey, reverse=not self.ascending)
+            pinned = [row for row in self.rows if row.get("equationRow")]
+            body = [row for row in self.rows if not row.get("equationRow")]
+            body.sort(key=sortKey, reverse=not self.ascending)
+            self.rows = body + pinned
             self.signals.sortDone.emit(self.rows, self.ascending)
         except Exception as e:
             Logic.logException("sortWorker.run failed", e)
@@ -163,7 +166,9 @@ def captureTableRows(table):
     """Capture row data including formatting so sort/undo preserve overlay and QAQC state."""
     rows = []
     for rowIdx in range(table.rowCount()):
-        timestamp = table.verticalHeaderItem(rowIdx).text() if table.verticalHeaderItem(rowIdx) else ''
+        headerItem = table.verticalHeaderItem(rowIdx)
+        timestamp = headerItem.text() if headerItem else ''
+        equationRow = QueryUtils.equationRowPayload(headerItem)
         cells = []
         for c in range(table.columnCount()):
             item = table.item(rowIdx, c)
@@ -178,7 +183,7 @@ def captureTableRows(table):
                 })
             else:
                 cells.append(None)
-        rows.append({'ts': timestamp, 'cells': cells})
+        rows.append({'ts': timestamp, 'cells': cells, 'equationRow': equationRow})
     return rows
 
 class queryWorkerSignals(QObject):
@@ -1229,6 +1234,8 @@ def qaqc(table, dataDictionaryTable, lookupIds, dictIndex=None, progressDialog=N
 
         prevVal = None
         for r in range(numRows):
+            if QueryUtils.isEquationRow(table, r):
+                continue
             item = table.item(r, col)
 
             if not item:
@@ -1320,6 +1327,10 @@ def updateTableAfterSort(table, sortedRows, ascending, dataDictionaryTable, col)
         for rowIdx, row in enumerate(sortedRows):
             tsHeader = QTableWidgetItem(row['ts'])
             tsHeader.setTextAlignment(tsAlign)
+            equationRow = row.get('equationRow')
+            if equationRow:
+                tsHeader.setData(QueryUtils.EQUATION_ROW_ROLE, equationRow)
+                tsHeader.setFlags(tsHeader.flags() & ~Qt.ItemFlag.ItemIsEditable)
             table.setVerticalHeaderItem(rowIdx, tsHeader)
             cells = row.get('cells', [])
 
@@ -1410,8 +1421,12 @@ def executeQuery(
             Config.overlayChecked = overlayChecked
             Config.rawData = bool(rawDataChecked)
             Config.qaqcEnabled = bool(qaqcChecked)
+        equationRowItems = [it for it in (queryItems or []) if QueryFlags.isEquationRowQueryItem(it)]
         equationItems = [it for it in (queryItems or []) if QueryFlags.isEquationQueryItem(it)]
-        queryItems = [it for it in (queryItems or []) if not QueryFlags.isEquationQueryItem(it)]
+        queryItems = [
+            it for it in (queryItems or [])
+            if not QueryFlags.isEquationQueryItem(it) and not QueryFlags.isEquationRowQueryItem(it)
+        ]
         if isRefresh and mainWindow is not None:
             try:
                 from core import TableOps
@@ -2000,6 +2015,13 @@ def executeQuery(
             TableOps.afterQuery(mainWindow, isRefresh=isRefresh)
         except Exception as e:
             Logic.logException("executeQuery: TableOps.afterQuery failed", e)
+
+        if equationRowItems:
+            try:
+                from core import TableOps
+                TableOps.applyEquationRowItems(mainWindow, equationRowItems)
+            except Exception as e:
+                Logic.logException("executeQuery: apply equation rows failed", e)
 
         # Baseline for edit/upload tracking + public/delta lock (after QAQC colors)
         try:

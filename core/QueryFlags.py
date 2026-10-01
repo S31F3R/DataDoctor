@@ -25,7 +25,9 @@ FLAG_LABELS = {
 ITEM_ROLE = int(Qt.ItemDataRole.UserRole)
 KIND_SERIES = "series"
 KIND_EQUATION = "equation"
+KIND_EQUATION_ROW = "equationRow"
 EQUATION_INTERVAL = "EQUATION"
+ROW_INTERVAL = "ROW"
 # Legacy third field on old saves; new saves store the column header there.
 EQUATION_DATABASE = "custom"
 EQUATION_DEFAULT_HEADER = "Column"
@@ -104,6 +106,8 @@ def setItemFlags(item, flags, defaults=None):
 def itemKind(item) -> str:
     kind = (itemPayload(item) or {}).get("kind") or KIND_SERIES
     text = item.text().strip() if item is not None else ""
+    if kind == KIND_EQUATION_ROW or _textIsEquationRow(text):
+        return KIND_EQUATION_ROW
     if kind == KIND_EQUATION or _textIsEquation(text):
         return KIND_EQUATION
     return KIND_SERIES
@@ -111,6 +115,34 @@ def itemKind(item) -> str:
 
 def itemIdOf(item) -> str:
     return str(ensurePayload(item).get("id") or newItemId())
+
+
+def _textIsEquationRow(text: str) -> bool:
+    parts = (text or "").strip().split("|")
+    return len(parts) == 2 and parts[0].upper() == ROW_INTERVAL and bool(parts[1].strip())
+
+
+def equationRowName(name) -> str:
+    """Row label stored in the query list. Pipes and newlines are spaces."""
+    label = (name or "").strip().replace("|", " ").replace("\n", " ").replace("\r", " ")
+    label = " ".join(label.split())
+    return label or "Equation"
+
+
+def equationRowListText(name) -> str:
+    """Visible query-list text. Formulas stay in the payload."""
+    return f"{ROW_INTERVAL}|{equationRowName(name)}"
+
+
+def equationRowIsBroken(payload) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    if formulaIsBroken(payload.get("formula")):
+        return True
+    for cell in payload.get("cells") or []:
+        if isinstance(cell, dict) and formulaIsBroken(cell.get("formula")):
+            return True
+    return False
 
 
 def _textIsEquation(text: str) -> bool:
@@ -149,6 +181,8 @@ def parseListText(text: str):
         label = parts[2] if len(parts) > 2 else ""
         return (KIND_EQUATION, formula, EQUATION_INTERVAL, equationHeader(label))
     parts = s.split("|")
+    if len(parts) == 2 and parts[0].upper() == ROW_INTERVAL:
+        return (KIND_EQUATION_ROW, "", ROW_INTERVAL, equationRowName(parts[1]))
     if len(parts) == 2 and parts[0].upper() == EQUATION_INTERVAL:
         return (KIND_EQUATION, "", EQUATION_INTERVAL, equationHeader(parts[1]))
     if len(parts) != 3:
@@ -188,6 +222,11 @@ def isEquationQueryItem(queryItem) -> bool:
         if str(queryItem[0]).startswith("="):
             return True
     return False
+
+
+def isEquationRowQueryItem(queryItem) -> bool:
+    """A named bottom row, not a custom-column equation."""
+    return isinstance(queryItem, dict) and (queryItem.get("kind") or "") == KIND_EQUATION_ROW
 
 
 def queryItemDatabase(queryItem) -> str:
@@ -406,7 +445,8 @@ def recolorQueryList(listWidget):
     overlayFlags = []
     for i in range(n):
         item = listWidget.item(i)
-        if itemKind(item) == KIND_EQUATION:
+        kind = itemKind(item)
+        if kind == KIND_EQUATION or kind == KIND_EQUATION_ROW:
             overlayFlags.append(False)
         else:
             overlayFlags.append(bool(itemFlags(item).get("overlay")))
@@ -417,9 +457,13 @@ def recolorQueryList(listWidget):
         item = listWidget.item(i)
         if item is None:
             continue
-        if itemKind(item) == KIND_EQUATION:
+        kind = itemKind(item)
+        if kind == KIND_EQUATION or kind == KIND_EQUATION_ROW:
             payload = itemPayload(item)
-            if formulaIsBroken(payload.get("formula")) or formulaIsBroken(item.text()):
+            broken = formulaIsBroken(payload.get("formula")) or formulaIsBroken(item.text())
+            if kind == KIND_EQUATION_ROW:
+                broken = broken or equationRowIsBroken(payload)
+            if broken:
                 item.setForeground(QBrush(brokenFg))
             else:
                 item.setForeground(QBrush(defaultFg))
@@ -450,7 +494,7 @@ def applyFlagToAll(listWidget, key: str, value: bool):
         return
     for i in range(listWidget.count()):
         item = listWidget.item(i)
-        if itemKind(item) == KIND_EQUATION:
+        if itemKind(item) != KIND_SERIES:
             continue
         flags = itemFlags(item)
         flags[key] = bool(value)
@@ -486,6 +530,19 @@ def serializeItem(item) -> dict:
         "qaqc": flags["qaqc"],
         "id": data.get("id") or newItemId(),
     }
+    if kind == KIND_EQUATION_ROW:
+        rowName = equationRowName(data.get("rowName") or (parseListText(text) or ("", "", "", ""))[3])
+        out["kind"] = KIND_EQUATION_ROW
+        out["q"] = equationRowListText(rowName)
+        out["rowName"] = rowName
+        out["rowId"] = data.get("rowId") or data.get("id") or newItemId()
+        out["id"] = out["rowId"]
+        cells = []
+        for cell in data.get("cells") or []:
+            if isinstance(cell, dict):
+                cells.append(dict(cell))
+        out["cells"] = cells
+        return out
     if kind == KIND_EQUATION:
         parsed = parseListText(text)
         formula = data.get("formula") or (parsed[1] if parsed else text)
@@ -516,6 +573,20 @@ def parseSavedEntry(entry, defaultFlags=None) -> dict | None:
         if parsed is None:
             return None
         kind, dataId, interval, database = parsed
+        if kind == KIND_EQUATION_ROW:
+            rowName = equationRowName(database)
+            rowId = newItemId()
+            return {
+                "kind": KIND_EQUATION_ROW,
+                "text": equationRowListText(rowName),
+                "flags": emptyFlags(),
+                "id": rowId,
+                "formula": None,
+                "header": None,
+                "rowId": rowId,
+                "rowName": rowName,
+                "cells": [],
+            }
         if kind == KIND_EQUATION:
             text = equationListText(dataId, database)
             return {
@@ -541,6 +612,26 @@ def parseSavedEntry(entry, defaultFlags=None) -> dict | None:
     formula = entry.get("formula")
     header = entry.get("header")
     flags = emptyFlags()
+    if kind == KIND_EQUATION_ROW or _textIsEquationRow(text):
+        parsed = parseListText(text) if text else None
+        rowName = equationRowName(entry.get("rowName") or (parsed[3] if parsed else ""))
+        cells = []
+        for cell in entry.get("cells") or []:
+            if isinstance(cell, dict) and (cell.get("formula") or cell.get("columnId") or cell.get("header")):
+                cells.append(dict(cell))
+        return {
+            "kind": KIND_EQUATION_ROW,
+            "text": equationRowListText(rowName),
+            "flags": emptyFlags(),
+            "id": entry.get("rowId") or entry.get("id") or newItemId(),
+            "formula": None,
+            "header": None,
+            "refs": None,
+            "anchorRow": None,
+            "rowId": entry.get("rowId") or entry.get("id") or newItemId(),
+            "rowName": rowName,
+            "cells": cells,
+        }
     if kind == KIND_EQUATION or (formula and str(formula).startswith("=")) or _textIsEquation(text):
         kind = KIND_EQUATION
         parsed = parseListText(text) if text else None

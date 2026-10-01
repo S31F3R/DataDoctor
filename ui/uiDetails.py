@@ -8,7 +8,7 @@ from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
 from PyQt6.QtCore import Qt, QTimer, QSize, QObject, QEvent
 from PyQt6 import uic
 from datetime import datetime
-from core import Logic, Config, Utils
+from core import Logic, Config, Utils, QueryUtils
 
 # Cap visible metadata rows; beyond this, show a themed vertical scrollbar
 maxVisibleMetaRows = 16
@@ -817,6 +817,8 @@ class uiDetails(QWidget):
             return "N/A", "N/A", "N/A"
 
         for row in range(table.rowCount()):
+            if QueryUtils.isEquationRow(table, row):
+                continue
             item = table.item(row, col)
 
             if item and item.text().strip():

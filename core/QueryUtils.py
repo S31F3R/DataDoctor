@@ -10,6 +10,30 @@ from core import Logic, Config, Utils, TableColors, QueryFlags
 
 # Unrounded API/table text, kept when buildTable applies a RoundingSpec.
 NATIVE_VALUE_ROLE = int(Qt.ItemDataRole.UserRole) + 32
+# Vertical-header payload for a named equation row (not a timestamp).
+EQUATION_ROW_ROLE = int(Qt.ItemDataRole.UserRole) + 40
+
+
+def equationRowPayload(headerItem):
+    """Dict on an equation-row header, or None for a date/time row."""
+    if headerItem is None:
+        return None
+    data = headerItem.data(EQUATION_ROW_ROLE)
+    if isinstance(data, dict) and data.get("kind") == "equationRow":
+        return data
+    return None
+
+
+def isEquationRow(table, row) -> bool:
+    if table is None:
+        return False
+    try:
+        row = int(row)
+    except (TypeError, ValueError):
+        return False
+    if row < 0 or row >= table.rowCount():
+        return False
+    return equationRowPayload(table.verticalHeaderItem(row)) is not None
 
 
 def itemNativeText(item):

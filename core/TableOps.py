@@ -13,9 +13,14 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem, QWidget, QApplication,
 )
 
-from core import Config, Logic, Upload, Utils, QueryFlags
-from core.Formula import FORMULA_KEY, remapFormulaColumns, shiftFormulaColumns
-from core.FormulaUi import _itemFormula, applyCellInput, hideFillChrome, recalculateAll
+from core import Config, Logic, QueryUtils, Upload, Utils, QueryFlags
+from core.Formula import (
+    FORMULA_KEY, coverRowsAbove, looksLikeFormula, remapFormulaColumns, shiftFormulaColumns,
+)
+from core.FormulaUi import (
+    _itemFormula, _rewriteFormulaFromRefs, applyCellInput, collectFormulaRefs,
+    hideFillChrome, recalculateAll,
+)
 from core.QueryUtils import (
     NATIVE_VALUE_ROLE, formatDeltaValue, parseDecimalText, overlayPairDisplays,
 )
@@ -549,6 +554,8 @@ def insertBlankColumn(mainWindow, col, side="right", adjustFormulas=True):
             recalculateAll(mainWindow)
         except Exception as e:
             Logic.logException("insertBlankColumn: formula recalc failed", e)
+        if _tableHasEquationRow(table):
+            rememberEquationRows(mainWindow)
     _refreshHeaderDetails(mainWindow, insertAt=insertAt, delta=1)
     if Config.debug:
         Logic.logMessage("DEBUG", f"TableOps.insertBlankColumn at {insertAt} id={customId}")
@@ -571,6 +578,8 @@ def _rememberCustomColumns(mainWindow):
             continue
         cells = {}
         for r in range(table.rowCount()):
+            if QueryUtils.isEquationRow(table, r):
+                continue
             tsItem = table.verticalHeaderItem(r)
             ts = tsItem.text() if tsItem else str(r)
             item = table.item(r, c)
@@ -581,6 +590,8 @@ def _rememberCustomColumns(mainWindow):
         formulaTemplate = None
         formulaAnchorRow = 0
         for r in range(table.rowCount()):
+            if QueryUtils.isEquationRow(table, r):
+                continue
             f = _itemFormula(table.item(r, c))
             if f:
                 formulaTemplate = f
@@ -638,6 +649,8 @@ def restoreCustomColumns(mainWindow):
         table.blockSignals(True)
         try:
             for r in range(table.rowCount()):
+                if QueryUtils.isEquationRow(table, r):
+                    continue
                 tsItem = table.verticalHeaderItem(r)
                 ts = tsItem.text() if tsItem else str(r)
                 cell = cells.get(ts) or {}
@@ -651,6 +664,372 @@ def restoreCustomColumns(mainWindow):
             table.blockSignals(False)
     recalculateAll(mainWindow)
     _rememberCustomColumns(mainWindow)
+
+
+def _tableHasEquationRow(table) -> bool:
+    if table is None:
+        return False
+    for r in range(table.rowCount()):
+        if QueryUtils.isEquationRow(table, r):
+            return True
+    return False
+
+
+def _nextEquationRowName(table) -> str:
+    used = set()
+    if table is not None:
+        for r in range(table.rowCount()):
+            payload = QueryUtils.equationRowPayload(table.verticalHeaderItem(r))
+            if payload:
+                used.add(payload.get("name") or "")
+    if "Equation" not in used:
+        return "Equation"
+    n = 2
+    while f"Equation {n}" in used:
+        n += 1
+    return f"Equation {n}"
+
+
+def _setEquationRowHeader(table, row, rowId, name):
+    item = QTableWidgetItem(name)
+    item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+    flags = item.flags() & ~Qt.ItemFlag.ItemIsEditable
+    item.setFlags(flags)
+    item.setData(QueryUtils.EQUATION_ROW_ROLE, {
+        "kind": "equationRow",
+        "id": rowId,
+        "name": name,
+    })
+    table.setVerticalHeaderItem(row, item)
+
+
+def columnBinding(mainWindow, col) -> dict:
+    """Identity of the series a row-equation cell is locked to."""
+    meta = _meta(mainWindow, col)
+    table = _table(mainWindow)
+    header = firstHeaderLine(_headerText(table, col)) if table is not None else ""
+    dataIds = meta.get("dataIds") or []
+    columnId = meta.get("itemId") or meta.get("customId")
+    if not columnId and dataIds:
+        columnId = dataIds[0]
+    return {
+        "columnId": columnId,
+        "customId": meta.get("customId"),
+        "header": header,
+    }
+
+
+def _idsEqual(a, b) -> bool:
+    if a is None or b is None:
+        return False
+    return str(a) == str(b)
+
+
+def findBoundColumn(mainWindow, cell) -> int:
+    """Column index for a saved equation-row cell, or -1."""
+    table = _table(mainWindow)
+    if table is None or not isinstance(cell, dict):
+        return -1
+    customId = cell.get("customId")
+    columnId = cell.get("columnId")
+    header = (cell.get("header") or "").strip()
+    metas = _metas(mainWindow)
+    n = table.columnCount()
+    if customId:
+        for c in range(n):
+            meta = metas[c] if c < len(metas) else {}
+            if _idsEqual((meta or {}).get("customId"), customId):
+                return c
+    if columnId:
+        for c in range(n):
+            meta = metas[c] if c < len(metas) else {}
+            meta = meta or {}
+            if _idsEqual(meta.get("itemId"), columnId) or _idsEqual(meta.get("customId"), columnId):
+                return c
+            for did in meta.get("dataIds") or []:
+                if _idsEqual(did, columnId):
+                    return c
+            if _idsEqual(meta.get("lookupId"), columnId):
+                return c
+    if header:
+        for c in range(n):
+            if firstHeaderLine(_headerText(table, c)) == header:
+                return c
+    return -1
+
+
+def equationRowSpecs(mainWindow):
+    """Query-list payloads for equation rows currently on the table."""
+    table = _table(mainWindow)
+    specs = []
+    if table is None:
+        return specs
+    for r in range(table.rowCount()):
+        payload = QueryUtils.equationRowPayload(table.verticalHeaderItem(r))
+        if not payload:
+            continue
+        cells = []
+        for c in range(table.columnCount()):
+            formula = _itemFormula(table.item(r, c))
+            if not formula:
+                continue
+            binding = columnBinding(mainWindow, c)
+            cells.append({
+                "formula": formula,
+                "columnId": binding.get("columnId"),
+                "customId": binding.get("customId"),
+                "header": binding.get("header"),
+                "refs": collectFormulaRefs(mainWindow, formula),
+            })
+        rowId = payload.get("id") or uuid.uuid4().hex[:12]
+        specs.append({
+            "kind": QueryFlags.KIND_EQUATION_ROW,
+            "rowId": rowId,
+            "rowName": payload.get("name") or "Equation",
+            "cells": cells,
+            "id": rowId,
+            "flags": QueryFlags.emptyFlags(),
+        })
+    return specs
+
+
+def _replaceEquationRowsInList(mainWindow, specs):
+    winQuery = getattr(mainWindow, "winQuery", None)
+    lst = getattr(winQuery, "listQueryList", None) if winQuery is not None else None
+    if lst is None:
+        return
+    lst.blockSignals(True)
+    try:
+        for i in reversed(range(lst.count())):
+            if QueryFlags.itemKind(lst.item(i)) == QueryFlags.KIND_EQUATION_ROW:
+                lst.takeItem(i)
+        for spec in specs or []:
+            rowId = spec.get("rowId") or spec.get("id") or QueryFlags.newItemId()
+            extra = {
+                "rowId": rowId,
+                "rowName": spec.get("rowName") or "Equation",
+                "cells": list(spec.get("cells") or []),
+                "id": rowId,
+            }
+            lst.addItem(QueryFlags.makeListItem(
+                QueryFlags.equationRowListText(extra["rowName"]),
+                flags=QueryFlags.emptyFlags(),
+                kind=QueryFlags.KIND_EQUATION_ROW,
+                extra=extra,
+            ))
+    finally:
+        lst.blockSignals(False)
+    QueryFlags.recolorQueryList(lst)
+    if winQuery is not None and hasattr(winQuery, "markQuickLookDirtyFromTable"):
+        winQuery.markQuickLookDirtyFromTable()
+
+
+def rememberEquationRows(mainWindow):
+    """Keep lastQueryItems and the query list aligned with the table rows."""
+    if mainWindow is None:
+        return
+    specs = equationRowSpecs(mainWindow)
+    kept = []
+    for entry in getattr(mainWindow, "lastQueryItems", None) or []:
+        if QueryFlags.isEquationRowQueryItem(entry):
+            continue
+        kept.append(entry)
+    kept.extend(specs)
+    mainWindow.lastQueryItems = kept
+    _replaceEquationRowsInList(mainWindow, specs)
+
+
+def _appendEquationRowWidget(table, rowId, name) -> int:
+    row = table.rowCount()
+    table.insertRow(row)
+    _setEquationRowHeader(table, row, rowId, name)
+    for c in range(table.columnCount()):
+        table.setItem(row, c, _centerItem(""))
+    return row
+
+
+def appendEquationRow(mainWindow):
+    """Append a named equation row. Date/time rows are left unchanged."""
+    table = _table(mainWindow)
+    if table is None or table.columnCount() <= 0:
+        return -1
+    name = _nextEquationRowName(table)
+    rowId = uuid.uuid4().hex[:12]
+    table.blockSignals(True)
+    try:
+        row = _appendEquationRowWidget(table, rowId, name)
+    finally:
+        table.blockSignals(False)
+    Upload.applyEditability(table, mainWindow)
+    Utils.sizeVerticalHeader(table)
+    rememberEquationRows(mainWindow)
+    if Config.debug:
+        Logic.logMessage("DEBUG", f"TableOps.appendEquationRow {name} id={rowId}")
+    return row
+
+
+def renameEquationRow(mainWindow, row, name=None) -> bool:
+    """Rename an equation row. Date/time rows are refused."""
+    table = _table(mainWindow)
+    if table is None or not QueryUtils.isEquationRow(table, row):
+        return False
+    payload = QueryUtils.equationRowPayload(table.verticalHeaderItem(row)) or {}
+    if name is None:
+        name, ok = QInputDialog.getText(
+            mainWindow, "Rename row", "Row name:", text=payload.get("name") or "Equation",
+        )
+        if not ok:
+            return False
+    name = QueryFlags.equationRowName(name)
+    if not name:
+        return False
+    rowId = payload.get("id") or uuid.uuid4().hex[:12]
+    _setEquationRowHeader(table, row, rowId, name)
+    Utils.sizeVerticalHeader(table)
+    rememberEquationRows(mainWindow)
+    return True
+
+
+def removeEquationRow(mainWindow, row) -> bool:
+    table = _table(mainWindow)
+    if table is None or not QueryUtils.isEquationRow(table, row):
+        return False
+    table.removeRow(row)
+    Upload.applyEditability(table, mainWindow)
+    Utils.sizeVerticalHeader(table)
+    rememberEquationRows(mainWindow)
+    return True
+
+
+def dropEquationRowsById(mainWindow, rowIds):
+    """Remove equation rows from the table only. Caller syncs the query list."""
+    table = _table(mainWindow)
+    if table is None or not rowIds:
+        return
+    wanted = {str(i) for i in rowIds if i}
+    for r in reversed(range(table.rowCount())):
+        payload = QueryUtils.equationRowPayload(table.verticalHeaderItem(r))
+        if payload and str(payload.get("id")) in wanted:
+            table.removeRow(r)
+
+
+def equationRowMenu(mainWindow, row):
+    """
+    Date/time rows: Append New Row only.
+    Equation rows: Append New Row, Rename, Remove.
+    """
+    parent = mainWindow if isinstance(mainWindow, QWidget) else None
+    menu = QMenu(parent)
+    append = menu.addAction("Append New Row")
+    append.setData("append")
+    table = _table(mainWindow)
+    if QueryUtils.isEquationRow(table, row):
+        rename = menu.addAction("Rename")
+        rename.setData("rename")
+        remove = menu.addAction("Remove")
+        remove.setData("remove")
+    return menu
+
+
+def _noteBrokenEquationCell(mainWindow, rowId, cell, formula):
+    """Keep a missing-column formula on the list so the row turns red."""
+    if mainWindow is None or "#REF!" not in str(formula or ""):
+        return
+
+    def patch(cells):
+        out = []
+        matched = False
+        for existing in cells or []:
+            if not isinstance(existing, dict):
+                continue
+            same = False
+            if cell.get("customId") and _idsEqual(existing.get("customId"), cell.get("customId")):
+                same = True
+            elif cell.get("columnId") and _idsEqual(existing.get("columnId"), cell.get("columnId")):
+                same = True
+            elif (cell.get("header") or "") and existing.get("header") == cell.get("header"):
+                same = True
+            if same and not matched:
+                updated = dict(existing)
+                updated["formula"] = formula
+                out.append(updated)
+                matched = True
+            else:
+                out.append(existing)
+        if not matched:
+            updated = dict(cell)
+            updated["formula"] = formula
+            out.append(updated)
+        return out
+
+    items = []
+    for entry in getattr(mainWindow, "lastQueryItems", None) or []:
+        if QueryFlags.isEquationRowQueryItem(entry) and str(entry.get("rowId")) == str(rowId):
+            entry = dict(entry)
+            entry["cells"] = patch(entry.get("cells"))
+        items.append(entry)
+    mainWindow.lastQueryItems = items
+    winQuery = getattr(mainWindow, "winQuery", None)
+    lst = getattr(winQuery, "listQueryList", None) if winQuery is not None else None
+    if lst is None:
+        return
+    for i in range(lst.count()):
+        item = lst.item(i)
+        if QueryFlags.itemKind(item) != QueryFlags.KIND_EQUATION_ROW:
+            continue
+        payload = QueryFlags.itemPayload(item)
+        if str(payload.get("rowId") or "") != str(rowId):
+            continue
+        payload["cells"] = patch(payload.get("cells"))
+        QueryFlags.setItemPayload(item, payload)
+    QueryFlags.recolorQueryList(lst)
+
+
+def applyEquationRowItems(mainWindow, items):
+    """
+    Append saved equation rows under the timestamps.
+
+    Each formula stays in the column it was typed in. Ranges cover every
+    timestamp row above the equation row. Other cells in the row stay blank.
+    """
+    table = _table(mainWindow)
+    if table is None or not items:
+        return
+    dataRows = sum(
+        1 for r in range(table.rowCount()) if not QueryUtils.isEquationRow(table, r)
+    )
+    for spec in items:
+        if not isinstance(spec, dict) or spec.get("kind") != QueryFlags.KIND_EQUATION_ROW:
+            continue
+        rowId = spec.get("rowId") or spec.get("id") or uuid.uuid4().hex[:12]
+        name = QueryFlags.equationRowName(spec.get("rowName"))
+        table.blockSignals(True)
+        try:
+            row = _appendEquationRowWidget(table, rowId, name)
+        finally:
+            table.blockSignals(False)
+        for cell in spec.get("cells") or []:
+            if not isinstance(cell, dict):
+                continue
+            formula = cell.get("formula") or ""
+            if not looksLikeFormula(formula):
+                continue
+            col = findBoundColumn(mainWindow, cell)
+            rewritten, broken = _rewriteFormulaFromRefs(formula, cell.get("refs"), mainWindow)
+            if col < 0:
+                _noteBrokenEquationCell(mainWindow, rowId, cell, "=#REF!")
+                continue
+            if not looksLikeFormula(rewritten):
+                rewritten = formula
+            expanded = coverRowsAbove(rewritten, dataRows)
+            applyCellInput(
+                mainWindow, row, col, expanded,
+                asFill=True, skipUndo=True, skipEquationSync=True,
+            )
+            if broken or "#REF!" in str(expanded):
+                _noteBrokenEquationCell(mainWindow, rowId, cell, expanded)
+    Upload.applyEditability(table, mainWindow)
+    Utils.sizeVerticalHeader(table)
 
 
 def _extractColumn(table, col):
@@ -890,6 +1269,8 @@ def _rebuildQueryItemsFromTable(mainWindow):
             anchorRow = 0
             if table is not None:
                 for r in range(table.rowCount()):
+                    if QueryUtils.isEquationRow(table, r):
+                        continue
                     f = _itemFormula(table.item(r, col))
                     if f:
                         formula = f
@@ -926,6 +1307,7 @@ def _rebuildQueryItemsFromTable(mainWindow):
             itemId = meta.get("itemId") if i == 0 else None
             items.append((dataId, interval, database, mrid, seen, flags or QueryFlags.emptyFlags(), itemId))
             seen += 1
+    items.extend(equationRowSpecs(mainWindow))
     mainWindow.lastQueryItems = items
 
 
@@ -939,6 +1321,20 @@ def _syncQueryList(mainWindow):
     try:
         lst.clear()
         for entry in items:
+            if isinstance(entry, dict) and entry.get("kind") == QueryFlags.KIND_EQUATION_ROW:
+                extra = {
+                    "rowId": entry.get("rowId") or entry.get("id") or QueryFlags.newItemId(),
+                    "rowName": entry.get("rowName") or "Equation",
+                    "cells": list(entry.get("cells") or []),
+                    "id": entry.get("rowId") or entry.get("id"),
+                }
+                lst.addItem(QueryFlags.makeListItem(
+                    QueryFlags.equationRowListText(extra["rowName"]),
+                    flags=QueryFlags.emptyFlags(),
+                    kind=QueryFlags.KIND_EQUATION_ROW,
+                    extra=extra,
+                ))
+                continue
             if isinstance(entry, dict) and (
                 entry.get("kind") == QueryFlags.KIND_EQUATION
                 or str(entry.get("formula") or "").startswith("=")

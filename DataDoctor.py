@@ -461,6 +461,8 @@ class uiMain(QMainWindow):
         self.mainTable.horizontalHeader().sectionDoubleClicked.connect(self.onMainHeaderDoubleClicked)
         self.mainTable.horizontalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.horizontalHeader().customContextMenuRequested.connect(self.showHeaderContextMenu)
+        self.mainTable.verticalHeader().setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.mainTable.verticalHeader().customContextMenuRequested.connect(self.showRowHeaderContextMenu)
         self.mainTable.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mainTable.customContextMenuRequested.connect(self.showCellContextMenu)
         self.mainTable.itemChanged.connect(self.onMainTableItemChanged)
@@ -1363,6 +1365,28 @@ class uiMain(QMainWindow):
             Logic.logException("showHeaderDetails failed", e)
             QMessageBox.warning(self, "Details Error", f"Failed to show details:\n{e}")
 
+    def showRowHeaderContextMenu(self, pos):
+        """Date/time rail: Append New Row only. Equation rows can also be renamed."""
+        try:
+            from core import TableOps
+            header = self.mainTable.verticalHeader()
+            row = header.logicalIndexAt(pos)
+            if row < 0:
+                return
+            menu = TableOps.equationRowMenu(self, row)
+            chosen = menu.exec(header.mapToGlobal(pos))
+            if chosen is None:
+                return
+            action = chosen.data()
+            if action == "append":
+                TableOps.appendEquationRow(self)
+            elif action == "rename":
+                TableOps.renameEquationRow(self, row)
+            elif action == "remove":
+                TableOps.removeEquationRow(self, row)
+        except Exception as e:
+            Logic.logException("showRowHeaderContextMenu failed", e)
+
     def showCellContextMenu(self, pos):
         """Show context menu for cell right-click: Metadata details (internal only, non-overlay) + overlay if applicable."""
         try:
@@ -1370,6 +1394,22 @@ class uiMain(QMainWindow):
             if not index.isValid(): return        
             row = index.row()
             col = index.column()
+            from core import QueryUtils
+            if QueryUtils.isEquationRow(self.mainTable, row):
+                menu = QMenu(self)
+                copyAction = menu.addAction("Copy")
+                copyAction.setShortcut("Ctrl+C")
+                copyAction.triggered.connect(lambda: Upload.copySelectionToClipboard(self))
+                pasteAction = menu.addAction("Paste")
+                pasteAction.setShortcut("Ctrl+V")
+                pasteAction.triggered.connect(lambda: Upload.pasteClipboardToSelection(self))
+                sel = self.mainTable.selectionModel()
+                if sel is not None and not sel.isSelected(index):
+                    self.mainTable.clearSelection()
+                    self.mainTable.setCurrentIndex(index)
+                    sel.select(index, sel.SelectionFlag.ClearAndSelect)
+                menu.exec(self.mainTable.viewport().mapToGlobal(pos))
+                return
             
             # Get timestamp and series (from headers)
             timestampStr = self.mainTable.verticalHeaderItem(row).text() if self.mainTable.verticalHeaderItem(row) else ""

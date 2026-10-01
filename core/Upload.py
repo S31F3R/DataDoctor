@@ -423,7 +423,8 @@ def applyEditability(table, mainWindow=None):
     isPublic = isPublicQuery(mainWindow) if mainWindow is not None else False
     metas = getattr(mainWindow, 'columnMetadata', None) or [] if mainWindow is not None else []
     hasCustom = any((m or {}).get('type') == 'custom' for m in metas)
-    if isPublic and not hasCustom:
+    hasEquationRow = any(QueryUtils.isEquationRow(table, r) for r in range(table.rowCount()))
+    if isPublic and not hasCustom and not hasEquationRow:
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     else:
         table.setEditTriggers(
@@ -442,7 +443,8 @@ def applyEditability(table, mainWindow=None):
                 if item is None:
                     continue
                 flags = item.flags()
-                if lockCol:
+                # Equation-row cells stay editable on public and delta columns.
+                if lockCol and not QueryUtils.isEquationRow(table, r):
                     item.setFlags(flags & ~Qt.ItemFlag.ItemIsEditable)
                 else:
                     item.setFlags(
@@ -612,6 +614,8 @@ def onItemChanged(mainWindow, item):
     metas = getattr(mainWindow, 'columnMetadata', None) or []
     meta = metas[col] if col < len(metas) else {}
     if (meta or {}).get('type') == 'custom':
+        return
+    if QueryUtils.isEquationRow(table, item.row()):
         return
 
     user, edit = getEditState(item)
@@ -849,7 +853,7 @@ def pasteClipboardToSelection(mainWindow):
                 c = startC + dc
                 if c < 0 or c >= numCols:
                     break
-                if columnIsLocked(mainWindow, c):
+                if columnIsLocked(mainWindow, c) and not QueryUtils.isEquationRow(table, r):
                     continue
                 item = table.item(r, c)
                 if item is None:

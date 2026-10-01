@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem, QAbstractItemView, QFrame,
 )
 
-from core import Config, Logic, Upload
+from core import Config, Logic, QueryUtils, Upload
 from core.Formula import (
     FORMULA_KEY, ERR_VALUE, ERR_REF, FUNCTIONS, FUNCTION_HELP,
     adjustFormula, colToLetters, evaluateFormula, formatFormulaResult,
@@ -173,7 +173,7 @@ def evaluateOnTable(table, formula: str, col: int, row: int):
     )
 
 
-def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, skipUndo=False):
+def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, skipUndo=False, skipEquationSync=False):
     """
     Set a cell from typed/pasted/filled text. Formulas starting with '=' are
     stored and the display becomes the computed value (upload uses that).
@@ -181,7 +181,8 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, s
     table = mainWindow.mainTable if mainWindow is not None else None
     if table is None:
         return False
-    if Upload.columnIsLocked(mainWindow, col):
+    equationRow = QueryUtils.isEquationRow(table, row)
+    if Upload.columnIsLocked(mainWindow, col) and not equationRow:
         return False
     item = table.item(row, col)
     if item is None:
@@ -190,7 +191,7 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, s
             Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
         )
         table.setItem(row, col, item)
-    if not (item.flags() & Qt.ItemFlag.ItemIsEditable):
+    if not equationRow and not (item.flags() & Qt.ItemFlag.ItemIsEditable):
         return False
     raw = "" if text is None else str(text).strip()
     oldText = item.text() if item is not None else ""
@@ -224,7 +225,12 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, s
             )
         # Enter applies this cell only. Whole-column fill is for Quick Look /
         # query replay (applyEquationQueryItems), or the fill handle.
-        if not asFill and (meta or {}).get("type") == "custom":
+        # An equation row keeps this cell only — it does not fill the column.
+        if equationRow:
+            if not skipEquationSync:
+                from core import TableOps
+                TableOps.rememberEquationRows(mainWindow)
+        elif not asFill and (meta or {}).get("type") == "custom":
             _syncEquationListItem(mainWindow, col, raw, originRow=row)
         return True
     _setItemFormula(item, None)
@@ -244,6 +250,9 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, s
             oldBg=oldBg, oldFg=oldFg, newBg=newBg, newFg=newFg,
             oldEdit=oldEdit, newEdit=newEdit,
         )
+    if equationRow and not skipEquationSync:
+        from core import TableOps
+        TableOps.rememberEquationRows(mainWindow)
     return True
 
 
@@ -930,7 +939,7 @@ class FormulaTableFilter(QObject):
 
     def _copyCell(self, srcR, srcC, dstR, dstC) -> bool:
         table = self._table()
-        if not formulaMayEdit(self.mainWindow, dstC):
+        if not formulaMayEdit(self.mainWindow, dstC) and not QueryUtils.isEquationRow(table, dstR):
             return False
         src = table.item(srcR, srcC)
         formula = _itemFormula(src)

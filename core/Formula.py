@@ -829,3 +829,43 @@ def remapFormulaColumns(formula: str, oldToNew: dict) -> str:
         prefix = "="
         body = body[1:]
     return prefix + _REF_IN_FORMULA.sub(repl, body)
+
+
+_RANGE_IN_FORMULA = re.compile(
+    r"(\$?[A-Za-z]+\$?\d+)\s*:\s*(\$?[A-Za-z]+\$?\d+)"
+)
+
+
+def coverRowsAbove(formula: str, dataRowCount: int) -> str:
+    """
+    Stretch every range to the timestamp rows above an equation row.
+
+    A1:A24 on a longer query becomes A1:A{n}. A single cell (A1) stays A1.
+    Column letters and $ locks are kept. n is the number of data rows.
+    """
+    if not looksLikeFormula(formula):
+        return formula
+    try:
+        n = int(dataRowCount)
+    except (TypeError, ValueError):
+        return formula
+    if n < 1:
+        return formula
+
+    def repl(m):
+        start = parseCellRef(m.group(1))
+        end = parseCellRef(m.group(2))
+        if start is None or end is None:
+            return m.group(0)
+        sCol, _sRow, sAbsCol, sAbsRow = start
+        eCol, _eRow, eAbsCol, eAbsRow = end
+        left = formatCellRef(sCol, 0, sAbsCol, sAbsRow)
+        right = formatCellRef(eCol, n - 1, eAbsCol, eAbsRow)
+        return f"{left}:{right}"
+
+    body = formula.strip()
+    prefix = ""
+    if body.startswith("="):
+        prefix = "="
+        body = body[1:]
+    return prefix + _RANGE_IN_FORMULA.sub(repl, body)

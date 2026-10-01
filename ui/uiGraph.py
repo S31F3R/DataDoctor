@@ -444,8 +444,10 @@ def selectedDataRows(table):
             rows.add(row)
 
     if rows:
-        return sorted(rows)
-    return list(range(table.rowCount()))
+        return [r for r in sorted(rows) if not QueryUtils.isEquationRow(table, r)]
+    return [
+        r for r in range(table.rowCount()) if not QueryUtils.isEquationRow(table, r)
+    ]
 
 
 def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None, rows=None):
