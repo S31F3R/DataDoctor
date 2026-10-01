@@ -10,5 +10,3 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
-- A Windows update keeps applying into the Data Doctor install folder when it restarts from the new zip, and removes an empty updates folder a failed run left in Temp.
-
