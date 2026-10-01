@@ -1,6 +1,14 @@
 ####### CURRENT TASKS #######
 
 ####### CURRENT BUGS #######
+-Update is broke:
+    Install root: C:\Program Files\Data Doctor
+    Update zip: C:\Program Files\Data Doctor\updates\DataDoctor-Python-v3.4.0-rc.3.zip
+    Running applyUpdate.py from DataDoctor-Python-v3.4.0-rc.3.zip
+    Install root: C:\Users\rodneysmith\AppData\Local\Temp\2
+    ERROR: No *.zip found in C:\Users\rodneysmith\AppData\Local\Temp\2\updates
+    Place DataDoctor-Python-*.zip (code) or DataDoctor-Windows-*.zip (launcher + python-embed) there, or pass --zip path
+-The bug above is a major uh oh. I can't even test. Make sure to remove whatever broken files are created when this gets fixed. The Temp\2 doesn't look right
 
 ####### 3.5.0 FEATURES #######
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)
