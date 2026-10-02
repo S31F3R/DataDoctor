@@ -31,7 +31,8 @@ What this does:
   5) If packaged bunker.db present: copy when live is missing (no prompts);
      otherwise merge via updateBunker.py
   6) pip install -r requirements.txt into python-embed (Windows) or .venv
-  7) Keep the zip until Data Doctor opens and the install is finished.
+  7) Move the zip into updates/held/ so Data Doctor.exe does not start this
+     script again. The app deletes it after the install is finished.
      Remove the extract tree now.
 
 Does NOT:
@@ -328,34 +329,188 @@ def maybeDownloadWindowsZip(installRoot: Path) -> Path | None:
 
 
 APPLIED_MARKER = "applied.json"
+HELD_DIR = "held"
+
+
+def _markerFiles(installRoot: Path) -> list[Path]:
+    found: list[Path] = []
+    seen: set[str] = set()
+    for d in allUpdatesDirs(installRoot):
+        marker = d / APPLIED_MARKER
+        if not marker.is_file():
+            continue
+        try:
+            key = os.path.normcase(str(marker.resolve()))
+        except OSError:
+            key = os.path.normcase(str(marker))
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append(marker)
+    return found
+
+
+def _loadZipList(marker: Path) -> list[str]:
+    import json
+
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(data, dict):
+        return []
+    return [str(p) for p in data.get("zips") or [] if p]
+
+
+def _saveZipList(marker: Path, zips: list[str]) -> None:
+    import json
+
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps({"zips": zips}, indent=2) + "\n", encoding="utf-8")
+
+
+def parkAppliedZip(zipPath: Path) -> Path:
+    """Move a top-level updates zip into updates/held/. A zip already there stays."""
+    zipPath = Path(zipPath)
+    if not zipPath.is_file():
+        return zipPath
+    if zipPath.parent.name.lower() == HELD_DIR:
+        try:
+            return zipPath.resolve()
+        except OSError:
+            return zipPath
+    held = zipPath.parent / HELD_DIR
+    held.mkdir(parents=True, exist_ok=True)
+    dest = held / zipPath.name
+    if dest.exists():
+        n = 2
+        while dest.exists():
+            dest = held / f"{zipPath.stem}-{n}{zipPath.suffix}"
+            n += 1
+    shutil.move(str(zipPath), str(dest))
+    try:
+        return dest.resolve()
+    except OSError:
+        return dest
+
+
+def _heldTwin(zipPath: Path) -> Path | None:
+    path = Path(zipPath)
+    if path.parent.name.lower() == HELD_DIR and path.is_file():
+        return path
+    twin = path.parent / HELD_DIR / path.name
+    if twin.is_file():
+        return twin
+    return None
+
+
+def _recordParkedZip(installRoot: Path, original: Path, parked: Path) -> bool:
+    """Store parked in applied.json. True when that path was not already listed."""
+    try:
+        text = str(parked.resolve())
+    except OSError:
+        text = str(parked)
+    old = {str(original), text}
+    try:
+        old.add(str(original.resolve()))
+    except OSError:
+        old.add(str(original))
+    updateDir = resolveUpdatesDir(installRoot, create=True)
+    marker = updateDir / APPLIED_MARKER
+    zips = _loadZipList(marker) if marker.is_file() else []
+    already = text in zips
+    new: list[str] = []
+    for p in zips:
+        if p == text:
+            continue
+        if p in old and not Path(p).is_file():
+            continue
+        new.append(p)
+    new.append(text)
+    _saveZipList(marker, new)
+    return not already
 
 
 def rememberAppliedZip(installRoot: Path, zipPath: Path) -> None:
     """
-    Remember a zip that applied. Data Doctor deletes it after the install
-    is finished, so a failed open can try the same file again.
-    """
-    import json
+    Move an applied zip under updates/held/ and remember that path.
 
-    updateDir = resolveUpdatesDir(installRoot, create=True)
-    marker = updateDir / APPLIED_MARKER
-    zips: list[str] = []
-    if marker.is_file():
-        try:
-            data = json.loads(marker.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                zips = [str(p) for p in data.get("zips") or [] if p]
-        except Exception:
-            zips = []
+    Data Doctor.exe starts applyUpdate.cmd when a *.zip sits at the top of
+    updates/. The file stays in held/ until the app confirms the install.
+    """
+    original = Path(zipPath)
+    if original.is_file() and original.parent.name.lower() != HELD_DIR:
+        parked = parkAppliedZip(original)
+    else:
+        parked = original if original.is_file() else _heldTwin(original)
+        if parked is None:
+            return
+    if _recordParkedZip(installRoot, original, parked):
+        print(f"Keeping {parked.name} until Data Doctor confirms the update")
+        appendAppLog("INFO", f"keeping {parked.name} until the app confirms the update")
+
+
+def parkRecordedZips(installRoot: Path) -> int:
+    """Move zips already listed in applied.json out of the top of updates/."""
+    moved = 0
+    for marker in _markerFiles(installRoot):
+        zips = _loadZipList(marker)
+        new: list[str] = []
+        changed = False
+        for raw in zips:
+            path = Path(raw)
+            if path.is_file() and path.parent.name.lower() != HELD_DIR:
+                parked = parkAppliedZip(path)
+                try:
+                    new.append(str(parked.resolve()))
+                except OSError:
+                    new.append(str(parked))
+                changed = True
+                moved += 1
+                continue
+            if not path.is_file():
+                twin = path.parent / HELD_DIR / path.name
+                if twin.is_file():
+                    try:
+                        new.append(str(twin.resolve()))
+                    except OSError:
+                        new.append(str(twin))
+                    changed = True
+                    continue
+            if path.is_file():
+                try:
+                    new.append(str(path.resolve()))
+                except OSError:
+                    new.append(str(path))
+            else:
+                new.append(raw)
+        deduped: list[str] = []
+        for p in new:
+            if p not in deduped:
+                deduped.append(p)
+        if deduped != zips:
+            changed = True
+        if changed:
+            _saveZipList(marker, deduped)
+    return moved
+
+
+def hasAppliedZipRecord(installRoot: Path) -> bool:
+    for marker in _markerFiles(installRoot):
+        if _loadZipList(marker):
+            return True
+    return False
+
+
+def zipIsRecorded(installRoot: Path, zipPath: Path) -> bool:
     try:
-        text = str(zipPath.resolve())
+        text = str(Path(zipPath).resolve())
     except OSError:
         text = str(zipPath)
-    if text not in zips:
-        zips.append(text)
-    marker.write_text(json.dumps({"zips": zips}, indent=2), encoding="utf-8")
-    print(f"Keeping {zipPath.name} until Data Doctor confirms the update")
-    appendAppLog("INFO", f"keeping {zipPath.name} until the app confirms the update")
+    for marker in _markerFiles(installRoot):
+        if text in _loadZipList(marker):
+            return True
+    return False
 
 
 def pickUpdateZip(installRoot: Path, projectFiles: Path) -> Path | None:
@@ -1565,7 +1720,9 @@ def apply(zipPath: Path, installRoot: Path, keepExtract: bool = False) -> int:
             appendAppLog("ERROR", "PyQt6 is not importable after pip; not starting")
             return 1
 
-        # Leave the zip until the app opens and the install is finished.
+        # Move the zip out of the top of updates/ so Data Doctor.exe does not
+        # start applyUpdate.cmd again. The app deletes it when the install
+        # is finished.
         try:
             rememberAppliedZip(installRoot, zipPath)
         except Exception as e:
@@ -1647,14 +1804,37 @@ def main() -> int:
         return 1
     if args.finishStaged:
         return finishStaged(installRoot)
-    updateDir = resolveUpdatesDir(installRoot, create=True)
+
+    moved = parkRecordedZips(installRoot)
+    if moved:
+        print(f"Set aside {moved} applied update zip(s)")
+        appendAppLog("INFO", f"parked {moved} applied update zip(s)")
 
     if args.zip:
-        zipPath = Path(args.zip).expanduser().resolve()
+        zipPath = Path(args.zip).expanduser()
+        try:
+            zipPath = zipPath.resolve()
+        except OSError:
+            pass
+        if not zipPath.is_file():
+            if hasAppliedZipRecord(installRoot):
+                print("Update zip already applied; starting Data Doctor.")
+                appendAppLog("INFO", "applied zip already parked; starting Data Doctor")
+                launchDataDoctorIfIdle(installRoot)
+                return 0
+            print(f"ERROR: Zip not found: {zipPath}", file=sys.stderr)
+            appendAppLog("ERROR", f"zip not found ({zipPath})")
+            return 1
     else:
         projectFiles = resolveCodeDir(installRoot)
         zipPath = pickUpdateZip(installRoot, projectFiles)
         if zipPath is None:
+            if hasAppliedZipRecord(installRoot):
+                print("Applied update is set aside; starting Data Doctor.")
+                appendAppLog("INFO", "no top-level zip; starting Data Doctor")
+                launchDataDoctorIfIdle(installRoot)
+                return 0
+            updateDir = resolveUpdatesDir(installRoot, create=True)
             print(
                 f"ERROR: No *.zip found in {updateDir}\n"
                 "  Place DataDoctor-Python-*.zip (code) or DataDoctor-Windows-*.zip "
@@ -1662,6 +1842,13 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
+
+    if zipIsRecorded(installRoot, zipPath):
+        rememberAppliedZip(installRoot, zipPath)
+        print("Update zip already applied; starting Data Doctor.")
+        appendAppLog("INFO", f"skipping already applied {zipPath.name}")
+        launchDataDoctorIfIdle(installRoot)
+        return 0
 
     print(f"Update zip: {zipPath}")
     reexecZipApplyScript(zipPath, installRoot)

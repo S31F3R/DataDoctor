@@ -286,8 +286,9 @@ CODE UPDATE (already on bundled python-embed)
    zips in updates\\ first).
 4) applyUpdate refreshes pythonFiles code (app.pyw, ui/, core/*
    except live bunker.db), merges the dictionary, pip-installs into
-   python-embed, and keeps the zip until Data Doctor opens and the
-   install is finished. The app then removes it and notes that in the log.
+   python-embed, and moves the zip into updates\\held\\ so the launcher
+   opens the app. The app removes it after the install is finished and
+   notes that in the log.
 
 LAUNCHER + BUNDLED PYTHON (3.0.x .venv installs → 3.1+)
 ------------------------------------------------------

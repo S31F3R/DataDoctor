@@ -1371,6 +1371,7 @@ def cleanupAppliedZips(root: Path | None = None, ready: bool | None = None) -> l
         return []
     removed = []
     kept = []
+    heldDirs = []
     for raw in (data.get("zips") if isinstance(data, dict) else None) or []:
         path = Path(str(raw))
         if not path.is_file():
@@ -1379,9 +1380,17 @@ def cleanupAppliedZips(root: Path | None = None, ready: bool | None = None) -> l
             path.unlink()
             removed.append(path.name)
             Logic.logMessage("INFO", f"Removed applied update {path.name}")
+            if path.parent.name.lower() == "held":
+                heldDirs.append(path.parent)
         except OSError as e:
             kept.append(str(path))
             Logic.logMessage("WARN", f"Could not remove applied update {path.name}: {e}")
+    for heldDir in heldDirs:
+        try:
+            if heldDir.is_dir() and not any(heldDir.iterdir()):
+                heldDir.rmdir()
+        except OSError as e:
+            Logic.logMessage("WARN", f"Could not remove empty update folder: {e}")
     try:
         if kept:
             marker.write_text(json.dumps({"zips": kept}, indent=2), encoding="utf-8")

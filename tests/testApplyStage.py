@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import tempfile
@@ -328,25 +329,58 @@ def main():
             errors += fail("reexec keep", again)
 
         keptZip = real / "updates" / "DataDoctor-Windows-v1.zip"
+        otherZip = real / "updates" / "DataDoctor-Python-v2.zip"
         writeFile(keptZip, "windows-bytes")
+        writeFile(otherZip, "python-bytes")
         applyUpdate.rememberAppliedZip(real, keptZip)
-        if not keptZip.is_file():
-            errors += fail("keep applied", "zip was deleted when it was applied")
+        held = real / "updates" / "held" / keptZip.name
+        if keptZip.exists():
+            errors += fail("park applied", "zip still sits at the top of updates")
+        if not held.is_file():
+            errors += fail("park held", "applied zip was not moved under held")
+        if not otherZip.is_file():
+            errors += fail("park other", "an unrecorded zip was moved")
         marker = real / "updates" / "applied.json"
         markerText = marker.read_text(encoding="utf-8") if marker.is_file() else ""
-        if str(keptZip.resolve()) not in markerText:
+        if str(held.resolve()) not in markerText:
             errors += fail("applied marker", markerText or "missing")
         applyUpdate.rememberAppliedZip(real, keptZip)
-        if marker.read_text(encoding="utf-8").count(str(keptZip.resolve())) != 1:
+        if marker.read_text(encoding="utf-8").count(str(held.resolve())) != 1:
             errors += fail("applied once", marker.read_text(encoding="utf-8"))
         from core.Update import cleanupAppliedZips, launcherRefreshPlan, localWindowsPackage
         if cleanupAppliedZips(real, ready=False):
             errors += fail("cleanup early", "removed a zip before the install finished")
-        if not keptZip.is_file():
+        if not held.is_file():
             errors += fail("cleanup early file", "zip was removed early")
         removed = cleanupAppliedZips(real, ready=True)
-        if keptZip.name not in removed or keptZip.exists() or marker.exists():
-            errors += fail("cleanup done", (removed, keptZip.exists(), marker.exists()))
+        if held.name not in removed or held.exists() or marker.exists():
+            errors += fail("cleanup done", (removed, held.exists(), marker.exists()))
+        if (real / "updates" / "held").exists():
+            errors += fail("held dir", "empty held folder still present")
+        if not otherZip.is_file():
+            errors += fail("cleanup other", "an unrecorded zip was removed")
+        otherZip.unlink()
+
+        loopZip = real / "updates" / "DataDoctor-Windows-v1.zip"
+        writeFile(loopZip, "again")
+        marker.write_text(
+            json.dumps({"zips": [str(loopZip.resolve())]}, indent=2),
+            encoding="utf-8",
+        )
+        if applyUpdate.parkRecordedZips(real) != 1 or loopZip.exists():
+            errors += fail("park recorded", loopZip.exists())
+        loopHeld = real / "updates" / "held" / loopZip.name
+        if not loopHeld.is_file() or str(loopHeld.resolve()) not in marker.read_text(encoding="utf-8"):
+            errors += fail("park recorded path", marker.read_text(encoding="utf-8") if marker.is_file() else "missing")
+        if localWindowsPackage(None, real / "updates") is not None:
+            errors += fail("parked windows", "held zip still looks like a package to apply")
+        if applyUpdate.pickUpdateZip(real, real / "pythonFiles") is not None:
+            errors += fail("pick parked", "held zip is still a top-level zip")
+        fresh = real / "updates" / "DataDoctor-Python-v3.zip"
+        writeFile(fresh, "new")
+        picked = applyUpdate.pickUpdateZip(real, real / "pythonFiles")
+        if picked is None or picked.name != fresh.name:
+            errors += fail("pick fresh", picked)
 
         zipDir = root / "zipdir"
         writeFile(zipDir / "DataDoctor-Windows-v9.zip", "w")
