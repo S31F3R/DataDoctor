@@ -23,7 +23,7 @@ from core.QueryFlags import (
 from core.QueryUtils import isEquationRow
 from core.TableOps import (
     appendEquationRow, applyEquationRowItems, equationRowMenu, moveColumnSet,
-    renameEquationRow,
+    renameEquationRow, restoreCustomColumns,
 )
 
 
@@ -206,8 +206,98 @@ def testTable():
     return 0
 
 
+def seriesHost(cols, rows=3):
+    host = type("H", (), {})()
+    host.mainTable = QTableWidget(rows, cols)
+    host.columnMetadata = []
+    host.lastQueryItems = []
+    host.lastQueryType = "internal"
+    host.winQuery = type("Q", (), {})()
+    host.winQuery.listQueryList = QListWidget()
+    host.winQuery.loadedQuickLookName = ""
+    host.winQuery.markQuickLookDirtyFromTable = lambda: None
+    for c in range(cols):
+        host.columnMetadata.append({
+            "type": "normal",
+            "dataIds": [str(100 + c)],
+            "itemId": f"s{c}",
+            "dbs": ["USGS-NWIS"],
+            "queryInfos": [f"{100 + c}|HOUR|USGS-NWIS"],
+            "name": f"S{c}",
+        })
+        host.mainTable.setHorizontalHeaderItem(c, QTableWidgetItem(f"S{c}"))
+    for r in range(rows):
+        host.mainTable.setVerticalHeaderItem(r, QTableWidgetItem(f"01/0{r + 1}/24 00:00:00"))
+        for c in range(cols):
+            host.mainTable.setItem(r, c, QTableWidgetItem(str((c + 1) * 10)))
+    return host
+
+
+def _customNames(host):
+    return [(m or {}).get("name") for m in host.columnMetadata]
+
+
+def testRefreshKeepsEquationColumns():
+    """Three series, equation at B, equation at C, then a series-only refresh."""
+    app = QApplication.instance() or QApplication([])
+    host = seriesHost(3)
+    host.customColumns = [
+        {
+            "id": "eq1", "name": "EqB", "indexHint": 1, "cells": {},
+            "formulaTemplate": "=A1", "formulaAnchorRow": 0,
+        },
+        {
+            "id": "eq2", "name": "EqC", "indexHint": 2, "cells": {},
+            "formulaTemplate": "=D1", "formulaAnchorRow": 0,
+        },
+    ]
+    restoreCustomColumns(host)
+    table = host.mainTable
+    names = _customNames(host)
+    if table.columnCount() != 5 or names[1] != "EqB" or names[2] != "EqC":
+        return fail("places", (table.columnCount(), names))
+    if _itemFormula(table.item(0, 1)) != "=A1":
+        return fail("eqb", _itemFormula(table.item(0, 1)))
+    if _itemFormula(table.item(0, 2)) != "=D1":
+        return fail("eqc", _itemFormula(table.item(0, 2)))
+    if table.item(0, 2).text() == "#CYCLE!" or table.item(0, 1).text() == "#CYCLE!":
+        return fail("cycle", (table.item(0, 1).text(), table.item(0, 2).text()))
+
+    start = seriesHost(3)
+    start.customColumns = [
+        {
+            "id": "a", "name": "Left", "indexHint": 0, "cells": {},
+            "formulaTemplate": "=C1", "formulaAnchorRow": 0,
+        },
+        {
+            "id": "b", "name": "Next", "indexHint": 1, "cells": {},
+            "formulaTemplate": "=C1", "formulaAnchorRow": 0,
+        },
+    ]
+    restoreCustomColumns(start)
+    if _customNames(start)[:2] != ["Left", "Next"]:
+        return fail("start", _customNames(start))
+
+    end = seriesHost(3)
+    end.customColumns = [
+        {
+            "id": "e1", "name": "End1", "indexHint": 3, "cells": {},
+            "formulaTemplate": "=A1", "formulaAnchorRow": 0,
+        },
+        {
+            "id": "e2", "name": "End2", "indexHint": 4, "cells": {},
+            "formulaTemplate": "=A1", "formulaAnchorRow": 0,
+        },
+    ]
+    restoreCustomColumns(end)
+    if _customNames(end)[-2:] != ["End1", "End2"]:
+        return fail("end", _customNames(end))
+    _ = app
+    return 0
+
+
 def main():
-    errors = testCoverRowsAbove() + testParseRow() + testTable()
+    errors = testCoverRowsAbove() + testParseRow() + testTable() + testRefreshKeepsEquationColumns()
     if errors:
         print(f"{errors} failed")
         return 1

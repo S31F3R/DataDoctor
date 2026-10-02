@@ -617,9 +617,11 @@ def restoreCustomColumns(mainWindow):
     if table is None or table.rowCount() == 0:
         return
     saved.sort(key=lambda s: s.get("indexHint", 0))
-    offset = 0
+    # indexHint is already the column's place in the full table. Adding one
+    # per custom column already restored slides the next equation to the right
+    # of the letters it was written with.
     for spec in saved:
-        idx = int(spec.get("indexHint") or 0) + offset
+        idx = int(spec.get("indexHint") or 0)
         if idx >= table.columnCount():
             newIdx = insertBlankColumn(
                 mainWindow, table.columnCount() - 1, side="right", adjustFormulas=False,
@@ -628,7 +630,6 @@ def restoreCustomColumns(mainWindow):
             newIdx = insertBlankColumn(mainWindow, idx, side="left", adjustFormulas=False)
         if newIdx < 0:
             continue
-        offset += 1
         name = spec.get("name") or "Column"
         metas = _metas(mainWindow)
         if newIdx < len(metas):
@@ -636,6 +637,12 @@ def restoreCustomColumns(mainWindow):
             metas[newIdx]["name"] = name
         _setHeaderText(table, newIdx, Utils.formatTableHeaderLabel(name))
         template = spec.get("formulaTemplate")
+        if Config.debug:
+            Logic.logMessage(
+                "DEBUG",
+                f"TableOps.restoreCustomColumns {name} indexHint={spec.get('indexHint')} "
+                f"at={newIdx} formula={template or ''}",
+            )
         if template:
             # Same formula on every row of the new date range. A1 stays A1
             # on row 0; it is not tied to the old timestamps.
@@ -1182,6 +1189,8 @@ def _applyColumnOrder(mainWindow, newOrder, log="", selectSrc=None):
         rules.append(Logic.DEFAULT_ROUNDING_SPEC)
 
     packs = []
+    formulaNotes = []
+    seenFormulaCols = set()
     widths = [table.columnWidth(i) for i in range(n)]
     table.blockSignals(True)
     header = table.horizontalHeader()
@@ -1221,6 +1230,12 @@ def _applyColumnOrder(mainWindow, newOrder, log="", selectSrc=None):
                             user = Upload.getUserDict(item)
                             user[FORMULA_KEY] = newF
                             Upload.setUserDict(item, user)
+                            if src not in seenFormulaCols:
+                                seenFormulaCols.add(src)
+                                formulaNotes.append(
+                                    f"TableOps._applyColumnOrder formula col {src} -> {dest} "
+                                    f"{firstHeaderLine(h)}: {formula} -> {newF}"
+                                )
                 table.setItem(r, dest, item)
             table.setColumnWidth(dest, width)
             newMetas.append(meta)
@@ -1252,6 +1267,8 @@ def _applyColumnOrder(mainWindow, newOrder, log="", selectSrc=None):
             "DEBUG",
             f"TableOps._applyColumnOrder {log} order={list(newOrder)}",
         )
+        for note in formulaNotes:
+            Logic.logMessage("DEBUG", note)
     return True
 
 
