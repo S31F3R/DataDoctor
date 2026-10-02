@@ -43,6 +43,6 @@ On first launch with no `user.config`, **UTC offset** is set to the computer’s
 
 ## Logging
 
-**Log Viewer** on the main window toggles a tab that loads `app.log` plus `app.log.1`…`app.log.5` (newest first) and live-appends while the tab is open. Closing and reopening reloads every rotation from disk. Uncaught exceptions write full tracebacks there. Debug mode (**Options → General**) adds extra `DEBUG` lines.
+**Log Viewer** on the main window toggles a tab (Notebook icon) that loads `app.log` plus `app.log.1`…`app.log.5` (newest first) and live-appends while the tab is open. Closing and reopening reloads every rotation from disk. Uncaught exceptions write full tracebacks there. Debug mode (**Options → General**) adds extra `DEBUG` lines.
 
 Windows launch writes `startup: process begin` then `startup: imports ok`, `startup: QApplication ready`, `startup: main window shown`. If the window never appears, the last of those lines is how far Python got. Native crashes dump to `fault.log` in the same folder.

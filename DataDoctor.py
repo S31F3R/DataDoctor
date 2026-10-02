@@ -1837,6 +1837,8 @@ class uiMain(QMainWindow):
             if "Time Lag" in title:
                 return "TimeLag.png"
             return "Plotter.png"
+        if widget is self.tabLog:
+            return "Notebook.png"
         return ""
 
     def paintMainTabIcon(self, widget):
@@ -2114,7 +2116,7 @@ class uiMain(QMainWindow):
         else:
             # Log always last
             idx = self.tabWidget.addTab(content, title)
-        if key in ("graph", "plotter", "sql"):
+        if key in ("graph", "plotter", "sql", "log"):
             self.paintMainTabIcon(content)
         self.tabWidget.setCurrentIndex(idx)
         if key == 'log': self.populateLogViewer()
@@ -2192,6 +2194,7 @@ class uiMain(QMainWindow):
         if idx == -1:
             # Always open Log Viewer as the last tab (not next to the active tab)
             self.tabWidget.addTab(self.tabLog, self.logTitle)
+            self.paintMainTabIcon(self.tabLog)
             idx = self.tabWidget.indexOf(self.tabLog)
             self.tabWidget.setCurrentIndex(idx)
             self.populateLogViewer()
