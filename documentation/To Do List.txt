@@ -1,14 +1,6 @@
 ####### CURRENT TASKS #######
--Log Viewer needs its icon added to the tab
 
 ####### CURRENT BUGS #######
--One of the Windows machines I updated is going through an update loop. It goes through the .cmd until the end, shows it's starting Data Doctor.exe, then starts the process again
-    -This didn't happen during my 3.0.0 to current test
--Had another bug with equations not remembering their location when they are moved. When I say location, I mean column letter. We worked on this bug before but there are 
- a lot of comibnations of testing we may have missed. If it isn't already, maybe we add some of the information in debug to help iron out this bug? The bug showed up with 3
- columns queried. Then a 4th was inserted on the far right with an equation entered. The column was moved and set as column 2, or B. I don't remember if we did a refresh query at this 
- point or before we moved it but a refresh was done so the equation went the entire range. A 5th column was added to the end, with another equation. It was moved from the end 
- to the 3rd slot, or column C. Hit refresh then BOOM, both equation columns showed CYCLE. They remembered row #s but column letters got messed up
 
 ####### 3.5.0 FEATURES #######
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)

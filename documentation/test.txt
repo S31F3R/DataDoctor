@@ -11,35 +11,6 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[x] 3.0.0 reaches the current launcher command
-   Steps:
-     a. From a 3.0.0 install, take the in-app update. The first zip is
-        the Python zip. That updater does not download the Windows zip.
-     b. Restart. The app says this install still uses system Python and
-        will restart to finish the install. The only button is OK.
-        Download and Later are not on that box.
-     c. Click OK. A DataDoctor-Windows zip already in updates\ is used
-        and is not downloaded again. Otherwise it downloads. There is
-        no second Restart / Later box. Data Doctor closes and
-        applyUpdate runs.
-     d. Data Doctor.exe is replaced and pythonFiles\python-embed is
-        installed. A second restart appears only if the command or that
-        Python could not be replaced while they were in use.
-     e. After the app opens and that install is finished, the zip is
-        removed on its own. app.log says it removed the applied update.
-        The zip is still in updates\ if the install is not finished.
-
-[x] Query list names row and column equations
-   Steps:
-     a. Append an equation row and rename it Total. The query list shows
-        ROW EQUATION|Total at the bottom.
-     b. Type a formula in a custom column named Stage. The query list
-        shows COLUMN EQUATION|Stage.
-     c. Save the Quick Look, clear the list, and load it. Both lines
-        come back with those names.
-     d. An older Quick Look that still says ROW|Total or EQUATION|Stage
-        still loads. Saving it writes the new names.
-
 [ ] Plotter HDB uses SQL when the API misses
    Steps:
      a. Oracle credentials are saved. Plot a USBR Oracle series (LCHDB,
@@ -57,6 +28,31 @@ Current Tests
      c. On a Mac: unzip, Right-click Data Doctor.app → Open (Gatekeeper). No system Python.
      d. If blocked: Clear Quarantine.command (Right-click → Open), then the app.
      e. Optional on Mac only: python scripts/packageMac.py --app → frozen PyInstaller .app.
+
+[ ] Windows update opens the app after apply
+   Steps:
+     a. From a machine that has just applied a zip, applyUpdate.cmd runs
+        to the end, says it is keeping the zip, and starts Data Doctor.exe.
+        The app stays open.
+     b. updates\ has no *.zip sitting directly in that folder. The zip is
+        under updates\held\ until the app opens and the install is finished.
+        app.log then says it removed the applied update.
+     c. A second applyUpdate.cmd does not start by itself.
+     d. A machine already looping: close the repeating cmd, and move or
+        delete the zip sitting directly in updates\. Update again with a
+        build that parks the zip.
+
+[ ] Refresh keeps moved equation columns
+   Steps:
+     a. Query 3 series. Insert a custom column on the far right and enter
+        an equation. Move it to column B. Refresh. The formula fills the
+        new date range.
+     b. Insert a 5th column at the end with another equation. Move it to
+        column C. Refresh.
+     c. Both stay equations. Neither column shows #CYCLE!. The letters
+        still refer to the same series they did before the refresh.
+     d. With debug on, the log shows the column move (old formula to new)
+        and the refresh restore index for each equation column.
 
 Confirmed
 --------------------------------------------------------------------------------
@@ -104,4 +100,6 @@ Windows update prompt does not mention the launcher
 Same launcher does not ask for a second restart
 A real launcher change still asks for the second restart
 Equation row from the date column
+3.0.0 reaches the current launcher command
+Query list names row and column equations
 

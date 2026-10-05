@@ -10,3 +10,7 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Log Viewer tab uses the Notebook icon
+- An applied Windows zip moves under updates/held so the launcher opens the app
+- Refresh puts a moved equation column back at the column it was moved to
+
