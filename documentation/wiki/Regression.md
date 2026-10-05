@@ -82,13 +82,13 @@ The legend is a radio. Exactly one view is on.
 - One other column: observed values versus that column after the lag, with the fit line.
 - Two or more: observed versus fitted, with a 1:1 line.
 
-**Aligned** is a time plot. The series you predicted stays put. The others are shifted by their lag so the wave sits on it. Each legend row shows the lag in steps and in clock time. Those rows can be hidden; they are not extra fits.
+**Aligned** is a time plot. The series you predicted stays put. Each other series has its own lag slider, drawn in that line's color. The slider runs both ways: a negative lag means that series leads, and a positive lag means it trails. Dragging it shifts the line, refits the Y equation, and updates the stats above that slider for the time window on screen (r², NSE, ME, RMSE, and N). Zooming the time axis updates those stats again. Warnings sit under the sliders. The Y line and the lag summary are not repeated on Aligned; they stay on Relationship. Legend rows can still be hidden. They are not extra fits.
 
 Missing timestamps stay gapped.
 
 ## Equation
 
-The label under the plot repeats the equation, the lags, r², mean error (ME), RMSE, how many points were used, and the step. Warnings (short record, weak cross-check, lag on the window edge, a series left out) are on that label too. The fit is still drawn.
+On **Relationship**, the label under the plot repeats the equation, the lags, r², mean error (ME), RMSE, how many points were used, and the step. Warnings (short record, weak cross-check, lag on the window edge, a series left out) are on that label too. The fit is still drawn. On **Aligned** those warnings sit under the sliders, and the equation updates when a slider moves. Switch back to Relationship to read or copy the new Y line.
 
 Double-click the label, or right-click it and choose **Copy**. The clipboard gets a formula you can paste into a Data Query cell:
 

@@ -1,6 +1,6 @@
 # Formulas
 
-Internal **Data Query** cells can hold Excel-style formulas. Type `=` then an expression. The cell **shows the result**; upload / graph / CSV use that number. Double-click (or F2) to see and edit the formula.
+Internal **Data Query** cells can hold Excel-style formulas. Type `=` then an expression. A space after `=` is still a formula (`= 0.06*A1` and `=0.06*A1` are the same). The cell **shows the result**; upload / graph / CSV use that number. Double-click (or F2) to see and edit the formula.
 
 [Regression](Regression) can copy a paste-ready line (`=1.037*B1+8.6`). The lag is not part of that formula. The regression label tells you which row the lagged series came from.
 

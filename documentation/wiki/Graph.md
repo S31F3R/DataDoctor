@@ -2,6 +2,8 @@
 
 The **Graph** button plots the Data Query table into a Graph tab (or a detached window). You can also **Graph** from a header or cell context menu — header Graph uses **all selected columns**, not only the one you right-clicked.
 
+A formula column plots its computed number. `= 0.06*A1` (space after `=`) is included. A column with no numbers is skipped.
+
 ## Tools
 
 - Graph opens with the **Zoom** tool active.

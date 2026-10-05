@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QFileDialog, QMessageBox, QToolButton,
 )
 from core import Config, Logic, Utils, QueryUtils
+from core.Formula import FORMULA_KEY, formatFormulaResult, looksLikeFormula
 
 # Lazy matplotlib imports so startup still works if the package is missing
 _mplReady = False
@@ -520,6 +521,55 @@ def _overlaySeriesFromColumn(table, col, baseLabel, headerFirstLines=None, rows=
     return out
 
 
+def _formulaText(item):
+    if item is None:
+        return ""
+    role = item.data(Qt.ItemDataRole.UserRole)
+    if isinstance(role, dict):
+        formula = role.get(FORMULA_KEY)
+        if formula:
+            return str(formula).strip()
+    return ""
+
+
+def _plottedValue(table, item, row, col):
+    """
+    Number to graph, plus the rounded display and the hover text.
+
+    A cell that still shows `= 0.06*A1` is evaluated. A space after =
+    does not keep the column off the graph.
+    """
+    display = item.text() if item is not None and item.text() is not None else ""
+    native = ""
+    if item is not None:
+        nv = item.data(QueryUtils.NATIVE_VALUE_ROLE)
+        native = str(nv).strip() if nv not in (None, "") else ""
+    shown = native or display or ""
+    value = parseNumeric(shown)
+    rounded = parseNumeric(display)
+    if np.isfinite(value):
+        return value, rounded, (display or "").strip()
+    formula = _formulaText(item)
+    if not looksLikeFormula(formula):
+        if looksLikeFormula(display):
+            formula = str(display).strip()
+        elif looksLikeFormula(native):
+            formula = native
+        else:
+            formula = ""
+    if formula and table is not None:
+        try:
+            from core.FormulaUi import evaluateOnTable
+            text = formatFormulaResult(evaluateOnTable(table, formula, col, row))
+        except Exception:
+            text = ""
+        if text:
+            evaluated = parseNumeric(text)
+            if np.isfinite(evaluated):
+                return evaluated, evaluated, text
+    return value, rounded, (display or "").strip()
+
+
 def extractSeries(table, columns=None, rows=None, columnMetadata=None):
     """
     Read timestamps + numeric series from mainTable.
@@ -596,14 +646,7 @@ def extractSeries(table, columns=None, rows=None, columnMetadata=None):
         texts = [''] * n
         for i, r in enumerate(rows):
             item = table.item(r, c)
-            display = item.text() if item is not None else ''
-            native = ''
-            if item is not None:
-                nv = item.data(QueryUtils.NATIVE_VALUE_ROLE)
-                native = str(nv).strip() if nv not in (None, '') else (display or '')
-            vals[i] = parseNumeric(native or display)
-            rounded[i] = parseNumeric(display)
-            texts[i] = (display or '').strip()
+            vals[i], rounded[i], texts[i] = _plottedValue(table, item, r, c)
         if not np.any(np.isfinite(vals)):
             warnings.append(f"Skipped '{label}' (no numeric values).")
             continue

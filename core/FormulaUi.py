@@ -194,6 +194,10 @@ def applyCellInput(mainWindow, row: int, col: int, text: str, *, asFill=False, s
     if not equationRow and not (item.flags() & Qt.ItemFlag.ItemIsEditable):
         return False
     raw = "" if text is None else str(text).strip()
+    # "= 0.06*A1" is the same formula as "=0.06*A1". A space after = used
+    # to leave the cell as text, so Graph skipped the column.
+    if raw.startswith("="):
+        raw = "=" + raw[1:].lstrip()
     oldText = item.text() if item is not None else ""
     oldFormula = _itemFormula(item)
     oldBg, oldFg = Upload.captureItemColors(item)
@@ -760,6 +764,9 @@ class FormulaTableFilter(QObject):
                 hbar.valueChanged.connect(lambda _v: self.repositionHandle())
             if vbar is not None:
                 vbar.valueChanged.connect(lambda _v: self.repositionHandle())
+            header = table.horizontalHeader()
+            if header is not None:
+                header.sectionResized.connect(lambda *_args: self.repositionHandle())
 
     def _table(self):
         return getattr(self.mainWindow, "mainTable", None)

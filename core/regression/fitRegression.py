@@ -23,7 +23,7 @@ from core.regression.equation import (
     renderEquation,
     renderLabel,
 )
-from core.regression.lagDetect import detectLag
+from core.regression.lagDetect import detectLag, lagMaxSteps
 from core.regression.scoreRegression import blockedCvR2, effectiveN, regressionScores
 
 
@@ -44,9 +44,13 @@ class PredictorFit:
         self.label = column.label
         self.col = column.col
         self.lagSteps = int(detection.lagSteps)
+        self.detectedLag = int(detection.lagSteps)
         self.peakRho = float(detection.peakRho)
         self.agrees = bool(detection.agrees)
+        self.detectedAgrees = bool(detection.agrees)
         self.pinned = bool(detection.pinned)
+        self.detectedPinned = bool(detection.pinned)
+        self.kMax = int(getattr(detection, "kMax", 0) or 0)
         self.phi = float(detection.phi)
         self.coef = float(coef)
 
@@ -91,6 +95,9 @@ class RegressionResult:
         self.yLabel = ""
         self.aligned = []
         self.spanSeconds = 0.0
+        self.grid = None
+        self.omitted = []
+        self.lagLimit = 0
 
 
 def _refuse(message: str):
@@ -228,6 +235,144 @@ def _warnings(stepSeconds, spanSeconds, n, nEff, r2, cvR2, predictors, omitted=N
     for key, reason in omitted or []:
         out.append(f"Left out {key}: {reason}.")
     return out
+
+
+def _syncPredictorFlags(pred):
+    """Manual lags drop the split-half note. The window edge still warns."""
+    detected = int(getattr(pred, "detectedLag", pred.lagSteps))
+    if int(pred.lagSteps) == detected:
+        pred.agrees = bool(getattr(pred, "detectedAgrees", pred.agrees))
+        pred.pinned = bool(getattr(pred, "detectedPinned", pred.pinned))
+        return
+    pred.agrees = True
+    limit = int(getattr(pred, "kMax", 0) or 0)
+    pred.pinned = limit > 0 and abs(int(pred.lagSteps)) >= limit
+
+
+def _fillResult(result, grid, target, predictors, omitted, indices, design, y, coef, yhat, A, r2, me, rmse):
+    """Write equation, warnings, aligned series, and the relationship scatter."""
+    step = float(grid.stepSeconds)
+    for i, pred in enumerate(predictors):
+        pred.coef = float(coef[i + 1])
+        _syncPredictorFlags(pred)
+
+    origin = grid.origin
+    pairTimes = [origin + timedelta(seconds=int(i) * step) for i in indices]
+    span = 0.0
+    if len(pairTimes) >= 2:
+        span = (pairTimes[-1] - pairTimes[0]).total_seconds()
+
+    nEff = effectiveN(y)
+    cvR2 = blockedCvR2(A, y)
+    warnings = _warnings(step, span, int(y.size), nEff, r2, cvR2, predictors, omitted)
+    terms = [(pred.key, pred.coef, pred.lagSteps) for pred in predictors]
+    equationText, copyText = renderEquation(terms, float(coef[0]))
+    stepLabel = formatStep(step)
+    lagParts = [(pred.key, pred.lagSteps, step) for pred in predictors]
+    labelText = renderLabel(
+        equationText, copyText, lagParts, r2, me, rmse, int(y.size), stepLabel, warnings,
+    )
+    figureText = (
+        f"{equationText}\n"
+        f"r² = {formatNumber(r2)}   ME = {formatNumber(me)}   "
+        f"RMSE = {formatNumber(rmse)}   N = {int(y.size)}"
+    )
+
+    result.grid = grid
+    result.omitted = list(omitted or [])
+    result.lagLimit = int(lagMaxSteps(step))
+    result.targetKey = target.key
+    result.targetLabel = target.label
+    result.targetCol = int(getattr(target, "col", result.targetCol))
+    result.predictors = predictors
+    result.intercept = float(coef[0])
+    result.r2 = float(r2)
+    result.me = float(me)
+    result.rmse = float(rmse)
+    result.n = int(y.size)
+    result.nEff = float(nEff)
+    result.cvR2 = None if cvR2 is None else float(cvR2)
+    result.equationText = equationText
+    result.copyText = copyText
+    result.labelText = labelText
+    result.figureText = figureText
+    result.warnings = warnings
+    result.stepSeconds = step
+    result.stepLabel = stepLabel
+    result.spanSeconds = float(span)
+    result.aligned = _aligned(grid, target, predictors)
+
+    if len(predictors) == 1:
+        pred = predictors[0]
+        result.scatterMode = "lagged"
+        result.scatterX = np.asarray(design[:, 0], dtype=float)
+        result.scatterY = np.asarray(y, dtype=float)
+        x0 = float(np.min(result.scatterX))
+        x1 = float(np.max(result.scatterX))
+        result.lineX = np.array([x0, x1], dtype=float)
+        result.lineY = result.intercept + pred.coef * result.lineX
+        clock = formatClock(pred.lagSteps * step)
+        result.xLabel = f"{pred.key} lagged ({formatSteps(pred.lagSteps)}, {clock})"
+        result.yLabel = target.label or target.key
+    else:
+        result.scatterMode = "fitted"
+        result.scatterX = np.asarray(yhat, dtype=float)
+        result.scatterY = np.asarray(y, dtype=float)
+        lo = float(min(np.min(result.scatterX), np.min(result.scatterY)))
+        hi = float(max(np.max(result.scatterX), np.max(result.scatterY)))
+        result.lineX = np.array([lo, hi], dtype=float)
+        result.lineY = np.array([lo, hi], dtype=float)
+        result.xLabel = "Fitted"
+        result.yLabel = "Observed"
+    return result
+
+
+def applyLags(result, lagByKey):
+    """
+    Refit the same predictors at new lags.
+
+    Slider lags replace the cross-correlation pick. A lag with no overlap
+    is put back and the equation is left as it was.
+    Returns (True, "") or (False, message).
+    """
+    if result is None or getattr(result, "grid", None) is None:
+        return False, "Regression has no series to shift."
+    predictors = list(result.predictors or [])
+    if not predictors:
+        return False, "Regression has no series to shift."
+    limit = int(result.lagLimit or 0)
+    previous = {pred.key: int(pred.lagSteps) for pred in predictors}
+    for pred in predictors:
+        if pred.key not in (lagByKey or {}):
+            continue
+        try:
+            lag = int(lagByKey[pred.key])
+        except (TypeError, ValueError):
+            continue
+        if limit > 0:
+            lag = max(-limit, min(limit, lag))
+        pred.lagSteps = lag
+    built = _completeDesign(result.grid, result.targetKey, predictors)
+    if built is None:
+        for pred in predictors:
+            pred.lagSteps = previous.get(pred.key, pred.lagSteps)
+        return False, "No overlap left after that lag."
+    indices, design, y = built
+    fitted = _fitOls(design, y)
+    if fitted is None:
+        for pred in predictors:
+            pred.lagSteps = previous.get(pred.key, pred.lagSteps)
+        return False, "The target does not vary at that lag."
+    coef, yhat, A, r2, me, rmse = fitted
+    target = type("Target", (), {})()
+    target.key = result.targetKey
+    target.label = result.targetLabel
+    target.col = result.targetCol
+    _fillResult(
+        result, result.grid, target, predictors, result.omitted,
+        indices, design, y, coef, yhat, A, r2, me, rmse,
+    )
+    return True, ""
 
 
 def _aligned(grid, target, predictors):
@@ -385,66 +530,9 @@ def fitColumns(columns, targetIndex: int):
             "Record is shorter than a few travel times, so the lag is not trustworthy."
         )
 
-    nEff = effectiveN(y)
-    cvR2 = blockedCvR2(A, y)
-    warnings = _warnings(step, span, n, nEff, r2, cvR2, predictors, omitted)
-
-    terms = [(pred.key, pred.coef, pred.lagSteps) for pred in predictors]
-    equationText, copyText = renderEquation(terms, float(coef[0]))
-    stepLabel = formatStep(step)
-    lagParts = [(pred.key, pred.lagSteps, step) for pred in predictors]
-    labelText = renderLabel(
-        equationText, copyText, lagParts, r2, me, rmse, n, stepLabel, warnings,
-    )
-    figureText = (
-        f"{equationText}\n"
-        f"r² = {formatNumber(r2)}   ME = {formatNumber(me)}   "
-        f"RMSE = {formatNumber(rmse)}   N = {n}"
-    )
-
     result = RegressionResult()
-    result.targetKey = target.key
-    result.targetLabel = target.label
-    result.targetCol = target.col
-    result.predictors = predictors
-    result.intercept = float(coef[0])
-    result.r2 = float(r2)
-    result.me = float(me)
-    result.rmse = float(rmse)
-    result.n = n
-    result.nEff = float(nEff)
-    result.cvR2 = None if cvR2 is None else float(cvR2)
-    result.equationText = equationText
-    result.copyText = copyText
-    result.labelText = labelText
-    result.figureText = figureText
-    result.warnings = warnings
-    result.stepSeconds = float(step)
-    result.stepLabel = stepLabel
-    result.spanSeconds = float(span)
-    result.aligned = _aligned(grid, target, predictors)
-
-    if len(predictors) == 1:
-        pred = predictors[0]
-        result.scatterMode = "lagged"
-        result.scatterX = np.asarray(design[:, 0], dtype=float)
-        result.scatterY = np.asarray(y, dtype=float)
-        x0 = float(np.min(result.scatterX))
-        x1 = float(np.max(result.scatterX))
-        result.lineX = np.array([x0, x1], dtype=float)
-        result.lineY = result.intercept + pred.coef * result.lineX
-        clock = formatClock(pred.lagSteps * step)
-        result.xLabel = f"{pred.key} lagged ({formatSteps(pred.lagSteps)}, {clock})"
-        result.yLabel = target.label or target.key
-    else:
-        result.scatterMode = "fitted"
-        result.scatterX = np.asarray(yhat, dtype=float)
-        result.scatterY = np.asarray(y, dtype=float)
-        lo = float(min(np.min(result.scatterX), np.min(result.scatterY)))
-        hi = float(max(np.max(result.scatterX), np.max(result.scatterY)))
-        result.lineX = np.array([lo, hi], dtype=float)
-        result.lineY = np.array([lo, hi], dtype=float)
-        result.xLabel = "Fitted"
-        result.yLabel = "Observed"
-
+    _fillResult(
+        result, grid, target, predictors, omitted,
+        indices, design, y, coef, yhat, A, r2, me, rmse,
+    )
     return result, None

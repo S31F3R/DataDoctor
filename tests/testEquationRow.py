@@ -296,8 +296,68 @@ def testRefreshKeepsEquationColumns():
     return 0
 
 
+def testSpacedFormulaGraphs():
+    """A formula cell whose text still has a space after = is numeric on a graph."""
+    app = QApplication.instance() or QApplication([])
+    table = QTableWidget(4, 2)
+    table.setHorizontalHeaderLabels(["Gage", "Equation"])
+    for r in range(4):
+        table.setVerticalHeaderItem(r, QTableWidgetItem(f"01/0{r + 1}/26 00:00"))
+        table.setItem(r, 0, QTableWidgetItem(str(10 + r)))
+    raw = QTableWidgetItem("= 0.0613*A1 + 41.116")
+    table.setItem(0, 1, raw)
+    from ui.uiGraph import extractSeries
+    import numpy as np
+    _ts, _texts, series, warnings = extractSeries(
+        table, columns=[1], rows=[0, 1, 2, 3],
+        columnMetadata=[{"type": "normal"}, {"type": "custom"}],
+    )
+    if warnings and not series:
+        return fail("spaceGraph", warnings)
+    if not series or not np.any(np.isfinite(series[0][1])):
+        return fail("spaceGraph", warnings or "no series")
+    if not np.isclose(series[0][1][0], 0.0613 * 10 + 41.116, rtol=1e-6):
+        return fail("spaceGraph", series[0][1][0])
+    _ = app
+    return 0
+
+
+def testFillHandleFollowsColumnResize():
+    from PyQt6.QtWidgets import QWidget
+    from core.FormulaUi import installOnTable
+    app = QApplication.instance() or QApplication([])
+
+    class Host(QWidget):
+        def __init__(self):
+            super().__init__()
+
+    host = Host()
+    host.columnMetadata = [{"type": "custom"}, {"type": "custom"}]
+    host.mainTable = QTableWidget(3, 2)
+    host.mainTable.setItem(0, 0, QTableWidgetItem("1"))
+    host.mainTable.resize(480, 240)
+    host.mainTable.show()
+    installOnTable(host)
+    host.mainTable.setCurrentCell(0, 0)
+    app.processEvents()
+    handle = host.mainTable._formulaFilter._handle
+    if handle is None or not handle.isVisible():
+        return fail("handle", "fill square is not showing")
+    before = handle.x()
+    host.mainTable.setColumnWidth(0, host.mainTable.columnWidth(0) + 48)
+    app.processEvents()
+    if handle.x() == before:
+        return fail("handle", f"stayed at {before}")
+    _ = app
+    return 0
+
+
 def main():
-    errors = testCoverRowsAbove() + testParseRow() + testTable() + testRefreshKeepsEquationColumns()
+    errors = (
+        testCoverRowsAbove() + testParseRow() + testTable()
+        + testRefreshKeepsEquationColumns()
+        + testSpacedFormulaGraphs() + testFillHandleFollowsColumnResize()
+    )
     if errors:
         print(f"{errors} failed")
         return 1

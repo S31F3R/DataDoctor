@@ -2116,7 +2116,7 @@ class uiMain(QMainWindow):
         else:
             # Log always last
             idx = self.tabWidget.addTab(content, title)
-        if key in ("graph", "plotter", "sql", "log"):
+        if key in ("graph", "plotter", "regression", "sql", "log"):
             self.paintMainTabIcon(content)
         self.tabWidget.setCurrentIndex(idx)
         if key == 'log': self.populateLogViewer()

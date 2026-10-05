@@ -1,5 +1,6 @@
 # uiRegression.py
 # Right-click Regression: one lagged fit, two views (Relationship / Aligned).
+# Aligned has one lag slider per predictor. Moving it refits Y.
 # Does not write the query table. The user copies the equation into Formulas.
 
 from __future__ import annotations
@@ -16,10 +17,12 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QHBoxLayout,
     QLabel,
     QMenu,
     QMessageBox,
     QSizePolicy,
+    QSlider,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -29,7 +32,7 @@ from core import Config, Logic, QueryUtils, Utils
 from core.Formula import colToLetters
 from core.plotLag import viewPairScores
 from core.regression.equation import formatClock, formatNumber, formatSteps
-from core.regression.fitRegression import SeriesColumn, fitColumns
+from core.regression.fitRegression import SeriesColumn, applyLags, fitColumns
 from ui.uiGraph import (
     _LEGEND_OFF,
     _LEGEND_ON,
@@ -382,6 +385,20 @@ class RegressionPanel(QWidget):
         self._equation.hide()
         self._layout.addWidget(self._equation)
 
+        self.lagHost = QWidget(self)
+        self.lagHostLayout = QVBoxLayout(self.lagHost)
+        self.lagHostLayout.setContentsMargins(8, 0, 8, 6)
+        self.lagHostLayout.setSpacing(2)
+        self.lagRows = []
+        self._lagWarnings = QLabel("", self.lagHost)
+        self._lagWarnings.setWordWrap(True)
+        self.lagHostLayout.addWidget(self._lagWarnings)
+        self._layout.addWidget(self.lagHost)
+        self.lagHost.hide()
+        self._lagNote = ""
+        self._drawing = False
+        self._xlimCid = None
+
         self.figure = None
         self.canvas = None
         self.toolbar = None
@@ -450,33 +467,45 @@ class RegressionPanel(QWidget):
         self._ax = fig.add_subplot(111)
         self._pressCid = self.canvas.mpl_connect("button_press_event", self._onPress)
         self._hoverCid = self.canvas.mpl_connect("motion_notify_event", self._onHover)
+        try:
+            self._xlimCid = self._ax.callbacks.connect("xlim_changed", self._onXLim)
+        except Exception:
+            self._xlimCid = None
 
     def _drawCurrent(self):
         result = self._result
         if result is None or self._ax is None:
             return
-        ax = self._ax
-        ax.clear()
-        self._legend = None
-        self._lineData = []
-        theme = self._applyTheme(self.figure, ax)
-        self._theme = theme
-        colors = self._colorCycle(theme)
-        if self._view == "aligned":
-            self._drawAligned(ax, colors, theme)
-        else:
-            self._drawRelationship(ax, colors, theme)
-        self._annotate(ax, theme)
-        self._buildLegend(theme)
-        self._styleEquation()
-        self._equation.setText(self.currentLabelText())
-        self._equation.show()
+        self._drawing = True
         try:
-            ax.ticklabel_format(axis="y", useOffset=False)
-        except Exception:
-            pass
-        if self.canvas is not None:
-            self.canvas.draw_idle()
+            ax = self._ax
+            ax.clear()
+            self._legend = None
+            self._lineData = []
+            theme = self._applyTheme(self.figure, ax)
+            self._theme = theme
+            colors = self._colorCycle(theme)
+            if self._view == "aligned":
+                self._drawAligned(ax, colors, theme)
+            else:
+                self._drawRelationship(ax, colors, theme)
+            self._annotate(ax, theme)
+            self._buildLegend(theme)
+            self._styleEquation()
+            if self._view == "aligned":
+                self._equation.hide()
+            else:
+                self._equation.setText(self.currentLabelText())
+                self._equation.show()
+            try:
+                ax.ticklabel_format(axis="y", useOffset=False)
+            except Exception:
+                pass
+            self._syncLagChrome()
+            if self.canvas is not None:
+                self.canvas.draw_idle()
+        finally:
+            self._drawing = False
 
     def _drawRelationship(self, ax, colors, theme):
         result = self._result
@@ -554,28 +583,27 @@ class RegressionPanel(QWidget):
             ax.grid(True, alpha=0.3)
 
     def currentLabelText(self):
-        """Relationship keeps the fit. Aligned scores the shifted hydrographs, including NSE."""
+        """Relationship keeps the fit. Aligned saves the slider stats and warnings."""
         result = self._result
         if result is None:
             return ""
         if self._view != "aligned":
             return result.labelText or ""
         lines = []
-        if result.equationText:
-            lines.append(result.equationText)
-        bits = []
-        for pred in result.predictors or []:
-            clock = formatClock(float(pred.lagSteps) * float(result.stepSeconds or 0))
-            bits.append(f"lag {pred.key} = {formatSteps(pred.lagSteps)} ({clock})")
-        if bits:
-            lines.append("   ".join(bits))
-        lines.extend(self._alignedScoreLines())
-        if result.stepLabel:
-            lines.append(f"dt = {result.stepLabel}")
-        for warning in result.warnings or []:
+        for row in self.lagRows:
+            stats = row.get("stats")
+            text = stats.text().strip() if stats is not None else ""
+            key = row.get("key") or ""
+            if text:
+                lines.append(f"{key}: {text}" if key else text)
+        if not lines:
+            lines.extend(self._alignedScoreLines())
+        for warning in list(result.warnings or []):
             text = str(warning).strip()
             if text:
                 lines.append(f"Warning: {text}")
+        if self._lagNote:
+            lines.append(f"Warning: {self._lagNote}")
         return "\n".join(lines)
 
     def _alignedScoreLines(self):
@@ -612,10 +640,10 @@ class RegressionPanel(QWidget):
         )
 
     def _annotate(self, ax, theme):
+        # Aligned stats live on the sliders. Relationship keeps the fit note.
         if self._view == "aligned":
-            text = "\n".join(self._alignedScoreLines())
-        else:
-            text = (self._result.figureText if self._result is not None else "") or ""
+            return
+        text = (self._result.figureText if self._result is not None else "") or ""
         if not text:
             return
         if theme == "retro":
@@ -855,6 +883,226 @@ class RegressionPanel(QWidget):
                 tb._zoom_info = None
         except Exception:
             pass
+
+    def _onXLim(self, _ax):
+        if self._drawing or self._view != "aligned":
+            return
+        self.refreshLagStats()
+
+    def sliderStyle(self, color):
+        return (
+            "QSlider::groove:horizontal { height: 4px; background: rgba(128,128,128,90); border-radius: 2px; }"
+            "QSlider::handle:horizontal {"
+            f" background: {color}; width: 16px; margin: -6px 0; border-radius: 8px;"
+            "}"
+        )
+
+    def clearLagRows(self):
+        for row in self.lagRows:
+            slider = row.get("slider")
+            widget = row.get("widget")
+            if slider is not None:
+                slider.blockSignals(True)
+            if widget is not None:
+                self.lagHostLayout.removeWidget(widget)
+                widget.setParent(None)
+                widget.deleteLater()
+        self.lagRows = []
+
+    def rebuildLagRows(self):
+        """One slider per predictor. Handle, stats, and step text use that line's color."""
+        self.clearLagRows()
+        result = self._result
+        if result is None:
+            return
+        colors = self._colorCycle(self._theme or "light")
+        limit = int(result.lagLimit or 0)
+        for i, pred in enumerate(result.predictors or []):
+            color = colors[(i + 1) % len(colors)]
+            wrap = QWidget(self.lagHost)
+            outer = QVBoxLayout(wrap)
+            outer.setContentsMargins(0, 2, 0, 2)
+            outer.setSpacing(0)
+            stats = QLabel("", wrap)
+            stats.setWordWrap(True)
+            outer.addWidget(stats)
+            bar = QWidget(wrap)
+            layout = QHBoxLayout(bar)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(8)
+            slider = QSlider(Qt.Orientation.Horizontal, bar)
+            slider.setMinimum(-limit if limit > 0 else 0)
+            slider.setMaximum(limit if limit > 0 else 0)
+            slider.setValue(int(pred.lagSteps))
+            slider.setEnabled(limit > 0)
+            slider.setSingleStep(1)
+            slider.setPageStep(1)
+            readout = QLabel("", bar)
+            readout.setMinimumWidth(180)
+            layout.addWidget(slider, stretch=1)
+            layout.addWidget(readout)
+            outer.addWidget(bar)
+            # Warnings stay last.
+            self.lagHostLayout.insertWidget(max(0, self.lagHostLayout.count() - 1), wrap)
+            slider.valueChanged.connect(
+                lambda value, key=pred.key: self.onLagSlider(key, value)
+            )
+            self.lagRows.append({
+                "key": pred.key,
+                "index": i,
+                "slider": slider,
+                "readout": readout,
+                "stats": stats,
+                "widget": wrap,
+                "color": color,
+            })
+        self.recolorLagRows()
+
+    def recolorLagRows(self):
+        colors = self._colorCycle(self._theme or "light")
+        for row in self.lagRows:
+            color = colors[(row["index"] + 1) % len(colors)]
+            row["color"] = color
+            stats = row.get("stats")
+            readout = row.get("readout")
+            slider = row.get("slider")
+            if stats is not None:
+                stats.setStyleSheet(f"color: {color};")
+            if readout is not None:
+                readout.setStyleSheet(f"color: {color};")
+            if slider is not None:
+                slider.setStyleSheet(self.sliderStyle(color))
+        theme = self._theme or "light"
+        if theme == "retro":
+            warnColor = "#00FF00"
+        elif theme == "dark":
+            warnColor = "#e0e0e0"
+        else:
+            warnColor = "#222222"
+        if self._lagWarnings is not None:
+            self._lagWarnings.setStyleSheet(f"color: {warnColor};")
+
+    def _syncSliderValues(self):
+        byKey = {pred.key: pred for pred in (self._result.predictors if self._result else []) or []}
+        limit = int(self._result.lagLimit or 0) if self._result is not None else 0
+        for row in self.lagRows:
+            pred = byKey.get(row["key"])
+            slider = row.get("slider")
+            if pred is None or slider is None:
+                continue
+            slider.blockSignals(True)
+            if limit > 0:
+                slider.setMinimum(-limit)
+                slider.setMaximum(limit)
+                slider.setEnabled(True)
+            slider.setValue(int(pred.lagSteps))
+            slider.blockSignals(False)
+
+    def _syncLagChrome(self):
+        if self._result is None or self._view != "aligned":
+            if self.lagHost is not None:
+                self.lagHost.hide()
+            return
+        keys = [pred.key for pred in (self._result.predictors or [])]
+        if [row.get("key") for row in self.lagRows] != keys:
+            self.rebuildLagRows()
+        else:
+            self.recolorLagRows()
+            self._syncSliderValues()
+        self.refreshLagReadouts()
+        self.refreshLagStats()
+        self.refreshLagWarnings()
+        if self.lagHost is not None:
+            self.lagHost.show()
+
+    def refreshLagReadouts(self):
+        result = self._result
+        if result is None:
+            return
+        byKey = {pred.key: pred for pred in result.predictors or []}
+        step = float(result.stepSeconds or 0)
+        for row in self.lagRows:
+            pred = byKey.get(row["key"])
+            readout = row.get("readout")
+            if pred is None or readout is None:
+                continue
+            clock = formatClock(float(pred.lagSteps) * step)
+            readout.setText(f"{pred.key}  {formatSteps(pred.lagSteps)} ({clock})")
+
+    def refreshLagStats(self):
+        """r², NSE, ME, RMSE, and N for the visible window, one line per slider."""
+        result = self._result
+        series = list(result.aligned or []) if result is not None else []
+        if len(series) < 2:
+            for row in self.lagRows:
+                stats = row.get("stats")
+                if stats is not None:
+                    stats.setText("Not enough overlap")
+            return
+        target = np.asarray(series[0].values, dtype=float)
+        times = list(series[0].times or [])
+        if times and mdates is not None:
+            x = np.asarray(mdates.date2num(times), dtype=float)
+        else:
+            x = np.arange(target.size, dtype=float)
+        x0, x1 = -1.0, float(target.size) + 1.0
+        if self._ax is not None and times and mdates is not None:
+            try:
+                x0, x1 = self._ax.get_xlim()
+            except Exception:
+                pass
+        byKey = {item.key: item for item in series}
+        for row in self.lagRows:
+            stats = row.get("stats")
+            item = byKey.get(row["key"])
+            if stats is None:
+                continue
+            if item is None:
+                stats.setText("Not enough overlap")
+                continue
+            scores = viewPairScores(
+                x, target, np.asarray(item.values, dtype=float), x0, x1,
+            )
+            stats.setText(self._sliderStatLine(scores))
+
+    def _sliderStatLine(self, scores):
+        count = int((scores or {}).get("n") or 0)
+        if count < 3:
+            return "Not enough overlap in view"
+        def piece(label, key):
+            value = scores.get(key)
+            shown = "—" if value is None else formatNumber(value)
+            return f"{label} = {shown}"
+        return (
+            f"{piece('r²', 'r2')}   {piece('NSE', 'nse')}   "
+            f"{piece('ME', 'me')}   {piece('RMSE', 'rmse')}   N = {count}"
+        )
+
+    def refreshLagWarnings(self):
+        result = self._result
+        lines = []
+        for warning in (result.warnings if result is not None else []) or []:
+            text = str(warning).strip()
+            if text:
+                lines.append(f"Warning: {text}")
+        if self._lagNote:
+            lines.append(f"Warning: {self._lagNote}")
+        if self._lagWarnings is not None:
+            self._lagWarnings.setText("\n".join(lines))
+            self._lagWarnings.setVisible(bool(lines))
+
+    def onLagSlider(self, key, value):
+        if self._drawing or self._result is None:
+            return
+        ok, message = applyLags(self._result, {key: int(value)})
+        if not ok:
+            self._lagNote = message or "That lag was not used."
+            self._syncSliderValues()
+            self.refreshLagReadouts()
+            self.refreshLagWarnings()
+            return
+        self._lagNote = ""
+        self._drawCurrent()
 
     def _colorCycle(self, theme):
         if theme == "retro":

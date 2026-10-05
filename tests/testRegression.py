@@ -15,7 +15,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from core.regression.cliRegression import main as cliMain
-from core.regression.fitRegression import SeriesColumn, fitColumns
+from core.regression.fitRegression import SeriesColumn, applyLags, fitColumns
 
 
 def column(key, label, col, values, step=900, start=None):
@@ -407,6 +407,58 @@ def testLagFillStartsOnRow4():
     return 0
 
 
+def testSliderRefit():
+    """A new lag refits Y and shifts the aligned line. The window edge clamps."""
+    rng = np.random.default_rng(0)
+    n = 960
+    a = rng.normal(size=n)
+    d = rng.normal(size=n)
+    y = np.full(n, np.nan)
+    for t in range(n):
+        ta = t - 3
+        td = t + 2
+        if 0 <= ta < n and 0 <= td < n:
+            y[t] = 1.037 * a[ta] + 0.214 * d[td] + 8.6
+    result, err = fitColumns(
+        [
+            column("A", "upstream", 0, a),
+            column("D", "side", 3, d),
+            column("C", "target", 2, y),
+        ],
+        2,
+    )
+    if err:
+        return fail("slider", err)
+    if result.grid is None or int(result.lagLimit) < 3:
+        return fail("slider", f"grid {result.grid} limit {result.lagLimit}")
+    ok, message = applyLags(result, {"A": -4})
+    if not ok:
+        return fail("slider", message)
+    byKey = {p.key: p for p in result.predictors}
+    if byKey["A"].lagSteps != -4:
+        return fail("slider", byKey["A"].lagSteps)
+    if abs(byKey["A"].coef - 1.037) < 1e-3:
+        return fail("slider", f"equation did not change {result.equationText}")
+    if "Y = " not in result.equationText or "*A" not in result.equationText:
+        return fail("slider", result.equationText)
+    aligned = {s.key: s for s in result.aligned}
+    if not np.isclose(aligned["A"].values[10], a[6]):
+        return fail("slider", f"aligned {aligned['A'].values[10]} src {a[6]}")
+    if "-4 steps" not in result.labelText:
+        return fail("slider", result.labelText)
+    limit = int(result.lagLimit)
+    ok, message = applyLags(result, {"A": limit + 50})
+    if not ok or byKey["A"].lagSteps != limit:
+        return fail("slider", f"clamp {byKey['A'].lagSteps} {message}")
+    if not byKey["A"].pinned:
+        return fail("slider", "edge lag should warn")
+    ok, message = applyLags(result, {"A": -3})
+    if not ok or abs(byKey["A"].coef - 1.037) > 1e-6:
+        return fail("slider", f"restore {result.equationText} {message}")
+    print("ok slider")
+    return 0
+
+
 def testFormulaKeepsA1():
     from core.Formula import templateAtRowZero
     if templateAtRowZero("=1.037*B1+0.214*D1+8.6", 8) != "=1.037*B1+0.214*D1+8.6":
@@ -466,6 +518,7 @@ def main():
         testColumnLettersFollowInsertAndMove,
         testSavedAnchorRowIsRow4,
         testLagFillStartsOnRow4,
+        testSliderRefit,
         testFormulaKeepsA1,
         testCli,
     ):
