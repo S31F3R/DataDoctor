@@ -11,6 +11,41 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
+[ ] Aligned lag sliders refit the equation
+   Steps:
+     a. Run Regression on two or more series. Open the Regression tab and
+        choose Aligned.
+     b. Each series except the one you predicted has a slider in that line's
+        color. r², NSE, ME, RMSE, and N sit above the slider. The readout
+        shows the lag in steps and clock time. Warnings sit under the sliders.
+     c. Aligned does not repeat the Y line or the lag summary. Relationship
+        still shows them.
+     d. Move a slider. That line shifts, its stats change, and Relationship's
+        Y equation uses the new lag.
+     e. Zoom the time axis. The stats above the sliders follow the visible window.
+
+[ ] Fill handle follows a column resize
+   Steps:
+     a. Select a cell that shows the green fill square.
+     b. Drag that column's right edge. The square stays on the bottom-right
+        corner of the cell. It does not wait until you click another cell.
+
+[ ] A formula with a space after = still graphs
+   Steps:
+     a. Insert a custom column. Enter = 0.0613*A1 + 41.116 with a space after =.
+        The cell shows a number, not the formula text.
+     b. Graph that column together with the series it uses. The equation
+        column is on the graph.
+     c. Graph only that column. It plots. It does not say
+        "No numeric series found to graph."
+
+[ ] Regression tab icon comes back after detach
+   Steps:
+     a. Open Regression. The tab shows the regression icon.
+     b. Right-click the tab, choose Detach, then right-click the floating tab
+        and choose Attach.
+     c. The regression icon is on the tab again.
+
 [ ] Plotter HDB uses SQL when the API misses
    Steps:
      a. Oracle credentials are saved. Plot a USBR Oracle series (LCHDB,
@@ -41,18 +76,6 @@ Current Tests
      d. A machine already looping: close the repeating cmd, and move or
         delete the zip sitting directly in updates\. Update again with a
         build that parks the zip.
-
-[x] Refresh keeps moved equation columns
-   Steps:
-     a. Query 3 series. Insert a custom column on the far right and enter
-        an equation. Move it to column B. Refresh. The formula fills the
-        new date range.
-     b. Insert a 5th column at the end with another equation. Move it to
-        column C. Refresh.
-     c. Both stay equations. Neither column shows #CYCLE!. The letters
-        still refer to the same series they did before the refresh.
-     d. With debug on, the log shows the column move (old formula to new)
-        and the refresh restore index for each equation column.
 
 Confirmed
 --------------------------------------------------------------------------------
@@ -102,4 +125,5 @@ A real launcher change still asks for the second restart
 Equation row from the date column
 3.0.0 reaches the current launcher command
 Query list names row and column equations
+Refresh keeps moved equation columns
 

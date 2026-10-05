@@ -1,16 +1,6 @@
 ####### CURRENT TASKS #######
--On the regression, lets give the "Aligned" tab the lag sliders we use on Plotter-Time Lag. This means we can replace the current way to show the stats. Use the same logic
- we use for colors and stats per line and allow the stats to change when the slider moves. When the slider moves, readjust the Y equation. Can also remove the Lag summary and Y
- lines from aligned. We just want the Plotter-Time Lag colors, sliders, r squared for each, and the warnings. Put warnings below all sliders
 
 ####### CURRENT BUGS #######
--When I resize a column in the Data Query tab, the little square box used to drag an equation down doesn't resize with it. It keeps its location until I click a new cell
--I have a queried column with 2 inserted columns next to it. One is a regression equation, the other is a delta equation. When I try to graph all 3, 
- I only get the queried data and the delta
-    -I tried to just graph the regression column and the error I get is "No numeric series found to graph"
-        -Found the issue. There was a space after my = sign when creating the equation. This is what I had: = 0.0613*A6 + 0.1978*B13 + 0.915*E19 - 0.1969*F22 + 41.116
-         This is what fixed it: =0.0613*A6 + 0.1978*B13 + 0.915*E19 - 0.1969*F22 + 41.116
--If Regression gets detached and reattached, the tab icon goes away
 
 ####### 3.5.0 FEATURES #######
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)

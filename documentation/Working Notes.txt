@@ -13,4 +13,8 @@ resets this file to this template.
 - Log Viewer tab uses the Notebook icon
 - An applied Windows zip moves under updates/held so the launcher opens the app
 - Refresh puts a moved equation column back at the column it was moved to
+- Aligned regression uses a lag slider per series and refits the equation when a slider moves
+- Fill handle stays on the cell corner when a column is resized
+- A formula with a space after = still graphs
+- Regression tab icon returns after the tab is detached and attached
 
