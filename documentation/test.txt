@@ -11,7 +11,7 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
-[ ] Aligned lag sliders refit the equation
+[x] Aligned lag sliders refit the equation
    Steps:
      a. Run Regression on two or more series. Open the Regression tab and
         choose Aligned.
@@ -24,13 +24,13 @@ Current Tests
         Y equation uses the new lag.
      e. Zoom the time axis. The stats above the sliders follow the visible window.
 
-[ ] Fill handle follows a column resize
+[x] Fill handle follows a column resize
    Steps:
      a. Select a cell that shows the green fill square.
      b. Drag that column's right edge. The square stays on the bottom-right
         corner of the cell. It does not wait until you click another cell.
 
-[ ] A formula with a space after = still graphs
+[x] A formula with a space after = still graphs
    Steps:
      a. Insert a custom column. Enter = 0.0613*A1 + 41.116 with a space after =.
         The cell shows a number, not the formula text.
@@ -39,7 +39,7 @@ Current Tests
      c. Graph only that column. It plots. It does not say
         "No numeric series found to graph."
 
-[ ] Regression tab icon comes back after detach
+[x] Regression tab icon comes back after detach
    Steps:
      a. Open Regression. The tab shows the regression icon.
      b. Right-click the tab, choose Detach, then right-click the floating tab
