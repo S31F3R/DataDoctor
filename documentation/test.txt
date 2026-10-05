@@ -42,7 +42,7 @@ Current Tests
         delete the zip sitting directly in updates\. Update again with a
         build that parks the zip.
 
-[ ] Refresh keeps moved equation columns
+[x] Refresh keeps moved equation columns
    Steps:
      a. Query 3 series. Insert a custom column on the far right and enter
         an equation. Move it to column B. Refresh. The formula fills the
