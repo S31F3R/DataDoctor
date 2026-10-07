@@ -10,3 +10,5 @@ publishRelease.py copies these bullets under ## Changes in
 documentation/releases/vVERSION.md (no Working Notes heading), then
 resets this file to this template.
 
+- Importing a profile refreshes an open SQL tab's categories and snippets, and refreshes open database lists
+

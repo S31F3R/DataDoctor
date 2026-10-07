@@ -11,6 +11,19 @@ publishRelease.py folds any titles missed in the change list, then clears this.
 
 Current Tests
 --------------------------------------------------------------------------------
+[ ] Profile import refreshes an open SQL tab
+   Steps:
+     a. Open SQL Query Builder. Note the category dropdown and the snippet list.
+     b. Options → General → Import a profile zip that includes SQL Quick Looks.
+        Choose With categories.
+     c. Leave the SQL tab open. The category dropdown includes categories from
+        the zip, and the snippet list shows the snippets for the selected
+        category. You do not close the tab.
+     d. If the zip also has Config, the SQL database dropdown and an already
+        open Query window's database dropdown match that access list.
+     e. Already-open Query and Plotter Quick Look dropdowns include imported
+        names. An open Data Dictionary reloads.
+
 [ ] Plotter HDB uses SQL when the API misses
    Steps:
      a. Oracle credentials are saved. Plot a USBR Oracle series (LCHDB,
