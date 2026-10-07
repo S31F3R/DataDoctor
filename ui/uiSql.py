@@ -1504,6 +1504,13 @@ class SqlWorkbench:
         self.win.saveSnippetOrder()
         return True
 
+    def reloadSnippets(self):
+        """Reload categories and the snippet list from disk and user.config."""
+        if getattr(self, "cbCategory", None) is None:
+            return False
+        self._loadCategories()
+        return True
+
     def refresh(self):
         """Called when the SQL tab is shown."""
         config = Utils.loadConfig()

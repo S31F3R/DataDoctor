@@ -48,7 +48,7 @@ Relative custom rules (and Prev Day / Prev Week) refresh when you **load** and w
 
 Import **merges**. Existing files with the same name prompt **Overwrite**, **Skip**, or **Rename** (and Overwrite all / Skip all when more than one clash remains). Nothing is wiped just because it was not in the zip.
 
-SQL Quick Looks export a `categories.json` sidecar. On import you choose **With categories** (keep folder assignments from the zip) or **Without categories** (new snippets go to Uncategorized).
+SQL Quick Looks export a `categories.json` sidecar. On import you choose **With categories** (keep folder assignments from the zip) or **Without categories** (new snippets go to Uncategorized). An SQL Query Builder tab that is already open reloads its categories and snippets when the import finishes. An imported Config also refreshes the database lists on that tab and on an open Query window.
 
 ## Packaged examples
 

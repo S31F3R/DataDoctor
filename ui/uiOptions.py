@@ -1548,10 +1548,17 @@ class uiOptions(QDialog):
         except Exception as e:
             Logic.logException("import profile: refresh Plot Quick Looks failed", e)
         try:
-            if hasattr(win, "loadSnippets"):
+            # loadSnippets keeps the category dropdown that was built when the
+            # tab opened, so imported folders never appear until close/reopen.
+            wb = getattr(win, "sqlWorkbench", None)
+            reloaded = False
+            if wb is not None and hasattr(wb, "reloadSnippets"):
+                reloaded = bool(wb.reloadSnippets())
+            if not reloaded and hasattr(win, "loadSnippets"):
                 win.loadSnippets()
         except Exception as e:
             Logic.logException("import profile: refresh SQL snippets failed", e)
+        self._refreshDatabaseCombos()
         try:
             dd = getattr(win, "winDataDictionary", None)
             table = getattr(dd, "mainTable", None) if dd is not None else None
