@@ -1,6 +1,8 @@
 ####### CURRENT TASKS #######
 
 ####### CURRENT BUGS #######
+-Importing profil with just a Data Dictionary update doesn't refresh the view of the Data ID Search. Closing the program and reopening it does. Need to have any profile imports
+ have their respective import available right away within the program
 
 ####### 3.5.0 FEATURES #######
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)
