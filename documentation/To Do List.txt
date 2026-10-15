@@ -1,10 +1,24 @@
 ####### CURRENT TASKS #######
+-Aquarius supports Auto-batched requests to help for HTTP overhead. If possible, lets implement this into the Aquarius reading. It will also be used in the write code in the future
+-CUHDB dataID screwed up the Data Dictionary. Will need a one time fix to remove all the issues it caused, which means this will need to be part of the bunker.db merge
+ logic going forward. Not sure the best way to do it so will need to carefully plan this. Using the 2 .csv in documentation (CUHDB and UCHDB2), look for any duplicate dataID
+ in bunker.db. If there is a duplicate, look for the one that exists in CUHDB and NOT in UCHDB2. The one from CUHDB.csv only needs to be removed. For the merge/update
+ Data Dictionary script, make a list of the ones we need to remove. This will stay static, forever. If the ones we remove get fixed, they will have a different dataID when they
+ are added. We'll also need to fix updateBunkerFromCsv.py to not re add these bad ones in again. An easy way to 100% verify it's a bad one is the ones removed mark the dataID
+ with the siteID. That combination can be marked as bad in the scripts and not re-add them and flag them for removal in any future updates
 
 ####### CURRENT BUGS #######
+-Filter and sorting in a SQL Query Builder result needs to have the same sorting logic as dataID in Data Dictionary. Currently if I sort something with a number,
+ it doesn't sort in numerical order. I belive the logic on dataID does number then string sorting
 -Importing profil with just a Data Dictionary update doesn't refresh the view of the Data ID Search. Closing the program and reopening it does. Need to have any profile imports
  have their respective import available right away within the program
 
 ####### 3.5.0 FEATURES #######
 -Aquarius Options: credential account vs Entra (research; maybe Entra first, then credential)
+-Add HDB-POET tree like dataID search
+
+####### 3.6.0 FEATURES #######
+
+####### POTENTIAL FEATURES #######
 -Create a new tool called SQL Manager
     -Add SQL Developer type tree view once logged in. It needs to have the same options SQL Devloper does, showing the different users, different groups, right click options to unlock accounts, etc. This will be big and I'll document more features
